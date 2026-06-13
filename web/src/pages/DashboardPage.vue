@@ -85,7 +85,7 @@ onMounted(async () => {
     nodes.value = n
     gpus.value = g
     if (g.length > 0) {
-      const latest = (g || []).reduce((max, gpu) => {
+      const latest = (Array.isArray(g) ? g : []).reduce((max, gpu) => {
         if (gpu.collected_at && gpu.collected_at > max) return gpu.collected_at
         return max
       }, '')
@@ -99,15 +99,15 @@ const cards = computed(() => {
   const n = nodes.value
   const g = gpus.value
   const onlineCount = n.filter(x => x.status === 'online').length
-  const healthyCount = g.filter(x => x.health === 'healthy').length
-  const totalMem = (g || []).reduce((s, x) => s + (x.memory_total_bytes || 0), 0)
-  const usedMem = (g || []).reduce((s, x) => s + (x.memory_used_bytes || 0), 0)
+  const healthyCount = (Array.isArray(g) ? g : []).filter(x => x.health === 'healthy').length
+  const totalMem = (Array.isArray(g) ? g : []).reduce((s, x) => s + (x.memory_total_bytes || 0), 0)
+  const usedMem = (Array.isArray(g) ? g : []).reduce((s, x) => s + (x.memory_used_bytes || 0), 0)
   const freeMem = totalMem - usedMem
   const avgGpuUtil = g.length > 0
-    ? (g || []).reduce((s, x) => s + (x.gpu_utilization_percent || 0), 0) / (g || []).length || 0
+    ? (Array.isArray(g) ? g : []).reduce((s, x) => s + (x.gpu_utilization_percent || 0), 0) / (Array.isArray(g) && g.length > 0 ? g.length : 1) || 0
     : 0
   const avgMemUtil = g.length > 0
-    ? (g || []).reduce((s, x) => s + (x.memory_utilization_percent || 0), 0) / (g || []).length || 0
+    ? (Array.isArray(g) ? g : []).reduce((s, x) => s + (x.memory_utilization_percent || 0), 0) / (Array.isArray(g) && g.length > 0 ? g.length : 1) || 0
     : 0
 
   return [

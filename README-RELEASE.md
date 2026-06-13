@@ -154,7 +154,7 @@ All logs in English.
 - Set `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` for admin account
 - Set `LIGHTAI_GRAFANA_ADMIN_PASSWORD` for Grafana
 - Change default `agent_token` in configs before production
-- Do NOT expose 8080/9090/3000 to public internet directly
+- Do NOT expose 18080/19090/13000 to public internet directly
 - Use VPN, bastion host, or reverse proxy
 
 ## Troubleshooting

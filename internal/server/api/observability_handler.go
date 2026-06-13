@@ -3,18 +3,28 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 // HandleObservabilityStatus returns Prometheus/Grafana readiness status.
-// Used by the Web frontend to avoid cross-origin fetch to P+G directly.
+// Internal probes always use 127.0.0.1. External URLs use request Host.
 func HandleObservabilityStatus(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	// Strip port if present, we'll add the observability ports.
+	if i := strings.LastIndex(host, ":"); i != -1 {
+		host = host[:i]
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+
 	status := map[string]interface{}{
 		"prometheus": map[string]interface{}{
-			"url":   "http://127.0.0.1:19090",
+			"url":   "http://" + host + ":19090",
 			"ready": probeHTTP("http://127.0.0.1:19090/-/ready"),
 		},
 		"grafana": map[string]interface{}{
-			"url":   "http://127.0.0.1:13000",
+			"url":   "http://" + host + ":13000",
 			"ready": probeHTTP("http://127.0.0.1:13000/api/health"),
 		},
 	}

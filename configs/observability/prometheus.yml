@@ -1,5 +1,5 @@
 # LightAI Go - Prometheus Configuration (bundled mode)
-# Port: 9090. Managed by scripts/start-observability.sh
+# Port: 19090. Managed by scripts/start-observability.sh
 
 global:
   scrape_interval: 5s

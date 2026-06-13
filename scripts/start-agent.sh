@@ -47,7 +47,7 @@ sleep 3
 if kill -0 "$PID" 2>/dev/null; then
   echo "Agent started (PID $PID)."
   echo "  Metrics: http://127.0.0.1:19091/metrics"
-  echo "  Logs:    logs/agent.log logs/agent-stdout.log"
+  echo "  Logs:    logs/agent-stdout.log"
 else
   echo "Agent failed to start. Check logs/agent-stdout.log"
   rm -f run/agent.pid

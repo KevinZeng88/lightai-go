@@ -7,6 +7,8 @@ RLS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$RLS_ROOT"
 
 mkdir -p data/prometheus data/grafana data/grafana/plugins logs run
+mkdir -p deploy/observability/grafana/provisioning/plugins
+mkdir -p deploy/observability/grafana/provisioning/alerting
 
 PROM_BIN="bin/prometheus"
 GRAF_BIN=""
@@ -77,6 +79,20 @@ if [ ! -f run/grafana.pid ]; then
   # Pre-13:  grafana-server with GF_* env vars.
   if $GRAF_V13; then
     echo "  使用 Grafana 13+ 模式"
+    # Write dashboards.yaml with absolute path at startup time.
+    mkdir -p "$RLS_ROOT/deploy/observability/grafana/provisioning/dashboards"
+    cat > "$RLS_ROOT/deploy/observability/grafana/provisioning/dashboards/dashboards.yaml" << YAMLEOF
+apiVersion: 1
+providers:
+  - name: LightAI
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: true
+    editable: true
+    options:
+      path: $RLS_ROOT/deploy/observability/grafana/dashboards
+YAMLEOF
     GF_PATHS_PROVISIONING="$RLS_ROOT/deploy/observability/grafana/provisioning" \
     GF_SECURITY_ADMIN_USER=admin \
     GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
