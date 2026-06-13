@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
-VERSION="${LIGHTAI_VERSION:-0.1.0}"
+VERSION="${LIGHTAI_VERSION:-$(head -1 VERSION 2>/dev/null || echo 0.1.0)}"
 COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME=$(date -Iseconds)
 GO_VERSION=$(go version 2>/dev/null | awk '{print $3}' || echo "unknown")
@@ -150,15 +150,30 @@ echo "  OK"
 
 # 7. Write VERSION.
 echo "[7/8] Writing VERSION..."
-cat > "$BUILD_DIR/VERSION" << EOF
-version=$VERSION
-git_commit=$COMMIT
-build_time=$BUILD_TIME
-build_type=full
-go_version=$GO_VERSION
-node_version=$NODE_VERSION
-prometheus_version=$PROMETHEUS_VERSION
-grafana_version=$GRAFANA_VERSION
+# VERSION: plain version number (apply-patch.sh reads this).
+echo "$VERSION" > "$BUILD_DIR/VERSION"
+
+# release-manifest.json: full metadata.
+cat > "$BUILD_DIR/release-manifest.json" << EOF
+{
+  "product": "lightai-go",
+  "version": "$VERSION",
+  "release_name": "RC1 Hotfix 12",
+  "arch": "linux-amd64",
+  "created_at": "$BUILD_TIME",
+  "package_type": "full",
+  "git_commit": "$COMMIT",
+  "prometheus_version": "$PROMETHEUS_VERSION",
+  "grafana_version": "$GRAFANA_VERSION",
+  "go_version": "$GO_VERSION",
+  "node_version": "$NODE_VERSION",
+  "notes": [
+    "Fix observability gauge/stat panels with reduceOptions",
+    "Polish dashboard Chinese labels",
+    "Add VERSION based patch metadata",
+    "Add host load average, CPU, memory, filesystem metrics"
+  ]
+}
 EOF
 
 # Generate MANIFEST.sha256 (exclude runtime dirs).
