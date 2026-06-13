@@ -133,14 +133,24 @@ echo "  OK"
 # 7. Write VERSION.
 echo "[7/8] Writing VERSION..."
 cat > "$BUILD_DIR/VERSION" << EOF
-lightai_version=$VERSION
+version=$VERSION
 git_commit=$COMMIT
 build_time=$BUILD_TIME
+build_type=full
 go_version=$GO_VERSION
 node_version=$NODE_VERSION
 prometheus_version=$PROMETHEUS_VERSION
 grafana_version=$GRAFANA_VERSION
 EOF
+
+# Generate MANIFEST.sha256 (exclude runtime dirs, symlinks, dangling files).
+(cd "$BUILD_DIR" && find . -type f \
+  ! -path './data/*' ! -path './logs/*' ! -path './run/*' \
+  ! -path './data/prometheus/*' ! -path './data/grafana/*' \
+  ! -name MANIFEST.sha256 \
+  | sort | while read -r f; do
+    [ -f "$f" ] && sha256sum "$f" 2>/dev/null || true
+  done) > "$BUILD_DIR/MANIFEST.sha256"
 echo "  OK"
 
 # 8. Build tarball and verify.
