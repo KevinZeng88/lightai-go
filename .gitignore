@@ -1,0 +1,33 @@
+# Go
+bin/
+dist/
+*.exe
+*.test
+*.out
+
+# Logs
+logs/
+*.log
+
+# Config
+*.local.toml
+*.local.yaml
+*.local.yml
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Frontend
+node_modules/
+web/dist/
+
+# Temp
+tmp/
+.cache/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
