@@ -28,7 +28,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 
-const grafUrl = 'http://127.0.0.1:13000'
+const grafUrl = `http://${window.location.hostname}:3000`
 const status = ref('Checking...')
 const running = ref(false)
 

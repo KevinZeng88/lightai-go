@@ -10,8 +10,15 @@ mkdir -p data/prometheus data/grafana data/grafana/plugins logs run
 
 PROM_BIN="bin/prometheus"
 GRAF_BIN=""
+GRAF_V13=false
 for candidate in bin/grafana/bin/grafana-server bin/grafana/bin/grafana; do
-  [ -x "$candidate" ] && { GRAF_BIN="$candidate"; break; }
+  if [ -x "$candidate" ]; then
+    GRAF_BIN="$candidate"
+    case "$(basename "$candidate")" in
+      grafana) GRAF_V13=true ;;
+    esac
+    break
+  fi
 done
 
 echo "=== LightAI Observability ==="
@@ -22,21 +29,16 @@ echo "[Prometheus]"
 if [ -f run/prometheus.pid ]; then
   PID=$(cat run/prometheus.pid)
   if kill -0 "$PID" 2>/dev/null; then
-    echo "  状态: 运行中 (PID $PID)"
+    echo "  运行中 (PID $PID)"
   else
     rm -f run/prometheus.pid
-    echo "  状态: 已停止 (残留 PID)"
+    echo "  未运行 (已清理残留 PID)"
   fi
 else
-  echo "  状态: 未运行"
+  echo "  未运行"
 fi
 
 if [ ! -f run/prometheus.pid ]; then
-  if [ ! -x "$PROM_BIN" ]; then
-    echo "  错误: Prometheus 二进制不存在 ($PROM_BIN)"
-    echo "  请运行: ./scripts/prepare-observability-binaries.sh --download"
-    exit 1
-  fi
   nohup "$PROM_BIN" \
     --config.file=configs/observability/prometheus.yml \
     --storage.tsdb.path=data/prometheus \
@@ -46,7 +48,7 @@ if [ ! -f run/prometheus.pid ]; then
     > logs/prometheus.log 2>&1 &
   PID=$!
   echo "$PID" > run/prometheus.pid
-  echo "  状态: 已启动 (PID $PID)"
+  echo "  已启动 (PID $PID)"
 fi
 
 # --- Grafana ---
@@ -55,66 +57,91 @@ echo "[Grafana]"
 if [ -f run/grafana.pid ]; then
   PID=$(cat run/grafana.pid)
   if kill -0 "$PID" 2>/dev/null; then
-    echo "  状态: 运行中 (PID $PID)"
+    echo "  运行中 (PID $PID)"
   else
     rm -f run/grafana.pid
-    echo "  状态: 已停止 (残留 PID)"
+    echo "  未运行 (已清理残留 PID)"
   fi
 else
-  echo "  状态: 未运行"
+  echo "  未运行"
 fi
 
 if [ ! -f run/grafana.pid ]; then
   if [ ! -x "$GRAF_BIN" ]; then
-    echo "  错误: Grafana 二进制不存在"
-    echo "  请运行: ./scripts/prepare-observability-binaries.sh --download"
+    echo "  错误: Grafana 二进制不存在 (bin/grafana/bin/grafana)"
+    echo "  运行: ./scripts/prepare-observability-binaries.sh --download"
     exit 1
   fi
-  GF_PATHS_CONFIG=configs/observability/grafana.ini \
-  GF_PATHS_DATA=data/grafana \
-  GF_PATHS_LOGS=logs \
-  GF_PATHS_PLUGINS=data/grafana/plugins \
-  GF_PATHS_PROVISIONING=deploy/observability/grafana/provisioning \
-  GF_SECURITY_ADMIN_USER=admin \
-  GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
-  GF_SERVER_HTTP_ADDR=0.0.0.0 \
-  GF_SERVER_HTTP_PORT=3000 \
-  GF_DATABASE_TYPE=sqlite3 \
-  GF_DATABASE_PATH=data/grafana/grafana.db \
-  GF_ANALYTICS_REPORTING_ENABLED=false \
-  GF_ANALYTICS_CHECK_FOR_UPDATES=false \
-  nohup "$GRAF_BIN" \
-    > logs/grafana.log 2>&1 &
+
+  # Grafana 13+: grafana server --homepath <path> --config <path>
+  # Pre-13:  grafana-server with GF_* env vars
+  if $GRAF_V13; then
+    echo "  使用 Grafana 13+ 模式: $GRAF_BIN server"
+    GF_SECURITY_ADMIN_USER=admin \
+    GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
+    nohup "$GRAF_BIN" server \
+      --homepath "$RLS_ROOT/bin/grafana" \
+      --config "$RLS_ROOT/configs/observability/grafana.ini" \
+      > logs/grafana.log 2>&1 &
+  else
+    GF_PATHS_CONFIG=configs/observability/grafana.ini \
+    GF_PATHS_DATA=data/grafana \
+    GF_PATHS_LOGS=logs \
+    GF_PATHS_PLUGINS=data/grafana/plugins \
+    GF_PATHS_PROVISIONING=deploy/observability/grafana/provisioning \
+    GF_SECURITY_ADMIN_USER=admin \
+    GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
+    GF_SERVER_HTTP_ADDR=0.0.0.0 \
+    GF_SERVER_HTTP_PORT=3000 \
+    GF_DATABASE_TYPE=sqlite3 \
+    GF_DATABASE_PATH=data/grafana/grafana.db \
+    GF_ANALYTICS_REPORTING_ENABLED=false \
+    GF_ANALYTICS_CHECK_FOR_UPDATES=false \
+    nohup "$GRAF_BIN" > logs/grafana.log 2>&1 &
+  fi
   PID=$!
   echo "$PID" > run/grafana.pid
-  echo "  状态: 已启动 (PID $PID)"
+  echo "  已启动 (PID $PID)"
   if [ "${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" = "lightai" ]; then
-    echo "  注意: 使用默认开发密码 'lightai'。生产环境请设置 LIGHTAI_GRAFANA_ADMIN_PASSWORD。"
+    echo "  注意: 使用默认开发密码 'lightai'。生产请设置 LIGHTAI_GRAFANA_ADMIN_PASSWORD。"
   fi
 fi
 
 # --- Wait for readiness ---
 echo ""
 echo "等待服务就绪..."
-sleep 2
 
-for i in 1 2 3 4 5; do
-  if curl -sf http://127.0.0.1:9090/-/ready >/dev/null 2>&1; then
-    echo "  Prometheus: 就绪 (http://127.0.0.1:9090)"
-    break
-  fi
-  [ "$i" = "5" ] && echo "  Prometheus: 未就绪，请检查 logs/prometheus.log"
-  sleep 2
-done
-
-for i in 1 2 3 4 5; do
+grafana_ok=false
+for i in 1 2 3 4 5 6 7 8; do
   if curl -sf http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
-    echo "  Grafana:    就绪 (http://127.0.0.1:3000, admin/lightai)"
+    grafana_ok=true
     break
   fi
-  [ "$i" = "5" ] && echo "  Grafana: 未就绪，请检查 logs/grafana.log"
+  sleep 3
+done
+
+prom_ok=false
+for i in 1 2 3; do
+  if curl -sf http://127.0.0.1:9090/-/ready >/dev/null 2>&1; then
+    prom_ok=true
+    break
+  fi
   sleep 2
 done
+
+echo "  Prometheus: $($prom_ok && echo '就绪 (http://127.0.0.1:9090)' || echo '未就绪')"
+echo "  Grafana:    $($grafana_ok && echo '就绪 (http://127.0.0.1:3000, admin/lightai)' || echo '未就绪')"
+
+if ! $grafana_ok; then
+  echo ""
+  echo "Grafana 启动失败，请检查:"
+  echo "  tail -50 logs/grafana.log"
+  echo "  Grafana 13+ 启动命令: bin/grafana/bin/grafana server --homepath bin/grafana --config configs/observability/grafana.ini"
+  rm -f run/grafana.pid
+  exit 1
+fi
 
 echo ""
 echo "Observability 已启动。"
+echo "  局域网访问 Prometheus: http://<server-ip>:9090/"
+echo "  局域网访问 Grafana:    http://<server-ip>:3000/"

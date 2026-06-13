@@ -41,8 +41,8 @@ const { t } = useI18n()
 const targetsCount = ref(0)
 const lastCheck = ref('')
 
-const promUrl = 'http://127.0.0.1:19090'
-const grafanaUrl = 'http://127.0.0.1:13000'
+const promUrl = `http://${window.location.hostname}:9090`
+const grafanaUrl = `http://${window.location.hostname}:3000`
 
 const checkProm = async () => {
   try { await fetch(promUrl + '/-/healthy'); return true } catch { return false }

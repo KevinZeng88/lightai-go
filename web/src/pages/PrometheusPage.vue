@@ -22,7 +22,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 
-const promUrl = 'http://127.0.0.1:19090'
+const promUrl = `http://${window.location.hostname}:9090`
 const status = ref('Checking...')
 const running = ref(false)
 

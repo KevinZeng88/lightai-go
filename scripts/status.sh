@@ -21,7 +21,8 @@ check_proc() {
         fi
       fi
     else
-      printf "  %-13s 已停止 (残留 PID)\n" "$name"
+      printf "  %-13s 未运行 (已清理残留 PID)\n" "$name"
+      rm -f "$pidfile"
     fi
   else
     printf "  %-13s 未运行\n" "$name"
@@ -38,6 +39,8 @@ echo "--- 访问地址 ---"
 echo "  LightAI Web: http://127.0.0.1:8080/"
 echo "  Prometheus:  http://127.0.0.1:9090/"
 echo "  Grafana:     http://127.0.0.1:3000/"
+echo ""
+echo "  局域网访问请将 127.0.0.1 替换为服务器 IP。"
 
 echo ""
 echo "--- 最近日志 ---"
