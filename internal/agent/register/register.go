@@ -53,6 +53,7 @@ func Do(client *http.Client, cfg Config, st *state.State) (nodeID string, err er
 	)
 
 	reqBody := map[string]interface{}{
+		"node_id":            st.CachedNodeID(),
 		"agent_id":           cfg.AgentID,
 		"hostname":           cfg.Hostname,
 		"advertised_address": cfg.AdvertisedAddr,
@@ -174,8 +175,8 @@ func Do(client *http.Client, cfg Config, st *state.State) (nodeID string, err er
 }
 
 // SendHeartbeat sends a heartbeat to the server.
-func SendHeartbeat(client *http.Client, serverURL, agentToken, agentID string) (*HeartbeatResponse, error) {
-	reqBody := map[string]string{"agent_id": agentID}
+func SendHeartbeat(client *http.Client, serverURL, agentToken, agentID, nodeID string) (*HeartbeatResponse, error) {
+	reqBody := map[string]string{"node_id": nodeID, "agent_id": agentID}
 	bodyBytes, _ := json.Marshal(reqBody)
 
 	req, err := http.NewRequest("POST", serverURL+"/api/agent/heartbeat", bytes.NewReader(bodyBytes))

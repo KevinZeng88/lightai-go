@@ -251,7 +251,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 		case <-ctx.Done():
 			return
 		case <-heartbeatTicker.C:
-			hbResp, err := register.SendHeartbeat(client, cfg.ServerURL, cfg.AgentToken, agentID)
+			hbResp, err := register.SendHeartbeat(client, cfg.ServerURL, cfg.AgentToken, agentID, nodeID)
 			if err != nil {
 				consecutiveFailures++
 				log.Warn("heartbeat failed",

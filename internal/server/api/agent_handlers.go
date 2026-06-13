@@ -27,6 +27,7 @@ func NewAgentHandler(database *db.DB, m *srvmetrics.ServerMetrics) *AgentHandler
 
 // RegisterRequest is the agent registration request.
 type RegisterRequest struct {
+	NodeID         string `json:"node_id"`
 	AgentID        string `json:"agent_id"`
 	Hostname       string `json:"hostname"`
 	AdvertisedAddr string `json:"advertised_address"`
@@ -79,19 +80,27 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		req.MetricsPort = 9090
 	}
 
-	// Upsert node: check if agent_id already exists.
-	var nodeID string
-	err := h.DB.QueryRow(`SELECT id FROM nodes WHERE agent_id = ?`, req.AgentID).Scan(&nodeID)
+	// Upsert node: node_id is the primary identity (agent_id is display-only).
+	var serverNodeID string
+	var err error
+	if req.NodeID != "" {
+		err = h.DB.QueryRow(`SELECT id FROM nodes WHERE id = ?`, req.NodeID).Scan(&serverNodeID)
+	} else {
+		err = h.DB.QueryRow(`SELECT id FROM nodes WHERE agent_id = ?`, req.AgentID).Scan(&serverNodeID)
+	}
 	if err == sql.ErrNoRows {
-		// Create new node.
-		nodeID = uuid.NewString()
+		// Create new node. Use client-provided node_id or generate.
+		serverNodeID = req.NodeID
+		if serverNodeID == "" {
+			serverNodeID = uuid.NewString()
+		}
 		_, err = h.DB.Exec(
 			`INSERT INTO nodes (id, agent_id, hostname, advertised_address,
 			 metrics_enabled, metrics_scheme, metrics_port, metrics_path,
 			 status, last_heartbeat_at, tenant_id, owner_id, created_by, updated_by,
 			 created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, 'default', NULL, 'system', 'system', ?, ?)`,
-			nodeID, req.AgentID, req.Hostname, req.AdvertisedAddr,
+			serverNodeID, req.AgentID, req.Hostname, req.AdvertisedAddr,
 			boolToInt(req.MetricsEnabled), req.MetricsScheme, req.MetricsPort, req.MetricsPath,
 			now, now, now,
 		)
@@ -100,7 +109,7 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 			return
 		}
-		log.Info("node registered", "node_id", nodeID, "agent_id", req.AgentID, "hostname", req.Hostname)
+		log.Info("node registered", "node_id", serverNodeID, "agent_id", req.AgentID, "hostname", req.Hostname)
 		if h.Metrics != nil {
 			h.Metrics.AgentReports.Inc()
 		}
@@ -111,24 +120,24 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Update existing node.
 		_, err = h.DB.Exec(
-			`UPDATE nodes SET hostname = ?, advertised_address = ?,
+			`UPDATE nodes SET agent_id = ?, hostname = ?, advertised_address = ?,
 			 metrics_enabled = ?, metrics_scheme = ?, metrics_port = ?, metrics_path = ?,
 			 status = 'online', last_heartbeat_at = ?, updated_at = ?
 			 WHERE id = ?`,
-			req.Hostname, req.AdvertisedAddr,
+			req.AgentID, req.Hostname, req.AdvertisedAddr,
 			boolToInt(req.MetricsEnabled), req.MetricsScheme, req.MetricsPort, req.MetricsPath,
-			now, now, nodeID,
+			now, now, serverNodeID,
 		)
 		if err != nil {
 			log.Error("update node error", "error", err)
 			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 			return
 		}
-		log.Info("node re-registered", "node_id", nodeID, "agent_id", req.AgentID)
+		log.Info("node re-registered", "node_id", serverNodeID, "agent_id", req.AgentID)
 	}
 
 	resp := RegisterResponse{
-		NodeID:     nodeID,
+		NodeID:     serverNodeID,
 		AgentID:    req.AgentID,
 		TenantID:   "default",
 		ServerTime: now,
@@ -142,6 +151,7 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 // HandleHeartbeat handles POST /api/agent/heartbeat.
 func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		NodeID  string `json:"node_id"`
 		AgentID string `json:"agent_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -158,8 +168,8 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Update heartbeat.
 	result, err := h.DB.Exec(
-		`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE agent_id = ?`,
-		now, now, req.AgentID,
+		`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ? OR agent_id = ?`,
+		now, now, req.NodeID, req.AgentID,
 	)
 	if err != nil {
 		log.Error("heartbeat update error", "error", err)
