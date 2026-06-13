@@ -40,7 +40,8 @@ RuntimeEnvironment:
 
 Model:
   Qwen3-32B
-  path: /models/Qwen3-32B
+  container path: /models/Qwen3-32B
+  host path: /data/models/Qwen3-32B
   default port: 8000
 
 ModelInstance:
@@ -60,12 +61,17 @@ ModelInstance:
 ```go
 type Model struct {
     ID          string
+    TenantID    string
+    OwnerID     string
+    CreatedBy   string
+    UpdatedBy   string
     Name        string
     DisplayName string
     Description string
 
-    ModelType   string
-    ModelPath   string
+    ModelType          string
+    ModelContainerPath string
+    ModelHostPath      string
 
     DefaultRuntimeID string
 
@@ -147,24 +153,31 @@ embedding
 custom
 ```
 
-### 4.4 ModelPath
+### 4.4 ModelContainerPath 与 ModelHostPath
 
-模型路径。
+模型路径拆分为：
+
+```text
+model_container_path  必填，容器内路径
+model_host_path       可选，目标节点宿主机路径
+```
 
 示例：
 
 ```text
-/models/Qwen3-32B
-/data/models/deepseek-r1
+model_container_path: /models/Qwen3-32B
+model_host_path: /data/models/Qwen3-32B
 ```
 
 规则：
 
-1. 可以是容器内路径；
-2. 也可以是宿主机路径；
-3. 第一阶段不做自动下载；
-4. 第一阶段不校验所有 Agent 上路径是否存在；
-5. 实例启动时由 Agent 检查挂载路径和容器内路径。
+1. `model_container_path` 只表示容器内路径；
+2. `model_host_path` 只表示宿主机路径，不能直接用于容器命令；
+3. `model_host_path` 非空时，Server 可生成到 `model_container_path` 的明确只读 volume；
+4. 默认仍推荐 Runtime 或 Instance 显式配置 volume；
+5. 第一阶段不做自动下载；
+6. 第一阶段不校验所有 Agent 上路径是否存在；
+7. 实例启动时由 Agent 校验冻结规格中的宿主机挂载路径。
 
 ### 4.5 DefaultRuntimeID
 
@@ -204,7 +217,7 @@ custom
 131072
 ```
 
-第一阶段仅作为启动参数参考，不参与容量计算。
+第一阶段仅作为元数据或默认参数生成来源，不参与容量计算。如果默认 args 已包含等价上下文参数，Server 不得重复注入。
 
 ### 4.8 DefaultCommandArgs
 
@@ -280,6 +293,26 @@ Enabled bool
 
 ## 6. 模型 CRUD API
 
+权限和租户规则：
+
+1. 所有查询默认按 `session.current_tenant_id` 过滤；
+2. 查询要求 `model:read`；
+3. 创建、修改、禁用和删除要求 `model:write`；
+4. 创建时 Server 从 Session 写入 tenant、owner 和审计字段，不接受客户端覆盖；
+5. 更新时 Server 写入 `updated_by=session.current_user_id`；
+6. 不允许查询、引用、修改或删除其他 tenant 的模型；
+7. 默认 RuntimeEnvironment 必须与 Model 属于同一 tenant；
+8. API 不比较 built-in 或 custom Role 名称，只检查实时解析的 permission code。
+
+创建时固定写入：
+
+```text
+tenant_id = session.current_tenant_id
+owner_id = session.current_user_id
+created_by = session.current_user_id
+updated_by = session.current_user_id
+```
+
 ### 6.1 创建模型
 
 ```http
@@ -322,7 +355,9 @@ DELETE /api/models/{id}
 
 1. 没有实例引用，可以删除；
 2. 已有实例引用，不允许删除；
-3. 可以先 disabled，再迁移或删除实例后删除。
+3. 可以先 disabled，再迁移或删除实例后删除；
+4. 目标模型必须属于 `session.current_tenant_id`；
+5. owner_id 是可转移业务所有者，不等于 created_by，也不直接决定删除权限；删除仍以 tenant scope 和 `model:write` 为准。
 
 ---
 
@@ -334,7 +369,8 @@ DELETE /api/models/{id}
   "display_name": "Qwen3 32B",
   "description": "Qwen3 32B local model",
   "model_type": "llm",
-  "model_path": "/models/Qwen3-32B",
+  "model_container_path": "/models/Qwen3-32B",
+  "model_host_path": "/data/models/Qwen3-32B",
   "default_runtime_id": "runtime-vllm",
   "default_port": 8000,
   "default_context_len": 32768,
@@ -362,7 +398,7 @@ DELETE /api/models/{id}
 模型定义提供：
 
 ```text
-模型路径
+模型容器路径和可选宿主机路径
 默认端口
 默认启动参数
 默认环境变量
@@ -395,7 +431,7 @@ host port
 环境变量覆盖
 ```
 
-最终由 DockerRunSpec 组合生成启动命令。
+最终由 Server 生成并冻结 DockerRunSpec，Agent 只执行。
 
 ---
 
@@ -403,26 +439,14 @@ host port
 
 创建模型实例时允许覆盖模型默认参数。
 
-优先级：
-
-```text
-ModelInstance override > Model default > RuntimeEnvironment default
-```
-
-示例：
-
-```text
-Model default context_len = 32768
-Instance override context_len = 65536
-最终使用 65536
-```
-
 规则：
 
 1. 覆盖只影响该实例；
 2. 不修改模型定义；
 3. 启动命令快照必须记录最终参数；
-4. Web 页面应显示哪些字段来自默认值，哪些字段被实例覆盖。
+4. Web 页面应显示哪些字段来自默认值，哪些字段被实例覆盖；
+5. Model 提供默认 args，Instance 启用 override 时整体替换，不做参数名级合并；
+6. env、volume、port 等字段按 `docs/08-engineering-contracts.md` 的确定算法合并。
 
 ---
 
@@ -440,7 +464,7 @@ Instance override context_len = 65536
 Agent 启动实例时应检查：
 
 1. 宿主机挂载路径是否存在；
-2. 容器参数是否引用了合理路径；
+2. 冻结规格中的容器路径是否为绝对路径；
 3. Docker 启动失败时记录 stderr。
 
 ---
@@ -461,7 +485,7 @@ Agent 启动实例时应检查：
 模型详情页应展示：
 
 1. 基础信息；
-2. 模型路径；
+2. 模型容器路径和可选宿主机路径；
 3. 默认运行环境；
 4. 默认端口；
 5. 默认上下文长度；
@@ -486,6 +510,8 @@ Agent 启动实例时应检查：
 
 因此模型 `name` 一旦被实例或用量引用，后续不建议随意修改。
 
+`Model.TenantID` 是后续 API Key model access、Token usage 和成本聚合的归属依据。第一阶段只写入归属字段，不实现这些功能。
+
 ---
 
 ## 13. 日志与审计
@@ -499,6 +525,8 @@ Agent 启动实例时应检查：
 5. 删除；
 6. 删除失败原因；
 7. 被实例引用情况。
+
+结构化日志同时记录 user_id、tenant_id、role_ids、required_permission、model_id 和 result。
 
 第一阶段可以先写 Server 日志。
 后续再做操作审计表。
@@ -514,8 +542,15 @@ Agent 启动实例时应检查：
 3. 默认运行环境引用测试；
 4. 删除引用保护测试；
 5. disabled 模型不能创建新实例测试；
-6. 参数覆盖优先级测试；
-7. runtime metrics 字段保存测试。
+6. args 整体替换测试；
+7. runtime metrics 字段保存测试；
+8. model host/container path 语义测试；
+9. DefaultContextLen 不重复注入测试；
+10. tenant scope 查询过滤测试；
+11. 跨 tenant Runtime/Model 引用拒绝测试；
+12. 创建时归属字段由 Session 写入测试；
+13. 缺少 `model:write` 时写操作拒绝、具有该 permission 时允许测试；
+14. custom Role 的 model permission 生效测试。
 
 ---
 
@@ -531,4 +566,3 @@ Agent 启动实例时应检查：
 6. 模型可以选择默认运行环境；
 7. 模型可以被实例引用；
 8. 模型默认参数可以参与实例启动命令生成。
-

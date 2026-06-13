@@ -14,10 +14,20 @@
 6. Web/API 可以展示节点、OS 和 GPU 状态；
 7. 资源采集失败时有诊断信息；
 8. 单个 Collector 失败不能导致 Agent 崩溃；
-9. 没有真实 GPU 时也能用 MockCollector 验证流程；
+9. development/test 环境可以用 MockCollector 验证流程；
 10. Agent 和 Server 都可以暴露 Prometheus `/metrics`；
 11. Server 可以提供 `/metrics/targets` 供 Prometheus 动态发现 Agent；
 12. 后续可以接入平台托管的 Prometheus + Grafana。
+
+Phase 2 分为：
+
+```text
+Phase 2A：SystemCollector、CollectorRegistry、资源上报和仅用于 dev/test 的 Mock
+Phase 2B：NvidiaCollector 真实采集、单位转换和真实设备验收
+Phase 2C：MetaxCollector 真实采集、样例解析和真实设备验收
+```
+
+三部分都完成后 Phase 2 才算完成。
 
 第一阶段资源监控主要服务于：
 
@@ -144,12 +154,14 @@ DockerCollector
 RuntimeCollector
 ```
 
-第一阶段实现：
+Phase 2 实现：
 
 ```text
 SystemCollector
 GPUCollector
-MockGPUCollector
+NvidiaCollector
+MetaxCollector
+MockGPUCollector（仅 development/test）
 ```
 
 第二阶段补充：
@@ -168,6 +180,9 @@ RuntimeCollector
 5. 一个 Collector 失败不能影响其他 Collector；
 6. Agent 汇总采集结果后统一上报 Server；
 7. Agent 同时把最新采集结果刷新到 metrics exporter。
+8. 所有结果携带 `collected_at`；
+9. 成功空列表是有效结果，失败结果不得清空上一次成功状态；
+10. Server 拒绝旧 `collected_at` 覆盖新状态。
 
 ---
 
@@ -325,8 +340,9 @@ type GPUDeviceInfo struct {
     PCIBusID       string
     DriverVersion  string
     RuntimeVersion string
-    MemoryTotalMB  int64
+    MemoryTotalBytes uint64
     Status         string
+    CollectedAt    time.Time
 }
 ```
 
@@ -338,14 +354,14 @@ type GPUMetricInfo struct {
     Index           int
     UUID            string
     PCIBusID         string
-    MemoryUsedMB     int64
-    MemoryFreeMB     int64
-    UtilizationGPU   float64
-    UtilizationMem   float64
-    TemperatureC     float64
-    PowerW           float64
-    Health           string
-    CollectedAt      time.Time
+    MemoryUsedBytes       uint64
+    MemoryFreeBytes       uint64
+    UtilizationGPUPercent *float64
+    UtilizationMemPercent *float64
+    TemperatureC          *float64
+    PowerW                *float64
+    Health                string
+    CollectedAt           time.Time
 }
 ```
 
@@ -373,6 +389,10 @@ Server 侧 GPUDevice 表示一张 GPU 卡的静态或半静态信息。
 type GPUDevice struct {
     ID              string
     NodeID          string
+    TenantID        string
+    OwnerID         *string
+    CreatedBy       string
+    UpdatedBy       string
     Vendor          string
     Index           int
     Name            string
@@ -380,7 +400,7 @@ type GPUDevice struct {
     PCIBusID        string
     DriverVersion   string
     RuntimeVersion  string
-    MemoryTotalMB   int64
+    MemoryTotalBytes uint64
     Status          string
     CreatedAt       time.Time
     UpdatedAt       time.Time
@@ -417,14 +437,14 @@ Server 侧 GPUMetric 表示 GPU 最新指标。
 type GPUMetric struct {
     GPUDeviceID      string
     NodeID           string
-    MemoryUsedMB     int64
-    MemoryFreeMB     int64
-    UtilizationGPU   float64
-    UtilizationMem   float64
-    TemperatureC     float64
-    PowerW           float64
-    Health           string
-    CollectedAt      time.Time
+    MemoryUsedBytes       uint64
+    MemoryFreeBytes       uint64
+    UtilizationGPUPercent *float64
+    UtilizationMemPercent *float64
+    TemperatureC          *float64
+    PowerW                *float64
+    Health                string
+    CollectedAt           time.Time
 }
 ```
 
@@ -470,6 +490,15 @@ update metrics exporter
 report to server
 ```
 
+`gpu.profile` 取值为 `production`、`development`、`test`。默认 `production`，真实 Collector 按配置启用，Mock 默认关闭且在 production profile 中禁止启用。
+
+Collector 结果语义：
+
+1. 成功且有设备：更新本次状态；
+2. 成功且空列表：接受为真实“未发现设备”结果；
+3. 失败：只更新诊断，保留上一次成功设备和指标；
+4. 乱序或旧 `collected_at`：Server 拒绝覆盖。
+
 ---
 
 ## 10. MockCollector
@@ -480,8 +509,8 @@ MockCollector 应返回固定模拟数据，例如：
 
 ```text
 1 张 NVIDIA 模拟 GPU
-显存 24576 MB
-已用 4096 MB
+显存总量 25769803776 bytes
+已用 4294967296 bytes
 利用率 12%
 温度 45℃
 功耗 80W
@@ -496,13 +525,13 @@ MockCollector 价值：
 4. 可用于前端页面调试；
 5. 可用于 Prometheus / Grafana Dashboard 开发。
 
-MockCollector 必须可配置关闭。
+MockCollector 默认关闭，只允许在 `development` / `test` profile 显式启用，不能作为 NVIDIA 或 MetaX 的验收替代。
 
 ---
 
-## 11. NvidiaCollector 预留
+## 11. NvidiaCollector
 
-后续可以通过 `nvidia-smi` 采集。
+Phase 2B 必须通过 `nvidia-smi` 实现真实采集。
 
 建议命令：
 
@@ -516,13 +545,17 @@ nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,driver_version,memory.total,me
 2. 命令超时时返回诊断错误；
 3. 单行解析失败不能导致全部失败；
 4. 字段为空时使用 unknown；
-5. power.draw 可能为空或 N/A。
+5. power.draw 可能为空或 N/A；
+6. `memory.*` 的 MB 输出在 Collector 内乘以 `1024 * 1024` 转为 bytes；
+7. 利用率在 API/DB 中保存为 `0-100` percent，导出 Prometheus 时除以 100 转为 ratio；
+8. 解析器测试使用 `docs/vendor-samples/README.md` 定义的脱敏真实样例；
+9. Phase 2B 必须在真实 NVIDIA 环境同时验收 Agent metrics、Server GPU API 和 diagnostics。
 
 ---
 
-## 12. MetaxCollector 预留
+## 12. MetaxCollector
 
-沐曦 GPU 后续通过厂商工具采集，例如 `mx-smi` 或实际现场工具。
+Phase 2C 必须通过测试环境确认的 MetaX 厂商工具实现真实采集。工具名称、参数和机器可读格式不得在缺少样例时预设。
 
 配置示例：
 
@@ -531,7 +564,7 @@ gpu:
   collectors:
     metax:
       enabled: true
-      tool_path: "/usr/bin/mx-smi"
+      tool_path: ""
       timeout_seconds: 3
 ```
 
@@ -541,7 +574,11 @@ gpu:
 2. 所有厂商差异放在 Collector 内部；
 3. 采集结果统一转成 GPUDeviceInfo / GPUMetricInfo；
 4. 采集失败时上报 CollectorDiagnosis；
-5. 现场工具路径必须可配置。
+5. 现场工具路径必须可配置；
+6. 优先使用厂商机器可读格式；
+7. 无法采集的字段使用 unknown/nil，禁止伪造；
+8. 解析器必须基于 `docs/vendor-samples/README.md` 定义的脱敏真实样例；
+9. Phase 2C 必须在真实 MetaX 环境同时验收 Agent metrics、Server GPU API 和 diagnostics。
 
 ---
 
@@ -637,7 +674,7 @@ POST /api/agent/resources/report
     "swap_total_bytes": 8589934592,
     "swap_used_bytes": 0,
     "swap_usage_percent": 0,
-    "agent_metrics_url": "http://192.168.1.10:18080/metrics"
+    "collected_at": "2026-06-13T10:00:00Z"
   },
   "filesystems": [
     {
@@ -659,8 +696,9 @@ POST /api/agent/resources/report
       "pci_bus_id": "0000:18:00.0",
       "driver_version": "550.54",
       "runtime_version": "12.4",
-      "memory_total_mb": 49152,
-      "status": "available"
+      "memory_total_bytes": 51539607552,
+      "status": "available",
+      "collected_at": "2026-06-13T10:00:00Z"
     }
   ],
   "gpu_metrics": [
@@ -669,10 +707,10 @@ POST /api/agent/resources/report
       "index": 0,
       "uuid": "GPU-xxxx",
       "pci_bus_id": "0000:18:00.0",
-      "memory_used_mb": 4096,
-      "memory_free_mb": 45056,
-      "utilization_gpu": 12.5,
-      "utilization_mem": 8.0,
+      "memory_used_bytes": 4294967296,
+      "memory_free_bytes": 47244640256,
+      "utilization_gpu_percent": 12.5,
+      "utilization_mem_percent": 8.0,
       "temperature_c": 45,
       "power_w": 80,
       "health": "healthy",
@@ -690,11 +728,11 @@ POST /api/agent/resources/report
       "checked_at": "2026-06-13T10:00:00Z"
     },
     {
-      "name": "mock",
+      "name": "nvidia",
       "type": "gpu",
-      "vendor": "mock",
+      "vendor": "nvidia",
       "available": true,
-      "tool_path": "",
+      "tool_path": "/usr/bin/nvidia-smi",
       "error": "",
       "checked_at": "2026-06-13T10:00:00Z"
     }
@@ -718,21 +756,31 @@ POST /api/agent/resources/report
 Server 收到资源上报后：
 
 1. 校验 Agent 是否存在；
-2. 更新 Node 主机信息；
-3. 更新 OS / CPU / Memory / Swap 最新状态；
-4. 更新文件系统最新状态；
-5. 更新 `agent_metrics_url`；
-6. 更新 `last_resource_report_at`；
-7. Upsert GPUDevice；
-8. 更新 GPU 最新指标；
+2. 从 Node 取得 tenant scope，Agent 上报不能指定或修改 tenant_id；
+3. 更新 Node 主机信息；
+4. 更新 OS / CPU / Memory / Swap 最新状态；
+5. 更新文件系统最新状态；
+6. 使用 Server 接收时间更新 `last_resource_report_at`；
+7. 按 `collected_at` Upsert GPUDevice，并写入 Node 的 tenant_id、`owner_id=null`、`created_by/updated_by=system`；
+8. 只用不旧于当前记录的采集结果更新 GPU 最新指标；
 9. 保存 Collector 诊断信息；
-10. 更新 Server 侧 Prometheus 指标缓存；
-11. 不因为部分数据异常导致整次上报失败；
-12. 返回 accepted。
+10. Collector 失败时保留上一次成功状态；
+11. Collector 成功返回空列表时接受为空设备事实；
+12. 更新 Server 侧 Prometheus 指标缓存；
+13. 不因为部分数据异常导致整次上报失败；
+14. 返回 accepted。
 
 ---
 
 ## 18. 查询 API
+
+所有 Node / GPU 查询 API 必须：
+
+1. 使用 User Session，不接受 Agent token；
+2. Node 查询要求 `node:read`，GPU 查询要求 `gpu:read`；
+3. 默认按 `session.current_tenant_id` 过滤；
+4. 对不属于当前 tenant 的 ID 返回 not found，避免泄露跨 tenant 资源存在性；
+5. 第一阶段 Node / GPU 默认归属 default tenant，因此行为与单租户部署一致。
 
 ### 18.1 查询节点列表
 
@@ -750,11 +798,15 @@ GET /api/nodes
       "name": "gpu-server-001",
       "hostname": "gpu-server-001",
       "ip": "192.168.1.10",
+      "advertised_address": "192.168.1.10",
       "status": "online",
       "cpu_usage_percent": 18.5,
       "memory_usage_percent": 25.0,
       "gpu_count": 8,
-      "agent_metrics_url": "http://192.168.1.10:18080/metrics",
+      "metrics_enabled": true,
+      "metrics_scheme": "http",
+      "metrics_port": 18080,
+      "metrics_path": "/metrics",
       "last_heartbeat_at": "2026-06-13T10:00:00Z",
       "last_resource_report_at": "2026-06-13T10:00:00Z"
     }
@@ -780,7 +832,7 @@ GET /api/nodes/{node_id}
 8. Collector 诊断；
 9. 最近心跳；
 10. 最近资源上报时间；
-11. Agent metrics URL。
+11. Agent metrics 受控地址字段。
 
 ### 18.3 查询 GPU 列表
 
@@ -930,6 +982,8 @@ Prometheus 通过该接口动态发现 Agent。
     "targets": ["192.168.1.10:18080"],
     "labels": {
       "job": "lightai-agent",
+      "__scheme__": "http",
+      "__metrics_path__": "/metrics",
       "node_id": "node-001",
       "node_name": "gpu-server-001"
     }
@@ -938,6 +992,8 @@ Prometheus 通过该接口动态发现 Agent。
 ```
 
 这个机制可以避免每新增一台 Agent 都手工修改 Prometheus 配置。
+
+target 来自已注册、未删除、`metrics_enabled=true` 且地址字段有效的节点，不以业务 online 状态过滤。字段组合规则见 `docs/08-engineering-contracts.md`。
 
 ---
 
@@ -974,8 +1030,8 @@ maintenance
 1. Agent 心跳正常，节点 online；
 2. 超过 offline timeout 未收到心跳，节点 offline；
 3. Collector 正常采集到 GPU，GPU available；
-4. 上一次存在、本次未上报，可以先标记 unknown；
-5. 连续多次未出现，可以标记 unavailable；
+4. Collector 成功返回空列表时，按明确的空设备事实更新；
+5. Collector 失败或报告时间更旧时，保留上一次成功状态；
 6. 温度、功耗、错误状态等异常时标记 warning 或 critical；
 7. 第一阶段不做复杂阈值，只保留字段和基础判断。
 
@@ -1010,13 +1066,15 @@ docker collector unavailable: docker socket not found
 
 Agent 不应因为 GPU 不存在或 Docker 不可用而退出。
 
+所有 Collector 必须明确区分成功空列表与失败，完整语义见 `docs/08-engineering-contracts.md`。
+
 ---
 
 ## 24. WSL2 开发环境策略
 
 当前开发环境是 WSL2 Ubuntu 24.04，可能没有真实 GPU 或 GPU 工具不完整。
 
-因此第一阶段必须支持：
+因此开发环境必须支持：
 
 1. MockGPUCollector；
 2. MockSystemCollector 或 gopsutil；
@@ -1025,7 +1083,8 @@ Agent 不应因为 GPU 不存在或 Docker 不可用而退出。
 5. Collector 诊断可见；
 6. 资源上报链路可验证；
 7. `/metrics` 可访问；
-8. Grafana dashboard 可以基于 Mock 指标调试。
+8. Grafana dashboard 可以基于 Mock 指标调试；
+9. 使用 `gpu.profile=development` 或 `test`，不得在 production profile 启用 Mock。
 
 ---
 
@@ -1065,7 +1124,7 @@ reported_at
 
 ## 26. 测试要求
 
-第一阶段至少包括：
+Phase 2 至少包括：
 
 1. SystemCollector 单元测试；
 2. MockGPUCollector 单元测试；
@@ -1075,7 +1134,19 @@ reported_at
 6. Node / GPU upsert 测试；
 7. 采集失败不崩溃测试；
 8. `/metrics` endpoint 测试；
-9. `/metrics/targets` 测试。
+9. `/metrics/targets` 测试；
+10. NVIDIA MB 到 bytes 转换测试；
+11. percent 到 Prometheus ratio 转换测试；
+12. 成功空列表清理状态测试；
+13. Collector 失败保留旧状态测试；
+14. 旧 `collected_at` 拒绝覆盖测试；
+15. production profile 禁止 Mock 测试；
+16. NVIDIA 脱敏真实样例解析测试；
+17. MetaX 脱敏真实样例解析测试；
+18. Node / GPU 查询按 current tenant 过滤测试；
+19. 跨 tenant Node / GPU ID 返回 not found 测试；
+20. Agent token 不能调用 Node / GPU 用户查询 API 测试；
+21. 缺少 `node:read` / `gpu:read` 时拒绝查询测试。
 
 验收场景：
 
@@ -1083,7 +1154,7 @@ reported_at
 无 GPU 环境：
 - Agent 启动
 - SystemCollector 正常采集 OS 信息
-- MockGPUCollector 上报 1 张 GPU
+- development/test profile 显式启用 MockGPUCollector 并上报 1 张 GPU
 - Agent /metrics 可访问
 - Server 保存 Node / GPU
 - API 查询可见
@@ -1094,6 +1165,16 @@ Collector 失败：
 - Agent 不崩溃
 - Server 收到 diagnostics
 - API 可看到错误信息
+
+真实 NVIDIA 环境：
+- Agent metrics 可看到 NVIDIA 指标
+- Server GPU API 返回 bytes 和 percent
+- diagnostics 显示 NvidiaCollector 可用
+
+真实 MetaX 环境：
+- Agent metrics 可看到 MetaX 指标
+- Server GPU API 返回统一字段
+- diagnostics 显示 MetaxCollector 可用
 ```
 
 ---
@@ -1114,7 +1195,9 @@ Collector 失败：
 10. Server 能看到节点；
 11. Server 能看到 CPU / 内存 / 磁盘；
 12. Server 能看到 GPU；
-13. 无真实 GPU 时 Mock 数据可见；
-14. Collector 失败有诊断；
-15. Agent 不因采集失败退出。
-
+13. development/test 环境可显式使用 Mock；
+14. NVIDIA 真实设备链路通过验收；
+15. MetaX 真实设备链路通过验收；
+16. Collector 失败有诊断且不覆盖旧状态；
+17. Agent 不因采集失败退出；
+18. API/DB 使用 bytes 和 percent，Prometheus 使用 ratio。

@@ -75,6 +75,10 @@ custom
 ```go
 type RuntimeEnvironment struct {
     ID          string
+    TenantID    string
+    OwnerID     string
+    CreatedBy   string
+    UpdatedBy   string
     Name        string
     Description string
     Type        string
@@ -105,7 +109,6 @@ type RuntimeEnvironment struct {
 
     GpuEnabled bool
     GpuMode    string
-    GpuIDs     []string
 
     NetworkEnabled bool
     NetworkMode    string
@@ -269,7 +272,6 @@ GPU 参数不要直接绑定 NVIDIA。
 ```go
 GpuEnabled bool
 GpuMode    string
-GpuIDs     []string
 ```
 
 GpuMode 建议枚举：
@@ -292,8 +294,9 @@ vendor_specific
 
 1. NVIDIA 可使用 `--gpus`；
 2. 沐曦、昇腾、寒武纪等通过 `devices`、`env`、`extra_args` 表达；
-3. 不在统一 DockerRunSpec 中硬编码所有厂商差异；
-4. 厂商差异可以后续放入 RuntimePreset 或 GPUVendorAdapter。
+3. RuntimeEnvironment 不保存具体 GPU ID，`selected` 的设备选择来自 ModelInstance；
+4. 不在统一 DockerRunSpec 中硬编码所有厂商差异；
+5. 厂商差异可以后续放入 RuntimePreset 或 GPUVendorAdapter。
 
 ---
 
@@ -309,6 +312,7 @@ type DockerRunSpec struct {
 
     Command     []string
     Entrypoint  []string
+    Args        []string
     WorkingDir  string
 
     Env         []EnvVar
@@ -316,13 +320,15 @@ type DockerRunSpec struct {
     Volumes     []VolumeMount
     Devices     []DeviceMapping
 
-    GpuArgs      []string
+    GpuPolicy    string
+    GpuDeviceIDs []string
     NetworkArgs  []string
     IpcArgs      []string
     UtsArgs      []string
     SecurityOpts []string
     Ulimits      []UlimitSpec
     ExtraArgs    []string
+    Labels       map[string]string
 
     ShmSize     string
     Privileged  bool
@@ -341,7 +347,11 @@ Node
 GPU selection
 ```
 
-生成后必须保存到实例启动记录或任务结果中，便于排障。
+Server 使用统一生成器生成并冻结 DockerRunSpec，Preview API 和任务创建复用同一逻辑。StartInstanceTask 直接携带冻结规格，Agent 只校验和执行，不重新合并 Runtime、Model 或 Instance。
+
+生成后必须保存到实例启动记录和任务中，便于排障。`Labels` 至少包含 `lightai.managed`、instance、node、operation 和 spec generation ownership labels。
+
+Runtime 决定 entrypoint 和 command；Model 提供默认 `Args`；Instance 启用 args override 时整体替换 Model args。详细字段和算法见 `docs/08-engineering-contracts.md`。
 
 ---
 
@@ -394,6 +404,10 @@ ShmSizeEnabled=true
 15. security_opt；
 16. extra_args。
 
+所有命令、args 和 extra args 必须保存为参数数组。禁止使用 shell 字符串执行，禁止把重定向、管道、命令替换等 shell 片段放入 `ExtraArgs`。
+
+env、volume、device、port、args 和 extra args 的确定合并规则见 `docs/08-engineering-contracts.md`。
+
 ---
 
 ## 9. Docker 命令生成示例
@@ -431,6 +445,26 @@ docker run -d \
 
 ## 10. 运行环境 CRUD API
 
+权限和租户规则：
+
+1. 所有查询默认按 `session.current_tenant_id` 过滤；
+2. 查询要求 `runtime:read`；
+3. 创建、修改和删除要求 `runtime:write`；
+4. 创建时 Server 写入 `tenant_id`、`owner_id`、`created_by`、`updated_by`，不信任客户端同名字段；
+5. 更新时 Server 写入 `updated_by=session.current_user_id`；
+6. 不允许查询、引用、修改或删除其他 tenant 的运行环境；
+7. API 不比较 built-in 或 custom Role 名称，只检查实时解析的 permission code；
+8. 第一阶段只有 default tenant 时，使用方式与单租户一致。
+
+创建时固定写入：
+
+```text
+tenant_id = session.current_tenant_id
+owner_id = session.current_user_id
+created_by = session.current_user_id
+updated_by = session.current_user_id
+```
+
 ### 10.1 创建运行环境
 
 ```http
@@ -466,7 +500,9 @@ DELETE /api/runtime-environments/{id}
 1. 未被模型或实例引用，可以删除；
 2. 已被模型默认引用，不允许删除；
 3. 已被实例引用，不允许删除；
-4. 可以先禁用，再迁移引用后删除。
+4. 可以先禁用，再迁移引用后删除；
+5. 目标资源必须属于 `session.current_tenant_id`；
+6. owner_id 是可转移业务所有者，不等于 created_by，也不直接决定删除权限；删除仍以 tenant scope 和 `runtime:write` 为准。
 
 ---
 
@@ -481,7 +517,8 @@ POST /api/runtime-environments/preview-docker-command
 1. 创建运行环境时预览；
 2. 创建实例前预览；
 3. 排查参数是否正确；
-4. 确认未启用参数不会出现在命令里。
+4. 确认未启用参数不会出现在命令里；
+5. 确认预览结果与实际任务中的冻结 DockerRunSpec 来自同一生成逻辑。
 
 输入：
 
@@ -568,7 +605,9 @@ GPU
 7. volume container_path 不允许重复；
 8. device host_path 不允许为空；
 9. shm_size 格式需要合法；
-10. extra_args 不允许包含危险组合，后续逐步加强。
+10. extra_args 必须是拆分后的参数数组，不允许 shell 运算符或 shell 片段；
+11. ownership labels 不允许由用户覆盖；
+12. 同一输入必须生成稳定的规范 DockerRunSpec。
 
 第一阶段不做复杂安全沙箱，但要记录风险。
 
@@ -585,6 +624,16 @@ GPU
 5. 启用；
 6. Docker 命令预览；
 7. 校验失败原因。
+
+结构化日志同时记录：
+
+```text
+user_id
+tenant_id
+required_permission
+runtime_environment_id
+result
+```
 
 第一阶段可以先记录到 Server 日志。
 后续再做操作审计表。
@@ -604,7 +653,16 @@ GPU
 7. device 生成测试；
 8. shm-size 生成测试；
 9. privileged 开关测试；
-10. 删除引用保护测试。
+10. 删除引用保护测试；
+11. Preview 与任务冻结规格一致性测试；
+12. ownership labels 测试；
+13. shell 片段拒绝测试；
+14. 参数合并确定性测试；
+15. tenant scope 查询过滤测试；
+16. 跨 tenant CRUD 拒绝测试；
+17. 创建时归属字段由 Session 写入测试；
+18. 缺少 `runtime:write` 时写操作拒绝、具有该 permission 时允许测试；
+19. custom Role 的 runtime permission 生效测试。
 
 ---
 
@@ -619,5 +677,5 @@ GPU
 5. 可以预览 Docker 命令；
 6. 未启用参数不出现在命令中；
 7. 模型和实例可以引用运行环境；
-8. 启动实例时可以生成 DockerRunSpec。
-
+8. Server 启动实例时可以生成并冻结 DockerRunSpec；
+9. Agent 只执行冻结规格。

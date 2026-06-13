@@ -158,6 +158,18 @@ observability:
 3. 安全隔离环境；
 4. 客户暂不需要时序监控。
 
+### 5.4 模式行为矩阵
+
+| 能力 | builtin | external | disabled |
+| --- | --- | --- | --- |
+| 平台托管 Prometheus/Grafana | 是 | 否 | 否 |
+| `/metrics/targets` | 开启 | 开启 | 可关闭或返回空数组 |
+| 历史趋势 | 平台 Grafana | 客户 Grafana | 不提供 |
+| Web 默认入口 | 打开 Grafana 链接 | 外部 Grafana 链接 | 隐藏 |
+| iframe | 同源代理或明确匿名 Viewer 时 | 由客户决定 | 禁用 |
+
+完整契约见 `docs/08-engineering-contracts.md`。
+
 ---
 
 ## 6. 部署目录
@@ -189,11 +201,11 @@ deploy/
 说明：
 
 1. `prometheus.yml` 是 Prometheus 主配置；
-2. `targets/agents.yml` 是静态兜底 targets 文件；
-3. 正式场景优先使用 Server `/metrics/targets` 动态发现；
+2. `targets/agents.yml` 只作为 file SD 替代示例；
+3. 默认只使用 Server `/metrics/targets` HTTP SD；
 4. Grafana datasource 自动指向 Prometheus；
 5. Grafana dashboards 自动预置；
-6. Web 页面通过 iframe 或 reverse proxy 内嵌 Grafana。
+6. Web 页面默认提供 Grafana 链接，满足安全条件时才通过 iframe 或 reverse proxy 内嵌。
 
 ---
 
@@ -204,7 +216,7 @@ deploy/
 ```yaml
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.54.1
     container_name: lightai-prometheus
     restart: unless-stopped
     command:
@@ -220,7 +232,7 @@ services:
       - "9090:9090"
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.2.0
     container_name: lightai-grafana
     restart: unless-stopped
     environment:
@@ -243,10 +255,12 @@ volumes:
 
 注意：
 
-1. 生产环境是否启用匿名访问，需要根据客户安全要求决定；
-2. 内嵌 Grafana 需要允许 iframe；
-3. 如果未来做统一登录，应替换为反向代理鉴权或 auth proxy；
-4. Prometheus 和 Grafana 端口是否暴露给外部，应由部署策略决定。
+1. 以上镜像版本是当前文档示例，正式发布前统一确认可获取性和安全更新；
+2. 匿名 Viewer 和 `3000:3000` 只适用于开发或可信内网；
+3. 生产环境是否启用匿名访问，需要根据客户安全要求决定；
+4. 内嵌 Grafana 需要允许 iframe；
+5. 如果未来做统一登录，应替换为反向代理鉴权或 auth proxy；
+6. Prometheus 和 Grafana 端口是否暴露给外部，应由部署策略决定。
 
 ---
 
@@ -273,14 +287,14 @@ scrape_configs:
         refresh_interval: 10s
 ```
 
-如果 `host.docker.internal` 在 Linux 环境不可用，可以改为 Server 实际 IP，例如：
+`host.docker.internal` 仅作为 Docker Desktop 示例。Linux Server 部署应使用 Compose 网络、host gateway 显式配置或 Server 实际可达地址，例如：
 
 ```yaml
       - targets:
           - "192.168.1.100:8080"
 ```
 
-也可以增加静态兜底配置：
+如果不使用 HTTP SD，可以改用 file SD：
 
 ```yaml
   - job_name: "lightai-agents-static"
@@ -290,6 +304,8 @@ scrape_configs:
           - "/etc/prometheus/targets/agents.yml"
         refresh_interval: 10s
 ```
+
+HTTP SD 和 file SD 是替代方案，默认配置不得同时启用，避免重复抓取同一 Agent。
 
 ---
 
@@ -305,8 +321,7 @@ scrape_configs:
     job: "lightai-agent"
 ```
 
-第一阶段可以先手工维护 `agents.yml`。
-后续由 Server 根据已注册节点通过 `/metrics/targets` 动态生成。
+`agents.yml` 只用于选择 file SD 的替代部署。默认 HTTP SD 场景不维护该文件。
 
 ---
 
@@ -375,7 +390,7 @@ LightAI Web 中新增“监控看板”页面。
 /monitoring/instances
 ```
 
-第一阶段可以用 iframe 内嵌 Grafana dashboard：
+默认交互是提供“打开 Grafana”链接。只有部署了同源反向代理，或在可信环境明确启用匿名 Viewer 时，才使用 iframe：
 
 ```html
 <iframe
@@ -392,13 +407,13 @@ LightAI Web 中新增“监控看板”页面。
 LightAI Web /grafana/* → Grafana http://127.0.0.1:3000/*
 ```
 
-如果不做反向代理，也可以直接打开 Grafana 地址：
+如果不做反向代理，直接打开 Grafana 地址：
 
 ```text
 http://server-ip:3000
 ```
 
-但产品体验不如内嵌。
+该方式是默认安全基线。
 
 ---
 
@@ -410,7 +425,7 @@ Server 后续可以提供反向代理：
 /grafana/* → http://127.0.0.1:3000/*
 ```
 
-第一阶段建议只内嵌 Grafana，不内嵌 Prometheus。
+第一阶段默认提供 Grafana 链接，不内嵌 Prometheus；满足前述条件时可以内嵌 Grafana。
 
 原因：
 
@@ -445,6 +460,8 @@ Server 后续可以增加 ObservabilityManager。
 6. 提供监控状态 API；
 7. 提供前端监控页面配置；
 8. 提供 Grafana iframe URL。
+
+`/metrics/targets` 由 Server 根据 Node 的 `advertised_address`、`metrics_scheme`、`metrics_port`、`metrics_path` 和 `metrics_enabled` 生成。只要节点已注册、未删除且字段有效，就保留 target，不按业务 online 状态过滤。
 
 第一阶段可以先不实现完整 ObservabilityManager，只保留部署配置和接口规划。
 
@@ -572,6 +589,8 @@ task_type
 status
 ```
 
+HTTP SD 使用 `__scheme__`、`__metrics_path__` 控制抓取 scheme/path；业务 labels 统一使用 `job=lightai-agent`、`node_id`、`node_name` 和可选 `vendor`，不包含完整 URL、IP 变化历史或错误文本。
+
 禁止放入 label：
 
 ```text
@@ -636,7 +655,7 @@ Docker 命令
 
 ## 20. 安全设计
 
-第一阶段为了快速验证，可以启用 Grafana anonymous Viewer。
+开发或可信内网为了快速验证，可以启用 Grafana anonymous Viewer。
 
 但生产环境需要注意：
 
@@ -689,11 +708,11 @@ deploy/observability/grafana/provisioning/
 
 做到可以手工启动 Prometheus + Grafana。
 
-### Step 3：Web 内嵌 Grafana
+### Step 3：Web 提供 Grafana 入口
 
 Web 增加“监控看板”页面。
 
-初期可以直接 iframe 到 Grafana。
+默认提供“打开 Grafana”链接；只有同源代理或明确启用匿名 Viewer 时才使用 iframe。
 
 ---
 
@@ -709,8 +728,8 @@ Web 增加“监控看板”页面。
 6. Prometheus 能抓取 Agent 指标；
 7. Grafana 能连接 Prometheus；
 8. Grafana 有 LightAI Dashboard；
-9. LightAI Web 页面能看到 Grafana 图表；
-10. 没有真实 GPU 时，MockCollector 指标也能展示。
+9. LightAI Web 默认能打开 Grafana，满足安全条件时可以内嵌图表；
+10. development/test profile 中，MockCollector 指标也能展示。
 
 ---
 
@@ -727,4 +746,3 @@ Web 增加“监控看板”页面。
 7. GPU 异常告警；
 8. 实例异常告警；
 9. Token / 成本监控看板。
-

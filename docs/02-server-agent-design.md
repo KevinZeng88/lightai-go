@@ -175,7 +175,7 @@ node:
   offline_timeout_seconds: 15
 
 security:
-  agent_token: "change-me"
+  agent_token: "change-me"  # bootstrap/shared agent token
 
 observability:
   metrics_enabled: true
@@ -237,9 +237,10 @@ system:
   collector: "gopsutil"   # gopsutil / fastfetch / mock
 
 gpu:
+  profile: "production"   # production / development / test
   collectors:
     mock:
-      enabled: true
+      enabled: false
     nvidia:
       enabled: true
       tool_path: "/usr/bin/nvidia-smi"
@@ -355,6 +356,8 @@ GET /metrics/targets
     ],
     "labels": {
       "job": "lightai-agent",
+      "__scheme__": "http",
+      "__metrics_path__": "/metrics",
       "node_id": "node-001",
       "node_name": "gpu-server-001",
       "vendor": "mixed"
@@ -366,6 +369,8 @@ GET /metrics/targets
     ],
     "labels": {
       "job": "lightai-agent",
+      "__scheme__": "http",
+      "__metrics_path__": "/metrics",
       "node_id": "node-002",
       "node_name": "gpu-server-002",
       "vendor": "nvidia"
@@ -378,11 +383,14 @@ Server 根据已注册节点生成 targets。
 
 生成规则：
 
-1. 只返回有 `agent_metrics_url` 的节点；
-2. 默认只返回 online 节点；
-3. 可以通过配置决定是否返回 offline 节点；
-4. targets 使用 Agent 注册时上报的 metrics 地址；
-5. labels 不放高基数字段。
+1. 只返回已注册且未删除的节点；
+2. 节点必须 `metrics_enabled=true`；
+3. `metrics_scheme`、`advertised_address`、`metrics_port`、`metrics_path` 必须通过 Server 校验；
+4. 不以业务 `online/offline` 状态过滤 target；
+5. Server 组合 target，Agent 不上报任意完整 URL；
+6. labels 不放高基数字段。
+
+完整字段和 HTTP SD 规则见 `docs/08-engineering-contracts.md`。
 
 ---
 
@@ -400,8 +408,13 @@ POST /api/agent/register
   "name": "gpu-server-001",
   "hostname": "gpu-server-001",
   "ip": "192.168.1.10",
+  "advertised_address": "192.168.1.10",
   "agent_version": "0.1.0",
-  "agent_metrics_url": "http://192.168.1.10:18080/metrics",
+  "protocol_version": "1",
+  "metrics_enabled": true,
+  "metrics_scheme": "http",
+  "metrics_port": 18080,
+  "metrics_path": "/metrics",
   "os": "linux",
   "arch": "amd64",
   "cpu_model": "Intel Xeon",
@@ -426,10 +439,13 @@ POST /api/agent/register
 
 1. 如果 `agent_id` 不存在，创建 Node；
 2. 如果 `agent_id` 已存在，更新 Node 基础信息；
-3. 保存 `agent_metrics_url`；
-4. 更新 `last_seen_at`；
-5. 设置节点状态为 `online`；
-6. 返回注册结果。
+3. 校验并保存 advertised address、metrics scheme/port/path/enabled；
+4. 校验 Agent version 和 protocol version 兼容性；
+5. 使用 Server 接收时间更新 `last_seen_at`；
+6. 设置节点状态为 `online`；
+7. 新建 Node 时由 Server 写入 `tenant_id=default`、`owner_id=null`、`created_by=system`、`updated_by=system`；
+8. Agent 注册请求不得指定或覆盖 tenant、owner、created_by、updated_by；
+9. 返回注册结果。
 
 ---
 
@@ -472,7 +488,7 @@ POST /api/agent/heartbeat
 心跳逻辑：
 
 1. Server 根据 `agent_id` 找到 Node；
-2. 更新 `last_heartbeat_at`；
+2. 使用 Server 接收时间更新 `last_heartbeat_at`，请求中的 timestamp 只用于诊断时钟偏差；
 3. 更新状态为 `online`；
 4. 如果节点不存在，要求 Agent 重新注册；
 5. Agent 收到 `need_register=true` 后重新执行注册流程。
@@ -497,7 +513,6 @@ POST /api/agent/resources/report
 8. GPU 实时指标；
 9. Docker 状态；
 10. Collector 诊断信息；
-11. Agent metrics URL。
 
 详细设计见：
 
@@ -507,10 +522,20 @@ docs/03-resource-monitoring-design.md
 
 ---
 
-## 16. 任务拉取接口
+## 16. 任务 Claim 接口
 
 ```http
-GET /api/agent/tasks/pull?agent_id=node-001&limit=5
+POST /api/agent/tasks/claim
+```
+
+请求：
+
+```json
+{
+  "agent_id": "node-001",
+  "limit": 5,
+  "lease_seconds": 30
+}
 ```
 
 响应：
@@ -522,9 +547,14 @@ GET /api/agent/tasks/pull?agent_id=node-001&limit=5
       "task_id": "task-001",
       "type": "start_instance",
       "instance_id": "inst-001",
+      "tenant_id": "default",
+      "created_by": "user-001",
+      "operation_id": "op-001",
+      "generation": 3,
+      "attempt": 1,
+      "lease_expires_at": "2026-06-13T10:00:30Z",
       "payload": {
-        "model_id": "model-001",
-        "runtime_id": "runtime-001"
+        "docker_run_spec": {}
       },
       "created_at": "2026-06-13T10:00:00Z"
     }
@@ -553,12 +583,16 @@ cancelled
 
 任务拉取规则：
 
-1. Agent 只能拉取分配给自己的任务；
-2. 一次最多拉取有限数量任务；
-3. 拉取后 Server 将任务状态更新为 `running`；
-4. Agent 执行完成后必须回报结果；
-5. 超时未回报的任务后续可以标记为 failed 或重新下发；
-6. 第一阶段不做自动无限重试。
+1. Agent 只能 claim 分配给自己的任务；
+2. claim 必须在数据库事务中原子完成，不能先查询再更新；
+3. claim 后 Server 更新 `running`、`attempt`、`lease_owner` 和 `lease_expires_at`；
+4. Agent 只能续租和回报自己持有 lease 的任务；
+5. lease 过期后任务只能在未超过 `max_attempts` 时重新 claim；
+6. 同一实例只允许一个 active operation；
+7. Agent 执行完成后必须携带 operation、generation 和 attempt 回报；
+8. 第一阶段不做自动无限重试；
+9. Server 创建任务前已经完成 User Session、tenant scope 和 required permission code 校验；
+10. Agent 不解析 User、Role 或 Permission，只校验任务属于本节点并执行冻结规格。
 
 ---
 
@@ -574,6 +608,9 @@ POST /api/agent/tasks/report
 {
   "agent_id": "node-001",
   "task_id": "task-001",
+  "operation_id": "op-001",
+  "generation": 3,
+  "attempt": 1,
   "status": "succeeded",
   "started_at": "2026-06-13T10:00:01Z",
   "finished_at": "2026-06-13T10:00:05Z",
@@ -593,6 +630,9 @@ POST /api/agent/tasks/report
 {
   "agent_id": "node-001",
   "task_id": "task-001",
+  "operation_id": "op-001",
+  "generation": 3,
+  "attempt": 1,
   "status": "failed",
   "message": "docker run failed",
   "error": "image not found",
@@ -604,12 +644,13 @@ POST /api/agent/tasks/report
 
 Server 处理逻辑：
 
-1. 更新任务状态；
-2. 保存执行结果；
-3. 如果任务关联实例，则更新实例状态；
-4. 保存错误信息；
-5. 保存 Docker 命令快照；
-6. 保存 endpoint。
+1. 校验 task lease、attempt、operation 和 generation；
+2. 以 `task_id + operation_id + attempt` 幂等更新任务状态；
+3. 保存执行结果；
+4. 如果任务关联实例，则按 generation 规则更新实例状态；
+5. 保存错误信息；
+6. 保存 Docker 命令快照；
+7. 保存 endpoint。
 
 ---
 
@@ -627,6 +668,9 @@ POST /api/agent/instances/report
   "instances": [
     {
       "instance_id": "inst-001",
+      "task_id": "task-001",
+      "operation_id": "op-001",
+      "generation": 3,
       "container_id": "abc123",
       "status": "running",
       "health_status": "healthy",
@@ -644,7 +688,8 @@ POST /api/agent/instances/report
 2. Server 不依赖单次任务结果判断长期状态；
 3. 容器异常退出时可以及时更新；
 4. Web 可以看到最新状态；
-5. Prometheus 只展示指标趋势，不替代实例状态回报。
+5. Prometheus 只展示指标趋势，不替代实例状态回报；
+6. Server 拒绝旧 generation、旧 checked_at 或冲突 operation 的报告。
 
 ---
 
@@ -655,11 +700,20 @@ POST /api/agent/instances/report
 ```go
 type Node struct {
     ID                   string
+    TenantID             string
+    OwnerID              *string
+    CreatedBy            string
+    UpdatedBy            string
     Name                 string
     Hostname             string
     IP                   string
+    AdvertisedAddress    string
     AgentVersion         string
-    AgentMetricsURL      string
+    ProtocolVersion      string
+    MetricsEnabled       bool
+    MetricsScheme        string
+    MetricsPort          int
+    MetricsPath          string
     OS                   string
     Arch                 string
     CPUModel             string
@@ -695,9 +749,19 @@ unknown
 ```go
 type AgentTask struct {
     ID          string
+    TenantID    string
+    CreatedBy   string
+    UpdatedBy   string
     NodeID      string
     Type        string
+    InstanceID  string
+    OperationID string
+    SpecGeneration int64
     Status      string
+    Attempt     int
+    MaxAttempts int
+    LeaseOwner  string
+    LeaseExpiresAt *time.Time
     PayloadJSON string
     ResultJSON  string
     Error       string
@@ -733,6 +797,8 @@ Agent 可以在内存中维护：
 5. 最近一次 metrics 暴露数据。
 
 如果 Agent 重启，应依靠 Server 和 Docker inspect 恢复实例状态。
+
+任务可靠性、结果幂等和实例 generation 的完整规则见 `docs/08-engineering-contracts.md`。
 
 ---
 
@@ -813,7 +879,7 @@ Agent 必须记录：
 
 ## 23. 安全边界
 
-第一阶段可以先做简单 token 认证，避免任意 Agent 上报。
+第一阶段使用 bootstrap/shared agent token 认证，避免任意 Agent 上报。该 token 用于 Agent 初始接入和共享认证，不等同于用户 API Key。
 
 Agent 配置：
 
@@ -834,7 +900,24 @@ Server 校验失败返回：
 401 Unauthorized
 ```
 
-第一阶段不做复杂用户权限体系。
+认证边界：
+
+```text
+Agent bootstrap/shared token != User Session != Future API Key
+```
+
+规则：
+
+1. Agent 注册、心跳、资源上报、任务 claim、任务结果和实例状态回报只使用 Agent token；
+2. Agent API 不读取 Cookie，不使用 User Session，不执行 RBAC permission 解析；
+3. 用户登录、退出和管理 API 使用 server-side User Session；
+4. 用户登录状态不影响 Agent 注册和心跳；
+5. User Session 不能调用 Agent API；
+6. Agent token 不能调用用户管理 API；
+7. AgentTask 的 tenant_id 和 created_by 由 Server 写入，Agent 不据此判断用户权限；
+8. Future API Key 后续只用于模型服务调用。
+
+用户、租户和 RBAC 设计见 `docs/09-auth-tenant-design.md`。
 
 ---
 
@@ -868,4 +951,3 @@ curl http://127.0.0.1:8080/metrics/targets
 4. Server 和 Agent 日志都有清楚记录；
 5. Server 和 Agent 均预留 `/metrics`；
 6. Server 能返回 Prometheus targets。
-

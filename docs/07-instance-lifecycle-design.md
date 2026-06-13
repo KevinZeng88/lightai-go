@@ -56,6 +56,10 @@ GPU 可以为空，表示 CPU-only 或不绑定 GPU。
 ```go
 type ModelInstance struct {
     ID          string
+    TenantID    string
+    OwnerID     string
+    CreatedBy   string
+    UpdatedBy   string
     Name        string
     Description string
 
@@ -75,6 +79,10 @@ type ModelInstance struct {
     Status        string
     HealthStatus  string
     LastError     string
+    ActiveOperationID   string
+    ActiveOperationType string
+    SpecGeneration      int64
+    LastObservedGeneration int64
 
     DockerRunSpecJSON string
     DockerCommand     string
@@ -265,19 +273,21 @@ Server 创建 ModelInstance
   ↓
 Server 校验实例状态
   ↓
-Server 创建 start_instance task
+Server 创建 operation 并递增 spec generation
+  ↓
+Server 生成并冻结 DockerRunSpec
+  ↓
+Server 创建携带冻结规格的 start_instance task
   ↓
 实例状态改为 pending
   ↓
-Agent 拉取任务
+Agent 原子 claim 任务
   ↓
 Agent 将任务状态改为 running
   ↓
 实例状态改为 starting
   ↓
-Agent 生成 DockerRunSpec
-  ↓
-Agent 执行 docker run
+Agent 校验并执行冻结的 DockerRunSpec
   ↓
 Agent inspect 容器
   ↓
@@ -303,6 +313,8 @@ Server 更新实例状态
 3. docker_command；
 4. task result；
 5. stderr 摘要。
+
+start 幂等语义：相同 operation/generation 的容器已经运行时返回成功，不重复创建容器。
 
 ---
 
@@ -334,38 +346,21 @@ Server 更新实例状态 stopped
 4. endpoint 可保留但标记不可用；
 5. container_id 可保留用于历史排障。
 
+stop 幂等语义：目标容器不存在或已经停止时返回成功。
+
 ---
 
 ## 10. 实例重启流程
 
-重启可以拆成：
-
-```text
-stop_instance
-start_instance
-```
-
-第一阶段建议 Server 创建一个 `restart_instance` 任务，由 Agent 内部执行：
+Server 创建一个 `restart_instance` operation 和任务，由 Agent 固定执行：
 
 ```text
 docker stop
-docker rm 可选
+docker rm
 docker run
 ```
 
-是否删除旧容器由配置决定：
-
-```text
-remove_before_restart = true / false
-```
-
-第一阶段建议默认：
-
-```text
-remove_before_restart = true
-```
-
-避免同名容器冲突。
+restart 不提供保留旧容器的可选策略，避免同名容器和旧 generation 冲突。重复执行同一 restart operation 时必须幂等。
 
 ---
 
@@ -396,8 +391,19 @@ cancelled
 2. instance_id；
 3. node_id；
 4. task_type；
-5. payload；
-6. created_at。
+5. operation_id；
+6. spec_generation；
+7. attempt / max_attempts；
+8. lease_owner / lease_expires_at；
+9. payload；
+10. tenant_id；
+11. created_by；
+12. updated_by；
+13. created_at。
+
+任务必须原子 claim，同一实例只允许一个 active operation。完整 lease 和幂等规则见 `docs/08-engineering-contracts.md`。
+
+Server 创建任务前必须完成 User Session、current tenant 和 required permission code 校验。Agent 不解析 User、Role 或 Permission；AgentTask 的 tenant_id 用于审计和后续统计，Agent 仍只校验 node、lease、attempt、operation 和 generation。
 
 ---
 
@@ -406,18 +412,27 @@ cancelled
 ```json
 {
   "instance_id": "inst-001",
-  "model_id": "model-001",
-  "runtime_id": "runtime-001",
   "node_id": "node-001",
-  "gpu_device_ids": ["gpu-001", "gpu-002"],
-  "host_port": 8001,
-  "container_port": 8000
+  "operation_id": "op-001",
+  "generation": 3,
+  "docker_run_spec": {
+    "image": "vllm/vllm-openai:latest",
+    "name": "lightai-inst-001",
+    "args": ["--model", "/models/Qwen3-32B"],
+    "labels": {
+      "lightai.managed": "true",
+      "lightai.tenant_id": "default",
+      "lightai.created_by": "user-001",
+      "lightai.instance_id": "inst-001",
+      "lightai.node_id": "node-001",
+      "lightai.operation_id": "op-001",
+      "lightai.spec_generation": "3"
+    }
+  }
 }
 ```
 
-Agent 拉取任务后，需要根据 Server 返回的信息或本地缓存生成 DockerRunSpec。
-
-第一阶段建议任务 payload 中包含足够信息，避免 Agent 再频繁查 Server。
+StartInstanceTask 必须直接携带 Server 冻结的 DockerRunSpec。Agent 不根据本地缓存重新生成或合并规格。
 
 ---
 
@@ -427,6 +442,9 @@ Agent 拉取任务后，需要根据 Server 返回的信息或本地缓存生成
 type TaskResult struct {
     TaskID     string
     AgentID    string
+    OperationID string
+    Generation int64
+    Attempt    int
     Status     string
     Message    string
     Error      string
@@ -477,6 +495,9 @@ POST /api/agent/instances/report
   "instances": [
     {
       "instance_id": "inst-001",
+      "task_id": "task-001",
+      "operation_id": "op-001",
+      "generation": 3,
       "container_id": "abc123",
       "status": "running",
       "health_status": "healthy",
@@ -491,12 +512,15 @@ POST /api/agent/instances/report
 
 Server 收到后：
 
-1. 更新实例状态；
-2. 更新 health_status；
-3. 更新 last_checked_at；
-4. 更新 endpoint；
-5. 更新 runtime_metrics_url；
-6. 保存 last_error。
+1. 校验 task、operation、generation 和 checked_at；
+2. 拒绝旧 generation、旧 checked_at 或与 active operation 冲突的报告；
+3. 更新实例状态；
+4. 更新 health_status；
+5. 更新 last_observed_generation 和 last_checked_at；
+6. 更新 endpoint；
+7. 更新 runtime_metrics_url；
+8. 保存 last_error；
+9. 终态报告以 operation 幂等，条件清除对应 active operation。
 
 ---
 
@@ -514,7 +538,7 @@ http://<node_ip>:<host_port>
 
 如果节点有多个 IP，优先使用：
 
-1. Agent 配置中的 advertised_ip；
+1. Agent 配置中的 advertised_address；
 2. Agent 采集的 primary_ip；
 3. Server 看到的 remote_addr。
 
@@ -522,7 +546,7 @@ Agent 配置可预留：
 
 ```yaml
 agent:
-  advertised_ip: ""
+  advertised_address: ""
 ```
 
 ---
@@ -575,9 +599,50 @@ lightai-{safe_instance_name}-{short_id}
 4. 重启时可以复用；
 5. 冲突时应记录明确错误。
 
+所有受管容器必须带 `lightai.managed=true`、instance、node、operation 和 spec generation labels。Agent 不接管缺少 ownership labels 的容器。
+
+受管容器还必须带：
+
+```text
+lightai.tenant_id=<tenant_id>
+lightai.created_by=<user_id-or-system>
+```
+
+这两个 labels 用于审计和 reconciliation，不改变 operation/generation 的状态接收规则。
+
+Agent 启动或重新连接后扫描受管容器并 reconciliation：
+
+1. 容器运行：inspect 并回报 running/health；
+2. 容器已退出：最新操作为 stop 时回报 stopped，否则回报 failed；
+3. 容器缺失且实例原状态为 created/stopped：回报 stopped；
+4. 容器缺失且期望运行，或存在 start/restart operation：回报 failed；
+5. Docker 不可用或无法可靠判断：回报 unknown。
+
+所有 reconciliation 报告仍必须携带 operation、generation 和 checked_at，并通过 Server 的旧数据拒绝规则。
+
 ---
 
 ## 18. 实例 CRUD API
+
+权限和租户规则：
+
+1. 所有查询默认按 `session.current_tenant_id` 过滤；
+2. 查询要求 `instance:read`；
+3. 创建、修改和删除要求 `instance:write`；
+4. 创建时 Server 从 Session 写入 tenant、owner 和审计字段；
+5. Model、RuntimeEnvironment、Node、GPUDevice 和 ModelInstance 必须属于同一 tenant；
+6. 不允许跨 tenant 查询、引用、修改或删除；
+7. owner_id 是可转移业务所有者，不等于 created_by，不作为 ACL；
+8. API 不比较 built-in 或 custom Role 名称，只检查实时解析的 permission code。
+
+创建时固定写入：
+
+```text
+tenant_id = session.current_tenant_id
+owner_id = session.current_user_id
+created_by = session.current_user_id
+updated_by = session.current_user_id
+```
 
 ### 18.1 创建实例
 
@@ -635,11 +700,14 @@ DELETE /api/model-instances/{id}
 1. running 状态不允许直接删除；
 2. 必须先停止；
 3. stopped / failed / created 可以删除；
-4. 删除实例不一定删除历史任务记录。
+4. 删除实例不一定删除历史任务记录；
+5. 目标实例必须属于 `session.current_tenant_id`，且调用者具有 `instance:write`。
 
 ---
 
 ## 19. 实例操作 API
+
+启动、停止、重启和刷新状态要求目标实例属于 current tenant，并要求 `instance:operate`。
 
 ### 19.1 启动实例
 
@@ -720,7 +788,10 @@ POST /api/model-instances/{id}/refresh
 6. 启动前检查 GPU 属于目标节点；
 7. 启动前检查端口不为空；
 8. 停止前检查实例是否已运行；
-9. 重启前记录旧状态。
+9. 重启前记录旧状态；
+10. 同一实例只允许一个 active operation；
+11. ownership labels 不允许用户覆盖；
+12. start/stop/restart 重复请求遵循幂等语义。
 
 ---
 
@@ -736,6 +807,8 @@ Server 记录：
 6. 任务回报；
 7. 实例状态变化；
 8. 错误信息。
+
+结构化日志同时记录 user_id、tenant_id、role_ids、required_permission、instance_id、operation_id 和 result。
 
 Agent 记录：
 
@@ -766,7 +839,21 @@ Agent 记录：
 8. 节点离线禁止启动测试；
 9. GPU 不属于节点时禁止启动测试；
 10. 任务回报更新实例状态测试；
-11. 实例状态回报测试。
+11. 实例状态回报测试；
+12. task claim/lease/attempt 测试；
+13. 同实例 active operation 排他测试；
+14. 旧 generation 和旧 checked_at 拒绝测试；
+15. start/stop/restart 幂等测试；
+16. restart 固定 stop/remove/start 测试；
+17. ownership labels 和 Agent 重启 reconciliation 测试；
+18. tenant scope 查询过滤测试；
+19. 跨 tenant Model/Runtime/Node/GPU 引用拒绝测试；
+20. 跨 tenant 实例操作拒绝测试；
+21. 创建时归属字段由 Session 写入测试；
+22. 缺少 `instance:write` / `instance:operate` 时拒绝、具有对应 permission 时允许测试；
+23. custom Role 的 instance permission 生效测试；
+23. AgentTask tenant/audit 字段测试；
+24. tenant/created_by ownership labels 测试。
 
 ---
 
@@ -785,5 +872,8 @@ Agent 记录：
 9. 可以查看最近错误；
 10. Agent 能回报实例状态；
 11. 容器异常退出后状态能变化；
-12. 节点离线时实例状态能进入 unknown。
-
+12. 节点离线时实例状态能进入 unknown；
+13. Server 下发冻结 DockerRunSpec；
+14. 任务具备 claim、lease、attempt 和幂等保护；
+15. operation/generation 防止旧报告覆盖新状态；
+16. Agent 重启后可按 ownership labels reconciliation。

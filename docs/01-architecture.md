@@ -6,6 +6,8 @@ LightAI Go 第一阶段采用 Server / Agent 架构。
 
 Server 是控制面，负责管理节点、操作系统资源、GPU 资源、运行环境、模型、模型实例、任务、Web/API 和监控组件配置。
 
+Server 同时负责本地用户、Tenant、Membership、RBAC、Session、tenant scope 和资源审计归属。基础身份设计见 `docs/09-auth-tenant-design.md`。
+
 Agent 是执行面，运行在每台 GPU 服务器上，负责注册、心跳、操作系统资源采集、GPU 资源采集、资源上报、任务拉取、Docker 启停、实例状态检查、日志回报和 Prometheus `/metrics` 指标暴露。
 
 整体链路：
@@ -68,7 +70,13 @@ Server 第一阶段负责：
 15. 提供 Server `/metrics`；
 16. 提供 Prometheus 动态发现接口 `/metrics/targets`；
 17. 提供 Prometheus / Grafana 配置和内嵌入口；
-18. 持久化管理数据到 SQLite。
+18. 持久化管理数据到 SQLite；
+19. 初始化 Permission catalog、built-in Role、default tenant 和 bootstrap platform admin；
+20. 管理本地 User、TenantMembership、TenantMembershipRole、custom Role 和 RolePermission；
+21. 提供登录、退出和当前用户接口；
+22. 每次请求实时解析 Membership、Roles 和 Permissions；
+23. 对用户侧 API 执行 tenant scope 和 required permission code 校验；
+24. 为核心资源写入 tenant、owner 和审计字段。
 
 Server 不直接操作 GPU，不直接执行 Docker 命令，不直接启动模型。
 
@@ -177,7 +185,15 @@ internal/
 11. AgentTask：Server 下发给 Agent 的任务；
 12. TaskResult：Agent 回报的任务结果；
 13. InstanceStatus：实例状态；
-14. DockerRunSpec：最终 Docker 启动参数快照。
+14. DockerRunSpec：最终 Docker 启动参数快照；
+15. Tenant：资源和成员的租户边界；
+16. User：全局本地用户；
+17. TenantMembership：用户在 tenant 内的成员关系；
+18. TenantMembershipRole：Membership 与 Role 的多对多绑定；
+19. Role：全局只读 built-in Role 或 tenant custom Role；
+20. Permission：系统只读 permission code catalog；
+21. RolePermission：Role 与 Permission 的绑定；
+22. Session：用户登录和 current tenant 上下文。
 
 ---
 
@@ -250,16 +266,18 @@ Grafana 展示 GPU 趋势
 ### 6.4 Prometheus 动态发现流程
 
 ```text
-Agent 注册时上报 agent_metrics_url
+Agent 注册时上报 advertised_address 和受控 metrics scheme/port/path/enabled
   ↓
-Server 保存 Node.agent_metrics_url
+Server 校验并保存 Node metrics 字段
   ↓
 Prometheus 请求 Server /metrics/targets
   ↓
-Server 返回 online Agent target 列表
+Server 返回已注册、未删除、metrics_enabled 且地址有效的 Agent target
   ↓
 Prometheus 抓取 Agent /metrics
 ```
+
+动态发现不以 Node 的业务 `online/offline` 状态作为过滤条件，具体契约见 `docs/08-engineering-contracts.md`。
 
 ### 6.5 模型实例启动流程
 
@@ -268,13 +286,13 @@ Prometheus 抓取 Agent /metrics
   ↓
 Server 保存 ModelInstance
   ↓
-Server 创建 StartInstanceTask
+Server 生成并冻结 DockerRunSpec
   ↓
-Agent 拉取任务
+Server 创建携带冻结规格的 StartInstanceTask
   ↓
-Agent 生成 Docker 命令
+Agent 原子 claim 任务
   ↓
-Agent 执行 docker run
+Agent 校验并执行 DockerRunSpec
   ↓
 Agent 检查容器状态
   ↓
@@ -299,6 +317,34 @@ Agent 回报结果
 Server 更新实例状态
 ```
 
+### 6.7 用户认证与授权流程
+
+```text
+用户提交 username / password / optional tenant_id
+  ↓
+Server 校验 User、TenantMembership 和 Tenant
+  ↓
+Server 创建 server-side Session
+  ↓
+后续请求从 Session 获取 current_user_id / current_tenant_id
+  ↓
+Server 实时解析 TenantMembershipRole、RolePermission 和 Permission
+  ↓
+Server 执行 tenant scope 和 required permission code 校验
+  ↓
+Server 写入 tenant_id / owner_id / created_by / updated_by
+```
+
+凭证边界：
+
+```text
+Agent API：bootstrap/shared agent token
+用户管理 API：User Session
+后续模型调用：Future API Key
+```
+
+三类凭证不能混用。
+
 ---
 
 ## 7. 第一阶段通信方式
@@ -311,9 +357,18 @@ Agent 主动访问 Server：
 POST /api/agent/register
 POST /api/agent/heartbeat
 POST /api/agent/resources/report
-GET  /api/agent/tasks/pull
+POST /api/agent/tasks/claim
 POST /api/agent/tasks/report
 POST /api/agent/instances/report
+```
+
+用户主动访问 Server：
+
+```text
+POST /api/auth/login
+POST /api/auth/logout
+POST /api/auth/change-password
+GET  /api/auth/me
 ```
 
 Server 和 Agent 指标接口：
@@ -355,13 +410,13 @@ GET /metrics/targets   # Server only
   Dashboard provisioning
 ```
 
-第一阶段实现：
+Phase 2 实现：
 
 1. SystemCollector；
-2. MockGPUCollector；
-3. GPUCollector 接口；
-4. NvidiaCollector 预留；
-5. MetaxCollector 预留；
+2. GPUCollector 接口；
+3. NvidiaCollector 真实采集链路；
+4. MetaxCollector 真实采集链路；
+5. 仅用于 development/test 的 MockGPUCollector；
 6. Agent `/metrics`；
 7. Server `/metrics`；
 8. Server `/metrics/targets`。
@@ -415,7 +470,8 @@ builtin 模式：
 2. LightAI Go 提供 Prometheus 配置；
 3. LightAI Go 提供 Grafana datasource provisioning；
 4. LightAI Go 提供 Grafana dashboard provisioning；
-5. LightAI Web 内嵌 Grafana 看板。
+5. LightAI Web 默认提供“打开 Grafana”链接；
+6. 仅在同源反向代理或明确启用匿名 Viewer 时内嵌 Grafana。
 
 external 模式：
 
@@ -428,6 +484,8 @@ disabled 模式：
 1. 不启用 Prometheus / Grafana；
 2. LightAI Go 仍然展示当前资源状态；
 3. 不展示历史趋势图。
+
+三种模式的完整行为矩阵见 `docs/08-engineering-contracts.md`。
 
 ---
 
@@ -449,7 +507,7 @@ disabled 模式：
 10. 系统诊断页面；
 11. 监控看板页面。
 
-监控看板页面可以内嵌 Grafana：
+监控看板页面默认提供 Grafana 链接：
 
 ```text
 /monitoring
@@ -458,7 +516,9 @@ disabled 模式：
 /monitoring/instances
 ```
 
-第一阶段可以先通过 iframe 方式内嵌 Grafana。后续再做统一鉴权和反向代理增强。
+iframe 是条件能力，不是默认依赖。
+
+第一阶段默认提供 Grafana 链接；具备同源代理或明确启用匿名 Viewer 时才使用 iframe，后续再做统一鉴权增强。
 
 ---
 
@@ -476,8 +536,9 @@ disabled 模式：
 8. RuntimeCollector；
 9. 更多 GPU 厂商；
 10. PostgreSQL；
-11. 权限体系；
+11. SSO、资源级 ACL 和组织继承；
 12. Grafana 统一鉴权；
 13. 告警规则；
 14. 企业微信 / 邮件告警。
 
+Tenant、User、Membership、TenantMembershipRole、built-in/custom Role、系统 Permission catalog、RolePermission、Session 和基础 RBAC 已属于第一阶段，不列为后续扩展。用户自定义 Permission code、资源级 ACL、API Key、Token 和成本仍保持后续范围。
