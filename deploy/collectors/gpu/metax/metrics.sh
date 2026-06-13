@@ -24,8 +24,10 @@ CSV_FILE="$TMPDIR/lightai-metax-metrics.$$.csv"
 LIST_FILE="$TMPDIR/lightai-metax-list.$$.txt"
 trap 'rm -f "$CSV_FILE" "$LIST_FILE"' EXIT
 
-# 1. Combined CSV.
-"$MX_SMI_CMD" --show-memory --show-usage --show-temperature --show-board-power -o "$CSV_FILE" 2>/dev/null || {
+# 1. Combined CSV. Redirect stdout to /dev/null to prevent vendor
+# status messages (e.g., "The data is writing to ...") from
+# contaminating the Collector stdout protocol output.
+"$MX_SMI_CMD" --show-memory --show-usage --show-temperature --show-board-power -o "$CSV_FILE" >/dev/null 2>/dev/null || {
   echo "mx-smi combined CSV failed" >&2
   collector_emit_status metax false "mx-smi combined CSV command failed"
   exit 30
