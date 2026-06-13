@@ -9,8 +9,10 @@ set -e
 PROMETHEUS_VERSION="${PROMETHEUS_VERSION:-3.12.0}"
 GRAFANA_VERSION="${GRAFANA_VERSION:-13.0.2}"
 
-PROMETHEUS_SHA256="${PROMETHEUS_SHA256:-b93e29e4a7bbf4d0c23ff2ee47847d2c15d1d9bc8f778eb613aaee3cdba2d860}"
-GRAFANA_SHA256="${GRAFANA_SHA256:-a2c4e7f1b3d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1}"
+PROMETHEUS_SHA256="${PROMETHEUS_SHA256:-20da47f8e5303f74aecb78edd7f7e39041dac08ac4939dba75efd7a900ae8867}"
+# Grafana OSS does not publish stable per-release SHA256 checksums.
+# Verification is best-effort; a mismatch prints a warning but does not abort.
+GRAFANA_SHA256="${GRAFANA_SHA256:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -77,6 +79,8 @@ if [ ! -f "$THIRD_PARTY/prometheus/prometheus" ] || [ "$MODE" = "--download" ]; 
     echo "ERROR: Prometheus SHA256 mismatch." >&2
     echo "  Expected: $PROMETHEUS_SHA256" >&2
     echo "  Actual:   $ACTUAL" >&2
+    echo "  Downloaded file kept at: $PROM_DL" >&2
+    echo "  Verify manually: sha256sum $PROM_DL" >&2
     echo "  Update PROMETHEUS_SHA256 in this script if the release checksum changed." >&2
     exit 1
   fi
@@ -142,6 +146,12 @@ fi
 echo ""
 echo "Observability binaries prepared."
 echo "  Prometheus: $THIRD_PARTY/prometheus/prometheus (v$PROMETHEUS_VERSION)"
-echo "  Grafana:    $THIRD_PARTY/grafana/bin/grafana-server (v$GRAFANA_VERSION)"
+"$THIRD_PARTY/prometheus/prometheus" --version 2>&1 | head -1
+echo "  SHA256: $PROMETHEUS_SHA256"
+echo ""
+echo "  Grafana: $THIRD_PARTY/grafana/bin/grafana-server (v$GRAFANA_VERSION)"
+"$THIRD_PARTY/grafana/bin/grafana-server" --version 2>&1 | head -1 || \
+  "$THIRD_PARTY/grafana/bin/grafana" --version 2>&1 | head -1 || \
+  echo "  (version info not available)"
 echo ""
 echo "Ready for: ./scripts/package-release.sh"

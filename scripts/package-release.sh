@@ -40,25 +40,45 @@ echo ""
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"/{bin,configs/observability,deploy/observability,deploy/collectors,scripts,logs,data/prometheus,data/grafana,run}
 
-# 1. Build Go binaries.
-echo "[1/7] Building Go binaries..."
+# 1. Check observability binaries FIRST (fail fast).
+echo "[1/7] Checking observability binaries..."
+THIRD="$PROJECT_DIR/third_party/observability"
+if $WITH_OBSERVABILITY; then
+  if [ ! -x "$THIRD/prometheus/prometheus" ]; then
+    echo "  ERROR: Prometheus binary not found at $THIRD/prometheus/prometheus"
+    echo "  Run: ./scripts/prepare-observability-binaries.sh --download"
+    echo "  Or:  ./scripts/package-release.sh --without-observability"
+    exit 1
+  fi
+  if [ ! -d "$THIRD/grafana/bin" ]; then
+    echo "  ERROR: Grafana not found at $THIRD/grafana/bin"
+    echo "  Run: ./scripts/prepare-observability-binaries.sh --download"
+    exit 1
+  fi
+  echo "  Prometheus: $THIRD/prometheus/prometheus"
+  echo "  Grafana:    $THIRD/grafana/bin/"
+  echo "  OK"
+else
+  echo "  Skipped (--without-observability)"
+fi
+
+# 2. Build Go binaries.
+echo "[2/7] Building Go binaries..."
 go build -tags web -o "$BUILD_DIR/bin/lightai-server" ./cmd/server
 go build -o "$BUILD_DIR/bin/lightai-agent" ./cmd/agent
 echo "  OK"
 
-# 2. Build Web.
-echo "[2/7] Building Web assets..."
+# 3. Build Web.
+echo "[3/7] Building Web assets..."
 if [ -d web ]; then
   (cd web && npm ci --silent 2>/dev/null || npm install --silent 2>/dev/null)
   (cd web && npm run build 2>/dev/null)
 fi
 echo "  OK"
 
-# 3. Observability binaries.
+# 4. Observability binaries.
 if $WITH_OBSERVABILITY; then
-  echo "[3/7] Bundling observability binaries..."
-  THIRD="$PROJECT_DIR/third_party/observability"
-  if [ ! -x "$THIRD/prometheus/prometheus" ]; then
+  echo "[4/7] Bundling observability binaries..."
     echo "  ERROR: Prometheus binary not found at $THIRD/prometheus/prometheus"
     echo "  Run: ./scripts/prepare-observability-binaries.sh --download"
     echo "  Or:  ./scripts/package-release.sh --without-observability"
@@ -73,7 +93,7 @@ if $WITH_OBSERVABILITY; then
   cp -r "$THIRD/grafana" "$BUILD_DIR/bin/grafana"
   echo "  OK"
 else
-  echo "[3/7] Skipping observability binaries (--without-observability)"
+  echo "[4/7] Skipping observability binaries (--without-observability)"
 fi
 
 # 4. Copy configs, collectors, scripts.
