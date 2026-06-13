@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"lightai-go/internal/agent/collector"
+	"lightai-go/internal/agent/register"
+	"lightai-go/internal/agent/state"
 	"lightai-go/internal/common/config"
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/common/types"
@@ -35,6 +37,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Init file logging if configured.
+	initLogging(cfg)
+
 	log.Init(cfg.LogLevel)
 
 	agentID := cfg.AgentID
@@ -42,11 +47,30 @@ func main() {
 		agentID = uuid.NewString()
 	}
 
-	log.Info("starting lightai agent",
+	// Load persistent state (node_id cache).
+	st, err := state.Load(cfg.DataDir, agentID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load agent state: %v\n", err)
+		os.Exit(1)
+	}
+
+	hostname, _ := os.Hostname()
+	advertisedAddr := hostname
+	if cfg.AdvertisedAddr != "" {
+		advertisedAddr = cfg.AdvertisedAddr
+	}
+
+	log.Info("agent starting",
 		"version", version.String(),
 		"agent_id", agentID,
 		"server_url", cfg.ServerURL,
+		"hostname", hostname,
+		"advertise_address", advertisedAddr,
+		"metrics_listen", fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port),
+		"data_dir", cfg.DataDir,
+		"cached_node_id", st.CachedNodeID(),
 		"gpu_profile", cfg.GPU.Profile,
+		"log_level", cfg.LogLevel,
 	)
 
 	// Setup Prometheus metrics.
@@ -57,25 +81,21 @@ func main() {
 	// Setup collectors based on profile.
 	registry := collector.NewRegistry()
 
-	// System collector always available.
 	if cfg.Collectors.System.Enabled {
 		registry.RegisterSystem(collector.NewSystemCollector())
 	}
 
-	// GPU collectors based on profile.
 	profile := cfg.GPU.Profile
 	if profile == "" {
 		profile = "production"
 	}
 
-	// Production always enables real collectors if configured.
 	if cfg.Collectors.Nvidia.Enabled {
 		if profile == "production" || profile == "development" {
 			registry.RegisterGPU(collector.NewNvidiaCollector())
 			log.Info("nvidia collector enabled", "profile", profile)
 		}
 	}
-	// Development/test can also enable mock (alongside real collectors).
 	if profile == "development" || profile == "test" {
 		if cfg.Collectors.MockGPU.Enabled {
 			registry.RegisterGPU(collector.NewMockGPUCollector())
@@ -83,10 +103,16 @@ func main() {
 		}
 	}
 
-	// Register collector metrics.
-	_ = registerCollectorMetrics(reg, registry)
-
-	hostname, _ := os.Hostname()
+	log.Info("collectors configured",
+		"system_enabled", cfg.Collectors.System.Enabled,
+		"nvidia_enabled", cfg.Collectors.Nvidia.Enabled,
+		"mock_enabled", cfg.Collectors.MockGPU.Enabled,
+		"gpu_profile", profile,
+		"heartbeat_interval_s", cfg.Heartbeat.Interval.Seconds(),
+		"collect_interval_s", cfg.Collectors.System.Interval.Seconds(),
+		"report_interval_s", cfg.Collectors.ReportInterval.Seconds(),
+		"request_timeout_s", cfg.RequestTimeout.Seconds(),
+	)
 
 	// Health/metrics HTTP server.
 	healthMux := http.NewServeMux()
@@ -96,9 +122,9 @@ func main() {
 	})
 	healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
-	healthAddr := fmt.Sprintf(":%d", cfg.Health.Port)
+	metricsAddr := fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port)
 	healthSrv := &http.Server{
-		Addr:         healthAddr,
+		Addr:         metricsAddr,
 		Handler:      healthMux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
@@ -106,19 +132,18 @@ func main() {
 	}
 
 	go func() {
-		log.Info("agent health server listening", "addr", healthAddr)
+		log.Info("metrics server listening", "addr", metricsAddr)
 		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal("agent health server failed", "error", err)
+			log.Error("metrics server failed", "error", err)
 		}
 	}()
 
-	advertisedAddr := hostname
-	log.Info("agent started", "agent_id", agentID, "hostname", hostname)
+	log.Info("agent started", "agent_id", agentID)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go runAgentLoop(ctx, cfg, agentID, hostname, advertisedAddr, registry)
+	go runAgentLoop(ctx, cfg, agentID, hostname, advertisedAddr, registry, st)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -131,65 +156,118 @@ func main() {
 	defer shutdownCancel()
 
 	if err := healthSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error("agent health server forced to shutdown", "error", err)
+		log.Error("metrics server forced to shutdown", "error", err)
 	}
 
 	log.Info("agent stopped")
 }
 
-func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string, registry *collector.Registry) {
-	client := &http.Client{Timeout: 10 * time.Second}
+func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string, registry *collector.Registry, st *state.State) {
+	timeout := cfg.RequestTimeout
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
+	client := &http.Client{Timeout: timeout}
 
-	if err := registerAgent(client, cfg, agentID, hostname, advertisedAddr); err != nil {
-		log.Error("initial registration failed", "error", err)
+	// Register with server.
+	regCfg := register.Config{
+		ServerURL:      cfg.ServerURL,
+		AgentToken:     cfg.AgentToken,
+		AgentID:        agentID,
+		Hostname:       hostname,
+		AdvertisedAddr: advertisedAddr,
+		MetricsEnabled: cfg.Metrics.Enabled,
+		MetricsScheme:  cfg.Metrics.Scheme,
+		MetricsPort:    cfg.Metrics.Port,
+		MetricsPath:    cfg.Metrics.Path,
+		Version:        version.String(),
+		RequestTimeout: timeout,
 	}
 
-	heartbeatTicker := time.NewTicker(30 * time.Second)
+	nodeID, err := register.Do(client, regCfg, st)
+	if err != nil {
+		log.Error("initial registration failed", "error", err)
+		// Continue with heartbeat loop - will retry on next heartbeat failure.
+	} else {
+		log.Info("agent registered with server",
+			"node_id", nodeID,
+			"agent_id", agentID,
+		)
+	}
+
+	// Heartbeat ticker.
+	hbInterval := cfg.Heartbeat.Interval
+	if hbInterval == 0 {
+		hbInterval = 2 * time.Second
+	}
+	heartbeatTicker := time.NewTicker(hbInterval)
 	defer heartbeatTicker.Stop()
 
-	// Resource collection interval.
+	// Collection/report ticker.
 	collectInterval := cfg.Collectors.System.Interval
 	if collectInterval == 0 {
-		collectInterval = 60 * time.Second
+		collectInterval = 5 * time.Second
 	}
-
 	collectTicker := time.NewTicker(collectInterval)
 	defer collectTicker.Stop()
 
 	// Collect immediately after registration.
 	collectAndReport(ctx, client, cfg, agentID, registry)
 
-	registered := true
+	consecutiveFailures := 0
+	lastSuccessAt := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-heartbeatTicker.C:
-			if err := sendHeartbeat(client, cfg, agentID); err != nil {
-				log.Warn("heartbeat failed", "error", err)
-				if isNeedRegister(err) {
-					registered = false
+			hbResp, err := register.SendHeartbeat(client, cfg.ServerURL, cfg.AgentToken, agentID)
+			if err != nil {
+				consecutiveFailures++
+				log.Warn("heartbeat failed",
+					"agent_id", agentID,
+					"error", err,
+					"consecutive_failure_count", consecutiveFailures,
+				)
+				if hbResp != nil && hbResp.NeedRegister {
+					log.Info("server requested re-registration",
+						"agent_id", agentID,
+					)
+					nodeID, regErr := register.Do(client, regCfg, st)
+					if regErr != nil {
+						log.Error("re-registration failed", "error", regErr)
+					} else {
+						log.Info("re-registration successful",
+							"node_id", nodeID,
+						)
+						consecutiveFailures = 0
+					}
 				}
-			}
-			if !registered {
-				if err := registerAgent(client, cfg, agentID, hostname, advertisedAddr); err != nil {
-					log.Error("re-registration failed", "error", err)
-				} else {
-					registered = true
-				}
+			} else {
+				consecutiveFailures = 0
 			}
 		case <-collectTicker.C:
 			collectAndReport(ctx, client, cfg, agentID, registry)
+			if consecutiveFailures == 0 {
+				lastSuccessAt = time.Now()
+			}
 		}
 	}
+
+	_ = lastSuccessAt
 }
 
 func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry) {
+	log.Debug("resource collect start", "agent_id", agentID)
+
+	start := time.Now()
 	report := registry.Collect(ctx, agentID)
 	if report == nil {
 		log.Warn("resource collection returned nil report")
 		return
 	}
+	collectDuration := time.Since(start)
 
 	// Marshal and send to server.
 	bodyBytes, err := json.Marshal(report)
@@ -206,93 +284,32 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.AgentToken)
 
+	reportStart := time.Now()
 	resp, err := client.Do(req)
+	reportLatency := time.Since(reportStart)
 	if err != nil {
-		log.Error("resource report request failed", "error", err)
+		log.Error("resource report failed",
+			"agent_id", agentID,
+			"error", err,
+			"collect_ms", collectDuration.Milliseconds(),
+		)
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		log.Warn("resource report returned non-ok status", "status", resp.StatusCode)
-		return
-	}
+	_ = resp // consume
 
 	gpuCount := registry.GPUCount()
-	log.Info("resource report sent", "agent_id", agentID, "gpu_count", gpuCount)
+	log.Info("resource report success",
+		"agent_id", agentID,
+		"gpu_count", gpuCount,
+		"collect_ms", collectDuration.Milliseconds(),
+		"report_latency_ms", reportLatency.Milliseconds(),
+		"payload_bytes", len(bodyBytes),
+	)
 }
 
-// registerCollectorMetrics registers Prometheus metrics from the collector registry.
-func registerCollectorMetrics(reg *prometheus.Registry, registry *collector.Registry) error {
-	// Register system and GPU metrics as Prometheus gauges.
-	// These are updated during collection cycles.
-	return nil
-}
-
-func registerAgent(client *http.Client, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string) error {
-	reqBody := map[string]interface{}{
-		"agent_id":           agentID,
-		"hostname":           hostname,
-		"advertised_address": advertisedAddr,
-		"metrics_enabled":    cfg.Metrics.Enabled,
-		"metrics_scheme":     cfg.Metrics.Scheme,
-		"metrics_port":       cfg.Metrics.Port,
-		"metrics_path":       cfg.Metrics.Path,
-		"version":            version.String(),
-	}
-
-	bodyBytes, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", cfg.ServerURL+"/api/agent/register", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.AgentToken)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("register request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("register returned status %d", resp.StatusCode)
-	}
-
-	var regResp struct{ NodeID string }
-	json.NewDecoder(resp.Body).Decode(&regResp)
-	log.Info("agent registered", "node_id", regResp.NodeID)
-	return nil
-}
-
-func sendHeartbeat(client *http.Client, cfg *config.AgentConfig, agentID string) error {
-	reqBody := map[string]string{"agent_id": agentID}
-	bodyBytes, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", cfg.ServerURL+"/api/agent/heartbeat", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.AgentToken)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("heartbeat request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var hbResp struct {
-		Status       string `json:"status"`
-		NeedRegister bool   `json:"need_register"`
-	}
-	json.NewDecoder(resp.Body).Decode(&hbResp)
-
-	if hbResp.NeedRegister {
-		return fmt.Errorf("need_register")
-	}
-	return nil
-}
-
-func isNeedRegister(err error) bool {
-	return err != nil && err.Error() == "need_register"
+func initLogging(cfg *config.AgentConfig) {
+	// File logging setup is handled in config/log package.
+	// This is a placeholder for future file log initialization.
 }

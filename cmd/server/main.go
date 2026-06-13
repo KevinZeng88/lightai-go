@@ -26,9 +26,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-var (
-	configPath = flag.String("config", "", "path to config file (YAML)")
-)
+var configPath = flag.String("config", "", "path to config file (YAML)")
 
 func main() {
 	flag.Parse()
@@ -41,9 +39,9 @@ func main() {
 
 	log.Init(cfg.LogLevel)
 
-	log.Info("starting lightai server",
+	log.Info("server starting",
 		"version", version.String(),
-		"port", cfg.Port,
+		"listen", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		"log_level", cfg.LogLevel,
 		"db_path", cfg.DBPath,
 	)
@@ -116,8 +114,12 @@ func main() {
 		ResourceHandler: resourceHandler,
 	})
 
+	// Serve embedded web assets or fallback.
+	serveEmbeddedWeb(mux)
+
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Addr:         addr,
 		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
@@ -125,7 +127,7 @@ func main() {
 	}
 
 	go func() {
-		log.Info("server listening", "addr", srv.Addr)
+		log.Info("server listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("server failed", "error", err)
 		}
@@ -144,4 +146,21 @@ func main() {
 	}
 
 	log.Info("server stopped")
+}
+
+// serveFallbackPage returns a helpful HTML page when web assets are not built.
+func serveFallbackPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`<!DOCTYPE html>
+<html><head><title>LightAI Go</title></head>
+<body style="font-family: sans-serif; padding: 2rem;">
+<h1>LightAI Go Server</h1>
+<p>API server is running.</p>
+<p>Web assets not built. Run:</p>
+<pre>cd web && npm run build</pre>
+<p>Then rebuild with <code>-tags web</code>.</p>
+<hr>
+<p><small>API: <a href="/api/auth/me">/api/auth/me</a> | <a href="/healthz">/healthz</a> | <a href="/metrics">/metrics</a> | <a href="/metrics/targets">/metrics/targets</a></small></p>
+</body></html>`))
 }

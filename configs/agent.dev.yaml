@@ -1,18 +1,20 @@
 # LightAI Go Agent - Development Configuration
 agent_id: agent-dev-01
-server_url: http://localhost:8080
+server_url: http://127.0.0.1:18080
 agent_token: "dev-agent-token"
 log_level: debug
 data_dir: data
+request_timeout: 5s
 
 metrics:
   enabled: true
+  host: "127.0.0.1"
   scheme: http
-  port: 9090
+  port: 19091
   path: /metrics
 
-health:
-  port: 9091
+heartbeat:
+  interval: 2s
 
 gpu:
   profile: development
@@ -20,9 +22,20 @@ gpu:
 collectors:
   system:
     enabled: true
-    interval: 60s
+    interval: 5s
   mock_gpu:
     enabled: false
   nvidia:
     enabled: true
-    interval: 60s
+    interval: 5s
+  report_interval: 5s
+
+logging:
+  level: "debug"
+  dir: "logs"
+  file: "lightai-agent.log"
+  stdout: true
+  file_enabled: true
+  max_size_mb: 50
+  max_files: 5
+  retention_days: 7
