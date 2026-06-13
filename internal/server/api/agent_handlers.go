@@ -10,8 +10,6 @@ import (
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/server/db"
 	srvmetrics "lightai-go/internal/server/metrics"
-
-	"github.com/google/uuid"
 )
 
 // AgentHandler handles Agent API endpoints.
@@ -62,8 +60,8 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AgentID == "" {
-		http.Error(w, `{"error":"agent_id required"}`, http.StatusBadRequest)
+	if req.NodeID == "" {
+		http.Error(w, `{"error":"node_id is required"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -80,20 +78,12 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		req.MetricsPort = 9090
 	}
 
-	// Upsert node: node_id is the primary identity (agent_id is display-only).
+	// Upsert node: node_id is the ONLY identity key.
 	var serverNodeID string
-	var err error
-	if req.NodeID != "" {
-		err = h.DB.QueryRow(`SELECT id FROM nodes WHERE id = ?`, req.NodeID).Scan(&serverNodeID)
-	} else {
-		err = h.DB.QueryRow(`SELECT id FROM nodes WHERE agent_id = ?`, req.AgentID).Scan(&serverNodeID)
-	}
+	err := h.DB.QueryRow(`SELECT id FROM nodes WHERE id = ?`, req.NodeID).Scan(&serverNodeID)
 	if err == sql.ErrNoRows {
-		// Create new node. Use client-provided node_id or generate.
+		// Create new node with client-provided node_id.
 		serverNodeID = req.NodeID
-		if serverNodeID == "" {
-			serverNodeID = uuid.NewString()
-		}
 		_, err = h.DB.Exec(
 			`INSERT INTO nodes (id, agent_id, hostname, advertised_address,
 			 metrics_enabled, metrics_scheme, metrics_port, metrics_path,
@@ -159,8 +149,8 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AgentID == "" {
-		http.Error(w, `{"error":"agent_id required"}`, http.StatusBadRequest)
+	if req.NodeID == "" {
+		http.Error(w, `{"error":"node_id is required"}`, http.StatusBadRequest)
 		return
 	}
 
