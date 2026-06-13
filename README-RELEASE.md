@@ -1,9 +1,31 @@
 # LightAI Go Release Package
 
-Version: 0.1.0
+LightAI Go — lightweight GPU infrastructure management platform.
+Server/Agent architecture with Web Console and built-in Prometheus + Grafana.
 
-LightAI Go is a lightweight GPU infrastructure management platform.
-Server/Agent architecture with Web Console.
+## Supported Systems
+
+- Rocky Linux 8 (linux-amd64)
+- CentOS 8 (linux-amd64)
+- Ubuntu 20.04 (linux-amd64)
+- Other linux-amd64 with glibc
+
+NOT supported: CentOS 7, Alpine/musl, ARM.
+
+## No Docker Required
+
+This release includes Prometheus and Grafana binaries directly.
+No Docker, docker compose, or container runtime needed.
+All components run as native processes managed by shell scripts.
+
+## Included Components
+
+| Component | Version | Port |
+|-----------|---------|------|
+| LightAI Server + Web | 0.1.0 | 8080 |
+| LightAI Agent | 0.1.0 | 9091 |
+| Prometheus | 3.12.0 | 9090 |
+| Grafana OSS | 13.0.2 | 3000 |
 
 ## Quick Start
 
@@ -14,179 +36,141 @@ tar -xzf lightai-go-0.1.0-linux-amd64.tar.gz
 cd lightai-go-0.1.0-linux-amd64
 ```
 
-### 2. Set Admin Password
+### 2. Set Passwords
 
 ```bash
 export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='YourSecurePassword123'
+export LIGHTAI_GRAFANA_ADMIN_PASSWORD='YourGrafanaPassword123'
 ```
 
-The password is required on first start to create the admin user.
-If not set, a random password is generated and printed once to stderr.
-
-### 3. Start Server
+### 3. Start All Services
 
 ```bash
 ./scripts/start-server.sh
+./scripts/start-agent.sh nvidia     # or: metax
+./scripts/start-observability.sh
 ```
 
-Server listens on `0.0.0.0:8080` by default.
-
-- Web Console: `http://<server-ip>:8080/`
-- API: `http://<server-ip>:8080/api/`
-- Health: `http://<server-ip>:8080/healthz`
-- Metrics: `http://<server-ip>:8080/metrics`
-
-### 4. Start Agent (MetaX)
-
-```bash
-./scripts/start-agent.sh metax
-```
-
-For NVIDIA GPUs:
-
-```bash
-./scripts/start-agent.sh nvidia
-```
-
-### 5. Verify
+### 4. Verify
 
 ```bash
 ./scripts/status.sh
 ./scripts/verify-local.sh
 ```
 
-### 6. Open Web Console
+### 5. Access
 
-```
-http://<server-ip>:8080/
-```
+| Service | URL |
+|---------|-----|
+| LightAI Web | http://<server-ip>:8080/ |
+| Prometheus | http://<server-ip>:9090/ |
+| Grafana | http://<server-ip>:3000/ (admin / <LIGHTAI_GRAFANA_ADMIN_PASSWORD>) |
 
-Default language: Chinese. Switch to English via top-right language selector.
+## Services
+
+### Server
+- Listens on 0.0.0.0:8080
+- Web Console embedded (no separate web server needed)
+- Default language: Chinese
+
+### Agent
+- Listens on 0.0.0.0:9091 (metrics)
+- Supports MetaX (`mx-smi`) and NVIDIA (`nvidia-smi`) GPU collectors
+- GPU collector scripts: `deploy/collectors/gpu/`
+
+### Prometheus
+- Local TSDB storage: `data/prometheus/`
+- Retention: 15 days
+- Scrapes Server (:8080/metrics) and Agent (:9091/metrics)
+
+### Grafana
+- SQLite database: `data/grafana/grafana.db`
+- Auto-provisioned Prometheus datasource
+- Auto-loaded dashboards from `deploy/observability/grafana/dashboards/`
 
 ## Directory Structure
 
 ```
-lightai-go-0.1.0-linux-amd64/
-├── bin/
-│   ├── lightai-server      # Server binary (API + embedded Web)
-│   └── lightai-agent       # Agent binary
-├── configs/
-│   ├── server.release.yaml # Server configuration
-│   ├── agent.metax.yaml    # Agent config (MetaX GPU)
-│   └── agent.nvidia.yaml   # Agent config (NVIDIA GPU)
+├── bin/                    # All binaries
+│   ├── lightai-server
+│   ├── lightai-agent
+│   ├── prometheus
+│   └── grafana/
+├── configs/                # Configuration files
+│   ├── server.release.yaml
+│   ├── agent.metax.yaml
+│   ├── agent.nvidia.yaml
+│   └── observability/
 ├── deploy/
 │   ├── collectors/gpu/     # GPU collector scripts
-│   │   ├── common.sh
-│   │   ├── nvidia/
-│   │   └── metax/
-│   └── observability/      # Prometheus/Grafana configs
-├── scripts/
-│   ├── start-server.sh     # Start server (background)
-│   ├── start-agent.sh      # Start agent (background)
-│   ├── stop-server.sh      # Stop server
-│   ├── stop-agent.sh       # Stop agent
-│   ├── status.sh           # Show running status
-│   ├── verify-local.sh     # Run health checks
-│   ├── collect-logs.sh     # Collect diagnostics bundle
-│   ├── observability-up.sh # Start Prometheus+Grafana
-│   ├── observability-down.sh
-│   └── observability-status.sh
-├── logs/                   # Log files (created on start)
-├── data/                   # Database and agent state
-├── run/                    # PID files
-├── VERSION                 # Build info
-└── README-RELEASE.md       # This file
+│   └── observability/      # Grafana dashboards, provisioning
+├── scripts/                # Management scripts
+├── logs/ data/ run/        # Runtime directories
+├── LICENSES/               # Third-party licenses
+└── README-RELEASE.md
 ```
 
-## Logs
+## Management Scripts
 
-- `logs/server.log` — Server structured log
-- `logs/agent.log` — Agent structured log
-- `logs/server-stdout.log` — Server stdout/stderr
-- `logs/agent-stdout.log` — Agent stdout/stderr
+```bash
+# Start / Stop
+./scripts/start-server.sh
+./scripts/stop-server.sh
+./scripts/start-agent.sh [metax|nvidia]
+./scripts/stop-agent.sh
+./scripts/start-observability.sh
+./scripts/stop-observability.sh
 
-All logs are in English.
+# Diagnostics
+./scripts/status.sh           # Process + health check
+./scripts/verify-local.sh     # Full verification
+./scripts/collect-logs.sh     # Create diagnostics bundle
+```
 
 ## GPU Collector
 
-GPU metrics are collected via external scripts that output
-LightAI GPU Collector Protocol.
+### MetaX
+- Requires `mx-smi` at `/usr/bin/mx-smi` or set `MX_SMI` env var
+- Agent user must be in `video` group for `/dev/mxcd`
 
-- NVIDIA: `nvidia-smi` must be available.
-- MetaX: `mx-smi` must be available at `/usr/bin/mx-smi`
-  or set via `MX_SMI` environment variable.
+### NVIDIA
+- Requires `nvidia-smi`
 
-MetaX agent user must be in the `video` group for `/dev/mxcd` access.
+## Logs
 
-## Observability (Optional)
-
-Bundled Prometheus + Grafana:
-
-```bash
-./scripts/observability-up.sh    # Start (requires prometheus + grafana-server)
-./scripts/observability-status.sh
-./scripts/observability-down.sh
+```
+logs/server.log           # Server structured log
+logs/agent.log            # Agent structured log
+logs/server-stdout.log    # Server stdout
+logs/agent-stdout.log     # Agent stdout
+logs/prometheus.log       # Prometheus stdout
+logs/grafana.log          # Grafana stdout
 ```
 
-Prometheus: `http://<server-ip>:19090`
-Grafana:    `http://<server-ip>:13000` (admin/lightai)
+All logs in English.
 
-Set `LIGHTAI_GRAFANA_ADMIN_PASSWORD` for production.
+## Security
+
+- Set `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` for admin account
+- Set `LIGHTAI_GRAFANA_ADMIN_PASSWORD` for Grafana
+- Change default `agent_token` in configs before production
+- Do NOT expose 8080/9090/3000 to public internet directly
+- Use VPN, bastion host, or reverse proxy
 
 ## Troubleshooting
 
 ```bash
-# Check status
-./scripts/status.sh
-
-# Run verification
-./scripts/verify-local.sh
-
-# Collect diagnostics
-./scripts/collect-logs.sh
-# Sends lightai-go-logs-<timestamp>.tar.gz
-
-# View recent logs
-tail -100 logs/agent-stdout.log
-tail -100 logs/server-stdout.log
-
-# Check GPU collector
-bash deploy/collectors/gpu/metax/discover.sh
-bash deploy/collectors/gpu/metax/metrics.sh
-
-# Reset database (WARNING: deletes all data)
-rm -f data/lightai.db
-# Restart server to re-initialize
+./scripts/status.sh                    # Check all services
+./scripts/verify-local.sh              # Run health checks
+./scripts/collect-logs.sh              # Collect diagnostics bundle
+tail -100 logs/agent-stdout.log        # View agent output
+tail -100 logs/prometheus.log          # View Prometheus output
+bash deploy/collectors/gpu/metax/discover.sh  # Test GPU collector
 ```
-
-## Web Console
-
-The Web Console is embedded in the Server binary.
-No separate web server or Node.js required on the target machine.
-
-Default language: Chinese. Click the language selector (top-right) to switch to English.
-
-Pages:
-- Dashboard — node/GPU overview
-- Nodes — node list with detail drawer
-- GPUs — GPU list with filter/search/detail
-- Observability — Metrics Targets, Prometheus, Grafana
-
-## Security Notes
-
-- Change `agent_token` in configs before production use.
-- Set `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` via environment variable.
-- Set `LIGHTAI_GRAFANA_ADMIN_PASSWORD` for Grafana.
-- Do NOT expose ports 8080/19090/13000 directly to public internet.
-- Use VPN, bastion host, or reverse proxy for production access.
-- TLS/HTTPS is a future enhancement.
 
 ## Build from Source
 
 ```bash
-cd web && npm install && npm run build
-cd ..
-go build -tags web -o bin/lightai-server ./cmd/server
-go build -o bin/lightai-agent ./cmd/agent
+./scripts/prepare-observability-binaries.sh --download
 ./scripts/package-release.sh
 ```

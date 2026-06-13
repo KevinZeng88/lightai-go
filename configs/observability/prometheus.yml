@@ -1,0 +1,24 @@
+# LightAI Go - Prometheus Configuration (bundled mode)
+# Port: 9090. Managed by scripts/start-observability.sh
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 10s
+  external_labels:
+    cluster: lightai
+
+scrape_configs:
+  - job_name: lightai-server
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
+
+  - job_name: lightai-agent
+    static_configs:
+      - targets: ["127.0.0.1:9091"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+
+rule_files:
+  - deploy/observability/prometheus/rules/lightai.rules.yml
