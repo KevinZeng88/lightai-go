@@ -72,7 +72,7 @@ echo "git status:" >> "$TMP_DIR/system-info.txt"
 echo "  OK"
 
 echo "[6/10] NVIDIA GPU info..."
-if command -v nvidia-smi &>/dev/null; then
+if command -v nvidia-smi >/dev/null 2>&1; then
   nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,driver_version,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu,power.draw --format=csv,noheader,nounits > "$TMP_DIR/nvidia-smi-query.txt" 2>/dev/null || true
   nvidia-smi > "$TMP_DIR/nvidia-smi-full.txt" 2>/dev/null || true
   echo "  OK: $(wc -l < "$TMP_DIR/nvidia-smi-query.txt") GPU(s)"
@@ -81,7 +81,7 @@ else
 fi
 
 echo "[7/10] MetaX GPU info..."
-if command -v mx-smi &>/dev/null; then
+if command -v mx-smi >/dev/null 2>&1; then
   mx-smi > "$TMP_DIR/mx-smi.txt" 2>/dev/null || true
   echo "  OK"
 else

@@ -38,7 +38,17 @@ echo ""
 
 # Clean.
 rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR"/{bin,configs/observability,deploy/observability,deploy/collectors,scripts,logs,data/prometheus,data/grafana,run}
+mkdir -p "$BUILD_DIR/bin"
+mkdir -p "$BUILD_DIR/configs"
+mkdir -p "$BUILD_DIR/configs/observability"
+mkdir -p "$BUILD_DIR/deploy"
+mkdir -p "$BUILD_DIR/deploy/observability"
+mkdir -p "$BUILD_DIR/deploy/collectors"
+mkdir -p "$BUILD_DIR/scripts"
+mkdir -p "$BUILD_DIR/logs"
+mkdir -p "$BUILD_DIR/data/prometheus"
+mkdir -p "$BUILD_DIR/data/grafana"
+mkdir -p "$BUILD_DIR/run"
 
 # 1. Check observability binaries FIRST (fail fast).
 echo "[1/8] Checking observability binaries..."
@@ -100,6 +110,13 @@ fi
 
 # 5. Copy configs, collectors, scripts.
 echo "[5/8] Copying configs and scripts..."
+# Ensure target directories exist.
+for d in "$BUILD_DIR/configs" "$BUILD_DIR/configs/observability" "$BUILD_DIR/deploy" "$BUILD_DIR/scripts"; do
+  if [ ! -d "$d" ]; then
+    echo "  ERROR: directory missing: $d" >&2
+    exit 1
+  fi
+done
 cp configs/server.release.yaml "$BUILD_DIR/configs/"
 cp configs/agent.metax.yaml "$BUILD_DIR/configs/"
 cp configs/agent.nvidia.yaml "$BUILD_DIR/configs/"

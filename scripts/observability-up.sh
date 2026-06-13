@@ -40,7 +40,7 @@ if [ -f "$RUN_DIR/prometheus.pid" ]; then
 fi
 
 if [ ! -f "$RUN_DIR/prometheus.pid" ]; then
-  if ! command -v "$PROMETHEUS_BIN" &>/dev/null; then
+  if ! command -v "$PROMETHEUS_BIN" >/dev/null 2>&1; then
     echo "  ERROR: prometheus binary not found at '$PROMETHEUS_BIN'"
     echo "  Set PROMETHEUS_BIN env var or install prometheus."
     exit 1
@@ -71,7 +71,7 @@ if [ -f "$RUN_DIR/grafana.pid" ]; then
 fi
 
 if [ ! -f "$RUN_DIR/grafana.pid" ]; then
-  if ! command -v "$GRAFANA_BIN" &>/dev/null; then
+  if ! command -v "$GRAFANA_BIN" >/dev/null 2>&1; then
     echo "  WARNING: grafana-server binary not found at '$GRAFANA_BIN'"
     echo "  Set GRAFANA_BIN env var or install grafana."
     echo "  Grafana will NOT be started."
