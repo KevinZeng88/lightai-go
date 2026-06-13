@@ -1,75 +1,75 @@
 #!/bin/sh
 # LightAI GPU Collector - NVIDIA Metrics
-# Converts nvidia-smi output to LightAI GPU Collector Protocol.
-# Exit codes: 0=success, 10=not_available, 30=command_failed
+# Exit codes: 0=success, 10=not_available, 30=command_failed, 40=parse_failed
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/../common.sh"
+
 NVIDIA_SMI=""
-
-if command -v nvidia-smi >/dev/null 2>&1; then
-  NVIDIA_SMI="nvidia-smi"
-elif [ -x "/usr/bin/nvidia-smi" ]; then
-  NVIDIA_SMI="/usr/bin/nvidia-smi"
-elif [ -x "/usr/lib/wsl/lib/nvidia-smi" ]; then
-  NVIDIA_SMI="/usr/lib/wsl/lib/nvidia-smi"
-else
-  echo "STATUS vendor=nvidia ok=false message=\"nvidia-smi not found\""
+NVIDIA_SMI=$(collector_find_command nvidia-smi /usr/bin/nvidia-smi /usr/lib/wsl/lib/nvidia-smi) || {
+  collector_emit_status nvidia false "nvidia-smi not found"
   exit 10
-fi
+}
 
-# Execute query with all fields.
 QUERY="index,name,uuid,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu,power.draw"
 OUTPUT=$("$NVIDIA_SMI" --query-gpu="$QUERY" --format=csv,noheader,nounits 2>/dev/null) || {
-  echo "STATUS vendor=nvidia ok=false message=\"nvidia-smi command failed\""
+  echo "nvidia-smi metrics failed: exit=$?" >&2
+  collector_emit_status nvidia false "nvidia-smi command failed"
   exit 30
 }
 
 if [ -z "$OUTPUT" ]; then
-  echo "STATUS vendor=nvidia ok=true message=\"no NVIDIA GPUs found\""
-  exit 0
+  collector_emit_status nvidia false "no NVIDIA GPUs found"
+  exit 10
 fi
 
-echo "STATUS vendor=nvidia ok=true message=ok"
+collector_emit_status nvidia true ok
 
-# Parse each GPU line.
-# Format: index, name, uuid, memory.total, memory.used, memory.free, utilization.gpu, utilization.memory, temperature.gpu, power.draw
+parse_error=0
 echo "$OUTPUT" | while IFS=',' read -r idx name uuid mem_total mem_used mem_free gpu_util mem_util temp power; do
-  # Trim whitespace.
-  idx=$(echo "$idx" | xargs)
-  name=$(echo "$name" | xargs)
-  uuid=$(echo "$uuid" | xargs)
-  mem_total=$(echo "$mem_total" | xargs)
-  mem_used=$(echo "$mem_used" | xargs)
-  mem_free=$(echo "$mem_free" | xargs)
-  gpu_util=$(echo "$gpu_util" | xargs)
-  mem_util=$(echo "$mem_util" | xargs)
-  temp=$(echo "$temp" | xargs)
-  power=$(echo "$power" | xargs)
+  idx=$(echo "$idx" | collector_trim)
+  name=$(echo "$name" | collector_trim)
+  uuid=$(echo "$uuid" | collector_trim)
+  mem_total=$(echo "$mem_total" | collector_trim)
+  mem_used=$(echo "$mem_used" | collector_trim)
+  mem_free=$(echo "$mem_free" | collector_trim)
+  gpu_util=$(echo "$gpu_util" | collector_trim)
+  mem_util=$(echo "$mem_util" | collector_trim)
+  temp=$(echo "$temp" | collector_trim)
+  power=$(echo "$power" | collector_trim)
 
-  # Convert memory from MB to bytes.
-  mem_total_bytes=$(($mem_total * 1024 * 1024))
-  mem_used_bytes=$(($mem_used * 1024 * 1024))
-  mem_free_bytes=$(($mem_free * 1024 * 1024))
+  if [ -z "$idx" ] || [ -z "$uuid" ]; then
+    echo "nvidia metrics: missing index or uuid at idx=$idx" >&2
+    parse_error=1
+    continue
+  fi
 
-  # Handle null/N/A values for optional fields.
-  gpu_util_val="$gpu_util"
-  mem_util_val="$mem_util"
-  temp_val="$temp"
-  power_val="$power"
+  mem_total_bytes=$(collector_mib_to_bytes_or_null "$mem_total")
+  mem_used_bytes=$(collector_mib_to_bytes_or_null "$mem_used")
 
-  case "$gpu_util" in
-    ""|"N/A"|"[N/A]"|"Unknown") gpu_util_val="null" ;;
-  esac
-  case "$mem_util" in
-    ""|"N/A"|"[N/A]"|"Unknown") mem_util_val="null" ;;
-  esac
-  case "$temp" in
-    ""|"N/A"|"[N/A]"|"Unknown") temp_val="null" ;;
-  esac
-  case "$power" in
-    ""|"N/A"|"[N/A]"|"Unknown") power_val="null" ;;
-  esac
+  if [ "$mem_free" = "" ] || [ "$mem_free" = "N/A" ] || [ "$mem_free" = "[N/A]" ]; then
+    mem_free_bytes=$(collector_calc_free_bytes_or_null "$mem_total_bytes" "$mem_used_bytes")
+  else
+    mem_free_bytes=$(collector_mib_to_bytes_or_null "$mem_free")
+  fi
 
-  echo "METRIC vendor=nvidia index=$idx uuid=$uuid name=\"$name\" memory_total_bytes=$mem_total_bytes memory_used_bytes=$mem_used_bytes memory_free_bytes=$mem_free_bytes gpu_utilization_percent=$gpu_util_val memory_utilization_percent=$mem_util_val temperature_celsius=$temp_val power_draw_watts=$power_val health=healthy status=available"
+  gpu_util_val=$(collector_percent_or_null "$gpu_util")
+
+  mem_util_val=$(collector_percent_or_null "$mem_util")
+  if [ "$mem_util_val" = "null" ] && [ "$mem_total_bytes" != "null" ] && [ "$mem_used_bytes" != "null" ]; then
+    mem_util_val=$(collector_calc_percent_or_null "$mem_used_bytes" "$mem_total_bytes")
+  fi
+
+  temp_val=$(collector_number_or_null "$temp")
+  power_val=$(collector_number_or_null "$power")
+
+  collector_emit_metric nvidia "$idx" "$uuid" "$name" \
+    "$mem_total_bytes" "$mem_used_bytes" "$mem_free_bytes" \
+    "$gpu_util_val" "$mem_util_val" "$temp_val" "$power_val" \
+    healthy available
 done
+
+[ "$parse_error" = "1" ] && exit 40
+exit 0

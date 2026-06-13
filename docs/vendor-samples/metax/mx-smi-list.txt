@@ -1,0 +1,8 @@
+GPU#0    MXC500      0000:0e:00.0   Available (UUID: GPU-0b8d779d-fb57-dd1e-053f-618f95014f52)
+GPU#1    MXC500      0000:0f:00.0   Available (UUID: GPU-5d99679f-d17d-81c6-cfa3-d1193baf4bfa)
+GPU#2    MXC500      0000:10:00.0   Available (UUID: GPU-1c28f106-f814-dee4-c438-5bbac89c120c)
+GPU#3    MXC500      0000:12:00.0   Available (UUID: GPU-1d8e9b8e-6f49-40e2-0f62-35628953c0b6)
+GPU#4    MXC500      0000:35:00.0   Available (UUID: GPU-95b01051-e1e4-9038-d750-b0bbeb0c3088)
+GPU#5    MXC500      0000:36:00.0   Available (UUID: GPU-39c2d44f-377e-e7ca-43d6-dce9a1f2518e)
+GPU#6    MXC500      0000:37:00.0   Available (UUID: GPU-f5abb9d8-1d98-6bf5-77e5-c3a80f68a577)
+GPU#7    MXC500      0000:38:00.0   Available (UUID: GPU-a3a33e09-e127-8a64-bdbd-3293eb114e8c)
