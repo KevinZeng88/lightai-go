@@ -38,3 +38,4 @@ tmp/
 data/
 cookies.txt
 *.tar.gz
+third_party/

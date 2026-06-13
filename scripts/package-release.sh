@@ -41,7 +41,7 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"/{bin,configs/observability,deploy/observability,deploy/collectors,scripts,logs,data/prometheus,data/grafana,run}
 
 # 1. Check observability binaries FIRST (fail fast).
-echo "[1/7] Checking observability binaries..."
+echo "[1/8] Checking observability binaries..."
 THIRD="$PROJECT_DIR/third_party/observability"
 if $WITH_OBSERVABILITY; then
   if [ ! -x "$THIRD/prometheus/prometheus" ]; then
@@ -63,41 +63,43 @@ else
 fi
 
 # 2. Build Go binaries.
-echo "[2/7] Building Go binaries..."
+echo "[2/8] Building Go binaries..."
 go build -tags web -o "$BUILD_DIR/bin/lightai-server" ./cmd/server
 go build -o "$BUILD_DIR/bin/lightai-agent" ./cmd/agent
 echo "  OK"
 
 # 3. Build Web.
-echo "[3/7] Building Web assets..."
+echo "[3/8] Building Web assets..."
 if [ -d web ]; then
   (cd web && npm ci --silent 2>/dev/null || npm install --silent 2>/dev/null)
   (cd web && npm run build 2>/dev/null)
 fi
 echo "  OK"
 
-# 4. Observability binaries.
+# 4. Bundled observability binaries.
+PROMETHEUS_BIN="$THIRD/prometheus/prometheus"
+GRAFANA_DIR="$THIRD/grafana"
 if $WITH_OBSERVABILITY; then
-  echo "[4/7] Bundling observability binaries..."
-    echo "  ERROR: Prometheus binary not found at $THIRD/prometheus/prometheus"
-    echo "  Run: ./scripts/prepare-observability-binaries.sh --download"
-    echo "  Or:  ./scripts/package-release.sh --without-observability"
+  echo "[4/8] Bundling observability binaries..."
+  echo "  Observability input: $THIRD"
+  if [ ! -x "$PROMETHEUS_BIN" ]; then
+    echo "  ERROR: Prometheus binary not found at $PROMETHEUS_BIN"
     exit 1
   fi
-  if [ ! -d "$THIRD/grafana/bin" ]; then
-    echo "  ERROR: Grafana not found at $THIRD/grafana/bin"
-    echo "  Run: ./scripts/prepare-observability-binaries.sh --download"
+  if [ ! -d "$GRAFANA_DIR/bin" ]; then
+    echo "  ERROR: Grafana not found at $GRAFANA_DIR/bin"
     exit 1
   fi
-  cp "$THIRD/prometheus/prometheus" "$BUILD_DIR/bin/prometheus"
-  cp -r "$THIRD/grafana" "$BUILD_DIR/bin/grafana"
+  install -m 0755 "$PROMETHEUS_BIN" "$BUILD_DIR/bin/prometheus"
+  cp -a "$GRAFANA_DIR" "$BUILD_DIR/bin/grafana"
+  echo "  Observability bundled: bin/prometheus bin/grafana/"
   echo "  OK"
 else
-  echo "[4/7] Skipping observability binaries (--without-observability)"
+  echo "[4/8] Skipping observability binaries (--without-observability)"
 fi
 
-# 4. Copy configs, collectors, scripts.
-echo "[4/7] Copying configs and scripts..."
+# 5. Copy configs, collectors, scripts.
+echo "[5/8] Copying configs and scripts..."
 cp configs/server.release.yaml "$BUILD_DIR/configs/"
 cp configs/agent.metax.yaml "$BUILD_DIR/configs/"
 cp configs/agent.nvidia.yaml "$BUILD_DIR/configs/"
@@ -113,8 +115,8 @@ cp scripts/collect-logs.sh "$BUILD_DIR/scripts/"
 chmod +x "$BUILD_DIR"/scripts/*.sh
 echo "  OK"
 
-# 5. Copy README and licenses.
-echo "[5/7] Copying docs..."
+# 6. Copy README and licenses.
+echo "[6/8] Copying docs..."
 cp README-RELEASE.md "$BUILD_DIR/"
 # Prometheus LICENSE.
 if [ -f "$THIRD/prometheus/LICENSE" ]; then
@@ -128,8 +130,8 @@ if [ -f "$THIRD/grafana/LICENSE" ]; then
 fi
 echo "  OK"
 
-# 6. Write VERSION.
-echo "[6/7] Writing VERSION..."
+# 7. Write VERSION.
+echo "[7/8] Writing VERSION..."
 cat > "$BUILD_DIR/VERSION" << EOF
 lightai_version=$VERSION
 git_commit=$COMMIT
@@ -141,12 +143,25 @@ grafana_version=$GRAFANA_VERSION
 EOF
 echo "  OK"
 
-# 7. Build tarball.
-echo "[7/7] Creating tarball..."
+# 8. Build tarball and verify.
+echo "[8/8] Creating tarball..."
 mkdir -p dist
 rm -f "$TARBALL"
 tar -czf "$TARBALL" -C dist "$RELEASE_NAME"
 echo "  OK"
+
+# Quick verification.
+echo ""
+echo "--- Package Contents ---"
+echo "  bin/lightai-server: $(tar -tzf "$TARBALL" | grep -c 'bin/lightai-server$')"
+echo "  bin/lightai-agent:  $(tar -tzf "$TARBALL" | grep -c 'bin/lightai-agent$')"
+if $WITH_OBSERVABILITY; then
+  echo "  bin/prometheus:     $(tar -tzf "$TARBALL" | grep -c 'bin/prometheus$')"
+  echo "  bin/grafana/:       $(tar -tzf "$TARBALL" | grep -c 'bin/grafana/')"
+fi
+echo "  configs:            $(tar -tzf "$TARBALL" | grep -c 'configs/')"
+echo "  scripts:            $(tar -tzf "$TARBALL" | grep -c 'scripts/')"
+echo "  VERSION:            $(tar -tzf "$TARBALL" | grep -c 'VERSION$')"
 
 echo ""
 echo "Release: $TARBALL"
