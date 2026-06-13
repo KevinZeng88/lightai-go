@@ -46,8 +46,10 @@
             <el-icon><TrendCharts /></el-icon>
             <span>{{ t('nav.observability') }}</span>
           </template>
+          <el-menu-item index="/observability/overview">{{ t('nav.overview') }}</el-menu-item>
           <el-menu-item index="/observability/targets">{{ t('nav.metricsTargets') }}</el-menu-item>
-          <el-menu-item index="/observability/grafana">{{ t('nav.grafana') }}</el-menu-item>
+          <el-menu-item index="/observability/prometheus">Prometheus</el-menu-item>
+          <el-menu-item index="/observability/grafana">Grafana</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>

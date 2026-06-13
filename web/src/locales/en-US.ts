@@ -147,6 +147,15 @@ export default {
     noGpus: 'No GPUs found. Start an agent with GPU collectors.',
   },
   observability: {
+    overview: 'Overview',
+  observabilityOverview: {
+    prometheusStatus: 'Prometheus Status',
+    grafanaStatus: 'Grafana Status',
+    serverEndpoint: 'Server Metrics Endpoint',
+    dashboardShortcuts: 'Dashboard Shortcuts',
+    startCommand: 'Start Command',
+    notRunning: 'Not Running',
+  },
     targets: 'Metrics Targets',
     targetAddress: 'Target Address',
     labels: 'Labels',

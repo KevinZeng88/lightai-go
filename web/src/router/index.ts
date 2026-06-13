@@ -48,14 +48,24 @@ const router = createRouter({
           component: () => import('@/pages/PlaceholderPage.vue'),
         },
         {
+          path: 'observability/overview',
+          name: 'ObservabilityOverview',
+          component: () => import('@/pages/ObservabilityOverviewPage.vue'),
+        },
+        {
           path: 'observability/targets',
           name: 'MetricsTargets',
           component: () => import('@/pages/ObservabilityTargetsPage.vue'),
         },
         {
+          path: 'observability/prometheus',
+          name: 'Prometheus',
+          component: () => import('@/pages/PrometheusPage.vue'),
+        },
+        {
           path: 'observability/grafana',
           name: 'Grafana',
-          component: () => import('@/pages/PlaceholderPage.vue'),
+          component: () => import('@/pages/GrafanaPage.vue'),
         },
       ],
     },

@@ -147,6 +147,15 @@ export default {
     noGpus: '暂无 GPU，请先启动 Agent',
   },
   observability: {
+    overview: '概览',
+  observabilityOverview: {
+    prometheusStatus: 'Prometheus 状态',
+    grafanaStatus: 'Grafana 状态',
+    serverEndpoint: 'Server Metrics Endpoint',
+    dashboardShortcuts: 'Dashboard 快捷入口',
+    startCommand: '启动命令',
+    notRunning: '未启动',
+  },
     targets: 'Metrics Targets',
     targetAddress: '目标地址',
     labels: '标签',
