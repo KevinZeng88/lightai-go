@@ -1,437 +1,315 @@
-# LightAI Go 本地验证手册
+# LightAI Go Local Verification Runbook
 
-> 最后更新：2026-06-13
-> 适用版本：Phase 0 - Phase 2B
+> Last updated: 2026-06-13
+> Applicable: Phase 0 through Phase 3W+
 
-## 目录
+## Quick Reference — Ports
 
-1. [前置条件](#前置条件)
-2. [启动 Server](#启动-server)
-3. [启动 Agent](#启动-agent)
-4. [查看日志](#查看日志)
-5. [Health Check](#health-check)
-6. [Metrics](#metrics)
-7. [登录与认证](#登录与认证)
-8. [CSRF Token](#csrf-token)
-9. [用户信息](#用户信息)
-10. [节点查询](#节点查询)
-11. [GPU 查询](#gpu-查询)
-12. [Agent Metrics 检查](#agent-metrics-检查)
-13. [Server Metrics Targets](#server-metrics-targets)
-14. [各阶段验收标准](#各阶段验收标准)
-15. [常见失败原因和排查](#常见失败原因和排查)
+| Service | Default address |
+|---------|----------------|
+| Server API + Web | `http://127.0.0.1:18080` |
+| Agent metrics | `http://127.0.0.1:19091` |
+| Vite dev server | `http://127.0.0.1:15173` |
+| Prometheus (future) | `http://127.0.0.1:19090` |
+| Grafana (future) | `http://127.0.0.1:13000` |
 
----
-
-## 前置条件
+## 1. Prerequisites
 
 ```bash
-# 确保 Go 环境可用
 go version  # >= 1.21
-
-# 进入项目目录
 cd ~/projects/ai-platform-study/lightai-go
-
-# 编译
 go build ./cmd/server
 go build ./cmd/agent
 ```
 
----
-
-## 启动 Server
+## 2. Start Server
 
 ```bash
-# 使用开发配置启动
+# Local dev (127.0.0.1 only)
+export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='Admin@123456'
 ./server -config configs/server.dev.yaml
-
-# 或使用环境变量
-LIGHTAI_SERVER_PORT=18080 ./server
+# Server listens at http://127.0.0.1:18080
 ```
 
-Server 默认监听 `http://127.0.0.1:18080`。
-
-启动成功后应看到日志：
-```
-INFO  server started  addr=127.0.0.1:18080
-```
-
----
-
-## 启动 Agent
+## 3. Start Agent
 
 ```bash
-# 使用开发配置启动
 ./agent -config configs/agent.dev.yaml
-
-# 关键参数
-./agent \
-  -server-url http://127.0.0.1:18080 \
-  -agent-token <bootstrap-token> \
-  -agent-id agent-01
+# Agent metrics at http://127.0.0.1:19091
 ```
 
-Agent 启动后会依次：注册 → 心跳 → 资源采集。
-
----
-
-## 查看日志
+## 4. Web Dev Server
 
 ```bash
-# Server 日志输出到 stdout
-./server -config configs/server.dev.yaml 2>&1 | tee server.log
-
-# Agent 日志输出到 stdout
-./agent -config configs/agent.dev.yaml 2>&1 | tee agent.log
-
-# 日志级别通过配置控制（debug/info/warn/error）
+cd web && npm install && npm run dev
+# Vite at http://127.0.0.1:15173, proxies /api to 18080
 ```
 
----
-
-## Health Check
+## 5. Embedded Web Build
 
 ```bash
-# Server healthz
-curl -s http://127.0.0.1:18080/healthz
-# 预期：{"status":"ok"}
-
-# Agent healthz（Agent 也暴露 healthz）
-curl -s http://127.0.0.1:19091/healthz
-# 预期：{"status":"ok"}
+cd web && npm run build
+cd ..
+go build -tags web -o bin/lightai-server ./cmd/server
+LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='Admin@123456' ./bin/lightai-server --config configs/server.dev.yaml
+# Visit http://127.0.0.1:18080
 ```
 
----
+## 6. Bootstrap Admin
 
-## Metrics
+First start creates admin user. Password from:
+- `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` env var (preferred)
+- Auto-generated (printed to stderr on first start only)
 
-```bash
-# Server metrics
-curl -s http://127.0.0.1:18080/metrics | head -20
-# 预期：包含 lightai_ 前缀的 Prometheus 指标
+Default username: `admin`. First login requires password change.
 
-# Agent metrics
-curl -s http://127.0.0.1:19091/metrics | head -20
-# 预期：包含 lightai_ 前缀的 Prometheus 指标
-# Phase 2B 完成后期望包含 nvidia_ 相关指标
-```
-
----
-
-## 登录与认证
+## 7. Login and Password Change
 
 ```bash
-# 登录（获取 Session Cookie）
-curl -v -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
+# Login
+curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
   -H "Content-Type: application/json" \
   -H "Origin: http://127.0.0.1:18080" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"admin","password":"Admin@123456"}'
 
-# 预期：返回 200，Set-Cookie 包含 lightai_session
-# 首次登录可能要求修改密码（must_change_password=true）
-```
-
----
-
-## CSRF Token
-
-```bash
-# 获取 CSRF token
-curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/csrf-token
-# 预期：{"csrf_token":"..."}
-
-# 在状态变更请求中使用
-curl -X POST http://127.0.0.1:18080/api/users \
-  -b cookies.txt \
-  -H "Content-Type: application/json" \
-  -H "X-CSRF-Token: <csrf_token>" \
-  -H "Origin: http://127.0.0.1:18080" \
-  -d '{"username":"testuser","password":"test123","display_name":"Test User"}'
-```
-
----
-
-## 用户信息
-
-```bash
-# 获取当前用户信息
+# Check current user
 curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/me
-# 预期：{"user_id":"...","username":"admin","is_platform_admin":true,...}
-```
 
----
-
-## 节点查询
-
-```bash
-# 列出所有节点
-curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes
-# 预期：[{"id":"...","hostname":"...","status":"online",...}]
-
-# 查询单个节点
-curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes/<node_id>
-```
-
----
-
-## GPU 查询
-
-```bash
-# 列出所有 GPU
-curl -s -b cookies.txt http://127.0.0.1:18080/api/gpus
-# 预期：[{"id":"...","vendor":"nvidia","name":"...","memory_total_bytes":...}]
-
-# 按节点过滤
-curl -s -b cookies.txt "http://127.0.0.1:18080/api/gpus?node_id=<node_id>"
-
-# 按厂商过滤
-curl -s -b cookies.txt "http://127.0.0.1:18080/api/gpus?vendor=nvidia"
-```
-
----
-
-## Agent Metrics 检查
-
-```bash
-# Agent 指标（Phase 2A+）
-curl -s http://127.0.0.1:19091/metrics | grep -E "lightai_(system|gpu)"
-
-# 预期 Phase 2A：
-# lightai_system_cpu_utilization_ratio
-# lightai_system_memory_total_bytes
-# lightai_system_memory_used_bytes
-
-# 预期 Phase 2B（NVIDIA 可用时）：
-# lightai_gpu_memory_total_bytes
-# lightai_gpu_memory_used_bytes
-# lightai_gpu_utilization_ratio
-# lightai_gpu_temperature_celsius
-# lightai_gpu_power_watts
-```
-
----
-
-## Server Metrics Targets
-
-```bash
-# Server metrics targets（Prometheus HTTP SD 格式）
-curl -s http://127.0.0.1:18080/metrics/targets
-# 预期：[{"targets":["<agent_host>:<metrics_port>"],"labels":{"agent_id":"...","hostname":"..."}}]
-
-# 注意：只包含已注册、未删除、metrics_enabled=true 的节点
-# 不按 online/offline 状态过滤
-```
-
----
-
-## 各阶段验收标准
-
-### Phase 0 验收
-
-```bash
-go build ./cmd/server && go build ./cmd/agent
-./server -config configs/server.dev.yaml &
-SERVER_PID=$!
-sleep 2
-curl -s http://127.0.0.1:18080/healthz | grep '"ok"'
-curl -s http://127.0.0.1:18080/metrics | grep 'lightai_'
-kill $SERVER_PID
-```
-
-通过条件：healthz 返回 ok，metrics 包含 lightai_ 前缀指标。
-
-### Phase 0.5 验收
-
-```bash
-# 启动 Server
-./server -config configs/server.dev.yaml &
-SERVER_PID=$!
-sleep 2
-
-# 登录
-curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -H "Origin: http://127.0.0.1:18080" \
-  -d '{"username":"admin","password":"admin123"}'
-
-# 获取 CSRF token
+# Change password (required on first login)
 CSRF=$(curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/csrf-token | jq -r '.csrf_token')
-
-# 获取当前用户
-curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/me | jq '.username'
-
-# 登出
-curl -X POST http://127.0.0.1:18080/api/auth/logout \
+curl -X POST http://127.0.0.1:18080/api/auth/change-password \
   -b cookies.txt \
+  -H "Content-Type: application/json" \
   -H "X-CSRF-Token: $CSRF" \
-  -H "Origin: http://127.0.0.1:18080"
-
-kill $SERVER_PID
+  -H "Origin: http://127.0.0.1:18080" \
+  -d '{"current_password":"Admin@123456","new_password":"NewPass123"}'
 ```
 
-通过条件：登录成功，me 返回 admin，登出成功。
-
-### Phase 1 验收
+## 8. Verify API
 
 ```bash
-# 启动 Server 和 Agent
-./server -config configs/server.dev.yaml &
-SERVER_PID=$!
-sleep 2
-./agent -config configs/agent.dev.yaml &
-AGENT_PID=$!
-sleep 5
+# Nodes
+curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes | jq '.'
 
-# 登录并查询节点
-curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -H "Origin: http://127.0.0.1:18080" \
-  -d '{"username":"admin","password":"admin123"}'
-curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes | jq '.[0].status'
-
-# 检查 metrics targets
-curl -s http://127.0.0.1:18080/metrics/targets | jq '.'
-
-kill $AGENT_PID $SERVER_PID
-```
-
-通过条件：节点注册成功，状态为 online，metrics/targets 包含 Agent。
-
-### Phase 2A 验收
-
-```bash
-# 启动 Server 和 Agent（development profile）
-./server -config configs/server.dev.yaml &
-SERVER_PID=$!
-sleep 2
-./agent -config configs/agent.dev.yaml &
-AGENT_PID=$!
-sleep 10
-
-# 检查 Agent 系统指标
-curl -s http://127.0.0.1:19091/metrics | grep -E "lightai_system"
-
-# 检查节点详情（含系统信息）
-curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -H "Origin: http://127.0.0.1:18080" \
-  -d '{"username":"admin","password":"admin123"}'
-curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes | jq '.[0]'
-
-# development profile 下 Mock GPU 可用
+# GPUs (expects NVIDIA GeForce RTX 5090 Laptop GPU)
 curl -s -b cookies.txt http://127.0.0.1:18080/api/gpus | jq '.'
 
-kill $AGENT_PID $SERVER_PID
+# Metrics targets
+curl -s http://127.0.0.1:18080/metrics/targets | jq '.'
+
+# Health
+curl -s http://127.0.0.1:18080/healthz
 ```
 
-通过条件：系统指标正常，节点详情包含 OS/CPU/内存，Mock GPU 出现在 development profile。
-
-### Phase 2B 验收
+## 9. Verify collected_at Updates
 
 ```bash
-# 检查 NVIDIA 环境
-which nvidia-smi
-nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,driver_version,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu,power.draw --format=csv,noheader,nounits
-
-# 启动 Server 和 Agent（production profile，启用 NvidiaCollector）
-./server -config configs/server.prod.yaml &
-SERVER_PID=$!
-sleep 2
-./agent -config configs/agent.prod.yaml &
-AGENT_PID=$!
-sleep 10
-
-# 检查 Agent NVIDIA 指标
-curl -s http://127.0.0.1:19091/metrics | grep -E "lightai_gpu.*nvidia"
-
-# 检查 Server GPU API 返回 NVIDIA GPU
-curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -H "Origin: http://127.0.0.1:18080" \
-  -d '{"username":"admin","password":"admin123"}'
-curl -s -b cookies.txt http://127.0.0.1:18080/api/gpus | jq '.[] | select(.vendor=="nvidia")'
-
-# 检查诊断
-curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes | jq '.[0].diagnostics'
-
-kill $AGENT_PID $SERVER_PID
+# GPU collected_at updates every ~5 seconds
+watch -n 1 "curl -s -b cookies.txt http://127.0.0.1:18080/api/gpus | jq '.[0].collected_at'"
 ```
 
-通过条件：nvidia-smi 可用时，Agent metrics 包含 NVIDIA 指标，GPU API 返回真实 NVIDIA GPU。
-
-如果 nvidia-smi 不可用：
-- 单元测试（NVIDIA 样例 CSV 解析）必须通过
-- `docs/PHASE-STATUS.md` 标记真实 NVIDIA 验收 blocked
-
----
-
-## 常见失败原因和排查
-
-### Server 启动失败
+## 10. Verify Agent /metrics
 
 ```bash
-# 检查端口占用
-ss -tlnp | grep 18080
+# GPU memory (RTX 5090: ~25.65 GB)
+curl -s http://127.0.0.1:19091/metrics | grep 'lightai_gpu_memory_total_bytes'
 
-# 检查配置文件
-cat configs/server.dev.yaml
+# GPU utilization (0-100)
+curl -s http://127.0.0.1:19091/metrics | grep 'lightai_gpu_utilization_percent'
 
-# 检查 SQLite 数据库权限
-ls -la data/
+# Temperature
+curl -s http://127.0.0.1:19091/metrics | grep 'lightai_gpu_temperature_celsius'
+
+# Agent collector last success
+curl -s http://127.0.0.1:19091/metrics | grep 'lightai_agent_collector_last_success_timestamp_seconds'
+
+# Node online status
+curl -s http://127.0.0.1:19091/metrics | grep 'lightai_node_online'
 ```
 
-### Agent 注册失败
+## 11. Verify Server /metrics
 
 ```bash
-# 检查 Server 是否可达
+# Node counts
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_server_nodes_total'
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_server_nodes_online'
+
+# GPU counts
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_server_gpus_total'
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_server_gpus_healthy'
+
+# API metrics
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_server_api_requests_total'
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_server_api_request_duration_seconds'
+
+# Heartbeat/report counters
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_server_agent_heartbeats_total'
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_server_agent_reports_total'
+```
+
+## 12. Observability — Bundled Mode (default)
+
+```bash
+# Check status (includes binary detection)
+bash scripts/observability-status.sh
+
+# If Prometheus/Grafana binaries are available:
+bash scripts/observability-up.sh
+# Prometheus: http://127.0.0.1:19090
+# Grafana:    http://127.0.0.1:13000 (admin/lightai)
+
+# Stop
+bash scripts/observability-down.sh
+```
+
+**Binary not found diagnosis:**
+
+```
+DIAGNOSIS: Prometheus binary not found.
+Install prometheus or set PROMETHEUS_BIN env var.
+Or switch to observability.mode=external or disabled.
+```
+
+The development repository does not include Prometheus/Grafana binaries.
+Production releases should bundle them or document installation steps.
+
+## 13. Observability — External Mode
+
+For customers with existing Prometheus/Grafana:
+
+1. Set `observability.mode: external` in config.
+2. Configure `external.prometheus_url` and `external.grafana_url`.
+3. LightAI still exposes Server /metrics and Agent /metrics.
+4. Import LightAI Grafana dashboards from `deploy/observability/grafana/dashboards/`.
+5. Configure your Prometheus to scrape:
+   - `http://<server-ip>:18080/metrics` (Server)
+   - `http://<agent-ip>:19091/metrics` (Agent)
+   - Use `/metrics/targets` for HTTP SD agent discovery.
+
+## 14. Observability — Disabled Mode
+
+Set `observability.mode: disabled`. LightAI does not start Prometheus/Grafana.
+/metrics endpoints remain available for external monitoring systems.
+
+## 15. Grafana — Default Dev Account
+
+- Username: `admin`
+- Password: `lightai` (dev only)
+- Production: set `LIGHTAI_GRAFANA_ADMIN_PASSWORD`.
+
+Default dashboards:
+- LightAI Overview (`/d/lightai-overview`)
+- GPU Resources (`/d/lightai-gpu-resources`)
+- Agent Health (`/d/lightai-agent-health`)
+
+## 16. LAN / Server Deployment
+
+For external browser access, use `0.0.0.0` listen addresses:
+
+```yaml
+# Server
+host: "0.0.0.0"
+port: 18080
+
+# Agent metrics
+metrics:
+  host: "0.0.0.0"
+  port: 19091
+  advertise_addr: "<agent-ip>:19091"
+```
+
+Browser accesses: `http://<server-ip>:18080`.
+`127.0.0.1` is for local dev only; `0.0.0.0` is the listen address, not the browser URL.
+
+## 17. Firewall Ports
+
+| Port | Service | Required for |
+|------|---------|-------------|
+| 18080/tcp | Server API + Web | Browser access |
+| 19091/tcp | Agent metrics | Prometheus scrape (LAN) |
+| 19090/tcp | Prometheus | Prometheus UI |
+| 13000/tcp | Grafana | Grafana UI |
+
+Security: do NOT expose 18080/19090/13000 directly to public internet.
+Use VPN, bastion host, or reverse proxy. TLS/HTTPS is a future enhancement.
+
+## 18. Debug Bundle
+
+```bash
+bash scripts/collect-debug-bundle.sh
+# Output: dist/debug-bundles/lightai-debug-<timestamp>.tar.gz
+```
+
+Contains: Server/Agent logs, sanitized configs, system info, nvidia-smi output,
+healthz, metrics/targets, agent metrics (first 100 lines).
+
+All output in English. No passwords, tokens, or CSRF secrets included.
+
+## 19. Verify GPU Collector Architecture
+
+```bash
+# Confirm external command collector is active
+grep "external gpu collector enabled" logs/lightai-agent.log
+
+# Run NVIDIA scripts directly
+bash deploy/collectors/gpu/nvidia/discover.sh
+bash deploy/collectors/gpu/nvidia/metrics.sh
+
+# Confirm built-in NvidiaCollector is NOT the default path
+# (Agent log should show mode=external, NOT mode=builtin)
+grep "mode=external" logs/lightai-agent.log
+```
+
+## 20. Verify node_id Stability
+
+```bash
+# Start Agent, note node_id from /api/nodes
+# Restart Agent
+# Node count should still be 1, same node_id, no duplicate nodes
+curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes | jq 'length'
+```
+
+## 21. Common Issues
+
+### Port already in use
+
+```bash
+fuser -k 18080/tcp
+fuser -k 19091/tcp
+```
+
+### Agent registration failed
+
+```bash
 curl http://127.0.0.1:18080/healthz
-
-# 检查 Agent token 是否正确
 grep agent_token configs/agent.dev.yaml
-
-# 查看 Agent 日志中的错误信息
-./agent -config configs/agent.dev.yaml 2>&1 | grep -i error
 ```
 
-### NVIDIA Collector 失败
+### GPU collector not available
 
 ```bash
-# 检查 nvidia-smi 是否可用
 which nvidia-smi
-nvidia-smi
-
-# 检查 NVIDIA 驱动
-lsmod | grep nvidia
-
-# 检查 /dev/nvidia* 设备
-ls -la /dev/nvidia*
-
-# 手动执行查询命令
-nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,driver_version,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu,power.draw --format=csv,noheader,nounits
+bash deploy/collectors/gpu/nvidia/discover.sh
+grep "collector" logs/lightai-agent.log | grep -i error
 ```
 
-### 认证失败
+### Prometheus/Grafana binaries missing
 
 ```bash
-# 检查 bootstrap 管理员密码
-# 默认：admin / admin123（首次登录需改密码）
-
-# 检查 Cookie
-curl -v -c cookies.txt http://127.0.0.1:18080/api/auth/me
-
-# 检查 CSRF token 是否过期
-curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/csrf-token
+bash scripts/observability-status.sh
+# Output will show MISSING and clear diagnosis.
 ```
 
-### 数据库问题
+### Reset database
 
 ```bash
-# 重置数据库（开发环境）
 rm -f data/lightai.db
-# 重启 Server 将自动重新初始化
+# Restart Server to re-initialize.
+```
 
-# 检查数据库内容
-sqlite3 data/lightai.db ".tables"
-sqlite3 data/lightai.db "SELECT * FROM tenants;"
-sqlite3 data/lightai.db "SELECT * FROM users;"
+### Embedded web not showing
+
+```bash
+cd web && npm run build
+go build -tags web -o bin/lightai-server ./cmd/server
 ```
