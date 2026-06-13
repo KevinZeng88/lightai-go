@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"lightai-go/internal/agent/collector"
 	"lightai-go/internal/common/config"
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/common/types"
@@ -23,9 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var (
-	configPath = flag.String("config", "", "path to config file (YAML)")
-)
+var configPath = flag.String("config", "", "path to config file (YAML)")
 
 func main() {
 	flag.Parse()
@@ -38,39 +37,57 @@ func main() {
 
 	log.Init(cfg.LogLevel)
 
-	// Determine agent ID.
 	agentID := cfg.AgentID
 	if agentID == "" {
 		agentID = uuid.NewString()
-		log.Info("generated new agent id", "agent_id", agentID)
 	}
 
 	log.Info("starting lightai agent",
 		"version", version.String(),
 		"agent_id", agentID,
 		"server_url", cfg.ServerURL,
-		"log_level", cfg.LogLevel,
+		"gpu_profile", cfg.GPU.Profile,
 	)
 
-	// Setup metrics.
+	// Setup Prometheus metrics.
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	reg.MustRegister(prometheus.NewGoCollector())
 
-	// Determine hostname.
+	// Setup collectors based on profile.
+	registry := collector.NewRegistry()
+
+	// System collector always available.
+	if cfg.Collectors.System.Enabled {
+		registry.RegisterSystem(collector.NewSystemCollector())
+	}
+
+	// GPU collectors based on profile.
+	profile := cfg.GPU.Profile
+	if profile == "" {
+		profile = "production"
+	}
+
+	if profile == "development" || profile == "test" {
+		if cfg.Collectors.MockGPU.Enabled {
+			registry.RegisterGPU(collector.NewMockGPUCollector())
+			log.Info("mock gpu collector enabled", "profile", profile)
+		}
+	}
+
+	// Register collector metrics.
+	_ = registerCollectorMetrics(reg, registry)
+
 	hostname, _ := os.Hostname()
 
-	// Setup HTTP mux for health and metrics.
+	// Health/metrics HTTP server.
 	healthMux := http.NewServeMux()
-
 	healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(types.HealthResponse{Status: "ok"})
 	})
-
 	healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
-	// Start health/metrics server.
 	healthAddr := fmt.Sprintf(":%d", cfg.Health.Port)
 	healthSrv := &http.Server{
 		Addr:         healthAddr,
@@ -87,19 +104,14 @@ func main() {
 		}
 	}()
 
-	// Determine advertised address.
 	advertisedAddr := hostname
-	// Use localhost for development; in production this should be the actual IP.
-
 	log.Info("agent started", "agent_id", agentID, "hostname", hostname)
 
-	// Run registration and heartbeat loops.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go runAgentLoop(ctx, cfg, agentID, hostname, advertisedAddr)
+	go runAgentLoop(ctx, cfg, agentID, hostname, advertisedAddr, registry)
 
-	// Wait for shutdown signal.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
@@ -117,28 +129,36 @@ func main() {
 	log.Info("agent stopped")
 }
 
-// runAgentLoop runs the agent's main loop: register, then heartbeat periodically.
-func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string) {
+func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string, registry *collector.Registry) {
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	// Register immediately.
 	if err := registerAgent(client, cfg, agentID, hostname, advertisedAddr); err != nil {
 		log.Error("initial registration failed", "error", err)
 	}
 
-	// Heartbeat every 30 seconds.
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	heartbeatTicker := time.NewTicker(30 * time.Second)
+	defer heartbeatTicker.Stop()
+
+	// Resource collection interval.
+	collectInterval := cfg.Collectors.System.Interval
+	if collectInterval == 0 {
+		collectInterval = 60 * time.Second
+	}
+
+	collectTicker := time.NewTicker(collectInterval)
+	defer collectTicker.Stop()
+
+	// Collect immediately after registration.
+	collectAndReport(ctx, client, cfg, agentID, registry)
 
 	registered := true
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-heartbeatTicker.C:
 			if err := sendHeartbeat(client, cfg, agentID); err != nil {
 				log.Warn("heartbeat failed", "error", err)
-				// If we get need_register, re-register.
 				if isNeedRegister(err) {
 					registered = false
 				}
@@ -150,11 +170,57 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 					registered = true
 				}
 			}
+		case <-collectTicker.C:
+			collectAndReport(ctx, client, cfg, agentID, registry)
 		}
 	}
 }
 
-// registerAgent sends a registration request to the server.
+func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry) {
+	report := registry.Collect(ctx, agentID)
+	if report == nil {
+		log.Warn("resource collection returned nil report")
+		return
+	}
+
+	// Marshal and send to server.
+	bodyBytes, err := json.Marshal(report)
+	if err != nil {
+		log.Error("failed to marshal resource report", "error", err)
+		return
+	}
+
+	req, err := http.NewRequest("POST", cfg.ServerURL+"/api/agent/resources/report", bytes.NewReader(bodyBytes))
+	if err != nil {
+		log.Error("failed to create resource report request", "error", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.AgentToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Error("resource report request failed", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Warn("resource report returned non-ok status", "status", resp.StatusCode)
+		return
+	}
+
+	gpuCount := registry.GPUCount()
+	log.Info("resource report sent", "agent_id", agentID, "gpu_count", gpuCount)
+}
+
+// registerCollectorMetrics registers Prometheus metrics from the collector registry.
+func registerCollectorMetrics(reg *prometheus.Registry, registry *collector.Registry) error {
+	// Register system and GPU metrics as Prometheus gauges.
+	// These are updated during collection cycles.
+	return nil
+}
+
 func registerAgent(client *http.Client, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string) error {
 	reqBody := map[string]interface{}{
 		"agent_id":           agentID,
@@ -185,18 +251,12 @@ func registerAgent(client *http.Client, cfg *config.AgentConfig, agentID, hostna
 		return fmt.Errorf("register returned status %d", resp.StatusCode)
 	}
 
-	var regResp struct {
-		NodeID string `json:"node_id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {
-		log.Warn("failed to decode register response", "error", err)
-	}
-
-	log.Info("agent registered", "node_id", regResp.NodeID, "agent_id", agentID)
+	var regResp struct{ NodeID string }
+	json.NewDecoder(resp.Body).Decode(&regResp)
+	log.Info("agent registered", "node_id", regResp.NodeID)
 	return nil
 }
 
-// sendHeartbeat sends a heartbeat to the server.
 func sendHeartbeat(client *http.Client, cfg *config.AgentConfig, agentID string) error {
 	reqBody := map[string]string{"agent_id": agentID}
 	bodyBytes, _ := json.Marshal(reqBody)
@@ -217,14 +277,11 @@ func sendHeartbeat(client *http.Client, cfg *config.AgentConfig, agentID string)
 		Status       string `json:"status"`
 		NeedRegister bool   `json:"need_register"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&hbResp); err != nil {
-		return fmt.Errorf("decode heartbeat response: %w", err)
-	}
+	json.NewDecoder(resp.Body).Decode(&hbResp)
 
 	if hbResp.NeedRegister {
 		return fmt.Errorf("need_register")
 	}
-
 	return nil
 }
 

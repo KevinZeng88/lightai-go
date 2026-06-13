@@ -11,13 +11,14 @@ import (
 
 // RouterConfig holds all dependencies needed to set up routes.
 type RouterConfig struct {
-	DB           *db.DB
-	AgentToken   string
-	SessionStore *auth.SessionStore
-	SessionCfg   auth.SessionConfig
-	AuthHandler  *auth.AuthHandler
-	RBACHandler  *rbac.Handler
-	AgentHandler *AgentHandler
+	DB              *db.DB
+	AgentToken      string
+	SessionStore    *auth.SessionStore
+	SessionCfg      auth.SessionConfig
+	AuthHandler     *auth.AuthHandler
+	RBACHandler     *rbac.Handler
+	AgentHandler    *AgentHandler
+	ResourceHandler *ResourceHandler
 }
 
 // SetupRoutes registers all API routes on the given mux.
@@ -63,7 +64,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	agentMW := auth.AgentAuthMiddleware(cfg.AgentToken)
 	mux.Handle("POST /api/agent/register", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleRegister)))
 	mux.Handle("POST /api/agent/heartbeat", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleHeartbeat)))
-	mux.Handle("POST /api/agent/resources/report", agentMW(http.HandlerFunc(handleNotImplemented)))
+	mux.Handle("POST /api/agent/resources/report", agentMW(http.HandlerFunc(cfg.ResourceHandler.HandleResourceReport)))
 
 	// Resource routes (node:read permission).
 	resourceChain := chain(
@@ -72,8 +73,14 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	)
 	mux.Handle("GET /api/nodes", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodes)))
 	mux.Handle("GET /api/nodes/{id}", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNode)))
-	mux.Handle("GET /api/gpus", resourceChain(http.HandlerFunc(handleNotImplemented)))
-	mux.Handle("GET /api/gpus/{id}", resourceChain(http.HandlerFunc(handleNotImplemented)))
+
+	// GPU routes (gpu:read permission).
+	gpuChain := chain(
+		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
+		auth.RequirePermission("gpu:read"),
+	)
+	mux.Handle("GET /api/gpus", gpuChain(http.HandlerFunc(cfg.ResourceHandler.HandleListGPUs)))
+	mux.Handle("GET /api/gpus/{id}", gpuChain(http.HandlerFunc(cfg.ResourceHandler.HandleGetGPU)))
 }
 
 func sessionChain(cfg RouterConfig, h http.HandlerFunc) http.Handler {

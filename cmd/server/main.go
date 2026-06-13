@@ -81,6 +81,7 @@ func main() {
 	}
 	rbacHandler := rbac.NewHandler(database)
 	agentHandler := api.NewAgentHandler(database)
+	resourceHandler := api.NewResourceHandler(database)
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
@@ -105,13 +106,14 @@ func main() {
 	})
 
 	api.SetupRoutes(mux, api.RouterConfig{
-		DB:           database,
-		AgentToken:   cfg.AgentToken,
-		SessionStore: sessionStore,
-		SessionCfg:   sessionCfg,
-		AuthHandler:  authHandler,
-		RBACHandler:  rbacHandler,
-		AgentHandler: agentHandler,
+		DB:              database,
+		AgentToken:      cfg.AgentToken,
+		SessionStore:    sessionStore,
+		SessionCfg:      sessionCfg,
+		AuthHandler:     authHandler,
+		RBACHandler:     rbacHandler,
+		AgentHandler:    agentHandler,
+		ResourceHandler: resourceHandler,
 	})
 
 	srv := &http.Server{
