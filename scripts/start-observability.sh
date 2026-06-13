@@ -164,5 +164,17 @@ fi
 
 echo ""
 echo "Observability 已启动。"
+echo ""
+echo "=== Prometheus 常用查询 ==="
+echo "  up                                     # 所有 target 状态"
+echo "  lightai_host_cpu_usage_ratio           # CPU 使用率"
+echo "  lightai_host_memory_used_ratio         # 内存使用率"
+echo "  lightai_host_filesystem_used_ratio     # 磁盘使用率"
+echo "  lightai_gpu_memory_total_bytes         # GPU 显存总量"
+echo "  lightai_gpu_memory_used_bytes          # GPU 显存已用"
+echo ""
+echo "Prometheus 首页显示 "No data queried yet" 是正常状态。"
+echo "在上方输入框输入查询表达式后即可看到数据。"
+
 echo "  局域网 Prometheus: http://<server-ip>:19090/"
 echo "  局域网 Grafana:    http://<server-ip>:13000/"

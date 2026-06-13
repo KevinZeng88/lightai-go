@@ -18,6 +18,9 @@ type SystemSnapshot struct {
 	CPUModel          string                     `json:"cpu_model"`
 	CPUCores          int                        `json:"cpu_cores"`
 	CPUUtilization    float64                    `json:"cpu_utilization_percent"` // 0-100
+	Load1             float64                    `json:"load1"`
+	Load5             float64                    `json:"load5"`
+	Load15            float64                    `json:"load15"`
 	MemoryTotalBytes  uint64                     `json:"memory_total_bytes"`
 	MemoryUsedBytes   uint64                     `json:"memory_used_bytes"`
 	SwapTotalBytes    uint64                     `json:"swap_total_bytes"`

@@ -2,15 +2,237 @@
   "title": "LightAI 主机资源",
   "uid": "lightai-host-resources",
   "panels": [
-    {"title":"CPU 使用率","type":"timeseries","gridPos":{"x":0,"y":0,"w":12,"h":6},"targets":[{"expr":"lightai_host_cpu_usage_ratio * 100","legendFormat":"CPU %"}],"fieldConfig":{"defaults":{"unit":"percent","min":0,"max":100}}},
-    {"title":"系统负载","type":"timeseries","gridPos":{"x":12,"y":0,"w":12,"h":6},"targets":[{"expr":"lightai_host_load1","legendFormat":"1min"},{"expr":"lightai_host_load5","legendFormat":"5min"},{"expr":"lightai_host_load15","legendFormat":"15min"}]},
-    {"title":"内存总量","type":"stat","gridPos":{"x":0,"y":6,"w":4,"h":3},"targets":[{"expr":"lightai_host_memory_total_bytes","legendFormat":"Total"}],"fieldConfig":{"defaults":{"unit":"bytes"}}},
-    {"title":"内存已用","type":"stat","gridPos":{"x":4,"y":6,"w":4,"h":3},"targets":[{"expr":"lightai_host_memory_used_bytes","legendFormat":"Used"}],"fieldConfig":{"defaults":{"unit":"bytes"}}},
-    {"title":"内存使用率","type":"gauge","gridPos":{"x":8,"y":6,"w":4,"h":3},"targets":[{"expr":"lightai_host_memory_used_ratio * 100","legendFormat":"Memory %"}],"fieldConfig":{"defaults":{"unit":"percent","min":0,"max":100}}},
-    {"title":"Swap 总量","type":"stat","gridPos":{"x":12,"y":6,"w":4,"h":3},"targets":[{"expr":"lightai_host_swap_total_bytes","legendFormat":"Swap"}],"fieldConfig":{"defaults":{"unit":"bytes"}}},
-    {"title":"文件系统使用率","type":"gauge","gridPos":{"x":0,"y":9,"w":6,"h":4},"targets":[{"expr":"lightai_host_filesystem_used_ratio * 100","legendFormat":"{{mountpoint}}"}],"fieldConfig":{"defaults":{"unit":"percent"}}},
-    {"title":"文件系统总量","type":"table","gridPos":{"x":6,"y":9,"w":18,"h":4},"targets":[{"expr":"lightai_host_filesystem_total_bytes","legendFormat":"{{mountpoint}} Total"},{"expr":"lightai_host_filesystem_used_bytes","legendFormat":"{{mountpoint}} Used"},{"expr":"lightai_host_filesystem_available_bytes","legendFormat":"{{mountpoint}} Avail"}],"fieldConfig":{"defaults":{"unit":"bytes"}}},
-    {"title":"主机信息","type":"stat","gridPos":{"x":0,"y":13,"w":8,"h":3},"targets":[{"expr":"lightai_host_cpu_cores","legendFormat":"CPU Cores"}],"fieldConfig":{"defaults":{}}}
+    {
+      "title": "CPU 使用率",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_cpu_usage_ratio * 100",
+          "legendFormat": "CPU %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      }
+    },
+    {
+      "title": "系统负载",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_load1",
+          "legendFormat": "1min"
+        },
+        {
+          "expr": "lightai_host_load5",
+          "legendFormat": "5min"
+        },
+        {
+          "expr": "lightai_host_load15",
+          "legendFormat": "15min"
+        }
+      ]
+    },
+    {
+      "title": "系统负载 (Load Average)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_load1",
+          "legendFormat": "1min"
+        },
+        {
+          "expr": "lightai_host_load5",
+          "legendFormat": "5min"
+        },
+        {
+          "expr": "lightai_host_load15",
+          "legendFormat": "15min"
+        }
+      ]
+    },
+    {
+      "title": "内存总量",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_memory_total_bytes",
+          "legendFormat": "Total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "title": "内存已用",
+      "type": "stat",
+      "gridPos": {
+        "x": 4,
+        "y": 6,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_memory_used_bytes",
+          "legendFormat": "Used"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "title": "内存使用率",
+      "type": "gauge",
+      "gridPos": {
+        "x": 8,
+        "y": 6,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_memory_used_ratio * 100",
+          "legendFormat": "Memory %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      }
+    },
+    {
+      "title": "Swap 总量",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 4,
+        "h": 3
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_swap_total_bytes",
+          "legendFormat": "Swap"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "title": "文件系统使用率",
+      "type": "gauge",
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_filesystem_used_ratio * 100",
+          "legendFormat": "{{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "title": "文件系统总量",
+      "type": "table",
+      "gridPos": {
+        "x": 6,
+        "y": 9,
+        "w": 18,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_filesystem_total_bytes",
+          "legendFormat": "{{mountpoint}} Total"
+        },
+        {
+          "expr": "lightai_host_filesystem_used_bytes",
+          "legendFormat": "{{mountpoint}} Used"
+        },
+        {
+          "expr": "lightai_host_filesystem_available_bytes",
+          "legendFormat": "{{mountpoint}} Avail"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "title": "主机信息",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 8,
+        "h": 3
+      },
+      "targets": [
+        {
+          "expr": "lightai_host_cpu_cores",
+          "legendFormat": "CPU Cores"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {}
+      }
+    }
   ],
-  "schemaVersion": 36, "tags": ["lightai","host"], "refresh": "10s"
+  "schemaVersion": 36,
+  "tags": [
+    "lightai",
+    "host"
+  ],
+  "refresh": "10s"
 }

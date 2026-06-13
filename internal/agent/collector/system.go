@@ -8,6 +8,7 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/host"
+	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 )
@@ -57,6 +58,13 @@ func (s *SystemCollectorImpl) Collect(ctx context.Context) (*SystemSnapshot, *Co
 		snapshot.CPUModel = cpuInfo[0].ModelName
 	}
 	snapshot.CPUCores, _ = cpu.CountsWithContext(ctx, true)
+
+	loadAvg, err := load.AvgWithContext(ctx)
+	if err == nil {
+		snapshot.Load1 = loadAvg.Load1
+		snapshot.Load5 = loadAvg.Load5
+		snapshot.Load15 = loadAvg.Load15
+	}
 
 	cpuPercents, err := cpu.PercentWithContext(ctx, 0, false)
 	if err == nil && len(cpuPercents) > 0 {
