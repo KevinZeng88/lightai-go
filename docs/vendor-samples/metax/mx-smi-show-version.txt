@@ -1,5 +1,27 @@
+mx-smi  version: 2.3.1
+
+=================== MetaX System Management Interface Log ===================
+Timestamp                                         : Sat Jun 13 22:22:58 2026
+
+Attached GPUs                                     : 8
 GPU#0  MXC500  0000:0e:00.0
-Version
-MACA                                      : 3.7.2.0
-BIOS                                      : 1.33.5.0
-KMD                                       : 3.6.11
+    Version
+        MACA                                      : 3.7.2.0 
+        BIOS                                      : 1.33.5.0 
+        KMD                                       : 3.6.11 
+        SMP0                                      : 1.33.5.0 
+        SMP1                                      : 1.33.5.0 
+        CCX0                                      : 1.33.0.0 
+        CCX1                                      : 1.33.0.0 
+        CCX2                                      : 1.33.0.0 
+        VR0                                       : 0.13.0.5 
+        VR1                                       : 0.13.0.5 
+        MCU                                       : 1.2.6.0 
+
+GPU#1  MXC500  0000:0f:00.0
+    Version
+        MACA                                      : 3.7.2.0 
+        BIOS                                      : 1.33.5.0 
+        KMD                                       : 3.6.11 
+        SMP0                                      : 1.33.5.0 
+        SMP1                                      : 1.33.5.0 
