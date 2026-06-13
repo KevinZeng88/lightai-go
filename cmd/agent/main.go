@@ -221,6 +221,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 			"node_id", nodeID,
 			"agent_id", agentID,
 		)
+		snap.SetNodeID(nodeID)
 	}
 
 	// Heartbeat ticker.
@@ -269,6 +270,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 						log.Info("re-registration successful",
 							"node_id", nodeID,
 						)
+						snap.SetNodeID(nodeID)
 						consecutiveFailures = 0
 					}
 				}

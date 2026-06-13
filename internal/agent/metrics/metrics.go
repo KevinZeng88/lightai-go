@@ -84,6 +84,13 @@ func (s *Snapshot) SetOnline(v bool) {
 	s.mu.Unlock()
 }
 
+// SetNodeID updates the node_id in the snapshot (called after registration).
+func (s *Snapshot) SetNodeID(nodeID string) {
+	s.mu.Lock()
+	s.NodeID = nodeID
+	s.mu.Unlock()
+}
+
 // Register registers all LightAI Agent custom metrics on the given registry.
 func Register(reg *prometheus.Registry, snap *Snapshot) {
 	reg.MustRegister(newGPUCollector(snap))
