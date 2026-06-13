@@ -68,6 +68,14 @@ func main() {
 		profile = "production"
 	}
 
+	// Production always enables real collectors if configured.
+	if cfg.Collectors.Nvidia.Enabled {
+		if profile == "production" || profile == "development" {
+			registry.RegisterGPU(collector.NewNvidiaCollector())
+			log.Info("nvidia collector enabled", "profile", profile)
+		}
+	}
+	// Development/test can also enable mock (alongside real collectors).
 	if profile == "development" || profile == "test" {
 		if cfg.Collectors.MockGPU.Enabled {
 			registry.RegisterGPU(collector.NewMockGPUCollector())
