@@ -1,6 +1,8 @@
 #!/bin/sh
-# LightAI GPU Collector - MetaX Metrics (CSV fast path)
-# Target: <1.0s for 8 GPUs. Exit codes: 0=success, 10=not_available, 30=command_failed, 40=parse_failed
+# LightAI GPU Collector - MetaX Metrics (CSV fast path, POSIX awk)
+# Uses combined CSV + mx-smi -L for uuid map.
+# Compatible with: gawk, mawk, original-awk.
+# Exit codes: 0=success, 10=not_available, 30=command_failed, 40=parse_failed
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -22,7 +24,7 @@ CSV_FILE="$TMPDIR/lightai-metax-metrics.$$.csv"
 LIST_FILE="$TMPDIR/lightai-metax-list.$$.txt"
 trap 'rm -f "$CSV_FILE" "$LIST_FILE"' EXIT
 
-# 1. Combined CSV (fast: ~0.23s).
+# 1. Combined CSV.
 "$MX_SMI_CMD" --show-memory --show-usage --show-temperature --show-board-power -o "$CSV_FILE" 2>/dev/null || {
   echo "mx-smi combined CSV failed" >&2
   collector_emit_status metax false "mx-smi combined CSV command failed"
@@ -33,7 +35,7 @@ if [ ! -s "$CSV_FILE" ]; then
   exit 30
 fi
 
-# 2. GPU list (fast: ~0.05s).
+# 2. GPU list.
 "$MX_SMI_CMD" -L > "$LIST_FILE" 2>/dev/null || {
   collector_emit_status metax false "mx-smi -L failed"
   exit 30
@@ -41,7 +43,7 @@ fi
 
 collector_emit_status metax true ok
 
-# 3. Single awk pass over both files to emit METRIC lines.
+# 3. Single awk pass. Patterns as strings for mawk/POSIX compat.
 awk '
 function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
 function quote(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
@@ -59,30 +61,31 @@ function num_or_null(v) {
   if (v == "" || v == "N/A" || v == "[N/A]" || v == "null") return "null"
   return v
 }
-function idx_from_did(did) {
-  did = trim(did)
-  if (match(did, /GPU#([0-9]+)/, a)) return a[1]
-  return did
+function extract_match(str, pat,    s) {
+  if (match(str, pat)) { s = substr(str, RSTART, RLENGTH); return trim(s) }
+  return ""
+}
+function extract_capture(str, pat, keep,    s) {
+  if (match(str, pat)) { s = substr(str, RSTART, RLENGTH); sub(keep, "", s); return trim(s) }
+  return ""
 }
 
-# File 1: mx-smi -L output (whitespace-separated)
+# File 1: mx-smi -L output.
 FILENAME == LISTFILE && /^[[:space:]]*GPU#[0-9]+/ {
   line = $0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
-  idx = ""; raw = ""; uuid = ""; st = ""
-  if (match(line, /GPU#([0-9]+)/, a)) idx = a[1]
+  idx = extract_capture(line, "GPU#[0-9]+", "GPU#")
   split(line, f, /[[:space:]]+/)
-  if (length(f) >= 2) raw = f[2]
-  if (match(line, /(Available|Unavailable|In Use|Error)/, a)) st = a[1]
-  if (match(line, /UUID: ([^)]+)/, a)) uuid = a[1]
-  idx = trim(idx); uuid = trim(uuid)
+  raw = (length(f) >= 2) ? f[2] : ""
+  st = extract_match(line, "Available|Unavailable|In Use|Error")
+  uuid = extract_capture(line, "UUID: [^)]+", "UUID: ")
   if (idx != "" && uuid != "") { uuid_map[idx]=uuid; raw_map[idx]=raw; state_map[idx]=st }
   next
 }
 FILENAME == LISTFILE { next }
 
-# File 2: CSV (comma-separated)
+# File 2: CSV header.
 FNR == 1 {
-  FS=","; $0=$0  # re-parse with FS set
+  FS=","; $0=$0
   for (i=1; i<=NF; i++) {
     hdr = trim($i)
     if (hdr == "deviceId") devId_col = i
@@ -97,12 +100,13 @@ FNR == 1 {
   next
 }
 
+# File 2: CSV data rows.
 {
   FS=","; $0=$0
   if (NF < 5) next
 
   did = trim($(devId_col))
-  gidx = idx_from_did(did)
+  gidx = extract_capture(did, "GPU#[0-9]+", "GPU#")
   if (gidx == "") next
 
   uuid = uuid_map[gidx]

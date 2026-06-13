@@ -107,7 +107,7 @@ collector_normalize_metax_name() {
   case "$raw" in
     MXC[0-9]*)
       # Extract the Cxxx part: MXC500 -> C500, MXC550 -> C550, etc.
-      echo "$raw" | sed -E 's/^MXC([0-9].*)/MetaX C\1/' ;;
+      echo "MetaX C${raw#MXC}" ;;
     *)
       echo "$raw" ;;
   esac
