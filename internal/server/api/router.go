@@ -17,13 +17,11 @@ type RouterConfig struct {
 	SessionCfg   auth.SessionConfig
 	AuthHandler  *auth.AuthHandler
 	RBACHandler  *rbac.Handler
+	AgentHandler *AgentHandler
 }
 
 // SetupRoutes registers all API routes on the given mux.
 func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
-	// Public endpoints (no auth required).
-	// healthz and /metrics are registered in main.
-
 	// Auth endpoints (no session required for login/CSRF).
 	mux.HandleFunc("POST /api/auth/login", cfg.AuthHandler.HandleLogin)
 	mux.HandleFunc("GET /api/auth/csrf-token", cfg.AuthHandler.HandleCSRFToken)
@@ -61,24 +59,23 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 
 	mux.Handle("GET /api/permissions", tenantChain(cfg, cfg.RBACHandler.HandleListPermissions, "role:read"))
 
-	// Agent API routes.
-	agentChain := auth.AgentAuthMiddleware(cfg.AgentToken)
-	mux.Handle("POST /api/agent/register", agentChain(http.HandlerFunc(handleNotImplemented)))
-	mux.Handle("POST /api/agent/heartbeat", agentChain(http.HandlerFunc(handleNotImplemented)))
-	mux.Handle("POST /api/agent/resources/report", agentChain(http.HandlerFunc(handleNotImplemented)))
+	// Agent API routes (use agent token, not session).
+	agentMW := auth.AgentAuthMiddleware(cfg.AgentToken)
+	mux.Handle("POST /api/agent/register", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleRegister)))
+	mux.Handle("POST /api/agent/heartbeat", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleHeartbeat)))
+	mux.Handle("POST /api/agent/resources/report", agentMW(http.HandlerFunc(handleNotImplemented)))
 
-	// Resource routes (for Phase 2A+).
+	// Resource routes (node:read permission).
 	resourceChain := chain(
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
 		auth.RequirePermission("node:read"),
 	)
-	mux.Handle("GET /api/nodes", resourceChain(http.HandlerFunc(handleNotImplemented)))
-	mux.Handle("GET /api/nodes/{id}", resourceChain(http.HandlerFunc(handleNotImplemented)))
+	mux.Handle("GET /api/nodes", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodes)))
+	mux.Handle("GET /api/nodes/{id}", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNode)))
 	mux.Handle("GET /api/gpus", resourceChain(http.HandlerFunc(handleNotImplemented)))
 	mux.Handle("GET /api/gpus/{id}", resourceChain(http.HandlerFunc(handleNotImplemented)))
 }
 
-// sessionChain wraps a handler with session + CSRF middleware.
 func sessionChain(cfg RouterConfig, h http.HandlerFunc) http.Handler {
 	return chain(
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
@@ -86,14 +83,12 @@ func sessionChain(cfg RouterConfig, h http.HandlerFunc) http.Handler {
 	)(h)
 }
 
-// platformChain wraps a handler with session + CSRF + platform admin middleware.
 func platformChain(cfg RouterConfig, h http.HandlerFunc) http.Handler {
 	sessionMW := auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg)
 	csrfMW := auth.CSRFMiddleware(cfg.SessionCfg)
 	return sessionMW(csrfMW(auth.RequirePlatformAdmin(http.HandlerFunc(h))))
 }
 
-// tenantChain wraps a handler with session + CSRF + permission middleware.
 func tenantChain(cfg RouterConfig, h http.HandlerFunc, permission string) http.Handler {
 	return chain(
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
@@ -102,7 +97,6 @@ func tenantChain(cfg RouterConfig, h http.HandlerFunc, permission string) http.H
 	)(h)
 }
 
-// chain applies a list of middleware to a handler.
 func chain(middlewares ...func(http.Handler) http.Handler) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		for i := len(middlewares) - 1; i >= 0; i-- {
