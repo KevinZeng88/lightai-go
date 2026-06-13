@@ -16,9 +16,14 @@ import (
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/common/types"
 	"lightai-go/internal/common/version"
+	"lightai-go/internal/server/api"
+	"lightai-go/internal/server/auth"
+	"lightai-go/internal/server/db"
+	"lightai-go/internal/server/rbac"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -45,12 +50,52 @@ func main() {
 		"db_path", cfg.DBPath,
 	)
 
+	// Open database.
+	database, err := db.Open(cfg.DBPath)
+	if err != nil {
+		log.Fatal("failed to open database", "error", err)
+	}
+	defer database.Close()
+
+	// Run migrations.
+	if err := database.Migrate(); err != nil {
+		log.Fatal("failed to run migrations", "error", err)
+	}
+
+	// Initialize bootstrap admin.
+	bootstrapCfg := auth.BootstrapConfig{
+		Username:            "admin",
+		Password:            "",
+		PasswordEnv:         "LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD",
+		ForceChangePassword: true,
+	}
+	if err := auth.InitBootstrap(database, bootstrapCfg); err != nil {
+		log.Fatal("failed to initialize bootstrap", "error", err)
+	}
+
+	// Setup session store.
+	sessionCfg := auth.DefaultSessionConfig()
+	sessionStore := auth.NewSessionStore(database, sessionCfg)
+
+	// Setup rate limiter (1 login per second, burst 5).
+	rateLimiter := auth.NewLoginRateLimiter(rate.Limit(1), 5)
+
+	// Setup handlers.
+	authHandler := &auth.AuthHandler{
+		DB:           database,
+		SessionStore: sessionStore,
+		SessionCfg:   sessionCfg,
+		RateLimiter:  rateLimiter,
+		BootstrapCfg: bootstrapCfg,
+	}
+	rbacHandler := rbac.NewHandler(database)
+
 	// Setup metrics.
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	reg.MustRegister(prometheus.NewGoCollector())
 
-	// Create metrics targets store (placeholder for Phase 0).
+	// Create metrics targets store (populated in Phase 1).
 	targetsStore := &metricsTargetsStore{
 		targets: []types.MetricTarget{},
 	}
@@ -58,16 +103,16 @@ func main() {
 	// Setup HTTP mux.
 	mux := http.NewServeMux()
 
-	// Register healthz.
+	// Public endpoints.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(types.HealthResponse{Status: "ok"})
 	})
 
-	// Register metrics.
+	// Metrics (no auth).
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
-	// Register metrics targets (Prometheus HTTP SD format).
+	// Metrics targets (Prometheus HTTP SD).
 	mux.HandleFunc("GET /metrics/targets", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		targets := targetsStore.List()
@@ -75,6 +120,16 @@ func main() {
 			targets = []types.MetricTarget{}
 		}
 		json.NewEncoder(w).Encode(targets)
+	})
+
+	// Setup API routes.
+	api.SetupRoutes(mux, api.RouterConfig{
+		DB:           database,
+		AgentToken:   cfg.AgentToken,
+		SessionStore: sessionStore,
+		SessionCfg:   sessionCfg,
+		AuthHandler:  authHandler,
+		RBACHandler:  rbacHandler,
 	})
 
 	// Create server.
@@ -112,13 +167,10 @@ func main() {
 }
 
 // metricsTargetsStore manages Prometheus HTTP SD targets.
-// In Phase 0 this is a placeholder. In Phase 1 it will be populated
-// from registered agents.
 type metricsTargetsStore struct {
 	targets []types.MetricTarget
 }
 
-// List returns all current targets.
 func (s *metricsTargetsStore) List() []types.MetricTarget {
 	return s.targets
 }
