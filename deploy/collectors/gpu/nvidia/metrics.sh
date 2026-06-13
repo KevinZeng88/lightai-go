@@ -1,7 +1,6 @@
 #!/bin/sh
-# LightAI GPU Collector - NVIDIA Metrics
+# LightAI GPU Collector - NVIDIA Metrics (awk fast path)
 # Exit codes: 0=success, 10=not_available, 30=command_failed, 40=parse_failed
-
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,7 +14,7 @@ NVIDIA_SMI=$(collector_find_command nvidia-smi /usr/bin/nvidia-smi /usr/lib/wsl/
 
 QUERY="index,name,uuid,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu,power.draw"
 OUTPUT=$("$NVIDIA_SMI" --query-gpu="$QUERY" --format=csv,noheader,nounits 2>/dev/null) || {
-  echo "nvidia-smi metrics failed: exit=$?" >&2
+  echo "nvidia-smi metrics failed" >&2
   collector_emit_status nvidia false "nvidia-smi command failed"
   exit 30
 }
@@ -27,49 +26,51 @@ fi
 
 collector_emit_status nvidia true ok
 
-parse_error=0
-echo "$OUTPUT" | while IFS=',' read -r idx name uuid mem_total mem_used mem_free gpu_util mem_util temp power; do
-  idx=$(echo "$idx" | collector_trim)
-  name=$(echo "$name" | collector_trim)
-  uuid=$(echo "$uuid" | collector_trim)
-  mem_total=$(echo "$mem_total" | collector_trim)
-  mem_used=$(echo "$mem_used" | collector_trim)
-  mem_free=$(echo "$mem_free" | collector_trim)
-  gpu_util=$(echo "$gpu_util" | collector_trim)
-  mem_util=$(echo "$mem_util" | collector_trim)
-  temp=$(echo "$temp" | collector_trim)
-  power=$(echo "$power" | collector_trim)
+# Single awk pass: parse CSV, emit METRIC lines.
+echo "$OUTPUT" | awk -F, '
+function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+function quote(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
+function mib_to_bytes(v) {
+  v = trim(v)
+  if (v == "" || v == "N/A" || v == "null") return "null"
+  return int(v) * 1024 * 1024
+}
+function num_or_null(v) {
+  v = trim(v)
+  if (v == "" || v == "N/A" || v == "[N/A]" || v == "null") return "null"
+  return v
+}
+{
+  if (NF < 5) { print "nvidia metrics: too few fields: " NF > "/dev/stderr"; next }
+  idx     = trim($1)
+  name    = trim($2)
+  uuid    = trim($3)
+  mt_raw  = trim($4)
+  mu_raw  = trim($5)
+  mf_raw  = trim($6)
+  gu_raw  = trim($7)
+  mu2_raw = trim($8)
+  tmp_raw = trim($9)
+  pw_raw  = trim($10)
 
-  if [ -z "$idx" ] || [ -z "$uuid" ]; then
-    echo "nvidia metrics: missing index or uuid at idx=$idx" >&2
-    parse_error=1
-    continue
-  fi
+  if (idx == "" || uuid == "") { print "nvidia metrics: missing required field" > "/dev/stderr"; next }
 
-  mem_total_bytes=$(collector_mib_to_bytes_or_null "$mem_total")
-  mem_used_bytes=$(collector_mib_to_bytes_or_null "$mem_used")
+  mt = mib_to_bytes(mt_raw)
+  mu = mib_to_bytes(mu_raw)
+  mf = mib_to_bytes(mf_raw)
+  # Calculate free if missing or N/A
+  if (mf == "null" && mt != "null" && mu != "null") mf = int(mt) - int(mu)
 
-  if [ "$mem_free" = "" ] || [ "$mem_free" = "N/A" ] || [ "$mem_free" = "[N/A]" ]; then
-    mem_free_bytes=$(collector_calc_free_bytes_or_null "$mem_total_bytes" "$mem_used_bytes")
-  else
-    mem_free_bytes=$(collector_mib_to_bytes_or_null "$mem_free")
-  fi
+  gu = num_or_null(gu_raw)
+  mu2 = num_or_null(mu2_raw)
+  # Calculate memory util if missing
+  if (mu2 == "null" && mt != "null" && mu != "null") mu2 = int(mu) * 100 / int(mt)
 
-  gpu_util_val=$(collector_percent_or_null "$gpu_util")
+  tmp = num_or_null(tmp_raw)
+  pw  = num_or_null(pw_raw)
 
-  mem_util_val=$(collector_percent_or_null "$mem_util")
-  if [ "$mem_util_val" = "null" ] && [ "$mem_total_bytes" != "null" ] && [ "$mem_used_bytes" != "null" ]; then
-    mem_util_val=$(collector_calc_percent_or_null "$mem_used_bytes" "$mem_total_bytes")
-  fi
-
-  temp_val=$(collector_number_or_null "$temp")
-  power_val=$(collector_number_or_null "$power")
-
-  collector_emit_metric nvidia "$idx" "$uuid" "$name" \
-    "$mem_total_bytes" "$mem_used_bytes" "$mem_free_bytes" \
-    "$gpu_util_val" "$mem_util_val" "$temp_val" "$power_val" \
-    healthy available
-done
-
-[ "$parse_error" = "1" ] && exit 40
+  printf "METRIC vendor=nvidia index=%s uuid=%s name=\"%s\" memory_total_bytes=%s memory_used_bytes=%s memory_free_bytes=%s gpu_utilization_percent=%s memory_utilization_percent=%s temperature_celsius=%s power_draw_watts=%s health=%s status=%s\n",
+    idx, uuid, quote(name), mt, mu, mf, gu, mu2, tmp, pw, "healthy", "available"
+}
+'
 exit 0

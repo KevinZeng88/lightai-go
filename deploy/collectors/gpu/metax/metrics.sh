@@ -1,180 +1,143 @@
 #!/bin/sh
-# LightAI GPU Collector - MetaX Metrics
-# Uses mx-smi default summary + mx-smi -L for real-time metrics.
-# Exit codes: 0=success, 10=not_available, 30=command_failed, 40=parse_failed
-
+# LightAI GPU Collector - MetaX Metrics (CSV fast path)
+# Target: <1.0s for 8 GPUs. Exit codes: 0=success, 10=not_available, 30=command_failed, 40=parse_failed
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../common.sh"
 
-# Find mx-smi.
 MX_SMI_CMD=""
 if [ -n "${MX_SMI:-}" ] && [ -x "$MX_SMI" ]; then
   MX_SMI_CMD="$MX_SMI"
 else
-  MX_SMI_CMD=$(collector_find_command \
-    mx-smi \
-    /usr/bin/mx-smi \
-    /usr/local/bin/mx-smi \
-    /opt/maca/bin/mx-smi \
-    /usr/local/maca/bin/mx-smi \
-    /opt/mxdriver/bin/mx-smi) || {
+  MX_SMI_CMD=$(collector_find_command mx-smi /usr/bin/mx-smi /usr/local/bin/mx-smi \
+    /opt/maca/bin/mx-smi /usr/local/maca/bin/mx-smi /opt/mxdriver/bin/mx-smi) || {
     collector_emit_status metax false "mx-smi not found"
     exit 10
   }
 fi
 
-# 1. Build index -> uuid/raw_model map from mx-smi -L.
-LIST_OUTPUT=$("$MX_SMI_CMD" -L 2>/dev/null) || true
+TMPDIR="${TMPDIR:-/tmp}"
+CSV_FILE="$TMPDIR/lightai-metax-metrics.$$.csv"
+LIST_FILE="$TMPDIR/lightai-metax-list.$$.txt"
+trap 'rm -f "$CSV_FILE" "$LIST_FILE"' EXIT
 
-uuid_map=""
-name_map=""
-if [ -n "$LIST_OUTPUT" ]; then
-  echo "$LIST_OUTPUT" | while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    idx=$(echo "$line" | sed -n 's/^GPU#\([0-9]*\).*/\1/p' | collector_trim)
-    raw_model=$(echo "$line" | sed -n 's/^GPU#[0-9]*[[:space:]]\+\([^[:space:]]*\).*/\1/p' | collector_trim)
-    uuid=$(echo "$line" | sed -n 's/.*UUID: \([^)]*\).*/\1/p' | collector_trim)
-    if [ -n "$idx" ] && [ -n "$uuid" ]; then
-      name=$(collector_normalize_metax_name "$raw_model")
-      echo "$idx $uuid $name"
-    fi
-  done > /tmp/lightai-metax-map.$$
-else
-  collector_emit_status metax false "mx-smi -L failed"
+# 1. Combined CSV (fast: ~0.23s).
+"$MX_SMI_CMD" --show-memory --show-usage --show-temperature --show-board-power -o "$CSV_FILE" 2>/dev/null || {
+  echo "mx-smi combined CSV failed" >&2
+  collector_emit_status metax false "mx-smi combined CSV command failed"
+  exit 30
+}
+if [ ! -s "$CSV_FILE" ]; then
+  collector_emit_status metax false "empty combined CSV"
   exit 30
 fi
 
-# 2. Get real-time metrics from mx-smi default summary.
-SUMMARY=$("$MX_SMI_CMD" 2>/dev/null) || {
-  echo "mx-smi metrics failed" >&2
-  rm -f /tmp/lightai-metax-map.$$
-  collector_emit_status metax false "mx-smi command failed"
+# 2. GPU list (fast: ~0.05s).
+"$MX_SMI_CMD" -L > "$LIST_FILE" 2>/dev/null || {
+  collector_emit_status metax false "mx-smi -L failed"
   exit 30
 }
 
-if [ -z "$SUMMARY" ]; then
-  rm -f /tmp/lightai-metax-map.$$
-  collector_emit_status metax false "no MetaX GPUs found"
-  exit 10
-fi
-
 collector_emit_status metax true ok
 
-# 3. Parse mx-smi summary table.
-# The table is two lines per GPU:
-# Line 1: | <idx> <name> | <temp_idx> <ecc> | <pci> | <util>% <persistence> |
-# Line 2: | <power>W / <power_limit>W | <temp>C <perf> | <mem_used>/<mem_total> MiB | <state> |
-#
-# We accumulate line 1, then complete on line 2.
+# 3. Single awk pass over both files to emit METRIC lines.
+awk '
+function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+function quote(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
+function norm_name(raw) {
+  if (raw ~ /^MXC[0-9]/) { sub(/^MXC/, "MetaX C", raw); return raw }
+  return raw
+}
+function kb_to_bytes(kb) {
+  kb = trim(kb)
+  if (kb == "" || kb == "N/A" || kb == "null") return "null"
+  return int(kb) * 1024
+}
+function num_or_null(v) {
+  v = trim(v)
+  if (v == "" || v == "N/A" || v == "[N/A]" || v == "null") return "null"
+  return v
+}
+function idx_from_did(did) {
+  did = trim(did)
+  if (match(did, /GPU#([0-9]+)/, a)) return a[1]
+  return did
+}
 
-parse_error=0
-gpu_line1=""
-in_table=0
+# File 1: mx-smi -L output (whitespace-separated)
+FILENAME == LISTFILE && /^[[:space:]]*GPU#[0-9]+/ {
+  line = $0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+  idx = ""; raw = ""; uuid = ""; st = ""
+  if (match(line, /GPU#([0-9]+)/, a)) idx = a[1]
+  split(line, f, /[[:space:]]+/)
+  if (length(f) >= 2) raw = f[2]
+  if (match(line, /(Available|Unavailable|In Use|Error)/, a)) st = a[1]
+  if (match(line, /UUID: ([^)]+)/, a)) uuid = a[1]
+  idx = trim(idx); uuid = trim(uuid)
+  if (idx != "" && uuid != "") { uuid_map[idx]=uuid; raw_map[idx]=raw; state_map[idx]=st }
+  next
+}
+FILENAME == LISTFILE { next }
 
-echo "$SUMMARY" | while IFS= read -r line; do
-  # Detect table start: lines with pipe separators that contain GPU data.
-  if echo "$line" | grep -qE '^\|.*[0-9]+.*MiB.*\|' || echo "$line" | grep -qE '^\|.*[0-9]+[[:space:]]+[A-Za-z]'; then
-    in_table=1
-  fi
-  [ "$in_table" = "0" ] && continue
+# File 2: CSV (comma-separated)
+FNR == 1 {
+  FS=","; $0=$0  # re-parse with FS set
+  for (i=1; i<=NF; i++) {
+    hdr = trim($i)
+    if (hdr == "deviceId") devId_col = i
+    if (hdr ~ /deviceName/) devName_col = i
+    if (hdr ~ /utilization\.vram\.total/) vramTotal_col = i
+    if (hdr ~ /utilization\.vram\.used/)  vramUsed_col  = i
+    if (hdr ~ /utilization\.vram\.usage/) vramUsage_col = i
+    if (hdr ~ /utilization\.GPU/)          gpuUtil_col   = i
+    if (hdr ~ /temperature\.hotspot/)      temp_col      = i
+    if (hdr ~ /power.*\[W\]/)             power_col     = i
+  }
+  next
+}
 
-  # Check if this is a "line 1" (has PCI address pattern).
-  if echo "$line" | grep -qE '[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9a-fA-F]'; then
-    gpu_line1="$line"
-    continue
-  fi
+{
+  FS=","; $0=$0
+  if (NF < 5) next
 
-  # Check if this is a "line 2" (has MiB pattern).
-  if echo "$line" | grep -qE '[0-9]+/[0-9]+[[:space:]]*MiB'; then
-    line2="$line"
-    line1="$gpu_line1"
-    gpu_line1=""
+  did = trim($(devId_col))
+  gidx = idx_from_did(did)
+  if (gidx == "") next
 
-    [ -z "$line1" ] && continue
+  uuid = uuid_map[gidx]
+  if (uuid == "") { print "metax metrics: missing uuid for index " gidx > "/dev/stderr"; next }
 
-    # Parse line 1: | <idx> <name> | <ign> | <pci> | <util>% <ign> |
-    # Field 1: "<idx> <name>"
-    f1_1=$(echo "$line1" | cut -d'|' -f2 | collector_trim)
-    idx=$(echo "$f1_1" | awk '{print $1}')
-    name_from_summary=$(echo "$f1_1" | cut -d' ' -f2- | collector_trim)
+  name = trim($(devName_col))
+  if (name == "" || name == "null") name = raw_map[gidx]
+  if (name == "") name = "unknown"
+  name = norm_name(name)
 
-    # Field 3: PCI address
-    pci=$(echo "$line1" | cut -d'|' -f4 | collector_trim)
+  mem_total = kb_to_bytes(trim($(vramTotal_col)))
+  mem_used  = kb_to_bytes(trim($(vramUsed_col)))
+  mem_free  = "null"
+  if (mem_total != "null" && mem_used != "null") mem_free = int(mem_total) - int(mem_used)
 
-    # Field 4: "<util>% <persistence>"
-    f1_4=$(echo "$line1" | cut -d'|' -f5 | collector_trim)
-    gpu_util=$(echo "$f1_4" | awk '{print $1}' | sed 's/%//' | collector_trim)
+  mem_util = num_or_null($(vramUsage_col))
+  gpu_util = num_or_null($(gpuUtil_col))
+  temp_val = num_or_null($(temp_col))
+  power_val = num_or_null($(power_col))
 
-    # Parse line 2: | <power>W / <limit>W | <temp>C <perf> | <used>/<total> MiB | <state> |
-    f2_1=$(echo "$line2" | cut -d'|' -f2 | collector_trim)
-    power=$(echo "$f2_1" | awk '{print $1}' | sed 's/W//' | collector_trim)
+  st = state_map[gidx]
+  health = "unknown"; status = "unknown"
+  if (st == "Available")   { health = "healthy";   status = "available" }
+  else if (st == "In Use") { health = "healthy";   status = "available" }
+  else if (st == "Unavailable") { health = "warning"; status = "unavailable" }
+  else if (st == "Error")  { health = "unhealthy"; status = "unavailable" }
 
-    f2_2=$(echo "$line2" | cut -d'|' -f3 | collector_trim)
-    temp=$(echo "$f2_2" | awk '{print $1}' | sed 's/C//' | collector_trim)
+  printf "METRIC vendor=metax index=%s uuid=%s name=\"%s\" memory_total_bytes=%s memory_used_bytes=%s memory_free_bytes=%s gpu_utilization_percent=%s memory_utilization_percent=%s temperature_celsius=%s power_draw_watts=%s health=%s status=%s\n",
+    gidx, uuid, quote(name), mem_total, mem_used, mem_free, gpu_util, mem_util, temp_val, power_val, health, status
+}
+' LISTFILE="$LIST_FILE" "$LIST_FILE" "$CSV_FILE" 2>/tmp/lightai-metax-metrics.err
 
-    f2_3=$(echo "$line2" | cut -d'|' -f4 | collector_trim)
-    mem_used_mib=$(echo "$f2_3" | awk -F'/' '{print $1}' | collector_trim)
-    mem_total_mib=$(echo "$f2_3" | awk -F'/' '{print $2}' | awk '{print $1}' | collector_trim)
-
-    f2_4=$(echo "$line2" | cut -d'|' -f5 | collector_trim)
-    gpu_state=$(echo "$f2_4" | collector_trim)
-
-    # Look up uuid and name from the map.
-    uuid=""
-    name_from_map=""
-    if [ -f /tmp/lightai-metax-map.$$ ]; then
-      while read -r mid muuid mname; do
-        if [ "$mid" = "$idx" ]; then
-          uuid="$muuid"
-          name_from_map="$mname"
-          break
-        fi
-      done < /tmp/lightai-metax-map.$$
-    fi
-
-    # Use summary name if available, otherwise map name.
-    name="$name_from_summary"
-    if [ -z "$name" ] || [ "$name" = "$idx" ]; then
-      name="$name_from_map"
-    fi
-    [ -z "$name" ] && name=$(collector_normalize_metax_name "$name_from_map")
-
-    if [ -z "$idx" ] || [ -z "$uuid" ]; then
-      echo "metax metrics: missing index or uuid at idx=$idx" >&2
-      parse_error=1
-      continue
-    fi
-
-    # Convert MiB to bytes.
-    mem_total_bytes=$(collector_mib_to_bytes_or_null "$mem_total_mib")
-    mem_used_bytes=$(collector_mib_to_bytes_or_null "$mem_used_mib")
-    mem_free_bytes=$(collector_calc_free_bytes_or_null "$mem_total_bytes" "$mem_used_bytes")
-
-    # Normalize values.
-    gpu_util_val=$(collector_percent_or_null "$gpu_util")
-    mem_util_val=$(collector_calc_percent_or_null "$mem_used_bytes" "$mem_total_bytes")
-    temp_val=$(collector_number_or_null "$temp")
-    power_val=$(collector_number_or_null "$power")
-
-    # Map GPU state.
-    health="unknown"
-    status="unknown"
-    case "$gpu_state" in
-      Available) health="healthy"; status="available" ;;
-      "In Use")  health="healthy"; status="available" ;;
-      Unavailable) health="warning"; status="unavailable" ;;
-      Error)      health="unhealthy"; status="unavailable" ;;
-    esac
-
-    collector_emit_metric metax "$idx" "$uuid" "$name" \
-      "$mem_total_bytes" "$mem_used_bytes" "$mem_free_bytes" \
-      "$gpu_util_val" "$mem_util_val" "$temp_val" "$power_val" \
-      "$health" "$status"
-  fi
-done
-
-rm -f /tmp/lightai-metax-map.$$
-[ "$parse_error" = "1" ] && exit 40
+if [ -s /tmp/lightai-metax-metrics.err ]; then
+  rm -f /tmp/lightai-metax-metrics.err
+  exit 40
+fi
+rm -f /tmp/lightai-metax-metrics.err
 exit 0

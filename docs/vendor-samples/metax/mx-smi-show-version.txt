@@ -1,0 +1,5 @@
+GPU#0  MXC500  0000:0e:00.0
+Version
+MACA                                      : 3.7.2.0
+BIOS                                      : 1.33.5.0
+KMD                                       : 3.6.11
