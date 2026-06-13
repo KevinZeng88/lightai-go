@@ -85,7 +85,7 @@ func main() {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	reg.MustRegister(prometheus.NewGoCollector())
-	serverMetrics := srvmetrics.New(reg)
+	serverMetrics := srvmetrics.New(reg, database.DB)
 
 	agentHandler := api.NewAgentHandler(database, serverMetrics)
 	resourceHandler := api.NewResourceHandler(database, serverMetrics)
@@ -126,7 +126,7 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      mux,
+		Handler:      metricsWrapper(mux, serverMetrics),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -214,4 +214,38 @@ func serveWeb(mux *http.ServeMux) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(data)
 	})
+}
+
+// metricsWrapper wraps the mux with API request metrics recording.
+func metricsWrapper(mux *http.ServeMux, m *srvmetrics.ServerMetrics) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		wr := &respWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		mux.ServeHTTP(wr, r)
+		duration := time.Since(start).Seconds()
+		if m != nil && m.APIRequests != nil {
+			ep := api.StripPathParams(r.URL.Path)
+			code := "2xx"
+			if wr.statusCode >= 400 {
+				code = "4xx"
+			}
+			if wr.statusCode >= 500 {
+				code = "5xx"
+			}
+			m.APIRequests.WithLabelValues(ep, r.Method, code).Inc()
+			if m.APIRequestDuration != nil {
+				m.APIRequestDuration.WithLabelValues(ep, r.Method).Observe(duration)
+			}
+		}
+	})
+}
+
+type respWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *respWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
 }
