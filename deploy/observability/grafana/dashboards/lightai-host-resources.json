@@ -14,7 +14,7 @@
       "targets": [
         {
           "expr": "lightai_host_cpu_usage_ratio * 100",
-          "legendFormat": "CPU %"
+          "legendFormat": "CPU 使用率"
         }
       ],
       "fieldConfig": {
@@ -37,15 +37,15 @@
       "targets": [
         {
           "expr": "lightai_host_load1",
-          "legendFormat": "1min"
+          "legendFormat": "1分钟"
         },
         {
           "expr": "lightai_host_load5",
-          "legendFormat": "5min"
+          "legendFormat": "5分钟"
         },
         {
           "expr": "lightai_host_load15",
-          "legendFormat": "15min"
+          "legendFormat": "15分钟"
         }
       ]
     },
@@ -61,15 +61,15 @@
       "targets": [
         {
           "expr": "lightai_host_load1",
-          "legendFormat": "1min"
+          "legendFormat": "1分钟"
         },
         {
           "expr": "lightai_host_load5",
-          "legendFormat": "5min"
+          "legendFormat": "5分钟"
         },
         {
           "expr": "lightai_host_load15",
-          "legendFormat": "15min"
+          "legendFormat": "15分钟"
         }
       ]
     },
@@ -85,12 +85,20 @@
       "targets": [
         {
           "expr": "lightai_host_memory_total_bytes",
-          "legendFormat": "Total"
+          "legendFormat": "总量"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "bytes"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
         }
       }
     },
@@ -106,12 +114,20 @@
       "targets": [
         {
           "expr": "lightai_host_memory_used_bytes",
-          "legendFormat": "Used"
+          "legendFormat": "已用"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "bytes"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
         }
       }
     },
@@ -126,8 +142,8 @@
       },
       "targets": [
         {
-          "expr": "lightai_host_memory_used_ratio * 100",
-          "legendFormat": "Memory %"
+          "expr": "max(lightai_host_memory_used_ratio) * 100",
+          "legendFormat": "内存"
         }
       ],
       "fieldConfig": {
@@ -135,6 +151,14 @@
           "unit": "percent",
           "min": 0,
           "max": 100
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
         }
       }
     },
@@ -157,6 +181,14 @@
         "defaults": {
           "unit": "bytes"
         }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       }
     },
     {
@@ -170,13 +202,21 @@
       },
       "targets": [
         {
-          "expr": "lightai_host_filesystem_used_ratio * 100",
+          "expr": "max(lightai_host_filesystem_used_ratio{mountpoint=\"/\"}) * 100",
           "legendFormat": "{{mountpoint}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
         }
       }
     },
@@ -192,15 +232,15 @@
       "targets": [
         {
           "expr": "lightai_host_filesystem_total_bytes",
-          "legendFormat": "{{mountpoint}} Total"
+          "legendFormat": "{{mountpoint}} 总量"
         },
         {
           "expr": "lightai_host_filesystem_used_bytes",
-          "legendFormat": "{{mountpoint}} Used"
+          "legendFormat": "{{mountpoint}} 已用"
         },
         {
           "expr": "lightai_host_filesystem_available_bytes",
-          "legendFormat": "{{mountpoint}} Avail"
+          "legendFormat": "{{mountpoint}} 可用"
         }
       ],
       "fieldConfig": {
@@ -221,11 +261,19 @@
       "targets": [
         {
           "expr": "lightai_host_cpu_cores",
-          "legendFormat": "CPU Cores"
+          "legendFormat": "CPU 核数"
         }
       ],
       "fieldConfig": {
         "defaults": {}
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       }
     }
   ],

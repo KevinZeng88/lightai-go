@@ -3,31 +3,130 @@
   "uid": "lightai-agent-health",
   "panels": [
     {
-      "title": "Node Online Status", "type": "stat", "gridPos": {"x": 0, "y": 0, "w": 6, "h": 3},
-      "targets": [{"expr": "lightai_node_online", "legendFormat": "{{hostname}}"}],
-      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}}}
-    },
-    {
-      "title": "Last Collector Success", "type": "stat", "gridPos": {"x": 6, "y": 0, "w": 6, "h": 3},
-      "targets": [{"expr": "time() - lightai_agent_collector_last_success_timestamp_seconds", "legendFormat": "{{hostname}}"}],
-      "fieldConfig": {"defaults": {"unit": "s"}}
-    },
-    {
-      "title": "Report Success Rate", "type": "timeseries", "gridPos": {"x": 12, "y": 0, "w": 12, "h": 3},
+      "title": "Node Online Status",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 3
+      },
       "targets": [
-        {"expr": "rate(lightai_agent_report_success_total[1m])", "legendFormat": "Success - {{hostname}}"},
-        {"expr": "rate(lightai_agent_report_errors_total[1m])", "legendFormat": "Errors - {{hostname}}"}
+        {
+          "expr": "lightai_node_online",
+          "legendFormat": "{{hostname}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "title": "Last Collector Success",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 3
+      },
+      "targets": [
+        {
+          "expr": "time() - lightai_agent_collector_last_success_timestamp_seconds",
+          "legendFormat": "{{hostname}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "title": "Report Success Rate",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 3
+      },
+      "targets": [
+        {
+          "expr": "rate(lightai_agent_report_success_total[1m])",
+          "legendFormat": "Success - {{hostname}}"
+        },
+        {
+          "expr": "rate(lightai_agent_report_errors_total[1m])",
+          "legendFormat": "Errors - {{hostname}}"
+        }
       ]
     },
     {
-      "title": "Collector Errors", "type": "timeseries", "gridPos": {"x": 0, "y": 3, "w": 12, "h": 6},
-      "targets": [{"expr": "rate(lightai_agent_collector_errors_total[1m])", "legendFormat": "{{hostname}}"}]
+      "title": "Collector Errors",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "rate(lightai_agent_collector_errors_total[1m])",
+          "legendFormat": "{{hostname}}"
+        }
+      ]
     },
     {
-      "title": "Go GC Duration", "type": "timeseries", "gridPos": {"x": 12, "y": 3, "w": 12, "h": 6},
-      "targets": [{"expr": "rate(go_gc_duration_seconds_sum[1m])", "legendFormat": "{{instance}}"}]
+      "title": "Go GC Duration",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "rate(go_gc_duration_seconds_sum[1m])",
+          "legendFormat": "{{instance}}"
+        }
+      ]
     }
   ],
   "schemaVersion": 36,
-  "tags": ["lightai", "agent"]
+  "tags": [
+    "lightai",
+    "agent"
+  ]
 }
