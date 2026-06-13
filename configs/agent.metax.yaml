@@ -1,7 +1,7 @@
 # LightAI Go Agent - MetaX Configuration
 # Copy to the GPU server and customize as needed.
 
-agent_id: agent-metax-01
+agent_id: agent-01
 server_url: http://127.0.0.1:18080
 agent_token: "lightai-agent-token-change-me"
 log_level: info

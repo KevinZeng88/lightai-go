@@ -1,30 +1,31 @@
 #!/bin/sh
 # LightAI Go - Start Agent (release mode)
-# Usage: ./scripts/start-agent.sh [metax|nvidia] [config]
+# Usage: ./scripts/start-agent.sh [config]
+# Default: configs/agent.nvidia.yaml
+# Override: LIGHTAI_AGENT_CONFIG env var or first argument
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RELEASE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VENDOR="${1:-metax}"
-
 cd "$RELEASE_ROOT"
 
-# Select config based on vendor.
-case "$VENDOR" in
-  metax)   CONFIG="${2:-$RELEASE_ROOT/configs/agent.metax.yaml}" ;;
-  nvidia)  CONFIG="${2:-$RELEASE_ROOT/configs/agent.nvidia.yaml}" ;;
-  *)
-    echo "Usage: $0 [metax|nvidia] [config]" >&2
-    echo "  metax  - MetaX GPU collector" >&2
-    echo "  nvidia - NVIDIA GPU collector" >&2
-    exit 1
-    ;;
-esac
+# Priority: command-line arg > LIGHTAI_AGENT_CONFIG > default NVIDIA
+if [ -n "${1:-}" ]; then
+  CONFIG="$1"
+elif [ -n "${LIGHTAI_AGENT_CONFIG:-}" ]; then
+  CONFIG="$LIGHTAI_AGENT_CONFIG"
+else
+  CONFIG="$RELEASE_ROOT/configs/agent.nvidia.yaml"
+fi
+
+if [ ! -f "$CONFIG" ]; then
+  echo "Agent config not found: $CONFIG" >&2
+  exit 1
+fi
 
 mkdir -p logs data run
 
 echo "=== LightAI Go Agent ==="
-echo "Vendor: $VENDOR"
 echo "Config: $CONFIG"
 echo "Root:   $RELEASE_ROOT"
 echo ""

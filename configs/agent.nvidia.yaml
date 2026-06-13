@@ -1,6 +1,6 @@
 # LightAI Go Agent - NVIDIA Configuration
 
-agent_id: agent-nvidia-01
+agent_id: agent-01
 server_url: http://127.0.0.1:18080
 agent_token: "lightai-agent-token-change-me"
 log_level: info
