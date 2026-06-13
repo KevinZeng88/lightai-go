@@ -1,0 +1,53 @@
+# LightAI Go Agent - NVIDIA Configuration
+
+agent_id: agent-nvidia-01
+server_url: http://127.0.0.1:8080
+agent_token: "lightai-agent-token-change-me"
+log_level: info
+data_dir: data
+request_timeout: 5s
+
+advertised_address: ""
+
+metrics:
+  enabled: true
+  host: "0.0.0.0"
+  scheme: http
+  port: 19091
+  path: /metrics
+  advertise_addr: ""
+
+heartbeat:
+  interval: 2s
+
+gpu:
+  profile: production
+
+collectors:
+  system:
+    enabled: true
+    interval: 5s
+  mock_gpu:
+    enabled: false
+  nvidia:
+    enabled: false
+  gpu_external:
+    enabled: true
+    timeout: 5s
+    collectors:
+      - name: "nvidia"
+        vendor: "nvidia"
+        enabled: true
+        discover_cmd: "deploy/collectors/gpu/nvidia/discover.sh"
+        metrics_cmd: "deploy/collectors/gpu/nvidia/metrics.sh"
+  report_interval: 5s
+
+logging:
+  level: info
+  dir: logs
+  file: agent.log
+  stdout: false
+  file_enabled: true
+  max_size_mb: 50
+  max_files: 5
+  retention_days: 7

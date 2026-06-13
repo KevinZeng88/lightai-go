@@ -1,0 +1,29 @@
+# LightAI Go Server - Release Configuration
+# For deployment on GPU servers. Copy and customize as needed.
+
+host: "0.0.0.0"
+port: 8080
+log_level: info
+db_path: data/lightai.db
+dev_mode: false
+
+# Change this token for production.
+agent_token: "lightai-agent-token-change-me"
+
+logging:
+  level: info
+  dir: logs
+  file: server.log
+  stdout: false
+  file_enabled: true
+  max_size_mb: 50
+  max_files: 5
+  retention_days: 7
+
+observability:
+  mode: bundled
+
+gpu:
+  profile: production
+
+node_offline_threshold: 20s
