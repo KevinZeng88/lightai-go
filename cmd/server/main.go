@@ -217,12 +217,20 @@ func serveWeb(mux *http.ServeMux) {
 }
 
 // metricsWrapper wraps the mux with API request metrics recording.
+// Only /api/* paths are tracked; /metrics, /healthz, and static assets are excluded.
 func metricsWrapper(mux *http.ServeMux, m *srvmetrics.ServerMetrics) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		wr := &respWriter{ResponseWriter: w, statusCode: http.StatusOK}
 		mux.ServeHTTP(wr, r)
 		duration := time.Since(start).Seconds()
+
+		// Only record API paths to avoid polluting counters with
+		// Prometheus scrapes, health checks, and static asset requests.
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			return
+		}
+
 		if m != nil && m.APIRequests != nil {
 			ep := api.StripPathParams(r.URL.Path)
 			code := "2xx"
