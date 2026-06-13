@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
 	"lightai-go/internal/server/rbac"
+	"lightai-go/web"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -115,7 +118,7 @@ func main() {
 	})
 
 	// Serve embedded web assets or fallback.
-	serveEmbeddedWeb(mux)
+	serveWeb(mux)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	srv := &http.Server{
@@ -148,11 +151,15 @@ func main() {
 	log.Info("server stopped")
 }
 
-// serveFallbackPage returns a helpful HTML page when web assets are not built.
-func serveFallbackPage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`<!DOCTYPE html>
+// serveWeb serves embedded web/dist or shows a fallback page.
+func serveWeb(mux *http.ServeMux) {
+	distFS, err := web.GetDist()
+	if err != nil {
+		log.Info("web assets not built; run 'cd web && npm run build'")
+		mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<!DOCTYPE html>
 <html><head><title>LightAI Go</title></head>
 <body style="font-family: sans-serif; padding: 2rem;">
 <h1>LightAI Go Server</h1>
@@ -163,4 +170,45 @@ func serveFallbackPage(w http.ResponseWriter, r *http.Request) {
 <hr>
 <p><small>API: <a href="/api/auth/me">/api/auth/me</a> | <a href="/healthz">/healthz</a> | <a href="/metrics">/metrics</a> | <a href="/metrics/targets">/metrics/targets</a></small></p>
 </body></html>`))
+		})
+		return
+	}
+
+	fileServer := http.FileServer(http.FS(distFS))
+	mux.Handle("GET /assets/", fileServer)
+	mux.Handle("GET /favicon.ico", fileServer)
+	mux.Handle("GET /favicon.png", fileServer)
+
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		data, err := fs.ReadFile(distFS, path)
+		if err == nil {
+			contentType := "application/octet-stream"
+			switch {
+			case strings.HasSuffix(path, ".html"):
+				contentType = "text/html; charset=utf-8"
+			case strings.HasSuffix(path, ".css"):
+				contentType = "text/css"
+			case strings.HasSuffix(path, ".js"):
+				contentType = "application/javascript"
+			case strings.HasSuffix(path, ".svg"):
+				contentType = "image/svg+xml"
+			case strings.HasSuffix(path, ".png"):
+				contentType = "image/png"
+			case strings.HasSuffix(path, ".ico"):
+				contentType = "image/x-icon"
+			}
+			w.Header().Set("Content-Type", contentType)
+			w.Write(data)
+			return
+		}
+		// SPA fallback: serve index.html.
+		data, err = fs.ReadFile(distFS, "index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(data)
+	})
 }
