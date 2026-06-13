@@ -1,0 +1,40 @@
+{
+  "title": "LightAI GPU Resources",
+  "uid": "lightai-gpu-resources",
+  "panels": [
+    {
+      "title": "GPU Utilization by GPU", "type": "timeseries", "gridPos": {"x": 0, "y": 0, "w": 12, "h": 6},
+      "targets": [{"expr": "lightai_gpu_utilization_percent", "legendFormat": "{{gpu_name}} ({{gpu_index}})"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}
+    },
+    {
+      "title": "GPU Memory Used/Total", "type": "bargauge", "gridPos": {"x": 12, "y": 0, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "lightai_gpu_memory_used_bytes", "legendFormat": "Used - {{gpu_name}}"},
+        {"expr": "lightai_gpu_memory_total_bytes - lightai_gpu_memory_used_bytes", "legendFormat": "Free - {{gpu_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    },
+    {
+      "title": "GPU Temperature", "type": "timeseries", "gridPos": {"x": 0, "y": 6, "w": 8, "h": 6},
+      "targets": [{"expr": "lightai_gpu_temperature_celsius", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "celsius"}}
+    },
+    {
+      "title": "GPU Power Draw", "type": "timeseries", "gridPos": {"x": 8, "y": 6, "w": 8, "h": 6},
+      "targets": [{"expr": "lightai_gpu_power_draw_watts", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "watt"}}
+    },
+    {
+      "title": "GPU Memory Utilization", "type": "timeseries", "gridPos": {"x": 16, "y": 6, "w": 8, "h": 6},
+      "targets": [{"expr": "lightai_gpu_memory_utilization_percent", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "percent"}}
+    },
+    {
+      "title": "GPU Count by Node", "type": "table", "gridPos": {"x": 0, "y": 12, "w": 12, "h": 4},
+      "targets": [{"expr": "count(lightai_gpu_memory_total_bytes) by (hostname)", "legendFormat": "{{hostname}}"}]
+    }
+  ],
+  "schemaVersion": 36,
+  "tags": ["lightai", "gpu"]
+}

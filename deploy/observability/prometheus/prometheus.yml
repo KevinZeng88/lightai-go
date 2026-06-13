@@ -1,18 +1,30 @@
-# LightAI Go - Prometheus Configuration
-# Phase 0 placeholder. Will be populated in Phase 9.
+# LightAI Go - Prometheus Configuration (bundled mode)
+# LightAI manages this config and starts Prometheus as a managed subprocess.
 
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 5s
+  evaluation_interval: 10s
+  external_labels:
+    cluster: lightai-dev
 
 scrape_configs:
-  # Server metrics
-  - job_name: 'lightai-server'
+  # LightAI Server metrics
+  - job_name: lightai-server
     static_configs:
-      - targets: ['server:8080']
+      - targets:
+          - "127.0.0.1:18080"
 
-  # Agent metrics (via HTTP SD from /metrics/targets)
-  - job_name: 'lightai-agents'
+  # LightAI Agent metrics (via HTTP SD from Server /metrics/targets)
+  - job_name: lightai-agents
     http_sd_configs:
-      - url: 'http://server:8080/metrics/targets'
-        refresh_interval: 60s
+      - url: "http://127.0.0.1:18080/metrics/targets"
+        refresh_interval: 30s
+
+  # Prometheus self metrics
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - "127.0.0.1:19090"
+
+rule_files:
+  - "deploy/observability/prometheus/rules/lightai.rules.yml"

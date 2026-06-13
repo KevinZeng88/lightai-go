@@ -112,30 +112,21 @@ func TestParseNvidiaCSV_PowerNA(t *testing.T) {
 }
 
 func TestParseFloatOrNil_NA(t *testing.T) {
-	v, err := parseFloatOrNil("N/A")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	v := parseFloatOrNil("N/A")
 	if v != nil {
 		t.Error("expected nil for N/A")
 	}
 }
 
 func TestParseFloatOrNil_Empty(t *testing.T) {
-	v, err := parseFloatOrNil("")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	v := parseFloatOrNil("")
 	if v != nil {
 		t.Error("expected nil for empty string")
 	}
 }
 
 func TestParseUintOrZero_NA(t *testing.T) {
-	v, err := parseUintOrZero("N/A")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	v := parseUintOrZero("N/A")
 	if v != 0 {
 		t.Errorf("expected 0 for N/A, got %d", v)
 	}

@@ -65,11 +65,12 @@ type AgentConfig struct {
 
 // AgentMetricsConfig holds agent metrics server settings.
 type AgentMetricsConfig struct {
-	Enabled bool   `yaml:"enabled" json:"enabled"`
-	Host    string `yaml:"host" json:"host"`
-	Scheme  string `yaml:"scheme" json:"scheme"`
-	Port    int    `yaml:"port" json:"port"`
-	Path    string `yaml:"path" json:"path"`
+	Enabled       bool   `yaml:"enabled" json:"enabled"`
+	Host          string `yaml:"host" json:"host"`
+	Scheme        string `yaml:"scheme" json:"scheme"`
+	Port          int    `yaml:"port" json:"port"`
+	Path          string `yaml:"path" json:"path"`
+	AdvertiseAddr string `yaml:"advertise_addr" json:"advertise_addr"`
 }
 
 // HeartbeatConfig holds heartbeat settings.
@@ -79,10 +80,27 @@ type HeartbeatConfig struct {
 
 // AgentCollectorConfig holds agent collector settings.
 type AgentCollectorConfig struct {
-	System         SystemCollectorConfig  `yaml:"system" json:"system"`
-	MockGPU        MockGPUCollectorConfig `yaml:"mock_gpu" json:"mock_gpu"`
-	Nvidia         NvidiaCollectorConfig  `yaml:"nvidia" json:"nvidia"`
-	ReportInterval time.Duration          `yaml:"report_interval" json:"report_interval"`
+	System         SystemCollectorConfig      `yaml:"system" json:"system"`
+	MockGPU        MockGPUCollectorConfig     `yaml:"mock_gpu" json:"mock_gpu"`
+	Nvidia         NvidiaCollectorConfig      `yaml:"nvidia" json:"nvidia"`
+	GPUExternal    GPUExternalCollectorConfig `yaml:"gpu_external" json:"gpu_external"`
+	ReportInterval time.Duration              `yaml:"report_interval" json:"report_interval"`
+}
+
+// GPUExternalCollectorConfig holds external GPU collector configs.
+type GPUExternalCollectorConfig struct {
+	Enabled    bool                   `yaml:"enabled" json:"enabled"`
+	Timeout    time.Duration          `yaml:"timeout" json:"timeout"`
+	Collectors []ExternalCollectorDef `yaml:"collectors" json:"collectors"`
+}
+
+// ExternalCollectorDef defines one external GPU collector.
+type ExternalCollectorDef struct {
+	Name        string `yaml:"name" json:"name"`
+	Vendor      string `yaml:"vendor" json:"vendor"`
+	Enabled     bool   `yaml:"enabled" json:"enabled"`
+	DiscoverCmd string `yaml:"discover_cmd" json:"discover_cmd"`
+	MetricsCmd  string `yaml:"metrics_cmd" json:"metrics_cmd"`
 }
 
 // SystemCollectorConfig holds system collector settings.

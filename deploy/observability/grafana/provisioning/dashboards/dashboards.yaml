@@ -1,0 +1,12 @@
+# LightAI Go - Grafana Dashboard Provisioning
+apiVersion: 1
+
+providers:
+  - name: LightAI
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: true
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

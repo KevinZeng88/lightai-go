@@ -1,0 +1,58 @@
+# LightAI Go - Prometheus Alert Rules (templates)
+groups:
+  - name: lightai
+    rules:
+      - alert: NodeOffline
+        expr: lightai_node_online == 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node offline (instance {{ $labels.hostname }})"
+
+      - alert: AgentCollectorError
+        expr: rate(lightai_agent_collector_errors_total[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent collector errors (instance {{ $labels.hostname }})"
+
+      - alert: GPUUnhealthy
+        expr: lightai_gpu_health_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GPU unhealthy ({{ $labels.gpu_name }})"
+
+      - alert: GPUHighUtilization
+        expr: lightai_gpu_utilization_percent > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU utilization high ({{ $labels.gpu_name }}: {{ $value }}%)"
+
+      - alert: GPUMemoryHighUsage
+        expr: lightai_gpu_memory_utilization_percent > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU memory usage high ({{ $labels.gpu_name }}: {{ $value }}%)"
+
+      - alert: GPUTemperatureHigh
+        expr: lightai_gpu_temperature_celsius > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU temperature high ({{ $labels.gpu_name }}: {{ $value }}°C)"
+
+      - alert: ServerHighErrorRate
+        expr: rate(lightai_server_api_requests_total{code=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Server error rate elevated"

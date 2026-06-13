@@ -6,12 +6,18 @@ log_level: debug
 data_dir: data
 request_timeout: 5s
 
+# Network: listen vs advertise.
+# 127.0.0.1 for local dev; 0.0.0.0 for LAN deployment.
+advertised_address: "127.0.0.1"
+
 metrics:
   enabled: true
   host: "127.0.0.1"
   scheme: http
   port: 19091
   path: /metrics
+  # Advertised address for Prometheus scrape targets (LAN: use actual IP).
+  advertise_addr: "127.0.0.1:19091"
 
 heartbeat:
   interval: 2s
@@ -25,9 +31,26 @@ collectors:
     interval: 5s
   mock_gpu:
     enabled: false
-  nvidia:
+  # External GPU collectors (default product path).
+  gpu_external:
     enabled: true
-    interval: 5s
+    timeout: "5s"
+    collectors:
+      - name: "nvidia"
+        vendor: "nvidia"
+        enabled: true
+        discover_cmd: "deploy/collectors/gpu/nvidia/discover.sh"
+        metrics_cmd: "deploy/collectors/gpu/nvidia/metrics.sh"
+      - name: "metax"
+        vendor: "metax"
+        enabled: false
+        discover_cmd: "deploy/collectors/gpu/metax/discover.sh"
+        metrics_cmd: "deploy/collectors/gpu/metax/metrics.sh"
+      - name: "amd"
+        vendor: "amd"
+        enabled: false
+        discover_cmd: "deploy/collectors/gpu/amd/discover.sh"
+        metrics_cmd: "deploy/collectors/gpu/amd/metrics.sh"
   report_interval: 5s
 
 logging:

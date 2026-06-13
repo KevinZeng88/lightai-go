@@ -90,12 +90,35 @@ func main() {
 		profile = "production"
 	}
 
-	if cfg.Collectors.Nvidia.Enabled {
-		if profile == "production" || profile == "development" {
-			registry.RegisterGPU(collector.NewNvidiaCollector())
-			log.Info("nvidia collector enabled", "profile", profile)
+	// GPU collectors: prefer external command collectors (product path).
+	if cfg.Collectors.GPUExternal.Enabled {
+		timeout := cfg.Collectors.GPUExternal.Timeout
+		if timeout == 0 {
+			timeout = 5 * time.Second
+		}
+		for _, def := range cfg.Collectors.GPUExternal.Collectors {
+			if !def.Enabled {
+				continue
+			}
+			extCfg := collector.ExternalCommandConfig{
+				Name:        def.Name,
+				Vendor:      def.Vendor,
+				Enabled:     def.Enabled,
+				DiscoverCmd: def.DiscoverCmd,
+				MetricsCmd:  def.MetricsCmd,
+				Timeout:     timeout,
+			}
+			registry.RegisterGPU(collector.NewExternalCommandCollector(extCfg))
+			log.Info("external gpu collector enabled",
+				"collector", def.Name,
+				"vendor", def.Vendor,
+				"discover_cmd", def.DiscoverCmd,
+				"metrics_cmd", def.MetricsCmd,
+			)
 		}
 	}
+
+	// Mock GPU for development/test.
 	if profile == "development" || profile == "test" {
 		if cfg.Collectors.MockGPU.Enabled {
 			registry.RegisterGPU(collector.NewMockGPUCollector())
@@ -105,7 +128,7 @@ func main() {
 
 	log.Info("collectors configured",
 		"system_enabled", cfg.Collectors.System.Enabled,
-		"nvidia_enabled", cfg.Collectors.Nvidia.Enabled,
+		"external_gpu_enabled", cfg.Collectors.GPUExternal.Enabled,
 		"mock_enabled", cfg.Collectors.MockGPU.Enabled,
 		"gpu_profile", profile,
 		"heartbeat_interval_s", cfg.Heartbeat.Interval.Seconds(),

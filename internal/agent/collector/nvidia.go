@@ -211,14 +211,8 @@ func parseNvidiaMetricsCSV(output string, collectedAt time.Time) ([]GPUMetricInf
 		}
 
 		// memory.used and memory.free are in MB, convert to bytes.
-		memUsedMB, err := parseUintOrZero(fields[6])
-		if err != nil {
-			return nil, fmt.Errorf("invalid memory.used '%s': %w", fields[6], err)
-		}
-		memFreeMB, err := parseUintOrZero(fields[7])
-		if err != nil {
-			return nil, fmt.Errorf("invalid memory.free '%s': %w", fields[7], err)
-		}
+		memUsedMB := parseUintOrZero(fields[6])
+		memFreeMB := parseUintOrZero(fields[7])
 		memUsedBytes := memUsedMB * 1024 * 1024
 		memFreeBytes := memFreeMB * 1024 * 1024
 
@@ -234,28 +228,28 @@ func parseNvidiaMetricsCSV(output string, collectedAt time.Time) ([]GPUMetricInf
 
 		// utilization.gpu (field 8) - 0-100 percent.
 		if len(fields) > 8 {
-			if v, err := parseFloatOrNil(fields[8]); err == nil && v != nil {
+			if v := parseFloatOrNil(fields[8]); v != nil {
 				metric.GPUUtilization = v
 			}
 		}
 
 		// utilization.memory (field 9) - 0-100 percent.
 		if len(fields) > 9 {
-			if v, err := parseFloatOrNil(fields[9]); err == nil && v != nil {
+			if v := parseFloatOrNil(fields[9]); v != nil {
 				metric.MemoryUtilization = v
 			}
 		}
 
 		// temperature.gpu (field 10) - celsius.
 		if len(fields) > 10 {
-			if v, err := parseFloatOrNil(fields[10]); err == nil && v != nil {
+			if v := parseFloatOrNil(fields[10]); v != nil {
 				metric.Temperature = v
 			}
 		}
 
 		// power.draw (field 11) - watts. May be "N/A" or empty.
 		if len(fields) > 11 {
-			if v, err := parseFloatOrNil(fields[11]); err == nil && v != nil {
+			if v := parseFloatOrNil(fields[11]); v != nil {
 				metric.PowerDraw = v
 			}
 		}
@@ -266,27 +260,7 @@ func parseNvidiaMetricsCSV(output string, collectedAt time.Time) ([]GPUMetricInf
 	return metrics, nil
 }
 
-// parseUintOrZero parses a string to uint64, returning 0 for empty or invalid input.
-func parseUintOrZero(s string) (uint64, error) {
-	s = strings.TrimSpace(s)
-	if s == "" || s == "N/A" || s == "[N/A]" {
-		return 0, nil
-	}
-	return strconv.ParseUint(s, 10, 64)
-}
-
-// parseFloatOrNil parses a string to float64, returning nil for empty, N/A, or invalid input.
-func parseFloatOrNil(s string) (*float64, error) {
-	s = strings.TrimSpace(s)
-	if s == "" || s == "N/A" || s == "[N/A]" || s == "Unknown" {
-		return nil, nil
-	}
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return nil, nil // Treat parse errors as nil (unknown).
-	}
-	return &v, nil
-}
-
 // Ensure interface satisfaction.
+// Deprecated: NvidiaCollector is kept for reference but ExternalCommandCollector
+// is now the default product path for all GPU vendors.
 var _ GPUCollector = (*NvidiaCollector)(nil)

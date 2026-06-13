@@ -65,6 +65,7 @@ type GPUMetricInfo struct {
 	Vendor            string    `json:"vendor"`
 	Index             int       `json:"index"`
 	UUID              string    `json:"uuid"`
+	MemoryTotalBytes  uint64    `json:"memory_total_bytes"`
 	MemoryUsedBytes   uint64    `json:"memory_used_bytes"`
 	MemoryFreeBytes   uint64    `json:"memory_free_bytes"`
 	GPUUtilization    *float64  `json:"gpu_utilization_percent,omitempty"`    // 0-100

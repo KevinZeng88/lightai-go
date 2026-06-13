@@ -1,0 +1,40 @@
+{
+  "title": "LightAI Overview",
+  "uid": "lightai-overview",
+  "panels": [
+    {
+      "title": "Nodes Online", "type": "stat", "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "targets": [{"expr": "lightai_node_online", "legendFormat": "{{hostname}}"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "title": "GPU Memory Used", "type": "gauge", "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "targets": [{"expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "decgbytes"}}
+    },
+    {
+      "title": "GPU Utilization", "type": "timeseries", "gridPos": {"x": 8, "y": 0, "w": 8, "h": 8},
+      "targets": [{"expr": "lightai_gpu_utilization_percent", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "percent"}}
+    },
+    {
+      "title": "GPU Temperature", "type": "timeseries", "gridPos": {"x": 16, "y": 0, "w": 8, "h": 8},
+      "targets": [{"expr": "lightai_gpu_temperature_celsius", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "celsius"}}
+    },
+    {
+      "title": "API Request Rate", "type": "timeseries", "gridPos": {"x": 0, "y": 8, "w": 12, "h": 6},
+      "targets": [{"expr": "rate(lightai_server_api_requests_total[1m])", "legendFormat": "{{endpoint}} ({{code}})"}]
+    },
+    {
+      "title": "Agent Report Errors", "type": "stat", "gridPos": {"x": 12, "y": 8, "w": 6, "h": 3},
+      "targets": [{"expr": "lightai_agent_report_errors_total", "legendFormat": "{{hostname}}"}]
+    },
+    {
+      "title": "Collector Errors", "type": "stat", "gridPos": {"x": 18, "y": 8, "w": 6, "h": 3},
+      "targets": [{"expr": "lightai_agent_collector_errors_total", "legendFormat": "{{hostname}}"}]
+    }
+  ],
+  "schemaVersion": 36,
+  "tags": ["lightai"]
+}
