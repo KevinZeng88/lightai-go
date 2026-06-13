@@ -1,0 +1,14 @@
+# LightAI Go - Grafana Dashboard Provisioning
+# Phase 0 placeholder. Will be populated in Phase 9.
+
+apiVersion: 1
+
+providers:
+  - name: 'LightAI'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: true
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

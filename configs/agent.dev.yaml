@@ -1,0 +1,28 @@
+# LightAI Go Agent - Development Configuration
+agent_id: agent-dev-01
+server_url: http://localhost:8080
+agent_token: "dev-agent-token"
+log_level: debug
+data_dir: data
+
+metrics:
+  enabled: true
+  scheme: http
+  port: 9090
+  path: /metrics
+
+health:
+  port: 9091
+
+gpu:
+  profile: development
+
+collectors:
+  system:
+    enabled: true
+    interval: 60s
+  mock_gpu:
+    enabled: false
+  nvidia:
+    enabled: true
+    interval: 60s

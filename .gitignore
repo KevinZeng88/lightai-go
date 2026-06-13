@@ -5,6 +5,10 @@ dist/
 *.test
 *.out
 
+# Compiled binaries (root level only)
+/server
+/agent
+
 # Logs
 logs/
 *.log

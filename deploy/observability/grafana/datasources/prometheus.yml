@@ -1,0 +1,12 @@
+# LightAI Go - Grafana Datasource Provisioning
+# Phase 0 placeholder. Will be populated in Phase 9.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

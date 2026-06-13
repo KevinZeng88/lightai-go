@@ -1,0 +1,18 @@
+# LightAI Go - Prometheus Configuration
+# Phase 0 placeholder. Will be populated in Phase 9.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Server metrics
+  - job_name: 'lightai-server'
+    static_configs:
+      - targets: ['server:8080']
+
+  # Agent metrics (via HTTP SD from /metrics/targets)
+  - job_name: 'lightai-agents'
+    http_sd_configs:
+      - url: 'http://server:8080/metrics/targets'
+        refresh_interval: 60s

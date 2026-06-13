@@ -1,0 +1,14 @@
+# LightAI Go Server - Development Configuration
+port: 8080
+log_level: debug
+db_path: data/lightai.db
+dev_mode: true
+
+# Bootstrap agent token (change in production)
+agent_token: "dev-agent-token"
+
+observability:
+  mode: disabled
+
+gpu:
+  profile: development
