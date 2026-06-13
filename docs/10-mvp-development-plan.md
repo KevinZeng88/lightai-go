@@ -57,9 +57,9 @@ git diff --check
 
 ```bash
 go run ./cmd/server
-curl http://127.0.0.1:8080/healthz
-curl http://127.0.0.1:8080/metrics
-curl http://127.0.0.1:8080/metrics/targets
+curl http://127.0.0.1:18080/healthz
+curl http://127.0.0.1:18080/metrics
+curl http://127.0.0.1:18080/metrics/targets
 
 go run ./cmd/agent
 curl http://127.0.0.1:18080/healthz
@@ -228,8 +228,8 @@ Phase 0.5 明确不实现：
 go run ./cmd/server
 go run ./cmd/agent
 
-curl http://127.0.0.1:8080/api/nodes
-curl http://127.0.0.1:8080/metrics/targets
+curl http://127.0.0.1:18080/api/nodes
+curl http://127.0.0.1:18080/metrics/targets
 ```
 
 预期：
@@ -344,11 +344,11 @@ Phase 2 完成标准：Phase 2A、2B、2C 全部通过。Mock 不能替代任一
 go run ./cmd/server
 go run ./cmd/agent
 
-curl http://127.0.0.1:8080/api/nodes
-curl http://127.0.0.1:8080/api/nodes/<node_id>
-curl http://127.0.0.1:8080/api/gpus
+curl http://127.0.0.1:18080/api/nodes
+curl http://127.0.0.1:18080/api/nodes/<node_id>
+curl http://127.0.0.1:18080/api/gpus
 curl http://127.0.0.1:18080/metrics
-curl http://127.0.0.1:8080/metrics/targets
+curl http://127.0.0.1:18080/metrics/targets
 ```
 
 ---

@@ -166,7 +166,7 @@ Agent ID 用于系统识别，不建议修改。
 
 ```yaml
 server:
-  listen_addr: "0.0.0.0:8080"
+  listen_addr: "127.0.0.1:18080"
   data_dir: "./data"
   log_dir: "./logs"
   database_path: "./data/lightai.db"
@@ -214,7 +214,7 @@ agent:
   log_dir: "./logs"
 
 server:
-  base_url: "http://127.0.0.1:8080"
+  base_url: "http://127.0.0.1:18080"
   token: "change-me"
 
 heartbeat:
@@ -927,8 +927,8 @@ Phase 0 验收：
 
 ```bash
 go run ./cmd/server
-curl http://127.0.0.1:8080/healthz
-curl http://127.0.0.1:8080/metrics
+curl http://127.0.0.1:18080/healthz
+curl http://127.0.0.1:18080/metrics
 go run ./cmd/agent
 curl http://127.0.0.1:18080/healthz
 curl http://127.0.0.1:18080/metrics
@@ -939,8 +939,8 @@ Phase 1 验收：
 ```bash
 go run ./cmd/server
 go run ./cmd/agent
-curl http://127.0.0.1:8080/api/nodes
-curl http://127.0.0.1:8080/metrics/targets
+curl http://127.0.0.1:18080/api/nodes
+curl http://127.0.0.1:18080/metrics/targets
 ```
 
 预期：

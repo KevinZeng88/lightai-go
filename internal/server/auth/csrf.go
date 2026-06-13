@@ -43,7 +43,7 @@ func ValidateOrigin(r *http.Request) bool {
 
 func containsOrigin(origin, host string) bool {
 	// Check if origin contains the host as a host component.
-	// e.g., "http://localhost:8080" contains "localhost:8080"
+	// e.g., "http://127.0.0.1:18080" contains "127.0.0.1:18080"
 	return len(origin) >= len(host) &&
 		origin[len(origin)-len(host):] == host
 }

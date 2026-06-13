@@ -278,12 +278,12 @@ scrape_configs:
     metrics_path: "/metrics"
     static_configs:
       - targets:
-          - "host.docker.internal:8080"
+          - "host.docker.internal:18080"
 
   - job_name: "lightai-agents"
     metrics_path: "/metrics"
     http_sd_configs:
-      - url: "http://host.docker.internal:8080/metrics/targets"
+      - url: "http://host.docker.internal:18080/metrics/targets"
         refresh_interval: 10s
 ```
 
@@ -291,7 +291,7 @@ scrape_configs:
 
 ```yaml
       - targets:
-          - "192.168.1.100:8080"
+          - "192.168.1.100:18080"
 ```
 
 如果不使用 HTTP SD，可以改用 file SD：

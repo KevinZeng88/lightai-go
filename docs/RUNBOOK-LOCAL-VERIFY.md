@@ -46,14 +46,14 @@ go build ./cmd/agent
 ./server -config configs/server.dev.yaml
 
 # 或使用环境变量
-LIGHTAI_SERVER_PORT=8080 ./server
+LIGHTAI_SERVER_PORT=18080 ./server
 ```
 
-Server 默认监听 `http://localhost:8080`。
+Server 默认监听 `http://127.0.0.1:18080`。
 
 启动成功后应看到日志：
 ```
-INFO  server started  addr=:8080
+INFO  server started  addr=127.0.0.1:18080
 ```
 
 ---
@@ -66,7 +66,7 @@ INFO  server started  addr=:8080
 
 # 关键参数
 ./agent \
-  -server-url http://localhost:8080 \
+  -server-url http://127.0.0.1:18080 \
   -agent-token <bootstrap-token> \
   -agent-id agent-01
 ```
@@ -93,11 +93,11 @@ Agent 启动后会依次：注册 → 心跳 → 资源采集。
 
 ```bash
 # Server healthz
-curl -s http://localhost:8080/healthz
+curl -s http://127.0.0.1:18080/healthz
 # 预期：{"status":"ok"}
 
 # Agent healthz（Agent 也暴露 healthz）
-curl -s http://localhost:9090/healthz
+curl -s http://127.0.0.1:19091/healthz
 # 预期：{"status":"ok"}
 ```
 
@@ -107,11 +107,11 @@ curl -s http://localhost:9090/healthz
 
 ```bash
 # Server metrics
-curl -s http://localhost:8080/metrics | head -20
+curl -s http://127.0.0.1:18080/metrics | head -20
 # 预期：包含 lightai_ 前缀的 Prometheus 指标
 
 # Agent metrics
-curl -s http://localhost:9090/metrics | head -20
+curl -s http://127.0.0.1:19091/metrics | head -20
 # 预期：包含 lightai_ 前缀的 Prometheus 指标
 # Phase 2B 完成后期望包含 nvidia_ 相关指标
 ```
@@ -122,9 +122,9 @@ curl -s http://localhost:9090/metrics | head -20
 
 ```bash
 # 登录（获取 Session Cookie）
-curl -v -c cookies.txt -X POST http://localhost:8080/api/auth/login \
+curl -v -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
   -H "Content-Type: application/json" \
-  -H "Origin: http://localhost:8080" \
+  -H "Origin: http://127.0.0.1:18080" \
   -d '{"username":"admin","password":"admin123"}'
 
 # 预期：返回 200，Set-Cookie 包含 lightai_session
@@ -137,15 +137,15 @@ curl -v -c cookies.txt -X POST http://localhost:8080/api/auth/login \
 
 ```bash
 # 获取 CSRF token
-curl -s -b cookies.txt http://localhost:8080/api/auth/csrf-token
+curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/csrf-token
 # 预期：{"csrf_token":"..."}
 
 # 在状态变更请求中使用
-curl -X POST http://localhost:8080/api/users \
+curl -X POST http://127.0.0.1:18080/api/users \
   -b cookies.txt \
   -H "Content-Type: application/json" \
   -H "X-CSRF-Token: <csrf_token>" \
-  -H "Origin: http://localhost:8080" \
+  -H "Origin: http://127.0.0.1:18080" \
   -d '{"username":"testuser","password":"test123","display_name":"Test User"}'
 ```
 
@@ -155,7 +155,7 @@ curl -X POST http://localhost:8080/api/users \
 
 ```bash
 # 获取当前用户信息
-curl -s -b cookies.txt http://localhost:8080/api/auth/me
+curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/me
 # 预期：{"user_id":"...","username":"admin","is_platform_admin":true,...}
 ```
 
@@ -165,11 +165,11 @@ curl -s -b cookies.txt http://localhost:8080/api/auth/me
 
 ```bash
 # 列出所有节点
-curl -s -b cookies.txt http://localhost:8080/api/nodes
+curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes
 # 预期：[{"id":"...","hostname":"...","status":"online",...}]
 
 # 查询单个节点
-curl -s -b cookies.txt http://localhost:8080/api/nodes/<node_id>
+curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes/<node_id>
 ```
 
 ---
@@ -178,14 +178,14 @@ curl -s -b cookies.txt http://localhost:8080/api/nodes/<node_id>
 
 ```bash
 # 列出所有 GPU
-curl -s -b cookies.txt http://localhost:8080/api/gpus
+curl -s -b cookies.txt http://127.0.0.1:18080/api/gpus
 # 预期：[{"id":"...","vendor":"nvidia","name":"...","memory_total_bytes":...}]
 
 # 按节点过滤
-curl -s -b cookies.txt "http://localhost:8080/api/gpus?node_id=<node_id>"
+curl -s -b cookies.txt "http://127.0.0.1:18080/api/gpus?node_id=<node_id>"
 
 # 按厂商过滤
-curl -s -b cookies.txt "http://localhost:8080/api/gpus?vendor=nvidia"
+curl -s -b cookies.txt "http://127.0.0.1:18080/api/gpus?vendor=nvidia"
 ```
 
 ---
@@ -194,7 +194,7 @@ curl -s -b cookies.txt "http://localhost:8080/api/gpus?vendor=nvidia"
 
 ```bash
 # Agent 指标（Phase 2A+）
-curl -s http://localhost:9090/metrics | grep -E "lightai_(system|gpu)"
+curl -s http://127.0.0.1:19091/metrics | grep -E "lightai_(system|gpu)"
 
 # 预期 Phase 2A：
 # lightai_system_cpu_utilization_ratio
@@ -215,7 +215,7 @@ curl -s http://localhost:9090/metrics | grep -E "lightai_(system|gpu)"
 
 ```bash
 # Server metrics targets（Prometheus HTTP SD 格式）
-curl -s http://localhost:8080/metrics/targets
+curl -s http://127.0.0.1:18080/metrics/targets
 # 预期：[{"targets":["<agent_host>:<metrics_port>"],"labels":{"agent_id":"...","hostname":"..."}}]
 
 # 注意：只包含已注册、未删除、metrics_enabled=true 的节点
@@ -233,8 +233,8 @@ go build ./cmd/server && go build ./cmd/agent
 ./server -config configs/server.dev.yaml &
 SERVER_PID=$!
 sleep 2
-curl -s http://localhost:8080/healthz | grep '"ok"'
-curl -s http://localhost:8080/metrics | grep 'lightai_'
+curl -s http://127.0.0.1:18080/healthz | grep '"ok"'
+curl -s http://127.0.0.1:18080/metrics | grep 'lightai_'
 kill $SERVER_PID
 ```
 
@@ -249,22 +249,22 @@ SERVER_PID=$!
 sleep 2
 
 # 登录
-curl -c cookies.txt -X POST http://localhost:8080/api/auth/login \
+curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
   -H "Content-Type: application/json" \
-  -H "Origin: http://localhost:8080" \
+  -H "Origin: http://127.0.0.1:18080" \
   -d '{"username":"admin","password":"admin123"}'
 
 # 获取 CSRF token
-CSRF=$(curl -s -b cookies.txt http://localhost:8080/api/auth/csrf-token | jq -r '.csrf_token')
+CSRF=$(curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/csrf-token | jq -r '.csrf_token')
 
 # 获取当前用户
-curl -s -b cookies.txt http://localhost:8080/api/auth/me | jq '.username'
+curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/me | jq '.username'
 
 # 登出
-curl -X POST http://localhost:8080/api/auth/logout \
+curl -X POST http://127.0.0.1:18080/api/auth/logout \
   -b cookies.txt \
   -H "X-CSRF-Token: $CSRF" \
-  -H "Origin: http://localhost:8080"
+  -H "Origin: http://127.0.0.1:18080"
 
 kill $SERVER_PID
 ```
@@ -283,14 +283,14 @@ AGENT_PID=$!
 sleep 5
 
 # 登录并查询节点
-curl -c cookies.txt -X POST http://localhost:8080/api/auth/login \
+curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
   -H "Content-Type: application/json" \
-  -H "Origin: http://localhost:8080" \
+  -H "Origin: http://127.0.0.1:18080" \
   -d '{"username":"admin","password":"admin123"}'
-curl -s -b cookies.txt http://localhost:8080/api/nodes | jq '.[0].status'
+curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes | jq '.[0].status'
 
 # 检查 metrics targets
-curl -s http://localhost:8080/metrics/targets | jq '.'
+curl -s http://127.0.0.1:18080/metrics/targets | jq '.'
 
 kill $AGENT_PID $SERVER_PID
 ```
@@ -309,17 +309,17 @@ AGENT_PID=$!
 sleep 10
 
 # 检查 Agent 系统指标
-curl -s http://localhost:9090/metrics | grep -E "lightai_system"
+curl -s http://127.0.0.1:19091/metrics | grep -E "lightai_system"
 
 # 检查节点详情（含系统信息）
-curl -c cookies.txt -X POST http://localhost:8080/api/auth/login \
+curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
   -H "Content-Type: application/json" \
-  -H "Origin: http://localhost:8080" \
+  -H "Origin: http://127.0.0.1:18080" \
   -d '{"username":"admin","password":"admin123"}'
-curl -s -b cookies.txt http://localhost:8080/api/nodes | jq '.[0]'
+curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes | jq '.[0]'
 
 # development profile 下 Mock GPU 可用
-curl -s -b cookies.txt http://localhost:8080/api/gpus | jq '.'
+curl -s -b cookies.txt http://127.0.0.1:18080/api/gpus | jq '.'
 
 kill $AGENT_PID $SERVER_PID
 ```
@@ -342,17 +342,17 @@ AGENT_PID=$!
 sleep 10
 
 # 检查 Agent NVIDIA 指标
-curl -s http://localhost:9090/metrics | grep -E "lightai_gpu.*nvidia"
+curl -s http://127.0.0.1:19091/metrics | grep -E "lightai_gpu.*nvidia"
 
 # 检查 Server GPU API 返回 NVIDIA GPU
-curl -c cookies.txt -X POST http://localhost:8080/api/auth/login \
+curl -c cookies.txt -X POST http://127.0.0.1:18080/api/auth/login \
   -H "Content-Type: application/json" \
-  -H "Origin: http://localhost:8080" \
+  -H "Origin: http://127.0.0.1:18080" \
   -d '{"username":"admin","password":"admin123"}'
-curl -s -b cookies.txt http://localhost:8080/api/gpus | jq '.[] | select(.vendor=="nvidia")'
+curl -s -b cookies.txt http://127.0.0.1:18080/api/gpus | jq '.[] | select(.vendor=="nvidia")'
 
 # 检查诊断
-curl -s -b cookies.txt http://localhost:8080/api/nodes | jq '.[0].diagnostics'
+curl -s -b cookies.txt http://127.0.0.1:18080/api/nodes | jq '.[0].diagnostics'
 
 kill $AGENT_PID $SERVER_PID
 ```
@@ -371,7 +371,7 @@ kill $AGENT_PID $SERVER_PID
 
 ```bash
 # 检查端口占用
-ss -tlnp | grep 8080
+ss -tlnp | grep 18080
 
 # 检查配置文件
 cat configs/server.dev.yaml
@@ -384,7 +384,7 @@ ls -la data/
 
 ```bash
 # 检查 Server 是否可达
-curl http://localhost:8080/healthz
+curl http://127.0.0.1:18080/healthz
 
 # 检查 Agent token 是否正确
 grep agent_token configs/agent.dev.yaml
@@ -417,10 +417,10 @@ nvidia-smi --query-gpu=index,name,uuid,pci.bus_id,driver_version,memory.total,me
 # 默认：admin / admin123（首次登录需改密码）
 
 # 检查 Cookie
-curl -v -c cookies.txt http://localhost:8080/api/auth/me
+curl -v -c cookies.txt http://127.0.0.1:18080/api/auth/me
 
 # 检查 CSRF token 是否过期
-curl -s -b cookies.txt http://localhost:8080/api/auth/csrf-token
+curl -s -b cookies.txt http://127.0.0.1:18080/api/auth/csrf-token
 ```
 
 ### 数据库问题
