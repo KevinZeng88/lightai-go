@@ -83,11 +83,16 @@ add_patch_file() {
 }
 
 # Read TO manifest line by line, compare with FROM.
-# sha256sum format: <hash>  ./path
+# Format: "file <sha256> <path>" or "symlink <target> <path>"
 while IFS= read -r line; do
   [ -z "$line" ] && continue
-  sha="${line%%  *}"
-  file="${line#*  }"
+  type="${line%% *}"
+  rest="${line#* }"
+  case "$type" in
+    file)    sha="${rest%% *}"; file="${rest#* }" ;;
+    symlink) sha=""; target="${rest%% *}"; file="${rest#* }" ;;
+    *)       continue ;;
+  esac
   # file starts with "./"
   case "$file" in
     ./data/*|./logs/*|./run/*|./data/prometheus/*|./data/grafana/*) continue ;;
@@ -102,23 +107,36 @@ while IFS= read -r line; do
   esac
 
   from_file="$FROM_DIR/$file"
-  if [ -f "$from_file" ]; then
+  if [ "$type" = "symlink" ]; then
+    # For symlinks, compare target.
+    from_target=$(readlink "$from_file" 2>/dev/null || echo "")
+    if [ "$from_target" != "$target" ]; then
+      add_patch_file "$file" "S" "$target"
+      CHANGED=$((CHANGED + 1))
+    fi
+  elif [ -f "$from_file" ]; then
     from_sha=$(sha256sum "$from_file" | awk '{print $1}')
     if [ "$from_sha" != "$sha" ]; then
       add_patch_file "$file" "C" "$sha"
       CHANGED=$((CHANGED + 1))
     fi
   else
-    # New file in TO.
-    add_patch_file "$file" "A" "$sha"
+    # New entry in TO.
+    add_patch_file "$file" "$type" "${sha:-$target}"
     CHANGED=$((CHANGED + 1))
   fi
 done < "$TO_DIR/MANIFEST.sha256"
 
-# Check for removed files.
+# Check for removed files/symlinks.
 while IFS= read -r line; do
   [ -z "$line" ] && continue
-  file="${line#*  }"
+  type="${line%% *}"
+  rest="${line#* }"
+  case "$type" in
+    file)    file="${rest#* }" ;;
+    symlink) file="${rest#* }" ;;
+    *)       continue ;;
+  esac
   case "$file" in
     ./data/*|./logs/*|./run/*) continue ;;
   esac

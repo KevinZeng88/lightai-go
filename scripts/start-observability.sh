@@ -73,14 +73,15 @@ if [ ! -f run/grafana.pid ]; then
     exit 1
   fi
 
-  # Grafana 13+: grafana server --homepath <path> --config <path>
-  # Pre-13:  grafana-server with GF_* env vars
+  # Grafana 13+: --homepath is GLOBAL flag (before 'server').
+  # Pre-13:  grafana-server with GF_* env vars.
   if $GRAF_V13; then
-    echo "  使用 Grafana 13+ 模式: $GRAF_BIN server"
+    echo "  使用 Grafana 13+ 模式"
     GF_SECURITY_ADMIN_USER=admin \
     GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
-    nohup "$GRAF_BIN" server \
+    nohup "$GRAF_BIN" \
       --homepath "$RLS_ROOT/bin/grafana" \
+      server \
       --config "$RLS_ROOT/configs/observability/grafana.ini" \
       > logs/grafana.log 2>&1 &
   else
@@ -103,7 +104,7 @@ if [ ! -f run/grafana.pid ]; then
   echo "$PID" > run/grafana.pid
   echo "  已启动 (PID $PID)"
   if [ "${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" = "lightai" ]; then
-    echo "  注意: 使用默认开发密码 'lightai'。生产请设置 LIGHTAI_GRAFANA_ADMIN_PASSWORD。"
+    echo "  注意: 使用默认密码 'lightai'。生产请设置 LIGHTAI_GRAFANA_ADMIN_PASSWORD。"
   fi
 fi
 
@@ -130,18 +131,18 @@ for i in 1 2 3; do
 done
 
 echo "  Prometheus: $($prom_ok && echo '就绪 (http://127.0.0.1:9090)' || echo '未就绪')"
-echo "  Grafana:    $($grafana_ok && echo '就绪 (http://127.0.0.1:3000, admin/lightai)' || echo '未就绪')"
+echo "  Grafana:    $($grafana_ok && echo '就绪 (http://127.0.0.1:3000)' || echo '未就绪')"
 
 if ! $grafana_ok; then
   echo ""
   echo "Grafana 启动失败，请检查:"
   echo "  tail -50 logs/grafana.log"
-  echo "  Grafana 13+ 启动命令: bin/grafana/bin/grafana server --homepath bin/grafana --config configs/observability/grafana.ini"
+  echo "  命令: bin/grafana/bin/grafana --homepath bin/grafana server --config configs/observability/grafana.ini"
   rm -f run/grafana.pid
   exit 1
 fi
 
 echo ""
 echo "Observability 已启动。"
-echo "  局域网访问 Prometheus: http://<server-ip>:9090/"
-echo "  局域网访问 Grafana:    http://<server-ip>:3000/"
+echo "  局域网 Prometheus: http://<server-ip>:9090/"
+echo "  局域网 Grafana:    http://<server-ip>:3000/"

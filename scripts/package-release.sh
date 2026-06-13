@@ -143,14 +143,24 @@ prometheus_version=$PROMETHEUS_VERSION
 grafana_version=$GRAFANA_VERSION
 EOF
 
-# Generate MANIFEST.sha256 (exclude runtime dirs, symlinks, dangling files).
+# Generate MANIFEST.sha256 (exclude runtime dirs).
+# Format: file <sha256> <path> or symlink <target> <path>
+MANIFEST="$BUILD_DIR/MANIFEST.sha256"
+: > "$MANIFEST"
 (cd "$BUILD_DIR" && find . -type f \
   ! -path './data/*' ! -path './logs/*' ! -path './run/*' \
   ! -path './data/prometheus/*' ! -path './data/grafana/*' \
   ! -name MANIFEST.sha256 \
-  | sort | while read -r f; do
-    [ -f "$f" ] && sha256sum "$f" 2>/dev/null || true
-  done) > "$BUILD_DIR/MANIFEST.sha256"
+  | sort | while IFS= read -r f; do
+    [ -f "$f" ] && sha256sum "$f" 2>/dev/null | awk '{print "file " $1 " " $2}'
+  done) >> "$MANIFEST"
+# Record symlinks too.
+(cd "$BUILD_DIR" && find . -type l \
+  ! -path './data/*' ! -path './logs/*' ! -path './run/*' \
+  | sort | while IFS= read -r f; do
+    target=$(readlink "$f" 2>/dev/null || echo "")
+    echo "symlink $target $f"
+  done) >> "$MANIFEST"
 echo "  OK"
 
 # 8. Build tarball and verify.

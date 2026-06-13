@@ -88,10 +88,25 @@ echo "Applying patch..."
 APPLIED=0
 SKIPPED_CONFIGS=0
 
-# Process changed/added files.
-grep -E '^[AC] ' "$MANIFEST" | while read -r type file rest; do
+# Process changed/added files/symlinks.
+grep -E '^[AC] |^S ' "$MANIFEST" | while read -r type file val; do
   src="$PATCH_DIR/$file"
   dst="$ROOT/$file"
+
+  if [ "$type" = "S" ]; then
+    # Symlink: create/update the link.
+    target="$val"
+    if [ -e "$dst" ] || [ -L "$dst" ]; then
+      mkdir -p "$(dirname "$BACKUP_DIR/$file")"
+      cp -a "$dst" "$BACKUP_DIR/$file" 2>/dev/null || true
+      rm -f "$dst"
+    fi
+    mkdir -p "$(dirname "$dst")"
+    ln -sf "$target" "$dst"
+    echo "  SYMLINK: $file -> $target"
+    APPLIED=$((APPLIED + 1))
+    continue
+  fi
 
   if [ ! -f "$src" ]; then
     echo "  WARNING: file in manifest not found in patch: $file"
