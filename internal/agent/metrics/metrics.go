@@ -95,6 +95,7 @@ func (s *Snapshot) SetNodeID(nodeID string) {
 func Register(reg *prometheus.Registry, snap *Snapshot) {
 	reg.MustRegister(newGPUCollector(snap))
 	reg.MustRegister(newAgentCollector(snap))
+	reg.MustRegister(newHostCollector(snap))
 }
 
 // --- GPU metrics collector ---
@@ -285,4 +286,79 @@ func itoa(i int) string {
 		n /= 10
 	}
 	return digits
+}
+
+
+// --- Host metrics collector ---
+
+type hostCollector struct {
+	snap *Snapshot
+	infoDesc, uptimeDesc, cpuCoresDesc, cpuUsageDesc *prometheus.Desc
+	load1Desc, load5Desc, load15Desc *prometheus.Desc
+	memTotalDesc, memUsedDesc, memUsedRatioDesc *prometheus.Desc
+	swapTotalDesc, swapUsedDesc *prometheus.Desc
+	fsTotalDesc, fsUsedDesc, fsAvailDesc, fsUsedRatioDesc *prometheus.Desc
+}
+
+func newHostCollector(snap *Snapshot) *hostCollector {
+	lbls := []string{"node_id", "agent_id", "hostname"}
+	fsLbls := []string{"node_id", "agent_id", "hostname", "mountpoint"}
+	return &hostCollector{
+		snap: snap,
+		infoDesc: prometheus.NewDesc("lightai_host_info", "Host information.", lbls, nil),
+		uptimeDesc: prometheus.NewDesc("lightai_host_uptime_seconds", "Host uptime.", lbls, nil),
+		cpuCoresDesc: prometheus.NewDesc("lightai_host_cpu_cores", "CPU cores.", lbls, nil),
+		cpuUsageDesc: prometheus.NewDesc("lightai_host_cpu_usage_ratio", "CPU usage ratio 0-1.", lbls, nil),
+		load1Desc: prometheus.NewDesc("lightai_host_load1", "Load average 1min.", lbls, nil),
+		load5Desc: prometheus.NewDesc("lightai_host_load5", "Load average 5min.", lbls, nil),
+		load15Desc: prometheus.NewDesc("lightai_host_load15", "Load average 15min.", lbls, nil),
+		memTotalDesc: prometheus.NewDesc("lightai_host_memory_total_bytes", "Total memory bytes.", lbls, nil),
+		memUsedDesc: prometheus.NewDesc("lightai_host_memory_used_bytes", "Used memory bytes.", lbls, nil),
+		memUsedRatioDesc: prometheus.NewDesc("lightai_host_memory_used_ratio", "Memory used ratio 0-1.", lbls, nil),
+		swapTotalDesc: prometheus.NewDesc("lightai_host_swap_total_bytes", "Total swap bytes.", lbls, nil),
+		swapUsedDesc: prometheus.NewDesc("lightai_host_swap_used_bytes", "Used swap bytes.", lbls, nil),
+		fsTotalDesc: prometheus.NewDesc("lightai_host_filesystem_total_bytes", "FS total bytes.", fsLbls, nil),
+		fsUsedDesc: prometheus.NewDesc("lightai_host_filesystem_used_bytes", "FS used bytes.", fsLbls, nil),
+		fsAvailDesc: prometheus.NewDesc("lightai_host_filesystem_available_bytes", "FS available bytes.", fsLbls, nil),
+		fsUsedRatioDesc: prometheus.NewDesc("lightai_host_filesystem_used_ratio", "FS used ratio 0-1.", fsLbls, nil),
+	}
+}
+
+func (c *hostCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.infoDesc; ch <- c.uptimeDesc; ch <- c.cpuCoresDesc; ch <- c.cpuUsageDesc
+	ch <- c.load1Desc; ch <- c.load5Desc; ch <- c.load15Desc
+	ch <- c.memTotalDesc; ch <- c.memUsedDesc; ch <- c.memUsedRatioDesc
+	ch <- c.swapTotalDesc; ch <- c.swapUsedDesc
+	ch <- c.fsTotalDesc; ch <- c.fsUsedDesc; ch <- c.fsAvailDesc; ch <- c.fsUsedRatioDesc
+}
+
+func (c *hostCollector) Collect(ch chan<- prometheus.Metric) {
+	c.snap.mu.RLock()
+	defer c.snap.mu.RUnlock()
+	s := c.snap.System
+	if s == nil { return }
+	lbls := []string{c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
+
+	ch <- prometheus.MustNewConstMetric(c.infoDesc, prometheus.GaugeValue, 1, lbls...)
+	ch <- prometheus.MustNewConstMetric(c.cpuCoresDesc, prometheus.GaugeValue, float64(s.CPUCores), lbls...)
+	ch <- prometheus.MustNewConstMetric(c.cpuUsageDesc, prometheus.GaugeValue, s.CPUUtilization/100.0, lbls...)
+	ch <- prometheus.MustNewConstMetric(c.memTotalDesc, prometheus.GaugeValue, float64(s.MemoryTotalBytes), lbls...)
+	ch <- prometheus.MustNewConstMetric(c.memUsedDesc, prometheus.GaugeValue, float64(s.MemoryUsedBytes), lbls...)
+	if s.MemoryTotalBytes > 0 {
+		ch <- prometheus.MustNewConstMetric(c.memUsedRatioDesc, prometheus.GaugeValue, float64(s.MemoryUsedBytes)/float64(s.MemoryTotalBytes), lbls...)
+	}
+	if s.SwapTotalBytes > 0 {
+		ch <- prometheus.MustNewConstMetric(c.swapTotalDesc, prometheus.GaugeValue, float64(s.SwapTotalBytes), lbls...)
+		ch <- prometheus.MustNewConstMetric(c.swapUsedDesc, prometheus.GaugeValue, float64(s.SwapUsedBytes), lbls...)
+	}
+	for _, fs := range s.Filesystems {
+		if fs.MountPoint == "" { continue }
+		fsl := []string{c.snap.NodeID, c.snap.AgentID, c.snap.Hostname, fs.MountPoint}
+		ch <- prometheus.MustNewConstMetric(c.fsTotalDesc, prometheus.GaugeValue, float64(fs.TotalBytes), fsl...)
+		ch <- prometheus.MustNewConstMetric(c.fsUsedDesc, prometheus.GaugeValue, float64(fs.UsedBytes), fsl...)
+		ch <- prometheus.MustNewConstMetric(c.fsAvailDesc, prometheus.GaugeValue, float64(fs.FreeBytes), fsl...)
+		if fs.TotalBytes > 0 {
+			ch <- prometheus.MustNewConstMetric(c.fsUsedRatioDesc, prometheus.GaugeValue, fs.UsedPercent/100.0, fsl...)
+		}
+	}
 }

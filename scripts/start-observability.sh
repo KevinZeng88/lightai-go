@@ -23,6 +23,10 @@ for candidate in bin/grafana/bin/grafana-server bin/grafana/bin/grafana; do
   fi
 done
 
+GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-admin}"
+GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-LightAI@123456}"
+[ -f configs/observability/grafana.env ] && . configs/observability/grafana.env
+
 echo "=== LightAI Observability ==="
 
 # --- Prometheus ---
@@ -95,7 +99,7 @@ providers:
 YAMLEOF
     GF_PATHS_PROVISIONING="$RLS_ROOT/deploy/observability/grafana/provisioning" \
     GF_SECURITY_ADMIN_USER=admin \
-    GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
+    GF_SECURITY_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-lightai}" \
     nohup "$GRAF_BIN" server \
       --homepath "$RLS_ROOT/bin/grafana" \
       --config "$RLS_ROOT/configs/observability/grafana.ini" \
@@ -107,7 +111,7 @@ YAMLEOF
     GF_PATHS_PLUGINS=data/grafana/plugins \
     GF_PATHS_PROVISIONING=deploy/observability/grafana/provisioning \
     GF_SECURITY_ADMIN_USER=admin \
-    GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
+    GF_SECURITY_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-lightai}" \
     GF_SERVER_HTTP_ADDR=0.0.0.0 \
     GF_SERVER_HTTP_PORT=13000 \
     GF_DATABASE_TYPE=sqlite3 \
@@ -119,8 +123,8 @@ YAMLEOF
   PID=$!
   echo "$PID" > run/grafana.pid
   echo "  已启动 (PID $PID)"
-  if [ "${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" = "lightai" ]; then
-    echo "  注意: 使用默认密码 'lightai'。生产请设置 LIGHTAI_GRAFANA_ADMIN_PASSWORD。"
+  if [ "${GRAFANA_ADMIN_PASSWORD}" = "LightAI@123456" ]; then
+    echo "  注意: 使用默认密码。生产请修改 configs/observability/grafana.env"
   fi
 fi
 
