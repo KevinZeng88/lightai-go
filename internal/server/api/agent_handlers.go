@@ -9,18 +9,20 @@ import (
 
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/server/db"
+	srvmetrics "lightai-go/internal/server/metrics"
 
 	"github.com/google/uuid"
 )
 
 // AgentHandler handles Agent API endpoints.
 type AgentHandler struct {
-	DB *db.DB
+	DB      *db.DB
+	Metrics *srvmetrics.ServerMetrics
 }
 
 // NewAgentHandler creates a new AgentHandler.
-func NewAgentHandler(database *db.DB) *AgentHandler {
-	return &AgentHandler{DB: database}
+func NewAgentHandler(database *db.DB, m *srvmetrics.ServerMetrics) *AgentHandler {
+	return &AgentHandler{DB: database, Metrics: m}
 }
 
 // RegisterRequest is the agent registration request.
@@ -99,6 +101,9 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Info("node registered", "node_id", nodeID, "agent_id", req.AgentID, "hostname", req.Hostname)
+		if h.Metrics != nil {
+			h.Metrics.AgentReports.Inc()
+		}
 	} else if err != nil {
 		log.Error("query node error", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
@@ -175,6 +180,9 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.Metrics != nil {
+		h.Metrics.AgentHeartbeats.Inc()
+	}
 	resp := HeartbeatResponse{
 		Status:     "ok",
 		ServerTime: now,

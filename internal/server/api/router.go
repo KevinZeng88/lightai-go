@@ -6,6 +6,7 @@ import (
 
 	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
+	srvmetrics "lightai-go/internal/server/metrics"
 	"lightai-go/internal/server/rbac"
 )
 
@@ -19,6 +20,7 @@ type RouterConfig struct {
 	RBACHandler     *rbac.Handler
 	AgentHandler    *AgentHandler
 	ResourceHandler *ResourceHandler
+	ServerMetrics   *srvmetrics.ServerMetrics
 }
 
 // SetupRoutes registers all API routes on the given mux.

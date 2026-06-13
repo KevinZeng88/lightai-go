@@ -203,6 +203,7 @@ func parseMetricLine(kv map[string]string, collectedAt time.Time) (*GPUMetricInf
 	metric := &GPUMetricInfo{
 		Vendor:      kv["vendor"],
 		Index:       index,
+		Name:        stringOr(kv, "name", ""),
 		UUID:        kv["uuid"],
 		Health:      stringOr(kv, "health", "unknown"),
 		CollectedAt: collectedAt,

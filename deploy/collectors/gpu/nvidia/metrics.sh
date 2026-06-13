@@ -71,5 +71,5 @@ echo "$OUTPUT" | while IFS=',' read -r idx name uuid mem_total mem_used mem_free
     ""|"N/A"|"[N/A]"|"Unknown") power_val="null" ;;
   esac
 
-  echo "METRIC vendor=nvidia index=$idx uuid=$uuid memory_total_bytes=$mem_total_bytes memory_used_bytes=$mem_used_bytes memory_free_bytes=$mem_free_bytes gpu_utilization_percent=$gpu_util_val memory_utilization_percent=$mem_util_val temperature_celsius=$temp_val power_draw_watts=$power_val health=healthy status=available"
+  echo "METRIC vendor=nvidia index=$idx uuid=$uuid name=\"$name\" memory_total_bytes=$mem_total_bytes memory_used_bytes=$mem_used_bytes memory_free_bytes=$mem_free_bytes gpu_utilization_percent=$gpu_util_val memory_utilization_percent=$mem_util_val temperature_celsius=$temp_val power_draw_watts=$power_val health=healthy status=available"
 done

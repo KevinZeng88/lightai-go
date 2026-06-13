@@ -8,17 +8,19 @@ import (
 
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/server/db"
+	srvmetrics "lightai-go/internal/server/metrics"
 
 	"github.com/google/uuid"
 )
 
 // ResourceHandler handles resource reporting and GPU query APIs.
 type ResourceHandler struct {
-	DB *db.DB
+	DB      *db.DB
+	Metrics *srvmetrics.ServerMetrics
 }
 
 // NewResourceHandler creates a new ResourceHandler.
-func NewResourceHandler(database *db.DB) *ResourceHandler {
+func NewResourceHandler(database *db.DB, m *srvmetrics.ServerMetrics) *ResourceHandler {
 	// Ensure GPU table exists.
 	database.Exec(`
 		CREATE TABLE IF NOT EXISTS gpu_devices (
@@ -48,7 +50,7 @@ func NewResourceHandler(database *db.DB) *ResourceHandler {
 			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)
 	`)
-	return &ResourceHandler{DB: database}
+	return &ResourceHandler{DB: database, Metrics: m}
 }
 
 // ResourceReportRequest is the resource report from an agent.
@@ -209,6 +211,9 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if h.Metrics != nil {
+		h.Metrics.AgentReports.Inc()
+	}
 }
 
 // HandleListGPUs handles GET /api/gpus.

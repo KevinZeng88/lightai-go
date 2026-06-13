@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"lightai-go/internal/agent/collector"
+	"lightai-go/internal/agent/metrics"
 	"lightai-go/internal/agent/register"
 	"lightai-go/internal/agent/state"
 	"lightai-go/internal/common/config"
@@ -77,6 +78,10 @@ func main() {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	reg.MustRegister(prometheus.NewGoCollector())
+
+	// Setup metrics snapshot (read by /metrics, never triggers collection).
+	snap := metrics.NewSnapshot("", agentID, hostname)
+	metrics.Register(reg, snap)
 
 	// Setup collectors based on profile.
 	registry := collector.NewRegistry()
@@ -166,7 +171,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go runAgentLoop(ctx, cfg, agentID, hostname, advertisedAddr, registry, st)
+	go runAgentLoop(ctx, cfg, agentID, hostname, advertisedAddr, registry, st, snap)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -185,7 +190,7 @@ func main() {
 	log.Info("agent stopped")
 }
 
-func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string, registry *collector.Registry, st *state.State) {
+func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string, registry *collector.Registry, st *state.State, snap *metrics.Snapshot) {
 	timeout := cfg.RequestTimeout
 	if timeout == 0 {
 		timeout = 5 * time.Second
@@ -235,7 +240,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 	defer collectTicker.Stop()
 
 	// Collect immediately after registration.
-	collectAndReport(ctx, client, cfg, agentID, registry)
+	collectAndReport(ctx, client, cfg, agentID, registry, snap)
 
 	consecutiveFailures := 0
 	lastSuccessAt := time.Now()
@@ -271,7 +276,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 				consecutiveFailures = 0
 			}
 		case <-collectTicker.C:
-			collectAndReport(ctx, client, cfg, agentID, registry)
+			collectAndReport(ctx, client, cfg, agentID, registry, snap)
 			if consecutiveFailures == 0 {
 				lastSuccessAt = time.Now()
 			}
@@ -281,7 +286,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 	_ = lastSuccessAt
 }
 
-func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry) {
+func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry, snap *metrics.Snapshot) {
 	log.Debug("resource collect start", "agent_id", agentID)
 
 	start := time.Now()
@@ -322,6 +327,9 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 
 	_ = resp // consume
 
+	// Update metrics snapshot from latest collection.
+	updateSnapshot(snap, registry, agentID, report)
+
 	gpuCount := registry.GPUCount()
 	log.Info("resource report success",
 		"agent_id", agentID,
@@ -332,7 +340,23 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 	)
 }
 
+// updateSnapshot copies latest collector results into the metrics snapshot.
+func updateSnapshot(snap *metrics.Snapshot, registry *collector.Registry, agentID string, report *collector.ResourceReport) {
+	if report == nil {
+		return
+	}
+	if report.GPUMetrics != nil {
+		snap.SetGPUMetrics(report.GPUMetrics)
+	}
+	if report.GPUDevices != nil {
+		snap.SetGPUDevices(report.GPUDevices)
+	}
+	if report.System != nil {
+		snap.SetSystem(report.System)
+	}
+	snap.SetOnline(true)
+}
+
 func initLogging(cfg *config.AgentConfig) {
 	// File logging setup is handled in config/log package.
-	// This is a placeholder for future file log initialization.
 }

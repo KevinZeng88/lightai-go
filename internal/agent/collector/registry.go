@@ -93,6 +93,22 @@ func (r *Registry) Collect(ctx context.Context, agentID string) *ResourceReport 
 	return report
 }
 
+// PairMetricsWithDevices copies device names into metrics by UUID matching.
+func (r *Registry) PairMetricsWithDevices() {
+	if len(r.lastGPUDevices) == 0 || len(r.lastGPUMetrics) == 0 {
+		return
+	}
+	nameMap := make(map[string]string)
+	for _, d := range r.lastGPUDevices {
+		nameMap[d.UUID] = d.Name
+	}
+	for i := range r.lastGPUMetrics {
+		if name, ok := nameMap[r.lastGPUMetrics[i].UUID]; ok {
+			r.lastGPUMetrics[i].Name = name
+		}
+	}
+}
+
 // GPUCount returns the total number of GPU devices from the last collection.
 func (r *Registry) GPUCount() int {
 	return len(r.lastGPUDevices)

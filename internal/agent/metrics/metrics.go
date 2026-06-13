@@ -12,7 +12,6 @@ import (
 )
 
 // Snapshot holds the latest collected data for /metrics scraping.
-// All reads are from this snapshot; collection is done by the collector loop.
 type Snapshot struct {
 	mu sync.RWMutex
 
@@ -26,11 +25,16 @@ type Snapshot struct {
 	ReportErrors  int64
 	LastSuccessAt time.Time
 	NodeOnline    int // 1 = online
+
+	// Agent context for metric labels.
+	NodeID   string
+	AgentID  string
+	Hostname string
 }
 
 // NewSnapshot creates a new metrics snapshot.
-func NewSnapshot() *Snapshot {
-	return &Snapshot{}
+func NewSnapshot(nodeID, agentID, hostname string) *Snapshot {
+	return &Snapshot{NodeID: nodeID, AgentID: agentID, Hostname: hostname}
 }
 
 func (s *Snapshot) SetGPUMetrics(m []collector.GPUMetricInfo) {
@@ -170,7 +174,7 @@ func (c *gpuCollector) Collect(ch chan<- prometheus.Metric) {
 	defer c.snap.mu.RUnlock()
 
 	for _, m := range c.snap.GPUMetrics {
-		lbls := []string{m.Vendor, m.UUID, itoa(m.Index), "", "", "", ""}
+		lbls := []string{m.Vendor, m.UUID, itoa(m.Index), m.Name, c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
 
 		ch <- prometheus.MustNewConstMetric(c.memTotalDesc, prometheus.GaugeValue, float64(m.MemoryTotalBytes), lbls...)
 		ch <- prometheus.MustNewConstMetric(c.memUsedDesc, prometheus.GaugeValue, float64(m.MemoryUsedBytes), lbls...)
@@ -252,7 +256,7 @@ func (c *agentCollector) Collect(ch chan<- prometheus.Metric) {
 	c.snap.mu.RLock()
 	defer c.snap.mu.RUnlock()
 
-	lbls := []string{"", "", ""}
+	lbls := []string{c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
 	ts := float64(c.snap.LastSuccessAt.Unix())
 	if ts > 0 {
 		ch <- prometheus.MustNewConstMetric(c.lastSuccessDesc, prometheus.GaugeValue, ts, lbls...)

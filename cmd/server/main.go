@@ -21,6 +21,7 @@ import (
 	"lightai-go/internal/server/api"
 	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
+	srvmetrics "lightai-go/internal/server/metrics"
 	"lightai-go/internal/server/rbac"
 	"lightai-go/web"
 
@@ -81,12 +82,13 @@ func main() {
 		BootstrapCfg: bootstrapCfg,
 	}
 	rbacHandler := rbac.NewHandler(database)
-	agentHandler := api.NewAgentHandler(database)
-	resourceHandler := api.NewResourceHandler(database)
-
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	reg.MustRegister(prometheus.NewGoCollector())
+	serverMetrics := srvmetrics.New(reg)
+
+	agentHandler := api.NewAgentHandler(database, serverMetrics)
+	resourceHandler := api.NewResourceHandler(database, serverMetrics)
 
 	mux := http.NewServeMux()
 
@@ -108,6 +110,7 @@ func main() {
 
 	api.SetupRoutes(mux, api.RouterConfig{
 		DB:              database,
+		ServerMetrics:   serverMetrics,
 		AgentToken:      cfg.AgentToken,
 		SessionStore:    sessionStore,
 		SessionCfg:      sessionCfg,

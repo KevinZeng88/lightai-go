@@ -64,6 +64,7 @@ type GPUDeviceInfo struct {
 type GPUMetricInfo struct {
 	Vendor            string    `json:"vendor"`
 	Index             int       `json:"index"`
+	Name              string    `json:"name"`
 	UUID              string    `json:"uuid"`
 	MemoryTotalBytes  uint64    `json:"memory_total_bytes"`
 	MemoryUsedBytes   uint64    `json:"memory_used_bytes"`

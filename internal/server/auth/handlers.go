@@ -211,6 +211,9 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Set cookie.
 	SetSessionCookie(w, sessionID, h.SessionCfg)
 
+	// Increment login counter.
+	// TODO: pass ServerMetrics to AuthHandler for proper counter.
+
 	// Build response.
 	platformAdmin := isPlatformAdmin == 1
 	mustChange := mustChangePassword == 1
