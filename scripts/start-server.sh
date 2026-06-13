@@ -41,8 +41,8 @@ echo "$PID" > run/server.pid
 sleep 2
 if kill -0 "$PID" 2>/dev/null; then
   echo "Server started (PID $PID)."
-  echo "  Health:  http://127.0.0.1:8080/healthz"
-  echo "  Web:     http://127.0.0.1:8080/"
+  echo "  Health:  http://127.0.0.1:18080/healthz"
+  echo "  Web:     http://127.0.0.1:18080/"
   echo "  Logs:    logs/server.log logs/server-stdout.log"
 else
   echo "Server failed to start. Check logs/server-stdout.log"

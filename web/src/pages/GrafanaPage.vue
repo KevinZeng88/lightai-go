@@ -11,24 +11,18 @@
       <el-tag v-if="!running" type="danger" style="margin-left: 8px">Not Running</el-tag>
     </div>
     <el-alert v-if="!running" type="info" :closable="false" style="margin-top: 12px"
-      title="Grafana is not running. Start it with: bash scripts/observability-up.sh" />
-
+      title="Grafana is not running. Start it with: bash scripts/start-observability.sh" />
     <h4 style="margin-top: 24px">Dashboards</h4>
     <el-space wrap>
-      <el-button v-for="d in dashboards" :key="d.uid" @click="openUrl(d.url)" size="small">
-        {{ d.name }}
-      </el-button>
+      <el-button v-for="d in dashboards" :key="d.uid" @click="openUrl(d.url)" size="small">{{ d.name }}</el-button>
     </el-space>
-
-    <el-alert type="info" :closable="false" style="margin-top: 12px"
-      title="iframe embedding will be available in a future release. Use external link for now." />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 
-const grafUrl = `http://${window.location.hostname}:3000`
+const grafUrl = `http://${window.location.hostname}:13000`
 const status = ref('Checking...')
 const running = ref(false)
 
@@ -40,13 +34,11 @@ const dashboards = [
 
 onMounted(async () => {
   try {
-    await fetch(grafUrl + '/api/health')
-    status.value = 'Running'
-    running.value = true
-  } catch {
-    status.value = 'Not running'
-    running.value = false
-  }
+    const resp = await fetch('/api/observability/status')
+    const data = await resp.json()
+    if (data.grafana?.ready) { status.value = 'Running'; running.value = true }
+    else { status.value = 'Not running'; running.value = false }
+  } catch { status.value = 'Cannot check'; running.value = false }
 })
 
 function openGrafana() { window.open(grafUrl, '_blank') }

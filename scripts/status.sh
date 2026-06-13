@@ -29,16 +29,16 @@ check_proc() {
   fi
 }
 
-check_proc "Server"      run/server.pid      "8080" "http://127.0.0.1:8080/healthz"
-check_proc "Agent"       run/agent.pid       "9091" "http://127.0.0.1:9091/healthz"
-check_proc "Prometheus"  run/prometheus.pid  "9090" "http://127.0.0.1:9090/-/ready"
-check_proc "Grafana"     run/grafana.pid     "3000" "http://127.0.0.1:3000/api/health"
+check_proc "Server"      run/server.pid      "18080" "http://127.0.0.1:18080/healthz"
+check_proc "Agent"       run/agent.pid       "19091" "http://127.0.0.1:19091/healthz"
+check_proc "Prometheus"  run/prometheus.pid  "19090" "http://127.0.0.1:19090/-/ready"
+check_proc "Grafana"     run/grafana.pid     "13000" "http://127.0.0.1:13000/api/health"
 
 echo ""
 echo "--- 访问地址 ---"
-echo "  LightAI Web: http://127.0.0.1:8080/"
-echo "  Prometheus:  http://127.0.0.1:9090/"
-echo "  Grafana:     http://127.0.0.1:3000/"
+echo "  LightAI Web: http://127.0.0.1:18080/"
+echo "  Prometheus:  http://127.0.0.1:19090/"
+echo "  Grafana:     http://127.0.0.1:13000/"
 echo ""
 echo "  局域网访问请将 127.0.0.1 替换为服务器 IP。"
 

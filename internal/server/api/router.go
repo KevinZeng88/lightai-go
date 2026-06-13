@@ -62,6 +62,9 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 
 	mux.Handle("GET /api/permissions", tenantChain(cfg, cfg.RBACHandler.HandleListPermissions, "role:read"))
 
+	// Observability status (no auth — used by Web frontend to avoid CORS).
+	mux.HandleFunc("GET /api/observability/status", HandleObservabilityStatus)
+
 	// Agent API routes (use agent token, not session).
 	agentMW := auth.AgentAuthMiddleware(cfg.AgentToken)
 	mux.Handle("POST /api/agent/register", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleRegister)))

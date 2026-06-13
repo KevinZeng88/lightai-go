@@ -22,10 +22,10 @@ All components run as native processes managed by shell scripts.
 
 | Component | Version | Port |
 |-----------|---------|------|
-| LightAI Server + Web | 0.1.0 | 8080 |
-| LightAI Agent | 0.1.0 | 9091 |
-| Prometheus | 3.12.0 | 9090 |
-| Grafana OSS | 13.0.2 | 3000 |
+| LightAI Server + Web | 0.1.0 | 18080 |
+| LightAI Agent | 0.1.0 | 19091 |
+| Prometheus | 3.12.0 | 19090 |
+| Grafana OSS | 13.0.2 | 13000 |
 
 ## Quick Start
 
@@ -62,26 +62,26 @@ export LIGHTAI_GRAFANA_ADMIN_PASSWORD='YourGrafanaPassword123'
 
 | Service | URL |
 |---------|-----|
-| LightAI Web | http://<server-ip>:8080/ |
-| Prometheus | http://<server-ip>:9090/ |
-| Grafana | http://<server-ip>:3000/ (admin / <LIGHTAI_GRAFANA_ADMIN_PASSWORD>) |
+| LightAI Web | http://<server-ip>:18080/ |
+| Prometheus | http://<server-ip>:19090/ |
+| Grafana | http://<server-ip>:13000/ (admin / <LIGHTAI_GRAFANA_ADMIN_PASSWORD>) |
 
 ## Services
 
 ### Server
-- Listens on 0.0.0.0:8080
+- Listens on 0.0.0.0:18080
 - Web Console embedded (no separate web server needed)
 - Default language: Chinese
 
 ### Agent
-- Listens on 0.0.0.0:9091 (metrics)
+- Listens on 0.0.0.0:19091 (metrics)
 - Supports MetaX (`mx-smi`) and NVIDIA (`nvidia-smi`) GPU collectors
 - GPU collector scripts: `deploy/collectors/gpu/`
 
 ### Prometheus
 - Local TSDB storage: `data/prometheus/`
 - Retention: 15 days
-- Scrapes Server (:8080/metrics) and Agent (:9091/metrics)
+- Scrapes Server (:18080/metrics) and Agent (:19091/metrics)
 
 ### Grafana
 - SQLite database: `data/grafana/grafana.db`

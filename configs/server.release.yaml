@@ -2,7 +2,7 @@
 # For deployment on GPU servers. Copy and customize as needed.
 
 host: "0.0.0.0"
-port: 8080
+port: 18080
 log_level: info
 db_path: data/lightai.db
 dev_mode: false

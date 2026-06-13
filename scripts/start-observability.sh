@@ -43,7 +43,7 @@ if [ ! -f run/prometheus.pid ]; then
     --config.file=configs/observability/prometheus.yml \
     --storage.tsdb.path=data/prometheus \
     --storage.tsdb.retention.time=15d \
-    --web.listen-address=0.0.0.0:9090 \
+    --web.listen-address=0.0.0.0:19090 \
     --web.enable-lifecycle \
     > logs/prometheus.log 2>&1 &
   PID=$!
@@ -77,6 +77,7 @@ if [ ! -f run/grafana.pid ]; then
   # Pre-13:  grafana-server with GF_* env vars.
   if $GRAF_V13; then
     echo "  使用 Grafana 13+ 模式"
+    GF_PATHS_PROVISIONING="$RLS_ROOT/deploy/observability/grafana/provisioning" \
     GF_SECURITY_ADMIN_USER=admin \
     GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
     nohup "$GRAF_BIN" server \
@@ -92,7 +93,7 @@ if [ ! -f run/grafana.pid ]; then
     GF_SECURITY_ADMIN_USER=admin \
     GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
     GF_SERVER_HTTP_ADDR=0.0.0.0 \
-    GF_SERVER_HTTP_PORT=3000 \
+    GF_SERVER_HTTP_PORT=13000 \
     GF_DATABASE_TYPE=sqlite3 \
     GF_DATABASE_PATH=data/grafana/grafana.db \
     GF_ANALYTICS_REPORTING_ENABLED=false \
@@ -113,7 +114,7 @@ echo "等待服务就绪..."
 
 grafana_ok=false
 for i in 1 2 3 4 5 6 7 8; do
-  if curl -sf http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+  if curl -sf http://127.0.0.1:13000/api/health >/dev/null 2>&1; then
     grafana_ok=true
     break
   fi
@@ -122,15 +123,15 @@ done
 
 prom_ok=false
 for i in 1 2 3; do
-  if curl -sf http://127.0.0.1:9090/-/ready >/dev/null 2>&1; then
+  if curl -sf http://127.0.0.1:19090/-/ready >/dev/null 2>&1; then
     prom_ok=true
     break
   fi
   sleep 2
 done
 
-echo "  Prometheus: $($prom_ok && echo '就绪 (http://127.0.0.1:9090)' || echo '未就绪')"
-echo "  Grafana:    $($grafana_ok && echo '就绪 (http://127.0.0.1:3000)' || echo '未就绪')"
+echo "  Prometheus: $($prom_ok && echo '就绪 (http://127.0.0.1:19090)' || echo '未就绪')"
+echo "  Grafana:    $($grafana_ok && echo '就绪 (http://127.0.0.1:13000)' || echo '未就绪')"
 
 if ! $grafana_ok; then
   echo ""
@@ -143,5 +144,5 @@ fi
 
 echo ""
 echo "Observability 已启动。"
-echo "  局域网 Prometheus: http://<server-ip>:9090/"
-echo "  局域网 Grafana:    http://<server-ip>:3000/"
+echo "  局域网 Prometheus: http://<server-ip>:19090/"
+echo "  局域网 Grafana:    http://<server-ip>:13000/"

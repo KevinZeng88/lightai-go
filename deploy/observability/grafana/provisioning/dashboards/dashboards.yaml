@@ -9,4 +9,4 @@ providers:
     disableDeletion: true
     editable: true
     options:
-      path: deploy/observability/grafana/dashboards
+      path: ../../dashboards
