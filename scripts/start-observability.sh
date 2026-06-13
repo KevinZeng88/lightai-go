@@ -73,15 +73,14 @@ if [ ! -f run/grafana.pid ]; then
     exit 1
   fi
 
-  # Grafana 13+: --homepath is GLOBAL flag (before 'server').
+  # Grafana 13+: server subcommand with --homepath and --config.
   # Pre-13:  grafana-server with GF_* env vars.
   if $GRAF_V13; then
     echo "  使用 Grafana 13+ 模式"
     GF_SECURITY_ADMIN_USER=admin \
     GF_SECURITY_ADMIN_PASSWORD="${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-lightai}" \
-    nohup "$GRAF_BIN" \
+    nohup "$GRAF_BIN" server \
       --homepath "$RLS_ROOT/bin/grafana" \
-      server \
       --config "$RLS_ROOT/configs/observability/grafana.ini" \
       > logs/grafana.log 2>&1 &
   else
@@ -137,7 +136,7 @@ if ! $grafana_ok; then
   echo ""
   echo "Grafana 启动失败，请检查:"
   echo "  tail -50 logs/grafana.log"
-  echo "  命令: bin/grafana/bin/grafana --homepath bin/grafana server --config configs/observability/grafana.ini"
+  echo "  命令: bin/grafana/bin/grafana server --homepath bin/grafana --config configs/observability/grafana.ini"
   rm -f run/grafana.pid
   exit 1
 fi
