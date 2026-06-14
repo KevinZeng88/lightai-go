@@ -111,6 +111,47 @@ func RequirePlatformAdmin(next http.Handler) http.Handler {
 	})
 }
 
+// RequirePasswordNotExpired middleware rejects state-changing requests
+// when the user has must_change_password set (unless the request is
+// to change password itself). P0-007: backend enforcement of password expiry.
+func RequirePasswordNotExpired(database *db.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Only enforce on state-changing methods.
+			if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Allow change-password and logout to proceed even with expired password.
+			if r.URL.Path == "/api/auth/change-password" || r.URL.Path == "/api/auth/logout" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			info := SessionInfoFromContext(r.Context())
+			if info == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			var mustChange int
+			err := database.QueryRow(
+				`SELECT must_change_password FROM users WHERE id = ?`,
+				info.UserID,
+			).Scan(&mustChange)
+			if err == nil && mustChange == 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				w.Write([]byte(`{"error":"password change required","code":"must_change_password"}`))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // AgentAuthMiddleware validates the agent bootstrap token.
 func AgentAuthMiddleware(agentToken string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

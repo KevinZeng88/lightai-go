@@ -23,7 +23,8 @@ if [ -z "$OUTPUT" ]; then
   exit 10
 fi
 
-collector_emit_status nvidia true ok
+# Track whether any DEVICE was emitted.
+DEVICE_COUNT=0
 
 # Single awk pass: parse CSV, emit DEVICE lines.
 echo "$OUTPUT" | awk -F, '
@@ -45,6 +46,23 @@ function mib_to_bytes(v) {
   if (idx == "" || uuid == "" || name == "") { print "nvidia discover: missing required field" > "/dev/stderr"; next }
   mem_bytes = mib_to_bytes(mem)
   printf "DEVICE vendor=nvidia index=%s uuid=%s name=\"%s\" pci_bus_id=%s driver_version=%s memory_total_bytes=%s\n", idx, uuid, quote(name), (pci==""?"unknown":pci), (driver==""?"unknown":driver), mem_bytes
+  fflush()
 }
-'
+' > /tmp/lightai-nvidia-discover-out.$$ 2>/tmp/lightai-nvidia-discover-err.$$
+
+# P1-002: Check if any DEVICE was actually emitted.
+if [ -s /tmp/lightai-nvidia-discover-out.$$ ]; then
+  cat /tmp/lightai-nvidia-discover-out.$$
+  collector_emit_status nvidia true ok
+elif [ -s /tmp/lightai-nvidia-discover-err.$$ ]; then
+  collector_emit_status nvidia false "parse failed"
+  rm -f /tmp/lightai-nvidia-discover-out.$$ /tmp/lightai-nvidia-discover-err.$$
+  exit 40
+else
+  collector_emit_status nvidia false "no devices parsed"
+  rm -f /tmp/lightai-nvidia-discover-out.$$ /tmp/lightai-nvidia-discover-err.$$
+  exit 10
+fi
+
+rm -f /tmp/lightai-nvidia-discover-out.$$ /tmp/lightai-nvidia-discover-err.$$
 exit 0

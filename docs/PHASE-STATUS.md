@@ -13,7 +13,7 @@
 | 2A | System/Registry/Mock | Done | `f259e42` |
 | 2B | NVIDIA Collector | Done | `7b0e039` |
 | 2B+ | node_id hardening | Done | `7649383` |
-| 2C | MetaX Collector | **Deferred** | — |
+| 2C | MetaX Collector | **Scripts Ready (mock verified, hardware pending)** | RC1 |
 | 3W | Web Console MVP | Done | `5689c21` |
 | 3W+ | Collector/Observability/Network | Done | `588e479` |
 | 3W+ hotfix | Agent/Server metrics snapshot | Done | `1a1e374` |
@@ -36,7 +36,7 @@
 - **Default**: ExternalCommandCollector (vendor scripts → protocol).
 - NVIDIA: `deploy/collectors/gpu/nvidia/discover.sh` + `metrics.sh`.
 - Built-in NvidiaCollector: deprecated, not default path.
-- MetaX: Phase 2C Deferred. Scripts at `deploy/collectors/gpu/metax/`.
+- MetaX: Scripts ready (mock verified, hardware pending). Scripts at `deploy/collectors/gpu/metax/`.
 
 ### Metrics
 - Agent `/metrics`: `lightai_gpu_*`, `lightai_agent_*` from latest snapshot. Scrape never triggers nvidia-smi.

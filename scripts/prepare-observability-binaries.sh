@@ -93,12 +93,11 @@ if [ ! -f "$THIRD_PARTY/prometheus/prometheus" ] || [ "$MODE" = "--download" ]; 
 fi
 
 # --- Grafana ---
-GRAF_TARBALL="grafana-enterprise-${GRAFANA_VERSION}.linux-amd64.tar.gz"
-GRAF_URL="https://dl.grafana.com/enterprise/release/${GRAF_TARBALL}"
+# P2-007: Prefer OSS by default. Enterprise as fallback.
+GRAF_TARBALL="grafana-${GRAFANA_VERSION}.linux-amd64.tar.gz"
+GRAF_OSS_URL="https://dl.grafana.com/oss/release/${GRAF_TARBALL}"
+GRAF_ENT_URL="https://dl.grafana.com/enterprise/release/grafana-enterprise-${GRAFANA_VERSION}.linux-amd64.tar.gz"
 GRAF_DL="$PROJECT_DIR/dist/downloads/${GRAF_TARBALL}"
-
-# Also try OSS if enterprise URL fails.
-GRAF_OSS_URL="https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.linux-amd64.tar.gz"
 
 if [ ! -d "$THIRD_PARTY/grafana/bin" ] || [ "$MODE" = "--download" ]; then
   echo ""
@@ -118,10 +117,10 @@ if [ ! -d "$THIRD_PARTY/grafana/bin" ] || [ "$MODE" = "--download" ]; then
     return 0
   }
 
-  if ! download_grafana "$GRAF_URL" "$GRAF_DL"; then
-    echo "  Enterprise download failed, trying OSS..."
-    GRAF_DL="$PROJECT_DIR/dist/downloads/grafana-${GRAFANA_VERSION}.linux-amd64.tar.gz"
-    download_grafana "$GRAF_OSS_URL" "$GRAF_DL" || {
+  if ! download_grafana "$GRAF_ENT_URL" "$GRAF_DL"; then
+    echo "  OSS download failed, trying Enterprise..."
+    GRAF_DL="$PROJECT_DIR/dist/downloads/grafana-enterprise-${GRAFANA_VERSION}.linux-amd64.tar.gz"
+    download_grafana "$GRAF_ENT_URL" "$GRAF_DL" || {
       echo "ERROR: Grafana download failed." >&2
       exit 1
     }
@@ -131,8 +130,9 @@ if [ ! -d "$THIRD_PARTY/grafana/bin" ] || [ "$MODE" = "--download" ]; then
   if [ -n "$GRAFANA_SHA256" ] && command -v sha256sum >/dev/null 2>&1; then
     ACTUAL=$(sha256sum "$GRAF_DL" | awk '{print $1}')
     if [ "$ACTUAL" != "$GRAFANA_SHA256" ]; then
-      echo "  WARNING: Grafana SHA256 mismatch (expected $GRAFANA_SHA256, got $ACTUAL)"
-      echo "  Continuing anyway. Update GRAFANA_SHA256 if needed."
+      echo "  ERROR: Grafana SHA256 mismatch (expected $GRAFANA_SHA256, got $ACTUAL)" >&2
+      echo "  Aborting. Update GRAFANA_SHA256 if the version changed." >&2
+      exit 1
     fi
   fi
 

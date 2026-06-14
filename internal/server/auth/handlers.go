@@ -54,6 +54,7 @@ type MeResponse struct {
 	} `json:"tenant"`
 	Roles       []RoleInfo `json:"roles"`
 	Permissions []string   `json:"permissions"`
+	CSRFToken   string     `json:"csrf_token,omitempty"`
 }
 
 // RoleInfo is a simplified role representation.
@@ -334,6 +335,11 @@ func (h *AuthHandler) HandleMe(w http.ResponseWriter, r *http.Request) {
 	resp.Tenant.Name = tenantName
 	resp.Roles = roles
 	resp.Permissions = permissions
+
+	// P0-007: Rotate CSRF secret on /me so page refresh recovers CSRF token.
+	if csrfToken, err := h.SessionStore.RotateCSRFSecret(info.SessionID); err == nil {
+		resp.CSRFToken = csrfToken
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)

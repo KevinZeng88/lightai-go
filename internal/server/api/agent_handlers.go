@@ -299,7 +299,29 @@ func (h *AgentHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(node)
 }
 
+// MarkOfflineNodes marks nodes as offline if they haven't sent a heartbeat
+// within the given threshold. Returns the count of nodes marked offline.
+// P0-009: Node auto-offline implementation.
+func (h *AgentHandler) MarkOfflineNodes(threshold time.Duration) (int, error) {
+	cutoff := time.Now().Add(-threshold).Format(time.RFC3339)
+	result, err := h.DB.Exec(
+		`UPDATE nodes SET status = 'offline', updated_at = datetime('now')
+		 WHERE status = 'online' AND last_heartbeat_at < ?`,
+		cutoff,
+	)
+	if err != nil {
+		log.Error("mark offline nodes error", "error", err)
+		return 0, err
+	}
+	n, _ := result.RowsAffected()
+	if n > 0 {
+		log.Info("nodes marked offline", "count", n)
+	}
+	return int(n), nil
+}
+
 // GetMetricsTargets returns Prometheus HTTP SD targets from registered nodes.
+// P0-009: Only returns online nodes; offline nodes are excluded from scraping.
 func (h *AgentHandler) GetMetricsTargets() []map[string]interface{} {
 	rows, err := h.DB.Query(
 		`SELECT agent_id, hostname, advertised_address, metrics_scheme, metrics_port, metrics_path

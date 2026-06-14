@@ -25,6 +25,7 @@ type SystemSnapshot struct {
 	MemoryUsedBytes   uint64                     `json:"memory_used_bytes"`
 	SwapTotalBytes    uint64                     `json:"swap_total_bytes"`
 	SwapUsedBytes     uint64                     `json:"swap_used_bytes"`
+	UptimeSeconds     uint64                     `json:"uptime_seconds"`
 	Filesystems       []FilesystemSnapshot       `json:"filesystems"`
 	NetworkInterfaces []NetworkInterfaceSnapshot `json:"network_interfaces"`
 	CollectedAt       time.Time                  `json:"collected_at"`

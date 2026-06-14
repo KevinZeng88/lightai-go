@@ -160,6 +160,25 @@ func (s *SessionStore) RevokeSession(sessionID string) error {
 	return err
 }
 
+// RotateCSRFSecret generates a new CSRF secret for the session and returns the plaintext.
+// Used after page refresh to re-establish CSRF protection without re-login.
+func (s *SessionStore) RotateCSRFSecret(sessionID string) (string, error) {
+	csrfSecret, err := generateRandomHex(32)
+	if err != nil {
+		return "", err
+	}
+	csrfSecretHash := hashString(csrfSecret)
+	sessionIDHash := hashString(sessionID)
+	_, err = s.db.Exec(
+		`UPDATE sessions SET csrf_secret_hash = ? WHERE id = ? AND revoked_at IS NULL`,
+		csrfSecretHash, sessionIDHash,
+	)
+	if err != nil {
+		return "", fmt.Errorf("rotate csrf: %w", err)
+	}
+	return csrfSecret, nil
+}
+
 // RevokeUserSessions revokes all sessions for a user except the given session ID.
 func (s *SessionStore) RevokeUserSessions(userID string, exceptSessionID string) error {
 	exceptHash := hashString(exceptSessionID)

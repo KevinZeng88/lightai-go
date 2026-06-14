@@ -60,6 +60,50 @@
           </el-table-column>
           <template #empty>{{ t('gpus.noGpus') }}</template>
         </el-table>
+
+        <!-- P1-004: Host system resources -->
+        <h4 style="margin-top: 16px">{{ t('nodes.hostResources') }}</h4>
+        <div v-if="sysLoading" style="text-align: center; padding: 16px">
+          <el-icon class="is-loading"><Loading /></el-icon>
+        </div>
+        <div v-else-if="nodeSystem">
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item :label="t('nodes.cpuCores')">{{ nodeSystem.cpu_cores }}</el-descriptions-item>
+            <el-descriptions-item :label="t('nodes.cpuUsage')">{{ nodeSystem.cpu_utilization_percent }}%</el-descriptions-item>
+            <el-descriptions-item :label="t('nodes.memory')">
+              {{ formatBytes(nodeSystem.memory_used_bytes) }} / {{ formatBytes(nodeSystem.memory_total_bytes) }}
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('nodes.loadAvg')">
+              {{ nodeSystem.load1 }} / {{ nodeSystem.load5 }} / {{ nodeSystem.load15 }}
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('nodes.uptime')">
+              {{ formatUptime(parseInt(nodeSystem.uptime_seconds) || 0) }}
+            </el-descriptions-item>
+          </el-descriptions>
+          <h5 style="margin-top: 12px">{{ t('nodes.filesystems') }}</h5>
+          <el-table :data="nodeSystem.filesystems || []" size="small" v-if="nodeSystem.filesystems?.length">
+            <el-table-column prop="mount_point" :label="t('nodes.mountPoint')" width="140" />
+            <el-table-column :label="t('nodes.diskUsage')" width="180">
+              <template #default="{ row }">{{ formatBytes(row.used_bytes) }} / {{ formatBytes(row.total_bytes) }}</template>
+            </el-table-column>
+            <el-table-column :label="t('nodes.diskFree')" width="120">
+              <template #default="{ row }">{{ formatBytes(row.free_bytes) }}</template>
+            </el-table-column>
+          </el-table>
+          <h5 style="margin-top: 12px">{{ t('nodes.network') }}</h5>
+          <el-table :data="nodeSystem.networks?.filter((n: any) => n.up) || []" size="small" v-if="nodeSystem.networks?.length">
+            <el-table-column prop="name" :label="t('nodes.interface')" width="120" />
+            <el-table-column :label="t('nodes.rxBytes')" width="140">
+              <template #default="{ row }">{{ formatBytes(row.bytes_recv) }}</template>
+            </el-table-column>
+            <el-table-column :label="t('nodes.txBytes')" width="140">
+              <template #default="{ row }">{{ formatBytes(row.bytes_sent) }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <div v-else style="color: var(--el-text-color-secondary); font-size: 13px; padding: 8px">
+          {{ t('nodes.noSystemData') }}
+        </div>
       </template>
     </el-drawer>
   </div>
@@ -69,7 +113,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RefreshRight } from '@element-plus/icons-vue'
-import { fetchNodes, type Node } from '@/api/nodes'
+import { fetchNodes, fetchNodeSystem, type Node, type NodeSystemInfo } from '@/api/nodes'
 import { fetchGPUs, type GPU } from '@/api/gpus'
 import StatusTag from '@/components/StatusTag.vue'
 import CopyButton from '@/components/CopyButton.vue'
@@ -85,6 +129,8 @@ const drawerVisible = ref(false)
 const selectedNode = ref<Node | null>(null)
 const nodeGpus = ref<GPU[]>([])
 const gpuLoading = ref(false)
+const sysLoading = ref(false)
+const nodeSystem = ref<NodeSystemInfo | null>(null)
 
 const filteredNodes = computed(() => {
   let result = nodes.value
@@ -109,8 +155,22 @@ async function openDetail(row: Node) {
   selectedNode.value = row
   drawerVisible.value = true
   gpuLoading.value = true
+  sysLoading.value = true
+  nodeSystem.value = null
   try { nodeGpus.value = await fetchGPUs({ node_id: row.id }) } catch { /* */ }
   gpuLoading.value = false
+  try { nodeSystem.value = await fetchNodeSystem(row.id) } catch { /* */ }
+  sysLoading.value = false
+}
+
+function formatUptime(seconds: number): string {
+  if (!seconds || seconds <= 0) return '0s'
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (d > 0) return d + 'd ' + h + 'h'
+  if (h > 0) return h + 'h ' + m + 'm'
+  return m + 'm'
 }
 
 onMounted(refresh)

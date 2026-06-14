@@ -2,13 +2,21 @@ import { useAuthStore } from '@/stores/auth'
 
 const BASE = ''
 
-interface ApiResponse {
-  data: any
+export class ApiError extends Error {
   status: number
+  data: any
+
+  constructor(status: number, data: any) {
+    const msg = typeof data?.error === 'string' ? data.error : `HTTP ${status}`
+    super(msg)
+    this.name = 'ApiError'
+    this.status = status
+    this.data = data
+  }
 }
 
 class ApiClient {
-  private async request(method: string, url: string, body?: any): Promise<ApiResponse> {
+  private async request(method: string, url: string, body?: any, retryOnCsrf = true): Promise<any> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
@@ -26,23 +34,75 @@ class ApiClient {
       body: body ? JSON.stringify(body) : undefined,
     })
 
-    const data = await resp.json().catch(() => ({}))
-    return { data, status: resp.status }
+    // P0-007: Parse JSON, but handle non-JSON responses gracefully.
+    let data: any
+    try {
+      data = await resp.json()
+    } catch {
+      data = {}
+    }
+
+    // P0-007: Throw structured error on non-2xx responses.
+    if (!resp.ok) {
+      // If CSRF token may have expired, try refreshing it and retry once.
+      if (resp.status === 403 && retryOnCsrf && method !== 'GET' && method !== 'HEAD') {
+        const refreshed = await this.refreshCsrfToken()
+        if (refreshed) {
+          return this.request(method, url, body, false) // Don't retry again
+        }
+      }
+
+      // If unauthorized, clear auth state.
+      if (resp.status === 401) {
+        authStore.isLoggedIn = false
+        authStore.user = null
+        authStore.csrfToken = ''
+      }
+
+      throw new ApiError(resp.status, data)
+    }
+
+    // P0-007: Extract CSRF token from response if present.
+    if (data?.csrf_token) {
+      authStore.csrfToken = data.csrf_token
+    }
+
+    return data
   }
 
-  async get(url: string): Promise<ApiResponse> {
+  // P0-007: Refresh CSRF token from server.
+  private async refreshCsrfToken(): Promise<boolean> {
+    try {
+      const resp = await fetch(BASE + '/api/auth/me', {
+        method: 'GET',
+        credentials: 'include',
+      })
+      if (!resp.ok) return false
+      const data = await resp.json()
+      if (data?.csrf_token) {
+        const authStore = useAuthStore()
+        authStore.csrfToken = data.csrf_token
+        return true
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+
+  async get(url: string): Promise<any> {
     return this.request('GET', url)
   }
 
-  async post(url: string, body?: any): Promise<ApiResponse> {
+  async post(url: string, body?: any): Promise<any> {
     return this.request('POST', url, body)
   }
 
-  async put(url: string, body?: any): Promise<ApiResponse> {
+  async put(url: string, body?: any): Promise<any> {
     return this.request('PUT', url, body)
   }
 
-  async delete(url: string): Promise<ApiResponse> {
+  async delete(url: string): Promise<any> {
     return this.request('DELETE', url)
   }
 }

@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -50,6 +51,49 @@ func NewResourceHandler(database *db.DB, m *srvmetrics.ServerMetrics) *ResourceH
 			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)
 	`)
+	// P1-004: Host system snapshot tables.
+	database.Exec(`
+		CREATE TABLE IF NOT EXISTS node_system_snapshots (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			node_id TEXT NOT NULL,
+			cpu_utilization_percent TEXT NOT NULL DEFAULT '0',
+			memory_total_bytes INTEGER NOT NULL DEFAULT 0,
+			memory_used_bytes INTEGER NOT NULL DEFAULT 0,
+			swap_total_bytes INTEGER NOT NULL DEFAULT 0,
+			swap_used_bytes INTEGER NOT NULL DEFAULT 0,
+			uptime_seconds TEXT NOT NULL DEFAULT '0',
+			cpu_cores INTEGER NOT NULL DEFAULT 0,
+			load1 TEXT NOT NULL DEFAULT '0',
+			load5 TEXT NOT NULL DEFAULT '0',
+			load15 TEXT NOT NULL DEFAULT '0',
+			collected_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`)
+	database.Exec(`
+		CREATE TABLE IF NOT EXISTS node_filesystem_snapshots (
+			node_id TEXT NOT NULL,
+			mount_point TEXT NOT NULL,
+			device TEXT NOT NULL DEFAULT '',
+			fs_type TEXT NOT NULL DEFAULT '',
+			total_bytes INTEGER NOT NULL DEFAULT 0,
+			used_bytes INTEGER NOT NULL DEFAULT 0,
+			free_bytes INTEGER NOT NULL DEFAULT 0,
+			used_percent TEXT NOT NULL DEFAULT '0',
+			collected_at TEXT NOT NULL DEFAULT (datetime('now')),
+			PRIMARY KEY (node_id, mount_point)
+		)
+	`)
+	database.Exec(`
+		CREATE TABLE IF NOT EXISTS node_network_snapshots (
+			node_id TEXT NOT NULL,
+			interface_name TEXT NOT NULL,
+			up INTEGER NOT NULL DEFAULT 0,
+			bytes_recv INTEGER NOT NULL DEFAULT 0,
+			bytes_sent INTEGER NOT NULL DEFAULT 0,
+			collected_at TEXT NOT NULL DEFAULT (datetime('now')),
+			PRIMARY KEY (node_id, interface_name)
+		)
+	`)
 	return &ResourceHandler{DB: database, Metrics: m}
 }
 
@@ -64,18 +108,41 @@ type ResourceReportRequest struct {
 }
 
 type SystemSnapshotReq struct {
-	Hostname         string  `json:"hostname"`
-	OS               string  `json:"os"`
-	OSVersion        string  `json:"os_version"`
-	KernelVersion    string  `json:"kernel_version"`
-	CPUModel         string  `json:"cpu_model"`
-	CPUCores         int     `json:"cpu_cores"`
-	CPUUtilization   float64 `json:"cpu_utilization_percent"`
-	MemoryTotalBytes uint64  `json:"memory_total_bytes"`
-	MemoryUsedBytes  uint64  `json:"memory_used_bytes"`
-	SwapTotalBytes   uint64  `json:"swap_total_bytes"`
-	SwapUsedBytes    uint64  `json:"swap_used_bytes"`
-	CollectedAt      string  `json:"collected_at"`
+	Hostname           string                    `json:"hostname"`
+	OS                 string                    `json:"os"`
+	OSVersion          string                    `json:"os_version"`
+	KernelVersion      string                    `json:"kernel_version"`
+	CPUModel           string                    `json:"cpu_model"`
+	CPUCores           int                       `json:"cpu_cores"`
+	CPUUtilization     float64                   `json:"cpu_utilization_percent"`
+	MemoryTotalBytes   uint64                    `json:"memory_total_bytes"`
+	MemoryUsedBytes    uint64                    `json:"memory_used_bytes"`
+	SwapTotalBytes     uint64                    `json:"swap_total_bytes"`
+	SwapUsedBytes      uint64                    `json:"swap_used_bytes"`
+	Load1              float64                   `json:"load1"`
+	Load5              float64                   `json:"load5"`
+	Load15             float64                   `json:"load15"`
+	UptimeSeconds      uint64                    `json:"uptime_seconds"`
+	Filesystems        []FilesystemSnapshotReq   `json:"filesystems"`
+	NetworkInterfaces  []NetworkInterfaceSnapshotReq `json:"network_interfaces"`
+	CollectedAt        string                    `json:"collected_at"`
+}
+
+type FilesystemSnapshotReq struct {
+	MountPoint  string  `json:"mount_point"`
+	Device      string  `json:"device"`
+	FSType      string  `json:"fs_type"`
+	TotalBytes  uint64  `json:"total_bytes"`
+	UsedBytes   uint64  `json:"used_bytes"`
+	FreeBytes   uint64  `json:"free_bytes"`
+	UsedPercent float64 `json:"used_percent"`
+}
+
+type NetworkInterfaceSnapshotReq struct {
+	Name      string `json:"name"`
+	Up        bool   `json:"up"`
+	BytesRecv uint64 `json:"bytes_recv"`
+	BytesSent uint64 `json:"bytes_sent"`
 }
 
 type GPUDeviceReq struct {
@@ -142,45 +209,116 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 
 	now := time.Now().Format(time.RFC3339)
 
-	// Update node with system snapshot info.
-	if req.System != nil {
-		h.DB.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, now, nodeID)
+	// P0-008: Use transaction for atomic resource write.
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Error("begin tx error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
 	}
+	defer tx.Rollback()
+
+	// P1-004: Save system snapshot (host CPU/memory/disk/network/uptime).
+	if req.System != nil {
+		sys := req.System
+		cpuStr := fmt.Sprintf("%.1f", sys.CPUUtilization)
+		_, err := tx.Exec(
+			`INSERT INTO node_system_snapshots
+			 (node_id, cpu_utilization_percent, memory_total_bytes, memory_used_bytes,
+			  swap_total_bytes, swap_used_bytes, uptime_seconds, cpu_cores,
+			  load1, load5, load15, collected_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			nodeID, cpuStr, sys.MemoryTotalBytes, sys.MemoryUsedBytes,
+			sys.SwapTotalBytes, sys.SwapUsedBytes, fmt.Sprintf("%d", sys.UptimeSeconds), sys.CPUCores,
+			fmt.Sprintf("%.2f", sys.Load1), fmt.Sprintf("%.2f", sys.Load5), fmt.Sprintf("%.2f", sys.Load15),
+			now,
+		)
+		if err != nil {
+			log.Error("save system snapshot error", "error", err)
+			// Non-fatal — GPU data should still be saved.
+		}
+
+		// Save filesystem snapshots.
+		for _, fs := range sys.Filesystems {
+			if fs.MountPoint == "" {
+				continue
+			}
+			tx.Exec(
+				`INSERT OR REPLACE INTO node_filesystem_snapshots
+				 (node_id, mount_point, device, fs_type, total_bytes, used_bytes, free_bytes, used_percent, collected_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				nodeID, fs.MountPoint, fs.Device, fs.FSType,
+				fs.TotalBytes, fs.UsedBytes, fs.FreeBytes,
+				fmt.Sprintf("%.1f", fs.UsedPercent), now,
+			)
+		}
+
+		// Save network interface snapshots.
+		for _, net := range sys.NetworkInterfaces {
+			tx.Exec(
+				`INSERT OR REPLACE INTO node_network_snapshots
+				 (node_id, interface_name, up, bytes_recv, bytes_sent, collected_at)
+				 VALUES (?, ?, ?, ?, ?, ?)`,
+				nodeID, net.Name, boolToInt(net.Up), net.BytesRecv, net.BytesSent, now,
+			)
+		}
+
+		// Update node info.
+		tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, now, nodeID)
+	}
+
+	// Collect UUIDs from this report for GPU staleness detection.
+	reportedUUIDs := make(map[string]bool)
 
 	// Update GPU devices.
 	if req.GPUDevices != nil {
 		for _, dev := range req.GPUDevices {
-			// Check if GPU already exists (by node_id + uuid).
-			var existingID string
-			err := h.DB.QueryRow(
-				`SELECT id FROM gpu_devices WHERE node_id = ? AND uuid = ?`,
-				nodeID, dev.UUID,
-			).Scan(&existingID)
+			reportedUUIDs[dev.UUID] = true
 
 			collectedAt := dev.CollectedAt
 			if collectedAt == "" {
 				collectedAt = now
 			}
 
+			var existingID string
+			err := tx.QueryRow(
+				`SELECT id FROM gpu_devices WHERE node_id = ? AND uuid = ?`,
+				nodeID, dev.UUID,
+			).Scan(&existingID)
+
 			if err == sql.ErrNoRows {
 				// Create new GPU.
 				gpuID := uuid.NewString()
-				h.DB.Exec(
+				_, err = tx.Exec(
 					`INSERT INTO gpu_devices (id, node_id, vendor, index_num, name, uuid, pci_bus_id,
 					 driver_version, memory_total_bytes, status, collected_at, created_at, updated_at)
 					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					gpuID, nodeID, dev.Vendor, dev.Index, dev.Name, dev.UUID, dev.PCIBusID,
 					dev.DriverVersion, dev.MemoryTotalBytes, dev.Status, collectedAt, now, now,
 				)
+				if err != nil {
+					log.Error("create gpu error", "error", err)
+					http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+					return
+				}
 			} else if err == nil {
 				// Update existing GPU.
-				h.DB.Exec(
+				_, err = tx.Exec(
 					`UPDATE gpu_devices SET vendor = ?, index_num = ?, name = ?, driver_version = ?,
 					 memory_total_bytes = ?, status = ?, collected_at = ?, updated_at = ?
 					 WHERE id = ?`,
 					dev.Vendor, dev.Index, dev.Name, dev.DriverVersion,
 					dev.MemoryTotalBytes, dev.Status, collectedAt, now, existingID,
 				)
+				if err != nil {
+					log.Error("update gpu error", "error", err)
+					http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+					return
+				}
+			} else {
+				log.Error("query gpu error", "error", err)
+				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+				return
 			}
 		}
 	}
@@ -188,12 +326,14 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 	// Update GPU metrics.
 	if req.GPUMetrics != nil {
 		for _, m := range req.GPUMetrics {
+			reportedUUIDs[m.UUID] = true
+
 			collectedAt := m.CollectedAt
 			if collectedAt == "" {
 				collectedAt = now
 			}
 
-			h.DB.Exec(
+			_, err := tx.Exec(
 				`UPDATE gpu_devices SET
 				 memory_used_bytes = ?, memory_free_bytes = ?,
 				 gpu_utilization_percent = ?, memory_utilization_percent = ?,
@@ -206,7 +346,53 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 				m.Health, collectedAt, now,
 				nodeID, m.UUID,
 			)
+			if err != nil {
+				log.Error("update gpu metrics error", "error", err)
+				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+				return
+			}
 		}
+	}
+
+	// P0-008: Mark GPUs that disappeared since last report as invalid.
+	// GPUs for this node not in the current report should be marked unavailable.
+	if len(reportedUUIDs) > 0 {
+		rows, err := tx.Query(`SELECT uuid FROM gpu_devices WHERE node_id = ? AND status != 'unavailable'`, nodeID)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var uuid string
+				if err := rows.Scan(&uuid); err != nil {
+					continue
+				}
+				if !reportedUUIDs[uuid] {
+					// GPU was previously reported but not in this report → mark unavailable.
+					tx.Exec(`UPDATE gpu_devices SET status = 'unavailable', updated_at = ? WHERE node_id = ? AND uuid = ?`,
+						now, nodeID, uuid)
+				}
+			}
+		}
+	}
+
+	// Persist diagnostics if provided (P0-008).
+	if req.Diagnostics != nil {
+		for _, d := range req.Diagnostics {
+			// Store diagnostics in a simple log or metrics.
+			// For now, log them at debug level.
+			log.Debug("agent diagnostic",
+				"agent_id", req.AgentID,
+				"name", d.Name,
+				"type", d.Type,
+				"available", d.Available,
+				"error", d.Error,
+			)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("commit tx error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -214,6 +400,22 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 	if h.Metrics != nil {
 		h.Metrics.AgentReports.Inc()
 	}
+}
+
+// MarkStaleGPUs marks GPU devices as unavailable if not updated within the threshold.
+// Called periodically by the node health checker.
+func (h *ResourceHandler) MarkStaleGPUs(nodeID string, threshold time.Duration) (int, error) {
+	cutoff := time.Now().Add(-threshold).Format(time.RFC3339)
+	result, err := h.DB.Exec(
+		`UPDATE gpu_devices SET status = 'unavailable', updated_at = datetime('now')
+		 WHERE node_id = ? AND status != 'unavailable' AND collected_at < ?`,
+		nodeID, cutoff,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := result.RowsAffected()
+	return int(n), nil
 }
 
 // HandleListGPUs handles GET /api/gpus.
@@ -266,19 +468,14 @@ func (h *ResourceHandler) HandleListGPUs(w http.ResponseWriter, r *http.Request)
 // HandleGetGPU handles GET /api/gpus/{id}.
 func (h *ResourceHandler) HandleGetGPU(w http.ResponseWriter, r *http.Request) {
 	gpuID := r.PathValue("id")
-	row := h.DB.QueryRow(
+	gpu := scanGPUFromRow(h.DB.QueryRow(
 		`SELECT id, node_id, vendor, index_num, name, uuid, pci_bus_id, driver_version,
 		memory_total_bytes, memory_used_bytes, memory_free_bytes,
 		gpu_utilization_percent, memory_utilization_percent,
 		temperature_celsius, power_draw_watts,
 		health, status, collected_at, created_at, updated_at
 		FROM gpu_devices WHERE id = ?`, gpuID,
-	)
-
-	rowData := &sql.Row{}
-	_ = rowData
-	// Hack: use the same scan pattern.
-	gpu := scanGPUFromRow(row)
+	))
 	if gpu == nil {
 		http.Error(w, `{"error":"gpu not found"}`, http.StatusNotFound)
 		return
@@ -394,4 +591,102 @@ func scanGPUFromRow(row *sql.Row) map[string]interface{} {
 		gpu["updated_at"] = updatedAt.String
 	}
 	return gpu
+}
+
+// HandleGetNodeSystem handles GET /api/nodes/{id}/system.
+// P1-004: Returns the latest host system snapshot for a node.
+func (h *ResourceHandler) HandleGetNodeSystem(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	if nodeID == "" {
+		http.Error(w, `{"error":"node id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	type FsInfo struct {
+		MountPoint  string `json:"mount_point"`
+		Device      string `json:"device"`
+		FSType      string `json:"fs_type"`
+		TotalBytes  uint64 `json:"total_bytes"`
+		UsedBytes   uint64 `json:"used_bytes"`
+		FreeBytes   uint64 `json:"free_bytes"`
+		UsedPercent string `json:"used_percent"`
+	}
+	type NetInfo struct {
+		Name      string `json:"name"`
+		Up        bool   `json:"up"`
+		BytesRecv uint64 `json:"bytes_recv"`
+		BytesSent uint64 `json:"bytes_sent"`
+	}
+	type SysInfo struct {
+		CPUUtilization string  `json:"cpu_utilization_percent"`
+		MemoryTotal    uint64  `json:"memory_total_bytes"`
+		MemoryUsed     uint64  `json:"memory_used_bytes"`
+		SwapTotal      uint64  `json:"swap_total_bytes"`
+		SwapUsed       uint64  `json:"swap_used_bytes"`
+		UptimeSeconds  string  `json:"uptime_seconds"`
+		CPUCores       int     `json:"cpu_cores"`
+		Load1          string  `json:"load1"`
+		Load5          string  `json:"load5"`
+		Load15         string  `json:"load15"`
+		CollectedAt    string  `json:"collected_at"`
+		Filesystems    []FsInfo `json:"filesystems"`
+		Networks       []NetInfo `json:"networks"`
+	}
+
+	resp := SysInfo{
+		Filesystems: []FsInfo{},
+		Networks:    []NetInfo{},
+	}
+
+	// Query latest system snapshot.
+	row := h.DB.QueryRow(
+		`SELECT cpu_utilization_percent, memory_total_bytes, memory_used_bytes,
+		        swap_total_bytes, swap_used_bytes, uptime_seconds, cpu_cores,
+		        load1, load5, load15, collected_at
+		 FROM node_system_snapshots WHERE node_id = ?
+		 ORDER BY collected_at DESC LIMIT 1`, nodeID)
+	err := row.Scan(
+		&resp.CPUUtilization, &resp.MemoryTotal, &resp.MemoryUsed,
+		&resp.SwapTotal, &resp.SwapUsed, &resp.UptimeSeconds, &resp.CPUCores,
+		&resp.Load1, &resp.Load5, &resp.Load15, &resp.CollectedAt,
+	)
+	if err != nil && err != sql.ErrNoRows {
+		log.Error("query system snapshot error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Query filesystem snapshots.
+	fsRows, err := h.DB.Query(
+		`SELECT mount_point, device, fs_type, total_bytes, used_bytes, free_bytes, used_percent
+		 FROM node_filesystem_snapshots WHERE node_id = ?`, nodeID)
+	if err == nil {
+		defer fsRows.Close()
+		for fsRows.Next() {
+			var fs FsInfo
+			if err := fsRows.Scan(&fs.MountPoint, &fs.Device, &fs.FSType,
+				&fs.TotalBytes, &fs.UsedBytes, &fs.FreeBytes, &fs.UsedPercent); err == nil {
+				resp.Filesystems = append(resp.Filesystems, fs)
+			}
+		}
+	}
+
+	// Query network snapshots.
+	netRows, err := h.DB.Query(
+		`SELECT interface_name, up, bytes_recv, bytes_sent
+		 FROM node_network_snapshots WHERE node_id = ?`, nodeID)
+	if err == nil {
+		defer netRows.Close()
+		for netRows.Next() {
+			var net NetInfo
+			var upInt int
+			if err := netRows.Scan(&net.Name, &upInt, &net.BytesRecv, &net.BytesSent); err == nil {
+				net.Up = upInt == 1
+				resp.Networks = append(resp.Networks, net)
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

@@ -24,9 +24,7 @@ if [ -z "$OUTPUT" ]; then
   exit 10
 fi
 
-collector_emit_status nvidia true ok
-
-# Single awk pass: parse CSV, emit METRIC lines.
+# P1-002: Pipe awk output to temp file, validate before emitting status.
 echo "$OUTPUT" | awk -F, '
 function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
 function quote(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
@@ -58,19 +56,42 @@ function num_or_null(v) {
   mt = mib_to_bytes(mt_raw)
   mu = mib_to_bytes(mu_raw)
   mf = mib_to_bytes(mf_raw)
-  # Calculate free if missing or N/A
   if (mf == "null" && mt != "null" && mu != "null") mf = int(mt) - int(mu)
 
   gu = num_or_null(gu_raw)
   mu2 = num_or_null(mu2_raw)
-  # Calculate memory util if missing
   if (mu2 == "null" && mt != "null" && mu != "null") mu2 = int(mu) * 100 / int(mt)
 
   tmp = num_or_null(tmp_raw)
   pw  = num_or_null(pw_raw)
 
+  # P1-002: Determine health based on actual data quality.
+  health = "healthy"
+  status = "available"
+  if (mt == "null" || mu == "null" || mf == "null") {
+    health = "error"
+    status = "unavailable"
+  } else if (gu == "null" || tmp == "null") {
+    health = "degraded"
+  }
+
   printf "METRIC vendor=nvidia index=%s uuid=%s name=\"%s\" memory_total_bytes=%s memory_used_bytes=%s memory_free_bytes=%s gpu_utilization_percent=%s memory_utilization_percent=%s temperature_celsius=%s power_draw_watts=%s health=%s status=%s\n",
-    idx, uuid, quote(name), mt, mu, mf, gu, mu2, tmp, pw, "healthy", "available"
+    idx, uuid, quote(name), mt, mu, mf, gu, mu2, tmp, pw, health, status
 }
-'
+' > /tmp/lightai-nvidia-metrics-out.$$ 2>/tmp/lightai-nvidia-metrics-err.$$
+
+if [ -s /tmp/lightai-nvidia-metrics-out.$$ ]; then
+  cat /tmp/lightai-nvidia-metrics-out.$$
+  collector_emit_status nvidia true ok
+elif [ -s /tmp/lightai-nvidia-metrics-err.$$ ]; then
+  collector_emit_status nvidia false "parse failed"
+  rm -f /tmp/lightai-nvidia-metrics-out.$$ /tmp/lightai-nvidia-metrics-err.$$
+  exit 40
+else
+  collector_emit_status nvidia false "no metrics produced"
+  rm -f /tmp/lightai-nvidia-metrics-out.$$ /tmp/lightai-nvidia-metrics-err.$$
+  exit 40
+fi
+
+rm -f /tmp/lightai-nvidia-metrics-out.$$ /tmp/lightai-nvidia-metrics-err.$$
 exit 0

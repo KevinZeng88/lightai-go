@@ -61,7 +61,7 @@ Default intervals (all configurable):
 - Go Agent parses only the protocol, never vendor CLI output directly.
 - NVIDIA: `deploy/collectors/gpu/nvidia/discover.sh` + `metrics.sh`.
 - Built-in `NvidiaCollector` is **deprecated** (kept for reference, not default path).
-- MetaX: Phase 2C Deferred. Scripts at `deploy/collectors/gpu/metax/`.
+- MetaX: Scripts ready (mock verified, hardware pending). Scripts at `deploy/collectors/gpu/metax/`.
 
 ## 6. Agent /metrics
 

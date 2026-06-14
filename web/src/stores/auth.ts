@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { apiClient } from '@/api/client'
+import { apiClient, ApiError } from '@/api/client'
 
 export interface UserInfo {
   id: string
@@ -31,8 +31,11 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = ref(false)
 
   async function login(username: string, password: string) {
-    const resp = await apiClient.post('/api/auth/login', { username, password })
-    const data = resp.data
+    // P0-007: apiClient.post now throws on non-2xx.
+    // If it succeeds, the response is valid login data.
+    const data = await apiClient.post('/api/auth/login', { username, password })
+
+    // P0-007: Only set logged-in state on successful response.
     user.value = {
       id: data.user_id,
       username: data.username,
@@ -40,16 +43,16 @@ export const useAuthStore = defineStore('auth', () => {
       is_platform_admin: data.is_platform_admin,
       must_change_password: data.must_change_password,
     }
-    csrfToken.value = data.csrf_token
-    mustChangePassword.value = data.must_change_password
+    csrfToken.value = data.csrf_token || ''
+    mustChangePassword.value = data.must_change_password || false
     isLoggedIn.value = true
     return data
   }
 
   async function fetchMe() {
     try {
-      const resp = await apiClient.get('/api/auth/me')
-      const data = resp.data
+      // P0-007: apiClient.get now throws on non-2xx.
+      const data = await apiClient.get('/api/auth/me')
       user.value = {
         id: data.user.id,
         username: data.user.username,
@@ -60,18 +63,29 @@ export const useAuthStore = defineStore('auth', () => {
       tenant.value = { id: data.tenant.id, name: data.tenant.name }
       roles.value = data.roles || []
       permissions.value = data.permissions || []
-      mustChangePassword.value = data.user.must_change_password
+      mustChangePassword.value = data.user.must_change_password || false
+      // P0-007: CSRF token may be refreshed via /me.
+      if (data.csrf_token) {
+        csrfToken.value = data.csrf_token
+      }
       isLoggedIn.value = true
-    } catch {
+    } catch (e) {
+      // P0-007: On any auth fetch failure, clear state.
       isLoggedIn.value = false
       user.value = null
+      tenant.value = null
+      csrfToken.value = ''
+      permissions.value = []
+      roles.value = []
     }
   }
 
   async function logout() {
     try {
       await apiClient.post('/api/auth/logout', {})
-    } catch { /* ignore */ }
+    } catch {
+      // Ignore errors during logout — we clear state anyway.
+    }
     isLoggedIn.value = false
     user.value = null
     tenant.value = null
@@ -81,11 +95,18 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function changePassword(currentPassword: string, newPassword: string) {
-    const resp = await apiClient.post('/api/auth/change-password', {
+    const data = await apiClient.post('/api/auth/change-password', {
       current_password: currentPassword,
       new_password: newPassword,
     })
-    return resp.data
+    // P0-007: After password change, clear must_change_password flag.
+    if (data.status === 'ok') {
+      mustChangePassword.value = false
+      if (user.value) {
+        user.value.must_change_password = false
+      }
+    }
+    return data
   }
 
   return {

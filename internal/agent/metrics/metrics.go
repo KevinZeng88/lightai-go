@@ -84,6 +84,14 @@ func (s *Snapshot) SetOnline(v bool) {
 	s.mu.Unlock()
 }
 
+// LastSuccessTime returns the timestamp of the last successful collection.
+// P1-001: Used for data staleness detection.
+func (s *Snapshot) LastSuccessTime() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.LastSuccessAt
+}
+
 // SetNodeID updates the node_id in the snapshot (called after registration).
 func (s *Snapshot) SetNodeID(nodeID string) {
 	s.mu.Lock()
@@ -206,6 +214,16 @@ func (c *gpuCollector) Collect(ch chan<- prometheus.Metric) {
 			healthVal = 1.0
 		}
 		ch <- prometheus.MustNewConstMetric(c.healthDesc, prometheus.GaugeValue, healthVal, lbls...)
+
+		// P1-008: Export GPU available status from devices.
+		for _, d := range c.snap.GPUDevices {
+			dlbls := []string{d.Vendor, d.UUID, itoa(d.Index), d.Name, c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
+			availVal := 0.0
+			if d.Status == "available" {
+				availVal = 1.0
+			}
+			ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, availVal, dlbls...)
+		}
 	}
 }
 
@@ -340,6 +358,7 @@ func (c *hostCollector) Collect(ch chan<- prometheus.Metric) {
 	lbls := []string{c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
 
 	ch <- prometheus.MustNewConstMetric(c.infoDesc, prometheus.GaugeValue, 1, lbls...)
+	ch <- prometheus.MustNewConstMetric(c.uptimeDesc, prometheus.GaugeValue, float64(s.UptimeSeconds), lbls...)
 	ch <- prometheus.MustNewConstMetric(c.cpuCoresDesc, prometheus.GaugeValue, float64(s.CPUCores), lbls...)
 	ch <- prometheus.MustNewConstMetric(c.cpuUsageDesc, prometheus.GaugeValue, s.CPUUtilization/100.0, lbls...)
 	if s.Load1 > 0 || s.Load5 > 0 || s.Load15 > 0 {

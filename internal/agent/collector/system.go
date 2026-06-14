@@ -51,6 +51,7 @@ func (s *SystemCollectorImpl) Collect(ctx context.Context) (*SystemSnapshot, *Co
 	snapshot.OS = hostInfo.OS
 	snapshot.OSVersion = hostInfo.PlatformVersion
 	snapshot.KernelVersion = hostInfo.KernelVersion
+	snapshot.UptimeSeconds = hostInfo.Uptime // P1-006: host uptime
 
 	// CPU info.
 	cpuInfo, err := cpu.InfoWithContext(ctx)
@@ -105,15 +106,15 @@ func (s *SystemCollectorImpl) Collect(ctx context.Context) (*SystemSnapshot, *Co
 		}
 	}
 
-	// Network interfaces.
+	// Network interfaces (P1-005: fix counter lookup — fetch once outside the loop).
 	interfaces, err := net.InterfacesWithContext(ctx)
 	if err == nil {
+		counters, _ := net.IOCountersWithContext(ctx, true) // per NIC
 		for _, iface := range interfaces {
 			addrs := make([]string, 0)
 			for _, addr := range iface.Addrs {
 				addrs = append(addrs, addr.Addr)
 			}
-			counters, _ := net.IOCountersWithContext(ctx, false)
 			var bytesRecv, bytesSent uint64
 			for _, c := range counters {
 				if c.Name == iface.Name {

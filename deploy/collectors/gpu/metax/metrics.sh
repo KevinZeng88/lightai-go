@@ -1,7 +1,6 @@
 #!/bin/sh
 # LightAI GPU Collector - MetaX Metrics (CSV fast path, POSIX awk)
 # Uses combined CSV + mx-smi -L for uuid map.
-# Compatible with: gawk, mawk, original-awk.
 # Exit codes: 0=success, 10=not_available, 30=command_failed, 40=parse_failed
 set -e
 
@@ -19,14 +18,15 @@ else
   }
 fi
 
+# P1-003: Use mktemp for ALL temp files, clean up on exit.
 TMPDIR="${TMPDIR:-/tmp}"
-CSV_FILE="$TMPDIR/lightai-metax-metrics.$$.csv"
-LIST_FILE="$TMPDIR/lightai-metax-list.$$.txt"
-trap 'rm -f "$CSV_FILE" "$LIST_FILE"' EXIT
+CSV_FILE=$(mktemp "$TMPDIR/lightai-metax-metrics-csv.XXXXXX")
+LIST_FILE=$(mktemp "$TMPDIR/lightai-metax-metrics-list.XXXXXX")
+ERR_FILE=$(mktemp "$TMPDIR/lightai-metax-metrics-err.XXXXXX")
+OUT_FILE=$(mktemp "$TMPDIR/lightai-metax-metrics-out.XXXXXX")
+trap 'rm -f "$CSV_FILE" "$LIST_FILE" "$ERR_FILE" "$OUT_FILE"' EXIT
 
-# 1. Combined CSV. Redirect stdout to /dev/null to prevent vendor
-# status messages (e.g., "The data is writing to ...") from
-# contaminating the Collector stdout protocol output.
+# 1. Combined CSV.
 "$MX_SMI_CMD" --show-memory --show-usage --show-temperature --show-board-power -o "$CSV_FILE" >/dev/null 2>/dev/null || {
   echo "mx-smi combined CSV failed" >&2
   collector_emit_status metax false "mx-smi combined CSV command failed"
@@ -43,9 +43,7 @@ fi
   exit 30
 }
 
-collector_emit_status metax true ok
-
-# 3. Single awk pass. Patterns as strings for mawk/POSIX compat.
+# 3. Single awk pass — output to temp file for validation.
 awk '
 function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
 function quote(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
@@ -129,6 +127,7 @@ FNR == 1 {
   temp_val = num_or_null($(temp_col))
   power_val = num_or_null($(power_col))
 
+  # P1-002: Health from GPU state, but also check metric quality.
   st = state_map[gidx]
   health = "unknown"; status = "unknown"
   if (st == "Available")   { health = "healthy";   status = "available" }
@@ -136,14 +135,29 @@ FNR == 1 {
   else if (st == "Unavailable") { health = "warning"; status = "unavailable" }
   else if (st == "Error")  { health = "unhealthy"; status = "unavailable" }
 
+  # Override: if core metrics failed to parse, downgrade health.
+  if (mem_total == "null" || mem_used == "null") {
+    health = "error"
+    status = "unavailable"
+  } else if (gpu_util == "null" || temp_val == "null") {
+    if (health == "healthy") health = "degraded"
+  }
+
   printf "METRIC vendor=metax index=%s uuid=%s name=\"%s\" memory_total_bytes=%s memory_used_bytes=%s memory_free_bytes=%s gpu_utilization_percent=%s memory_utilization_percent=%s temperature_celsius=%s power_draw_watts=%s health=%s status=%s\n",
     gidx, uuid, quote(name), mem_total, mem_used, mem_free, gpu_util, mem_util, temp_val, power_val, health, status
 }
-' LISTFILE="$LIST_FILE" "$LIST_FILE" "$CSV_FILE" 2>/tmp/lightai-metax-metrics.err
+' LISTFILE="$LIST_FILE" "$LIST_FILE" "$CSV_FILE" > "$OUT_FILE" 2>"$ERR_FILE"
 
-if [ -s /tmp/lightai-metax-metrics.err ]; then
-  rm -f /tmp/lightai-metax-metrics.err
+# P1-002: Validate output before declaring success.
+if [ -s "$OUT_FILE" ]; then
+  cat "$OUT_FILE"
+  collector_emit_status metax true ok
+elif [ -s "$ERR_FILE" ]; then
+  collector_emit_status metax false "parse failed"
+  exit 40
+else
+  collector_emit_status metax false "no metrics produced"
   exit 40
 fi
-rm -f /tmp/lightai-metax-metrics.err
+
 exit 0

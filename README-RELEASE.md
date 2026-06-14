@@ -1,16 +1,27 @@
 # LightAI Go Release Package
 
+**Version**: 0.1.6 (RC1)
+**Built with**: glibc 2.28 baseline (linux-build:el8-glibc2.28)
+
 LightAI Go — lightweight GPU infrastructure management platform.
 Server/Agent architecture with Web Console and built-in Prometheus + Grafana.
 
 ## Supported Systems
 
-- Rocky Linux 8 (linux-amd64)
-- CentOS 8 (linux-amd64)
-- Ubuntu 20.04 (linux-amd64)
-- Other linux-amd64 with glibc
+- Rocky Linux 8 / AlmaLinux 8 / RHEL 8 (glibc 2.28, linux-amd64)
+- Ubuntu 20.04+ (linux-amd64)
+- Other linux-amd64 with glibc >= 2.28
 
-NOT supported: CentOS 7, Alpine/musl, ARM.
+NOT supported: CentOS 7, Alpine/musl, ARM, glibc < 2.28.
+
+## Build Requirements
+
+Release binaries are built in a controlled glibc 2.28 container:
+```bash
+export LIGHTAI_BUILD_IMAGE=linux-build:el8-glibc2.28
+./scripts/package-release-docker.sh --no-bump
+```
+Do NOT build release binaries on Ubuntu 24.04 or other glibc >= 2.29 hosts directly.
 
 ## No Docker Required
 

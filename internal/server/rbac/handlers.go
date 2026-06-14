@@ -676,6 +676,10 @@ func (h *Handler) HandleDisableMembership(w http.ResponseWriter, r *http.Request
 func (h *Handler) HandleAddMembershipRole(w http.ResponseWriter, r *http.Request) {
 	membershipID := r.PathValue("id")
 	info := auth.SessionInfoFromContext(r.Context())
+	if info == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
 
 	var req struct {
 		RoleID string `json:"role_id"`
@@ -685,11 +689,33 @@ func (h *Handler) HandleAddMembershipRole(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// P0-006: Verify the membership belongs to the current tenant.
+	var membershipTenantID string
+	err := h.DB.QueryRow(`SELECT tenant_id FROM tenant_memberships WHERE id = ? AND status = 'active'`, membershipID).Scan(&membershipTenantID)
+	if err == sql.ErrNoRows {
+		http.Error(w, `{"error":"membership not found"}`, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Error("query membership error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if membershipTenantID != info.TenantID {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
 	// Verify role belongs to this tenant (or is built-in).
 	var roleTenantID sql.NullString
-	err := h.DB.QueryRow(`SELECT tenant_id FROM roles WHERE id = ? AND status = 'active'`, req.RoleID).Scan(&roleTenantID)
+	err = h.DB.QueryRow(`SELECT tenant_id FROM roles WHERE id = ? AND status = 'active'`, req.RoleID).Scan(&roleTenantID)
 	if err == sql.ErrNoRows {
 		http.Error(w, `{"error":"role not found"}`, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		log.Error("query role error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
 	if roleTenantID.Valid && roleTenantID.String != info.TenantID {
@@ -708,6 +734,7 @@ func (h *Handler) HandleAddMembershipRole(w http.ResponseWriter, r *http.Request
 			http.Error(w, `{"error":"role already assigned"}`, http.StatusConflict)
 			return
 		}
+		log.Error("add membership role error", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -721,12 +748,27 @@ func (h *Handler) HandleAddMembershipRole(w http.ResponseWriter, r *http.Request
 func (h *Handler) HandleRemoveMembershipRole(w http.ResponseWriter, r *http.Request) {
 	membershipID := r.PathValue("id")
 	roleID := r.PathValue("role_id")
+	info := auth.SessionInfoFromContext(r.Context())
+	if info == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
 
-	// Check this isn't the last active role for an active membership.
+	// P0-006: Verify the membership belongs to the current tenant.
+	var membershipTenantID string
 	var status string
-	err := h.DB.QueryRow(`SELECT status FROM tenant_memberships WHERE id = ?`, membershipID).Scan(&status)
+	err := h.DB.QueryRow(`SELECT tenant_id, status FROM tenant_memberships WHERE id = ?`, membershipID).Scan(&membershipTenantID, &status)
 	if err == sql.ErrNoRows {
 		http.Error(w, `{"error":"membership not found"}`, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Error("query membership error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if membershipTenantID != info.TenantID {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
 
@@ -747,6 +789,7 @@ func (h *Handler) HandleRemoveMembershipRole(w http.ResponseWriter, r *http.Requ
 		membershipID, roleID,
 	)
 	if err != nil {
+		log.Error("remove membership role error", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -857,16 +900,32 @@ func (h *Handler) HandleCreateRole(w http.ResponseWriter, r *http.Request) {
 // HandleDeleteRole handles DELETE /api/roles/{id}.
 func (h *Handler) HandleDeleteRole(w http.ResponseWriter, r *http.Request) {
 	roleID := r.PathValue("id")
+	info := auth.SessionInfoFromContext(r.Context())
+	if info == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
 
-	// Check not built-in.
+	// P0-006: Fetch role and verify it belongs to the current tenant.
+	var tenantID sql.NullString
 	var builtIn int
-	err := h.DB.QueryRow(`SELECT built_in FROM roles WHERE id = ?`, roleID).Scan(&builtIn)
+	err := h.DB.QueryRow(`SELECT tenant_id, built_in FROM roles WHERE id = ?`, roleID).Scan(&tenantID, &builtIn)
 	if err == sql.ErrNoRows {
 		http.Error(w, `{"error":"role not found"}`, http.StatusNotFound)
 		return
 	}
+	if err != nil {
+		log.Error("query role error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
 	if builtIn == 1 {
 		http.Error(w, `{"error":"cannot delete built-in role"}`, http.StatusForbidden)
+		return
+	}
+	// P0-006: Ensure tenant-scoped role belongs to the current tenant.
+	if !tenantID.Valid || tenantID.String != info.TenantID {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
 
@@ -880,6 +939,7 @@ func (h *Handler) HandleDeleteRole(w http.ResponseWriter, r *http.Request) {
 
 	_, err = h.DB.Exec(`DELETE FROM roles WHERE id = ?`, roleID)
 	if err != nil {
+		log.Error("delete role error", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}

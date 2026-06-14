@@ -1,12 +1,16 @@
 #!/bin/sh
 # LightAI GPU Collector - MetaX Discover (POSIX awk)
 # Uses mx-smi -L for GPU list + --show-version for driver version.
-# Compatible with: gawk, mawk, original-awk.
 # Exit codes: 0=success, 10=not_available, 30=command_failed, 40=parse_failed
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../common.sh"
+
+# P1-003: Use mktemp for error files, clean up on exit.
+ERR_FILE=$(mktemp /tmp/lightai-metax-discover-err.XXXXXX)
+OUT_FILE=$(mktemp /tmp/lightai-metax-discover-out.XXXXXX)
+trap 'rm -f "$ERR_FILE" "$OUT_FILE"' EXIT
 
 # Find mx-smi.
 MX_SMI_CMD=""
@@ -20,7 +24,7 @@ else
   }
 fi
 
-# Driver version: prefer --show-version, fallback to summary header.
+# Driver version.
 DRIVER_VERSION="unknown"
 VER_OUTPUT=$("$MX_SMI_CMD" --show-version 2>/dev/null) || true
 if [ -n "$VER_OUTPUT" ]; then
@@ -52,10 +56,7 @@ if [ -z "$LIST_OUTPUT" ]; then
   exit 10
 fi
 
-collector_emit_status metax true ok
-
-# Single awk pass: parse only GPU# lines, emit DEVICE.
-# Patterns are passed as strings for mawk/POSIX awk compatibility.
+# Single awk pass: parse GPU# lines, emit DEVICE to temp output file.
 echo "$LIST_OUTPUT" | awk -v driver="$DRIVER_VERSION" '
 function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
 function quote(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
@@ -63,7 +64,6 @@ function norm_name(raw) {
   if (raw ~ /^MXC[0-9]/) { sub(/^MXC/, "MetaX C", raw); return raw }
   return raw
 }
-# POSIX-compatible extraction: patterns are strings, not regex literals.
 function extract_match(str, pat,    s) {
   if (match(str, pat)) { s = substr(str, RSTART, RLENGTH); return trim(s) }
   return ""
@@ -86,11 +86,18 @@ function extract_capture(str, pat, keep,    s) {
   name = norm_name(name)
   printf "DEVICE vendor=metax index=%s uuid=%s name=\"%s\" pci_bus_id=%s driver_version=%s memory_total_bytes=null\n", idx, uuid, quote(name), (pci==""?"unknown":pci), driver
 }
-' 2>/tmp/lightai-metax-discover.err
+' > "$OUT_FILE" 2>"$ERR_FILE"
 
-if [ -s /tmp/lightai-metax-discover.err ]; then
-  rm -f /tmp/lightai-metax-discover.err
+# P1-002: Validate output before declaring success.
+if [ -s "$OUT_FILE" ]; then
+  cat "$OUT_FILE"
+  collector_emit_status metax true ok
+elif [ -s "$ERR_FILE" ]; then
+  collector_emit_status metax false "parse failed"
   exit 40
+else
+  collector_emit_status metax false "no devices parsed"
+  exit 10
 fi
-rm -f /tmp/lightai-metax-discover.err
+
 exit 0

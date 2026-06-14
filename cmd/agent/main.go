@@ -28,9 +28,16 @@ import (
 )
 
 var configPath = flag.String("config", "", "path to config file (YAML)")
+var showVersion = flag.Bool("version", false, "show version and exit")
 
 func main() {
 	flag.Parse()
+
+	// --- Version mode (exits early) ---
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	cfg, err := config.LoadAgentConfig(*configPath)
 	if err != nil {
@@ -41,8 +48,14 @@ func main() {
 	// Determine hostname early (needed for identity and logging).
 	hostname, _ := os.Hostname()
 
+	// P1-010: logging.level is primary; fall back to top-level log_level.
+	logLevel := cfg.Logging.Level
+	if logLevel == "" {
+		logLevel = cfg.LogLevel
+	}
+
 	log.Init(log.Config{
-		Level:         cfg.LogLevel,
+		Level:         logLevel,
 		Format:        cfg.Logging.Format,
 		Dir:           cfg.Logging.Dir,
 		File:          cfg.Logging.File,
@@ -83,6 +96,14 @@ func main() {
 		advertisedAddr = cfg.AdvertisedAddr
 	}
 
+
+		// P0-011: Warn about default agent token in production.
+		if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
+			log.Warn("using default agent token -- NOT safe for production",
+				"agent_token", cfg.AgentToken,
+				"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
+			)
+		}
 	log.Info("agent starting",
 		"version", version.String(),
 		"agent_id", agentID,
@@ -293,7 +314,6 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 	collectAndReport(ctx, client, cfg, agentID, registry, snap)
 
 	consecutiveFailures := 0
-	lastSuccessAt := time.Now()
 	lastHBFailLog := time.Time{} // rate-limit heartbeat failure logs
 
 	for {
@@ -334,14 +354,13 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 			}
 		case <-collectTicker.C:
 			collectAndReport(ctx, client, cfg, agentID, registry, snap)
-			if consecutiveFailures == 0 {
-				lastSuccessAt = time.Now()
+			// P1-001: Data staleness — mark offline if no success for too long.
+			if time.Since(snap.LastSuccessTime()) > 3*collectInterval {
+				snap.SetOnline(false)
 			}
 		}
 	}
 
-	_ = lastSuccessAt
-	_ = lastHBFailLog
 }
 
 func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry, snap *metrics.Snapshot) {
@@ -351,6 +370,8 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 	report := registry.Collect(ctx, agentID)
 	if report == nil {
 		log.Warn("resource collection returned nil report")
+		// P0-008: Record collection failure.
+		snap.IncCollectErrors()
 		return
 	}
 	collectDuration := time.Since(start)
@@ -359,12 +380,14 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 	bodyBytes, err := json.Marshal(report)
 	if err != nil {
 		log.Error("failed to marshal resource report", "error", err)
+		snap.IncCollectErrors()
 		return
 	}
 
 	req, err := http.NewRequest("POST", cfg.ServerURL+"/api/agent/resources/report", bytes.NewReader(bodyBytes))
 	if err != nil {
 		log.Error("failed to create resource report request", "error", err)
+		snap.IncCollectErrors()
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -379,11 +402,25 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 			"error", err,
 			"collect_ms", collectDuration.Milliseconds(),
 		)
+		// P0-008: Record report failure.
+		snap.IncReportErrors()
 		return
 	}
 	defer resp.Body.Close()
 
-	_ = resp // consume
+	// P0-008: Check HTTP status code.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Error("resource report rejected by server",
+			"agent_id", agentID,
+			"http_status", resp.StatusCode,
+			"collect_ms", collectDuration.Milliseconds(),
+		)
+		snap.IncReportErrors()
+		return
+	}
+
+	// P0-008: Record success.
+	snap.IncReportSuccess()
 
 	// Update metrics snapshot from latest collection.
 	updateSnapshot(snap, registry, agentID, report)

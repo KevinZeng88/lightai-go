@@ -78,6 +78,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	)
 	mux.Handle("GET /api/nodes", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodes)))
 	mux.Handle("GET /api/nodes/{id}", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNode)))
+	// P1-004: Host system snapshot endpoint.
+	mux.Handle("GET /api/nodes/{id}/system", resourceChain(http.HandlerFunc(cfg.ResourceHandler.HandleGetNodeSystem)))
 
 	// GPU routes (gpu:read permission).
 	gpuChain := chain(
@@ -98,13 +100,15 @@ func sessionChain(cfg RouterConfig, h http.HandlerFunc) http.Handler {
 func platformChain(cfg RouterConfig, h http.HandlerFunc) http.Handler {
 	sessionMW := auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg)
 	csrfMW := auth.CSRFMiddleware(cfg.SessionCfg)
-	return sessionMW(csrfMW(auth.RequirePlatformAdmin(http.HandlerFunc(h))))
+	pwdMW := auth.RequirePasswordNotExpired(cfg.DB)
+	return sessionMW(csrfMW(pwdMW(auth.RequirePlatformAdmin(http.HandlerFunc(h)))))
 }
 
 func tenantChain(cfg RouterConfig, h http.HandlerFunc, permission string) http.Handler {
 	return chain(
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
 		auth.CSRFMiddleware(cfg.SessionCfg),
+		auth.RequirePasswordNotExpired(cfg.DB),
 		auth.RequirePermission(permission),
 	)(h)
 }

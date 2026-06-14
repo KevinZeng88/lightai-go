@@ -1,5 +1,9 @@
 # LightAI Go - Prometheus Configuration (bundled mode)
 # Port: 19090. Managed by scripts/start-observability.sh
+#
+# P0-010: Uses HTTP SD from LightAI Server for multi-node discovery.
+# The server endpoint /metrics/targets returns all registered agents.
+# Falls back to static localhost targets for single-node or dev mode.
 
 global:
   scrape_interval: 5s
@@ -8,14 +12,20 @@ global:
     cluster: lightai
 
 scrape_configs:
+  # LightAI Server metrics (always localhost in bundled mode).
   - job_name: lightai-server
     static_configs:
       - targets: ["127.0.0.1:18080"]
 
+  # LightAI Agents - HTTP service discovery from Server.
+  # P0-010: The Server returns all registered agents with metrics enabled.
+  # Refresh every 30s to pick up new/offline nodes.
   - job_name: lightai-agent
-    static_configs:
-      - targets: ["127.0.0.1:19091"]
+    http_sd_configs:
+      - url: http://127.0.0.1:18080/metrics/targets
+        refresh_interval: 30s
 
+  # Prometheus self-monitoring.
   - job_name: prometheus
     static_configs:
       - targets: ["127.0.0.1:19090"]

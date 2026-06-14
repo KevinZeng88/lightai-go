@@ -35,9 +35,16 @@ import (
 var configPath = flag.String("config", "", "path to config file (YAML)")
 var resetAdminPassword = flag.String("reset-admin-password", "", "reset admin password to the given value and exit")
 var resetAdminPasswordInteractive = flag.Bool("reset-admin-password-interactive", false, "reset admin password via interactive prompt")
+var showVersion = flag.Bool("version", false, "show version and exit")
 
 func main() {
 	flag.Parse()
+
+	// --- Version mode (exits early) ---
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	// --- Password reset mode (exits early) ---
 	if *resetAdminPassword != "" || *resetAdminPasswordInteractive {
@@ -56,8 +63,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// P1-010: logging.level is primary; fall back to top-level log_level.
+	logLevel := cfg.Logging.Level
+	if logLevel == "" {
+		logLevel = cfg.LogLevel
+	}
+
 	log.Init(log.Config{
-		Level:         cfg.LogLevel,
+		Level:         logLevel,
 		Format:        cfg.Logging.Format,
 		Dir:           cfg.Logging.Dir,
 		File:          cfg.Logging.File,
@@ -68,6 +81,26 @@ func main() {
 		MaxFiles:      cfg.Logging.MaxFiles,
 		RetentionDays: cfg.Logging.RetentionDays,
 	})
+
+	// P0-011: Check for default agent token in production.
+	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
+		if cfg.DevMode {
+			log.Warn("using default agent token in dev mode — NOT safe for production",
+				"agent_token", cfg.AgentToken,
+			)
+		} else {
+			log.Error("DEFAULT AGENT TOKEN DETECTED",
+				"agent_token", cfg.AgentToken,
+				"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
+			)
+			fmt.Fprintf(os.Stderr, "\n=== SECURITY WARNING ===\n")
+			fmt.Fprintf(os.Stderr, "Default agent token detected: %s\n", cfg.AgentToken)
+			fmt.Fprintf(os.Stderr, "This is NOT safe for production.\n")
+			fmt.Fprintf(os.Stderr, "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.\n")
+			fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(openssl rand -hex 32)\n")
+			fmt.Fprintf(os.Stderr, "=========================\n\n")
+		}
+	}
 
 	log.Info("server starting",
 		"version", version.String(),
@@ -158,6 +191,10 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// P0-009: Start node health checker (periodic offline detection).
+	nodeHealthStop := make(chan struct{})
+	go runNodeHealthChecker(agentHandler, resourceHandler, cfg, nodeHealthStop)
+
 	go func() {
 		log.Info("server listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -168,6 +205,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
+	close(nodeHealthStop)
 	log.Info("server shutting down", "signal", sig.String())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -357,5 +395,53 @@ Next step: Login at the web UI with this new password.
 		fmt.Fprintf(os.Stderr, "ERROR: password updated but failed to write credentials file: %v\n", err)
 	} else {
 		fmt.Fprintf(os.Stderr, "Admin password reset. Credentials written to %s\n", credPath)
+	}
+}
+
+// runNodeHealthChecker periodically checks node heartbeats and marks
+// nodes as offline if they exceed the configured threshold.
+// P0-009: Node auto-offline implementation.
+func runNodeHealthChecker(agentHandler *api.AgentHandler, resourceHandler *api.ResourceHandler, cfg *config.ServerConfig, stop <-chan struct{}) {
+	threshold := cfg.NodeOfflineThreshold
+	if threshold == 0 {
+		threshold = 30 * time.Second
+	}
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	log.Info("node health checker started",
+		"offline_threshold", threshold.String(),
+		"check_interval", "10s",
+	)
+
+	for {
+		select {
+		case <-stop:
+			log.Info("node health checker stopped")
+			return
+		case <-ticker.C:
+			n, err := agentHandler.MarkOfflineNodes(threshold)
+			if err != nil {
+				log.Error("node health check failed", "error", err)
+			} else if n > 0 {
+				log.Info("nodes marked offline by health checker", "count", n)
+
+				// Also mark GPUs of offline nodes as stale.
+				rows, err := agentHandler.DB.Query(
+					`SELECT id FROM nodes WHERE status = 'offline'`,
+				)
+				if err == nil {
+					defer rows.Close()
+					for rows.Next() {
+						var nodeID string
+						if err := rows.Scan(&nodeID); err != nil {
+							continue
+						}
+						resourceHandler.MarkStaleGPUs(nodeID, 0)
+					}
+				}
+			}
+		}
 	}
 }

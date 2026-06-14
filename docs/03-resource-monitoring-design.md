@@ -30,7 +30,7 @@ Scripts call `nvidia-smi --query-gpu=... --format=csv,noheader,nounits` and conv
 The old `NvidiaCollector` (Go code parsing nvidia-smi CSV directly) is kept for reference only.
 It is NOT the default product path. New vendors must NOT add Go-native parsers.
 
-### MetaX — Phase 2C Deferred
+### MetaX — Scripts Ready (mock verified, hardware pending)
 
 Scripts prepared at `deploy/collectors/gpu/metax/`. Require real MetaX hardware.
 When hardware is available: adapt `discover.sh` and `metrics.sh` for `mx-smi` output.

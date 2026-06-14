@@ -9,16 +9,23 @@ set -e
 
 FROM_VERSION=""
 TO_VERSION=""
+FROM_MIN_VERSION=""   # P0-005: minimum version this patch can be applied to
 ARCH="linux-amd64"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --from) FROM_VERSION="$2"; shift 2 ;;
     --to)   TO_VERSION="$2";   shift 2 ;;
-    *) echo "Usage: $0 --from <ver> --to <ver>" >&2; exit 1 ;;
+    --from-min) FROM_MIN_VERSION="$2"; shift 2 ;;
+    *) echo "Usage: $0 --from <ver> --to <ver> [--from-min <min-ver>]" >&2; exit 1 ;;
   esac
 done
-[ -z "$FROM_VERSION" ] || [ -z "$TO_VERSION" ] && { echo "Usage: $0 --from <ver> --to <ver>" >&2; exit 1; }
+[ -z "$FROM_VERSION" ] || [ -z "$TO_VERSION" ] && { echo "Usage: $0 --from <ver> --to <ver> [--from-min <min-ver>]" >&2; exit 1; }
+
+# P0-005: If --from-min is not set, use --from as the minimum.
+if [ -z "$FROM_MIN_VERSION" ]; then
+  FROM_MIN_VERSION="$FROM_VERSION"
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -155,18 +162,21 @@ while IFS= read -r line; do
   fi
 done < "$FROM_DIR/MANIFEST.sha256"
 
-# --- Write patch-files.tsv (shell-native primary manifest) ---
-TIMESTAMP=$(date -Iseconds)
-{
-  echo "# from_version=$FROM_VERSION"
-  echo "# to_version=$TO_VERSION"
-  echo "# patch_mode=cumulative"
-  echo "# created_at=$TIMESTAMP"
-  echo "# changed_files=$CHANGED"
-  echo "# removed_files=$REMOVED"
-  echo "# action	mode	sha256	path"
-  cat "$TSV_TMP"
-} > "$PATCH_DIR/patch-files.tsv"
+	# --- Write patch-files.tsv (shell-native primary manifest) ---
+	TIMESTAMP=$(date -Iseconds)
+	{
+	  echo "# from_version=$FROM_VERSION"
+	  echo "# to_version=$TO_VERSION"
+	  echo "# from_min_version=$FROM_MIN_VERSION"
+	  echo "# from_max_exclusive=$TO_VERSION"
+	  echo "# patch_mode=cumulative"
+	  echo "# created_at=$TIMESTAMP"
+	  echo "# changed_files=$CHANGED"
+	  echo "# removed_files=$REMOVED"
+	  echo "# action	mode	sha256	path"
+	  cat "$TSV_TMP"
+	} > "$PATCH_DIR/patch-files.tsv"
+	rm -f "$TSV_TMP"
 rm -f "$TSV_TMP"
 
 # --- Write patch-manifest.json (audit / optional python3 enhanced display) ---

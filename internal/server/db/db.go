@@ -42,115 +42,160 @@ func Open(dbPath string) (*DB, error) {
 }
 
 // Migrate creates all required tables if they don't exist.
+// P1-014: Versioned schema migration. Applies migrations incrementally.
 func (db *DB) Migrate() error {
+	// Ensure schema_version table exists first.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
+		version INTEGER PRIMARY KEY,
+		applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+		description TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		return fmt.Errorf("create schema_version: %w", err)
+	}
+
+	// Check current schema version.
+	var currentVersion int
+	err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_version`).Scan(&currentVersion)
+	if err != nil {
+		currentVersion = 0
+	}
+
+	// Apply migrations in order.
+	if currentVersion < 1 {
+		if err := db.migrateV1(); err != nil {
+			return fmt.Errorf("migrate v1: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// SchemaVersion returns the current database schema version.
+func (db *DB) SchemaVersion() int {
+	var v int
+	db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_version`).Scan(&v)
+	return v
+}
+
+// migrateV1 applies the initial RC1 schema.
+func (db *DB) migrateV1() error {
 	schema := `
-	CREATE TABLE IF NOT EXISTS tenants (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		status TEXT NOT NULL DEFAULT 'active',
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-	);
+		CREATE TABLE IF NOT EXISTS tenants (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'active',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
 
-	CREATE TABLE IF NOT EXISTS users (
-		id TEXT PRIMARY KEY,
-		username TEXT NOT NULL UNIQUE,
-		display_name TEXT NOT NULL DEFAULT '',
-		password_hash TEXT NOT NULL,
-		status TEXT NOT NULL DEFAULT 'active',
-		is_platform_admin INTEGER NOT NULL DEFAULT 0,
-		must_change_password INTEGER NOT NULL DEFAULT 0,
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-	);
+		CREATE TABLE IF NOT EXISTS users (
+			id TEXT PRIMARY KEY,
+			username TEXT NOT NULL UNIQUE,
+			display_name TEXT NOT NULL DEFAULT '',
+			password_hash TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'active',
+			is_platform_admin INTEGER NOT NULL DEFAULT 0,
+			must_change_password INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
 
-	CREATE TABLE IF NOT EXISTS tenant_memberships (
-		id TEXT PRIMARY KEY,
-		tenant_id TEXT NOT NULL REFERENCES tenants(id),
-		user_id TEXT NOT NULL REFERENCES users(id),
-		status TEXT NOT NULL DEFAULT 'active',
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-		UNIQUE(tenant_id, user_id)
-	);
+		CREATE TABLE IF NOT EXISTS tenant_memberships (
+			id TEXT PRIMARY KEY,
+			tenant_id TEXT NOT NULL REFERENCES tenants(id),
+			user_id TEXT NOT NULL REFERENCES users(id),
+			status TEXT NOT NULL DEFAULT 'active',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(tenant_id, user_id)
+		);
 
-	CREATE TABLE IF NOT EXISTS roles (
-		id TEXT PRIMARY KEY,
-		tenant_id TEXT,
-		name TEXT NOT NULL,
-		display_name TEXT NOT NULL DEFAULT '',
-		description TEXT NOT NULL DEFAULT '',
-		built_in INTEGER NOT NULL DEFAULT 0,
-		status TEXT NOT NULL DEFAULT 'active',
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-		UNIQUE(tenant_id, name)
-	);
+		CREATE TABLE IF NOT EXISTS roles (
+			id TEXT PRIMARY KEY,
+			tenant_id TEXT,
+			name TEXT NOT NULL,
+			display_name TEXT NOT NULL DEFAULT '',
+			description TEXT NOT NULL DEFAULT '',
+			built_in INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT 'active',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(tenant_id, name)
+		);
 
-	CREATE TABLE IF NOT EXISTS permissions (
-		id TEXT PRIMARY KEY,
-		code TEXT NOT NULL UNIQUE,
-		scope TEXT NOT NULL DEFAULT 'tenant',
-		description TEXT NOT NULL DEFAULT '',
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-	);
+		CREATE TABLE IF NOT EXISTS permissions (
+			id TEXT PRIMARY KEY,
+			code TEXT NOT NULL UNIQUE,
+			scope TEXT NOT NULL DEFAULT 'tenant',
+			description TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
 
-	CREATE TABLE IF NOT EXISTS role_permissions (
-		id TEXT PRIMARY KEY,
-		role_id TEXT NOT NULL REFERENCES roles(id),
-		permission_id TEXT NOT NULL REFERENCES permissions(id),
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		UNIQUE(role_id, permission_id)
-	);
+		CREATE TABLE IF NOT EXISTS role_permissions (
+			id TEXT PRIMARY KEY,
+			role_id TEXT NOT NULL REFERENCES roles(id),
+			permission_id TEXT NOT NULL REFERENCES permissions(id),
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(role_id, permission_id)
+		);
 
-	CREATE TABLE IF NOT EXISTS tenant_membership_roles (
-		id TEXT PRIMARY KEY,
-		membership_id TEXT NOT NULL REFERENCES tenant_memberships(id),
-		role_id TEXT NOT NULL REFERENCES roles(id),
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		UNIQUE(membership_id, role_id)
-	);
+		CREATE TABLE IF NOT EXISTS tenant_membership_roles (
+			id TEXT PRIMARY KEY,
+			membership_id TEXT NOT NULL REFERENCES tenant_memberships(id),
+			role_id TEXT NOT NULL REFERENCES roles(id),
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(membership_id, role_id)
+		);
 
-	CREATE TABLE IF NOT EXISTS sessions (
-		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL REFERENCES users(id),
-		current_tenant_id TEXT NOT NULL REFERENCES tenants(id),
-		csrf_secret_hash TEXT NOT NULL,
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
-		expires_at TEXT NOT NULL,
-		revoked_at TEXT
-	);
+		CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
+			current_tenant_id TEXT NOT NULL REFERENCES tenants(id),
+			csrf_secret_hash TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+			expires_at TEXT NOT NULL,
+			revoked_at TEXT
+		);
 
-	CREATE TABLE IF NOT EXISTS nodes (
-		id TEXT PRIMARY KEY,
-		agent_id TEXT NOT NULL UNIQUE,
-		hostname TEXT NOT NULL DEFAULT '',
-		advertised_address TEXT NOT NULL DEFAULT '',
-		metrics_enabled INTEGER NOT NULL DEFAULT 1,
-		metrics_scheme TEXT NOT NULL DEFAULT 'http',
-		metrics_port INTEGER NOT NULL DEFAULT 9090,
-		metrics_path TEXT NOT NULL DEFAULT '/metrics',
-		status TEXT NOT NULL DEFAULT 'offline',
-		last_heartbeat_at TEXT,
-		tenant_id TEXT NOT NULL DEFAULT 'default',
-		owner_id TEXT,
-		created_by TEXT NOT NULL DEFAULT 'system',
-		updated_by TEXT NOT NULL DEFAULT 'system',
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-	);
+		CREATE TABLE IF NOT EXISTS nodes (
+			id TEXT PRIMARY KEY,
+			agent_id TEXT NOT NULL UNIQUE,
+			hostname TEXT NOT NULL DEFAULT '',
+			advertised_address TEXT NOT NULL DEFAULT '',
+			metrics_enabled INTEGER NOT NULL DEFAULT 1,
+			metrics_scheme TEXT NOT NULL DEFAULT 'http',
+			metrics_port INTEGER NOT NULL DEFAULT 9090,
+			metrics_path TEXT NOT NULL DEFAULT '/metrics',
+			status TEXT NOT NULL DEFAULT 'offline',
+			last_heartbeat_at TEXT,
+			tenant_id TEXT NOT NULL DEFAULT 'default',
+			owner_id TEXT,
+			created_by TEXT NOT NULL DEFAULT 'system',
+			updated_by TEXT NOT NULL DEFAULT 'system',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
 
-	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-	CREATE INDEX IF NOT EXISTS idx_tenant_memberships_tenant ON tenant_memberships(tenant_id);
-	CREATE INDEX IF NOT EXISTS idx_tenant_memberships_user ON tenant_memberships(user_id);
-	CREATE INDEX IF NOT EXISTS idx_roles_tenant ON roles(tenant_id);
-	CREATE INDEX IF NOT EXISTS idx_nodes_agent ON nodes(agent_id);
-	CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
+		CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+		CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+		CREATE INDEX IF NOT EXISTS idx_tenant_memberships_tenant ON tenant_memberships(tenant_id);
+		CREATE INDEX IF NOT EXISTS idx_tenant_memberships_user ON tenant_memberships(user_id);
+		CREATE INDEX IF NOT EXISTS idx_roles_tenant ON roles(tenant_id);
+		CREATE INDEX IF NOT EXISTS idx_nodes_agent ON nodes(agent_id);
+		CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
 	`
 
-	_, err := db.Exec(schema)
-	return err
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+
+	// Record schema version 1.
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (1, 'Initial RC1 schema: tenants, users, memberships, roles, permissions, sessions, nodes')`); err != nil {
+		return err
+	}
+
+	return nil
 }
