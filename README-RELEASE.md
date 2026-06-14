@@ -22,8 +22,8 @@ All components run as native processes managed by shell scripts.
 
 | Component | Version | Port |
 |-----------|---------|------|
-| LightAI Server + Web | 0.1.0 | 18080 |
-| LightAI Agent | 0.1.0 | 19091 |
+| LightAI Server + Web | 0.1.4 | 18080 |
+| LightAI Agent | 0.1.4 | 19091 |
 | Prometheus | 3.12.0 | 19090 |
 | Grafana OSS | 13.0.2 | 13000 |
 
@@ -32,39 +32,39 @@ All components run as native processes managed by shell scripts.
 ### 1. Extract
 
 ```bash
-tar -xzf lightai-go-0.1.0-linux-amd64.tar.gz
-cd lightai-go-0.1.0-linux-amd64
+tar -xzf lightai-go-0.1.4-linux-amd64.tar.gz
+cd lightai-go-0.1.4-linux-amd64
 ```
 
-### 2. Set Passwords
+### 2. Start All Services
 
 ```bash
+# If you want to pre-set passwords (optional — auto-generated if not set):
 export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='YourSecurePassword123'
 export LIGHTAI_GRAFANA_ADMIN_PASSWORD='YourGrafanaPassword123'
-```
 
-### 3. Start All Services
-
-```bash
 ./scripts/start-server.sh
-./scripts/start-agent.sh nvidia     # or: metax
+./scripts/start-agent.sh configs/agent.nvidia.yaml     # or: configs/agent.metax.yaml
 ./scripts/start-observability.sh
 ```
 
-### 4. Verify
+Initial credentials are saved to `runtime/initial-credentials.txt` (0600 permissions).
+After first login, change passwords immediately.
+
+### 3. Verify
 
 ```bash
 ./scripts/status.sh
 ./scripts/verify-local.sh
 ```
 
-### 5. Access
+### 4. Access
 
 | Service | URL |
 |---------|-----|
 | LightAI Web | http://<server-ip>:18080/ |
 | Prometheus | http://<server-ip>:19090/ |
-| Grafana | http://<server-ip>:13000/ (admin / <LIGHTAI_GRAFANA_ADMIN_PASSWORD>) |
+| Grafana | http://<server-ip>:13000/ (credentials in runtime/initial-credentials.txt) |
 
 ## Services
 
@@ -106,6 +106,7 @@ export LIGHTAI_GRAFANA_ADMIN_PASSWORD='YourGrafanaPassword123'
 │   └── observability/      # Grafana dashboards, provisioning
 ├── scripts/                # Management scripts
 ├── logs/ data/ run/        # Runtime directories
+├── runtime/                # Credentials file (0600, auto-generated)
 ├── LICENSES/               # Third-party licenses
 └── README-RELEASE.md
 ```
@@ -114,12 +115,20 @@ export LIGHTAI_GRAFANA_ADMIN_PASSWORD='YourGrafanaPassword123'
 
 ```bash
 # Start / Stop
-./scripts/start-server.sh
+./scripts/start-server.sh [config]
 ./scripts/stop-server.sh
-./scripts/start-agent.sh [metax|nvidia]
+./scripts/start-agent.sh [config]
 ./scripts/stop-agent.sh
 ./scripts/start-observability.sh
 ./scripts/stop-observability.sh
+./scripts/stop-all.sh
+
+# Password Management
+./scripts/reset-password.sh             # Reset Web/Admin + Grafana (auto-generate)
+./scripts/reset-password.sh --password '<new>'   # Specify password
+./scripts/reset-password.sh --interactive       # Prompt (no shell history)
+./scripts/reset-password.sh --web-only          # Reset Web/Admin only
+./scripts/reset-grafana-password.sh             # Reset Grafana only (auto-generate)
 
 # Diagnostics
 ./scripts/status.sh           # Process + health check
@@ -139,20 +148,30 @@ export LIGHTAI_GRAFANA_ADMIN_PASSWORD='YourGrafanaPassword123'
 ## Logs
 
 ```
-logs/server.log           # Server structured log
-logs/agent.log            # Agent structured log
-logs/server-stdout.log    # Server stdout
-logs/agent-stdout.log     # Agent stdout
+logs/lightai-server.log   # Server structured business log (JSON)
+logs/lightai-agent.log    # Agent structured business log (JSON)
+logs/server-stdout.log    # Server stdout/stderr wrapper
+logs/agent-stdout.log     # Agent stdout/stderr wrapper
 logs/prometheus.log       # Prometheus stdout
 logs/grafana.log          # Grafana stdout
 ```
 
+Log rotation: configurable via `logging.max_size_mb`, `logging.max_files`, `logging.retention_days`.
+
 All logs in English.
+
+## Credentials
+
+- Initial passwords are auto-generated if not pre-set via environment variables.
+- Credentials saved to `runtime/initial-credentials.txt` (0600, not overwritten on restart).
+- To reset passwords: `./scripts/reset-password.sh` or `./scripts/reset-grafana-password.sh`.
+- Reset credentials saved to `runtime/reset-credentials.txt` (0600).
+- Passwords are never logged to stdout/stderr or log files.
 
 ## Security
 
-- Set `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` for admin account
-- Set `LIGHTAI_GRAFANA_ADMIN_PASSWORD` for Grafana
+- Set `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` for admin account (or use auto-generated)
+- Set `LIGHTAI_GRAFANA_ADMIN_PASSWORD` for Grafana (or use auto-generated)
 - Change default `agent_token` in configs before production
 - Do NOT expose 18080/19090/13000 to public internet directly
 - Use VPN, bastion host, or reverse proxy
@@ -163,9 +182,10 @@ All logs in English.
 ./scripts/status.sh                    # Check all services
 ./scripts/verify-local.sh              # Run health checks
 ./scripts/collect-logs.sh              # Collect diagnostics bundle
-tail -100 logs/agent-stdout.log        # View agent output
+tail -100 logs/lightai-agent.log       # View agent structured log
+tail -100 logs/lightai-server.log      # View server structured log
 tail -100 logs/prometheus.log          # View Prometheus output
-bash deploy/collectors/gpu/metax/discover.sh  # Test GPU collector
+bash deploy/collectors/gpu/nvidia/discover.sh  # Test GPU collector
 ```
 
 ## Build from Source

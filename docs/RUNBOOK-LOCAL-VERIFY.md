@@ -1,7 +1,7 @@
 # LightAI Go Local Verification Runbook
 
-> Last updated: 2026-06-13
-> Applicable: Phase 0 through Phase 3W+
+> Last updated: 2026-06-14
+> Applicable: Phase 0 through RC1 Hotfix
 
 ## Quick Reference — Ports
 
@@ -59,9 +59,19 @@ LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='Admin@123456' ./bin/lightai-server --config co
 
 First start creates admin user. Password from:
 - `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` env var (preferred)
-- Auto-generated (printed to stderr on first start only)
+- Auto-generated (written to `runtime/initial-credentials.txt`, 0600 permissions)
 
 Default username: `admin`. First login requires password change.
+
+Credentials file: `runtime/initial-credentials.txt` — not overwritten on subsequent starts.
+
+To reset admin password:
+```bash
+./scripts/reset-password.sh                    # auto-generate
+./scripts/reset-password.sh --password '<pw>'  # specify
+./scripts/reset-password.sh --interactive      # prompt (no shell history)
+```
+New credentials saved to `runtime/reset-credentials.txt` (0600).
 
 ## 7. Login and Password Change
 
@@ -191,11 +201,12 @@ For customers with existing Prometheus/Grafana:
 Set `observability.mode: disabled`. LightAI does not start Prometheus/Grafana.
 /metrics endpoints remain available for external monitoring systems.
 
-## 15. Grafana — Default Dev Account
+## 15. Grafana — Admin Account
 
 - Username: `admin`
-- Password: `lightai` (dev only)
-- Production: set `LIGHTAI_GRAFANA_ADMIN_PASSWORD`.
+- Password: auto-generated on first start if `GRAFANA_ADMIN_PASSWORD` not set.
+- Credentials saved to `runtime/initial-credentials.txt`.
+- To reset: `./scripts/reset-grafana-password.sh` or `./scripts/reset-password.sh --grafana-only`.
 
 Default dashboards:
 - LightAI Overview (`/d/lightai-overview`)
@@ -303,7 +314,7 @@ bash scripts/observability-status.sh
 ### Reset database
 
 ```bash
-rm -f data/lightai.db
+rm -f data/lightai.db runtime/initial-credentials.txt
 # Restart Server to re-initialize.
 ```
 
