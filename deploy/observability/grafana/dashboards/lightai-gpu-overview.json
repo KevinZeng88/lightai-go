@@ -26,39 +26,55 @@
       "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}
     },
     {
-      "title": "GPU 显存使用",
-      "type": "bargauge",
-      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 7},
-      "targets": [{"expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)", "legendFormat": "{{gpu_name}}"}],
-      "fieldConfig": {"defaults": {"unit": "decgbytes"}}
-    },
-    {
-      "title": "GPU 显存利用率",
+      "title": "GPU 显存使用率",
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 7, "w": 8, "h": 6},
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 7},
       "targets": [{"expr": "lightai_gpu_memory_utilization_percent", "legendFormat": "{{gpu_name}}"}],
-      "fieldConfig": {"defaults": {"unit": "percent"}}
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}
     },
     {
       "title": "GPU 温度",
       "type": "timeseries",
-      "gridPos": {"x": 8, "y": 7, "w": 8, "h": 6},
+      "gridPos": {"x": 0, "y": 7, "w": 8, "h": 6},
       "targets": [{"expr": "lightai_gpu_temperature_celsius", "legendFormat": "{{gpu_name}}"}],
       "fieldConfig": {"defaults": {"unit": "celsius"}}
     },
     {
       "title": "GPU 功耗",
       "type": "timeseries",
-      "gridPos": {"x": 16, "y": 7, "w": 8, "h": 6},
+      "gridPos": {"x": 8, "y": 7, "w": 8, "h": 6},
       "targets": [{"expr": "lightai_gpu_power_draw_watts", "legendFormat": "{{gpu_name}}"}],
       "fieldConfig": {"defaults": {"unit": "watt"}}
     },
     {
-      "title": "GPU 健康状态",
+      "title": "GPU 显存使用 (绝对值)",
+      "type": "bargauge",
+      "gridPos": {"x": 16, "y": 7, "w": 8, "h": 6},
+      "targets": [{"expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "decgbytes"}}
+    },
+    {
+      "title": "GPU 明细",
       "type": "table",
       "gridPos": {"x": 0, "y": 13, "w": 24, "h": 5},
-      "targets": [{"expr": "lightai_gpu_health_status", "legendFormat": "{{gpu_name}}"}],
-      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "value": "1", "text": "健康"}, {"type": "value", "value": "0", "text": "异常"}]}}
+      "targets": [
+        {"expr": "lightai_gpu_memory_total_bytes / (1024*1024*1024)", "legendFormat": "显存总量 GB"},
+        {"expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)", "legendFormat": "显存已用 GB"},
+        {"expr": "lightai_gpu_memory_free_bytes / (1024*1024*1024)", "legendFormat": "剩余显存 GB"},
+        {"expr": "lightai_gpu_memory_utilization_percent", "legendFormat": "显存使用率 %"},
+        {"expr": "lightai_gpu_utilization_percent", "legendFormat": "GPU 利用率 %"},
+        {"expr": "lightai_gpu_temperature_celsius", "legendFormat": "温度 °C"},
+        {"expr": "lightai_gpu_power_draw_watts", "legendFormat": "功耗 W"},
+        {"expr": "lightai_gpu_health_status", "legendFormat": "健康"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "value": "1", "text": "健康"},
+            {"type": "value", "value": "0", "text": "异常"}
+          ]
+        }
+      }
     }
   ],
   "schemaVersion": 36,

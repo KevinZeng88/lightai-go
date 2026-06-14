@@ -51,10 +51,10 @@
       "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}
     },
     {
-      "title": "GPU 显存使用",
+      "title": "GPU 显存使用率",
       "type": "timeseries", "gridPos": {"x": 12, "y": 3, "w": 12, "h": 6},
-      "targets": [{"expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)", "legendFormat": "{{gpu_name}}"}],
-      "fieldConfig": {"defaults": {"unit": "decgbytes"}}
+      "targets": [{"expr": "lightai_gpu_memory_utilization_percent", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}
     },
     {
       "title": "CPU 使用率趋势",

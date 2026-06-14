@@ -46,10 +46,12 @@
       "targets": [
         {"expr": "lightai_gpu_memory_total_bytes / (1024*1024*1024)", "legendFormat": "显存总量 GB"},
         {"expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)", "legendFormat": "显存已用 GB"},
-        {"expr": "lightai_gpu_utilization_percent", "legendFormat": "利用率 %"},
+        {"expr": "lightai_gpu_memory_free_bytes / (1024*1024*1024)", "legendFormat": "剩余显存 GB"},
+        {"expr": "lightai_gpu_memory_utilization_percent", "legendFormat": "显存使用率 %"},
+        {"expr": "lightai_gpu_utilization_percent", "legendFormat": "GPU 利用率 %"},
         {"expr": "lightai_gpu_temperature_celsius", "legendFormat": "温度 °C"},
         {"expr": "lightai_gpu_power_draw_watts", "legendFormat": "功耗 W"},
-        {"expr": "lightai_gpu_health_status", "legendFormat": "健康状态"}
+        {"expr": "lightai_gpu_health_status", "legendFormat": "健康"}
       ]
     }
   ],
