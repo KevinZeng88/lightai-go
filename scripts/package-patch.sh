@@ -71,7 +71,7 @@ echo "Comparing files..."
 CHANGED=0
 REMOVED=0
 
-> "$PATCH_DIR/PATCH-MANIFEST.txt"
+> "$PATCH_DIR/.patch-file-list"
 
 # Function: add a file to the patch.
 add_patch_file() {
@@ -79,7 +79,7 @@ add_patch_file() {
   dir=$(dirname "$file")
   mkdir -p "$PATCH_DIR/$dir"
   cp "$TO_DIR/$file" "$PATCH_DIR/$file"
-  echo "$action $file $sha" >> "$PATCH_DIR/PATCH-MANIFEST.txt"
+  echo "$action $file $sha" >> "$PATCH_DIR/.patch-file-list"
 }
 
 # Read TO manifest line by line, compare with FROM.
@@ -141,35 +141,39 @@ while IFS= read -r line; do
     ./data/*|./logs/*|./run/*|./runtime/*) continue ;;
   esac
   if [ ! -f "$TO_DIR/$file" ]; then
-    echo "R $file" >> "$PATCH_DIR/PATCH-MANIFEST.txt"
+    echo "R $file" >> "$PATCH_DIR/.patch-file-list"
     REMOVED=$((REMOVED + 1))
   fi
 done < "$FROM_DIR/MANIFEST.sha256"
 
-# Write PATCH-MANIFEST header.
+# Convert shell true/false strings to JSON booleans.
+prom_json() { [ "$1" = "true" ] && echo "true" || echo "false"; }
+
+# Write JSON manifest (apply-patch.sh reads from_version / to_version / patch_mode).
 GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 TIMESTAMP=$(date -Iseconds)
+cat > "$PATCH_DIR/patch-manifest.json" << JSONEOF
 {
-  echo "from_version=$FROM_VERSION"
-  echo "to_version=$TO_VERSION"
-  echo "created_at=$TIMESTAMP"
-  echo "git_commit=$GIT_COMMIT"
-  echo "changed_files=$CHANGED"
-  echo "removed_files=$REMOVED"
-  echo "requires_stop=true"
-  echo "prometheus_version_from=$FROM_PROM_VER"
-  echo "prometheus_version_to=$TO_PROM_VER"
-  echo "prometheus_included=$PROM_CHANGED"
-  echo "grafana_version_from=$FROM_GRAF_VER"
-  echo "grafana_version_to=$TO_GRAF_VER"
-  echo "grafana_included=$GRAF_CHANGED"
-  echo "---"
-  cat "$PATCH_DIR/PATCH-MANIFEST.txt"
-} > "$PATCH_DIR/PATCH-MANIFEST.txt.tmp"
-mv "$PATCH_DIR/PATCH-MANIFEST.txt.tmp" "$PATCH_DIR/PATCH-MANIFEST.txt"
+  "from_version": "$FROM_VERSION",
+  "to_version": "$TO_VERSION",
+  "patch_mode": "cumulative",
+  "created_at": "$TIMESTAMP",
+  "git_commit": "$GIT_COMMIT",
+  "changed_files": $CHANGED,
+  "removed_files": $REMOVED,
+  "requires_stop": true,
+  "prometheus_version_from": "$FROM_PROM_VER",
+  "prometheus_version_to": "$TO_PROM_VER",
+  "prometheus_included": $(prom_json "$PROM_CHANGED"),
+  "grafana_version_from": "$FROM_GRAF_VER",
+  "grafana_version_to": "$TO_GRAF_VER",
+  "grafana_included": $(prom_json "$GRAF_CHANGED")
+}
+JSONEOF
 
 # Copy apply-patch.sh into the patch.
 cp "$PROJECT_DIR/scripts/apply-patch.sh" "$PATCH_DIR/apply-patch.sh" 2>/dev/null || true
+rm -f "$PATCH_DIR/.patch-file-list"
 
 # Build tarball.
 rm -f "$PATCH_TAR"

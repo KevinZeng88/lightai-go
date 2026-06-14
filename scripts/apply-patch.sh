@@ -82,7 +82,7 @@ mkdir -p "$BACKUP_DIR"
 echo "Backup: $BACKUP_DIR"
 
 APPLIED=0
-EXCLUDES="data/ logs/ run/ data/prometheus/ data/grafana/ backups/ .git/"
+EXCLUDES="data/ logs/ run/ runtime/ data/prometheus/ data/grafana/ backups/ .git/"
 
 for f in "$PATCH_DIR"/*; do
   fname=$(basename "$f")
