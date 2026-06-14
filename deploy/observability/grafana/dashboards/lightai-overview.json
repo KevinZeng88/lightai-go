@@ -3,398 +3,84 @@
   "uid": "lightai-overview",
   "panels": [
     {
-      "title": "Server 状态",
-      "type": "stat",
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "up{job=\"lightai-server\"}",
-          "legendFormat": "Server"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "mappings": [
-          {
-            "type": "value",
-            "value": "1",
-            "text": "运行中"
-          },
-          {
-            "type": "value",
-            "value": "0",
-            "text": "异常"
-          }
-        ]
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "title": "节点数",
+      "type": "stat", "gridPos": {"x": 0, "y": 0, "w": 4, "h": 3},
+      "targets": [{"expr": "lightai_server_nodes_online", "legendFormat": "在线"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
     },
     {
-      "title": "Agent 状态",
-      "type": "stat",
-      "gridPos": {
-        "x": 4,
-        "y": 0,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "up{job=\"lightai-agent\"}",
-          "legendFormat": "Agent"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "title": "GPU 总数",
+      "type": "stat", "gridPos": {"x": 4, "y": 0, "w": 4, "h": 3},
+      "targets": [{"expr": "lightai_server_gpus_total", "legendFormat": "GPU"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
     },
     {
-      "title": "Prometheus",
-      "type": "stat",
-      "gridPos": {
-        "x": 8,
-        "y": 0,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "up{job=\"prometheus\"}",
-          "legendFormat": "Prometheus"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "title": "异常 GPU",
+      "type": "stat", "gridPos": {"x": 8, "y": 0, "w": 4, "h": 3},
+      "targets": [{"expr": "lightai_server_gpus_total - lightai_server_gpus_healthy", "legendFormat": "异常"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "red", "value": 1}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
     },
     {
       "title": "CPU 使用率",
-      "type": "gauge",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "max(lightai_host_cpu_usage_ratio) * 100",
-          "legendFormat": "CPU"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "type": "gauge", "gridPos": {"x": 12, "y": 0, "w": 4, "h": 3},
+      "targets": [{"expr": "max(lightai_host_cpu_usage_ratio) * 100", "legendFormat": "CPU"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
     },
     {
       "title": "内存使用率",
-      "type": "gauge",
-      "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "max(lightai_host_memory_used_ratio) * 100",
-          "legendFormat": "Memory"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "type": "gauge", "gridPos": {"x": 16, "y": 0, "w": 4, "h": 3},
+      "targets": [{"expr": "max(lightai_host_memory_used_ratio) * 100", "legendFormat": "内存"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
     },
     {
-      "title": "GPU 数量",
-      "type": "stat",
-      "gridPos": {
-        "x": 20,
-        "y": 0,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "lightai_server_gpus_total",
-          "legendFormat": "GPUs"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "title": "磁盘使用率",
+      "type": "gauge", "gridPos": {"x": 20, "y": 0, "w": 4, "h": 3},
+      "targets": [{"expr": "max(lightai_host_filesystem_used_ratio{mountpoint=\"/\"}) * 100", "legendFormat": "根分区"}],
+      "fieldConfig": {"defaults": {"unit": "percent"}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
     },
     {
       "title": "GPU 利用率",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 0,
-        "y": 3,
-        "w": 12,
-        "h": 6
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_utilization_percent",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
-      }
+      "type": "timeseries", "gridPos": {"x": 0, "y": 3, "w": 12, "h": 6},
+      "targets": [{"expr": "lightai_gpu_utilization_percent", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}
     },
     {
       "title": "GPU 显存使用",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 12,
-        "y": 3,
-        "w": 12,
-        "h": 6
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decgbytes"
-        }
-      }
+      "type": "timeseries", "gridPos": {"x": 12, "y": 3, "w": 12, "h": 6},
+      "targets": [{"expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "decgbytes"}}
     },
     {
       "title": "CPU 使用率趋势",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 0,
-        "y": 9,
-        "w": 8,
-        "h": 6
-      },
-      "targets": [
-        {
-          "expr": "lightai_host_cpu_usage_ratio * 100",
-          "legendFormat": "CPU 使用率"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent"
-        }
-      }
+      "type": "timeseries", "gridPos": {"x": 0, "y": 9, "w": 8, "h": 5},
+      "targets": [{"expr": "lightai_host_cpu_usage_ratio * 100", "legendFormat": "CPU"}],
+      "fieldConfig": {"defaults": {"unit": "percent"}}
     },
     {
       "title": "内存使用",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 8,
-        "y": 9,
-        "w": 8,
-        "h": 6
-      },
-      "targets": [
-        {
-          "expr": "lightai_host_memory_used_bytes / (1024*1024*1024)",
-          "legendFormat": "已用 GB"
-        },
-        {
-          "expr": "lightai_host_memory_total_bytes / (1024*1024*1024)",
-          "legendFormat": "总量 GB"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decgbytes"
-        }
-      }
-    },
-    {
-      "title": "根分区使用率",
-      "type": "gauge",
-      "gridPos": {
-        "x": 16,
-        "y": 9,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "max(lightai_host_filesystem_used_ratio{mountpoint=\"/\"}) * 100",
-          "legendFormat": "根分区"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent"
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "type": "timeseries", "gridPos": {"x": 8, "y": 9, "w": 8, "h": 5},
+      "targets": [{"expr": "lightai_host_memory_used_bytes / (1024*1024*1024)", "legendFormat": "已用 GB"}],
+      "fieldConfig": {"defaults": {"unit": "decgbytes"}}
     },
     {
       "title": "GPU 温度",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 20,
-        "y": 9,
-        "w": 4,
-        "h": 6
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_temperature_celsius",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "celsius"
-        }
-      }
+      "type": "timeseries", "gridPos": {"x": 16, "y": 9, "w": 8, "h": 5},
+      "targets": [{"expr": "lightai_gpu_temperature_celsius", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "celsius"}}
     },
     {
       "title": "访问入口",
-      "type": "text",
-      "gridPos": {
-        "x": 0,
-        "y": 15,
-        "w": 24,
-        "h": 3
-      },
-      "options": {
-        "content": "LightAI Web: http://<server-ip>:18080/  |  Prometheus: http://<server-ip>:19090/  |  Grafana: http://<server-ip>:13000/  |  Agent: http://<server-ip>:19091/metrics",
-        "mode": "markdown"
-      }
+      "type": "text", "gridPos": {"x": 0, "y": 14, "w": 24, "h": 2},
+      "options": {"content": "LightAI Web: http://<server-ip>:18080/  |  Prometheus: http://<server-ip>:19090/  |  Grafana: http://<server-ip>:13000/", "mode": "markdown"}
     }
   ],
   "schemaVersion": 36,
-  "tags": [
-    "lightai",
-    "overview"
-  ],
+  "tags": ["lightai", "overview"],
   "refresh": "10s"
 }

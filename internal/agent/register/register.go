@@ -46,7 +46,7 @@ type Config struct {
 // Do performs agent registration with the server.
 // It returns the server-assigned node_id, which is also persisted to local state.
 func Do(client *http.Client, cfg Config, st *state.State) (nodeID string, err error) {
-	log.Info("register start",
+	log.Debug("register start",
 		"agent_id", cfg.AgentID,
 		"server_url", cfg.ServerURL,
 		"cached_node_id", st.CachedNodeID(),

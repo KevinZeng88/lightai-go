@@ -2,6 +2,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -106,10 +107,78 @@ func Init(cfg Config) {
 		if isJSON {
 			handler = slog.NewJSONHandler(sink, opts)
 		} else {
-			handler = slog.NewTextHandler(sink, opts)
+			handler = newHumanHandler(sink, opts)
 		}
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
+}
+
+// humanHandler is a slog.Handler that writes compact human-readable log lines.
+// Format: "2006-01-02 15:04:05.000 INFO  message"
+// In debug mode, key=value pairs are appended after the message.
+type humanHandler struct {
+	level slog.Level
+	w     io.Writer
+}
+
+func newHumanHandler(w io.Writer, opts *slog.HandlerOptions) slog.Handler {
+	h := &humanHandler{w: w, level: slog.LevelInfo}
+	if opts != nil && opts.Level != nil {
+		h.level = opts.Level.Level()
+	}
+	return h
+}
+
+func (h *humanHandler) Enabled(_ context.Context, lvl slog.Level) bool {
+	return lvl >= h.level
+}
+
+func (h *humanHandler) Handle(_ context.Context, r slog.Record) error {
+	// Time: "2006-01-02 15:04:05.000"
+	t := r.Time.Format("2006-01-02 15:04:05.000")
+	// Level: 5-char fixed-width.
+	var lvl string
+	switch r.Level {
+	case slog.LevelDebug:
+		lvl = "DEBUG"
+	case slog.LevelInfo:
+		lvl = "INFO "
+	case slog.LevelWarn:
+		lvl = "WARN "
+	case slog.LevelError:
+		lvl = "ERROR"
+	default:
+		lvl = r.Level.String()
+	}
+
+	// Build: "2006-01-02 15:04:05.000 INFO  message"
+	buf := make([]byte, 0, 256)
+	buf = append(buf, t...)
+	buf = append(buf, ' ')
+	buf = append(buf, lvl...)
+	buf = append(buf, ' ')
+	buf = append(buf, r.Message...)
+
+	// Append key=value pairs for context.
+	r.Attrs(func(a slog.Attr) bool {
+		buf = append(buf, ' ')
+		buf = append(buf, a.Key...)
+		buf = append(buf, '=')
+		buf = append(buf, a.Value.String()...)
+		return true
+	})
+
+	buf = append(buf, '\n')
+	_, err := h.w.Write(buf)
+	return err
+}
+
+func (h *humanHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *humanHandler) WithGroup(name string) slog.Handler {
+	return h
 }
 
 // openLogFile opens path.  When append is true the file is opened in append

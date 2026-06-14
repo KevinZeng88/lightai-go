@@ -103,7 +103,7 @@ func (e *ExternalCommandCollector) Discover(ctx context.Context) ([]GPUDeviceInf
 
 	_ = metrics // Metrics are collected separately via Metrics().
 
-	log.Info("external collector discover success",
+	log.Debug("external collector discover success",
 		"collector", e.cfg.Name,
 		"vendor", e.cfg.Vendor,
 		"parsed_device_count", len(devices),
@@ -151,7 +151,7 @@ func (e *ExternalCommandCollector) Metrics(ctx context.Context) ([]GPUMetricInfo
 	diag.Available = protoDiag.Available
 	diag.Error = protoDiag.Error
 
-	log.Info("external collector metrics success",
+	log.Debug("external collector metrics success",
 		"collector", e.cfg.Name,
 		"vendor", e.cfg.Vendor,
 		"parsed_metric_count", len(metrics),

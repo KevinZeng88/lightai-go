@@ -3,234 +3,65 @@
   "uid": "lightai-gpu-overview",
   "panels": [
     {
-      "title": "Server Up",
+      "title": "在线节点",
       "type": "stat",
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "lightai_server_info",
-          "legendFormat": "Server"
-        }
-      ],
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 3},
+      "targets": [{"expr": "lightai_server_nodes_online", "legendFormat": "online"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
     },
     {
-      "title": "GPU Count",
+      "title": "GPU 总数",
       "type": "stat",
-      "gridPos": {
-        "x": 4,
-        "y": 0,
-        "w": 4,
-        "h": 3
-      },
-      "targets": [
-        {
-          "expr": "lightai_server_gpus_total",
-          "legendFormat": "total"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 3},
+      "targets": [{"expr": "lightai_server_gpus_total", "legendFormat": "total"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
     },
     {
-      "title": "GPU Utilization",
+      "title": "GPU 利用率",
       "type": "timeseries",
-      "gridPos": {
-        "x": 8,
-        "y": 0,
-        "w": 8,
-        "h": 7
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_utilization_percent",
-          "legendFormat": "{{gpu_name}} ({{gpu_index}})"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
-      }
+      "gridPos": {"x": 8, "y": 0, "w": 8, "h": 7},
+      "targets": [{"expr": "lightai_gpu_utilization_percent", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}
     },
     {
-      "title": "GPU Memory Used",
+      "title": "GPU 显存使用",
       "type": "bargauge",
-      "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 8,
-        "h": 7
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decgbytes"
-        }
-      }
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 7},
+      "targets": [{"expr": "lightai_gpu_memory_used_bytes / (1024*1024*1024)", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "decgbytes"}}
     },
     {
-      "title": "GPU Memory Utilization",
+      "title": "GPU 显存利用率",
       "type": "timeseries",
-      "gridPos": {
-        "x": 0,
-        "y": 7,
-        "w": 8,
-        "h": 6
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_memory_utilization_percent",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent"
-        }
-      }
+      "gridPos": {"x": 0, "y": 7, "w": 8, "h": 6},
+      "targets": [{"expr": "lightai_gpu_memory_utilization_percent", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "percent"}}
     },
     {
-      "title": "GPU Temperature",
+      "title": "GPU 温度",
       "type": "timeseries",
-      "gridPos": {
-        "x": 8,
-        "y": 7,
-        "w": 8,
-        "h": 6
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_temperature_celsius",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "celsius"
-        }
-      }
+      "gridPos": {"x": 8, "y": 7, "w": 8, "h": 6},
+      "targets": [{"expr": "lightai_gpu_temperature_celsius", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "celsius"}}
     },
     {
-      "title": "GPU Power",
+      "title": "GPU 功耗",
       "type": "timeseries",
-      "gridPos": {
-        "x": 16,
-        "y": 7,
-        "w": 8,
-        "h": 6
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_power_draw_watts",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "watt"
-        }
-      }
+      "gridPos": {"x": 16, "y": 7, "w": 8, "h": 6},
+      "targets": [{"expr": "lightai_gpu_power_draw_watts", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "watt"}}
     },
     {
-      "title": "GPU Health",
+      "title": "GPU 健康状态",
       "type": "table",
-      "gridPos": {
-        "x": 0,
-        "y": 13,
-        "w": 12,
-        "h": 5
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_health_status",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "value": "1",
-              "text": "健康"
-            },
-            {
-              "type": "value",
-              "value": "0",
-              "text": "异常"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "title": "GPU Memory Total",
-      "type": "table",
-      "gridPos": {
-        "x": 12,
-        "y": 13,
-        "w": 12,
-        "h": 5
-      },
-      "targets": [
-        {
-          "expr": "lightai_gpu_memory_total_bytes / (1024*1024*1024)",
-          "legendFormat": "{{gpu_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decgbytes"
-        }
-      }
+      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 5},
+      "targets": [{"expr": "lightai_gpu_health_status", "legendFormat": "{{gpu_name}}"}],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "value": "1", "text": "健康"}, {"type": "value", "value": "0", "text": "异常"}]}}
     }
   ],
   "schemaVersion": 36,
-  "tags": [
-    "lightai",
-    "gpu"
-  ],
+  "tags": ["lightai", "gpu"],
   "refresh": "10s"
 }

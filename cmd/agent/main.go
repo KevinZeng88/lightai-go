@@ -389,7 +389,7 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 	updateSnapshot(snap, registry, agentID, report)
 
 	gpuCount := registry.GPUCount()
-	log.Info("resource report success",
+	log.Debug("resource report success",
 		"agent_id", agentID,
 		"gpu_count", gpuCount,
 		"collect_ms", collectDuration.Milliseconds(),
