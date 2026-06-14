@@ -7,12 +7,13 @@ import (
 
 // Registry manages all collectors and executes collection cycles.
 type Registry struct {
-	systemCollectors []SystemCollector
-	gpuCollectors    []GPUCollector
-	lastSystem       *SystemSnapshot
-	lastGPUDevices   []GPUDeviceInfo
-	lastGPUMetrics   []GPUMetricInfo
-	lastDiagnostics  []CollectorDiagnosis
+	systemCollectors  []SystemCollector
+	gpuCollectors     []GPUCollector
+	lastSystem        *SystemSnapshot
+	lastGPUDevices    []GPUDeviceInfo
+	lastGPUMetrics    []GPUMetricInfo
+	lastGPUResources  []GPUResource
+	lastDiagnostics   []CollectorDiagnosis
 }
 
 // NewRegistry creates a new collector registry.
@@ -86,6 +87,17 @@ func (r *Registry) Collect(ctx context.Context, agentID string) *ResourceReport 
 	} else {
 		report.GPUMetrics = r.lastGPUMetrics
 	}
+
+	// Normalize into unified GPUResource slice.
+	report.GPUResources = NormalizeGPUs(report.GPUDevices, report.GPUMetrics)
+	if len(report.GPUResources) > 0 {
+		r.lastGPUResources = report.GPUResources
+	} else if len(r.lastGPUResources) > 0 {
+		report.GPUResources = r.lastGPUResources
+	}
+
+	// Copy device names into metrics by UUID (backward compat for Prometheus labels).
+	r.PairMetricsWithDevices()
 
 	report.Diagnostics = sysDiags
 	r.lastDiagnostics = sysDiags

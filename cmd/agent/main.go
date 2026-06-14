@@ -440,11 +440,8 @@ func updateSnapshot(snap *metrics.Snapshot, registry *collector.Registry, agentI
 	if report == nil {
 		return
 	}
-	if report.GPUMetrics != nil {
-		snap.SetGPUMetrics(report.GPUMetrics)
-	}
-	if report.GPUDevices != nil {
-		snap.SetGPUDevices(report.GPUDevices)
+	if len(report.GPUResources) > 0 {
+		snap.SetGPUResources(report.GPUResources)
 	}
 	if report.System != nil {
 		snap.SetSystem(report.System)

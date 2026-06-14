@@ -23,6 +23,20 @@ export LIGHTAI_BUILD_IMAGE=linux-build:el8-glibc2.28
 ```
 Do NOT build release binaries on Ubuntu 24.04 or other glibc >= 2.29 hosts directly.
 
+### Go Build Cache
+
+The Docker wrapper persists Go module and build caches on the host:
+- `.cache/go-mod` → container `/go/pkg/mod` (downloaded modules)
+- `.cache/go-build` → container `/go-cache` (compiled packages)
+
+First build downloads all Go modules (requires internet). Subsequent builds
+reuse the cache and skip `go: downloading`. To force a clean module download:
+```bash
+rm -rf .cache/go-mod .cache/go-build
+```
+
+For fully offline builds, pre-populate the cache or use Go vendor mode (future).
+
 ## No Docker Required
 
 This release includes Prometheus and Grafana binaries directly.
@@ -33,8 +47,8 @@ All components run as native processes managed by shell scripts.
 
 | Component | Version | Port |
 |-----------|---------|------|
-| LightAI Server + Web | 0.1.4 | 18080 |
-| LightAI Agent | 0.1.4 | 19091 |
+| LightAI Server + Web | 0.1.6 | 18080 |
+| LightAI Agent | 0.1.6 | 19091 |
 | Prometheus | 3.12.0 | 19090 |
 | Grafana OSS | 13.0.2 | 13000 |
 

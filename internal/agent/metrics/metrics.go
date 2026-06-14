@@ -12,13 +12,13 @@ import (
 )
 
 // Snapshot holds the latest collected data for /metrics scraping.
+// GPUResources is the single source of truth for both /metrics and report payload.
 type Snapshot struct {
 	mu sync.RWMutex
 
-	GPUMetrics  []collector.GPUMetricInfo
-	GPUDevices  []collector.GPUDeviceInfo
-	System      *collector.SystemSnapshot
-	Diagnostics []collector.CollectorDiagnosis
+	GPUResources []collector.GPUResource // unified, vendor-neutral
+	System       *collector.SystemSnapshot
+	Diagnostics  []collector.CollectorDiagnosis
 
 	CollectErrors int64
 	ReportSuccess int64
@@ -37,16 +37,12 @@ func NewSnapshot(nodeID, agentID, hostname string) *Snapshot {
 	return &Snapshot{NodeID: nodeID, AgentID: agentID, Hostname: hostname}
 }
 
-func (s *Snapshot) SetGPUMetrics(m []collector.GPUMetricInfo) {
+// SetGPUResources atomically replaces the current GPU resource snapshot.
+// This is the single entry point for both /metrics and report payload.
+func (s *Snapshot) SetGPUResources(gpus []collector.GPUResource) {
 	s.mu.Lock()
-	s.GPUMetrics = m
+	s.GPUResources = gpus
 	s.LastSuccessAt = time.Now()
-	s.mu.Unlock()
-}
-
-func (s *Snapshot) SetGPUDevices(d []collector.GPUDeviceInfo) {
-	s.mu.Lock()
-	s.GPUDevices = d
 	s.mu.Unlock()
 }
 
@@ -189,41 +185,39 @@ func (c *gpuCollector) Collect(ch chan<- prometheus.Metric) {
 	c.snap.mu.RLock()
 	defer c.snap.mu.RUnlock()
 
-	for _, m := range c.snap.GPUMetrics {
-		lbls := []string{m.Vendor, m.UUID, itoa(m.Index), m.Name, c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
+	// Single loop over unified GPUResource — one emission per GPU per metric.
+	// No separate GPUMetrics/GPUDevices loops; no duplicate time series possible.
+	for _, g := range c.snap.GPUResources {
+		lbls := []string{g.Vendor, g.UUID, itoa(g.Index), g.Name, c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
 
-		ch <- prometheus.MustNewConstMetric(c.memTotalDesc, prometheus.GaugeValue, float64(m.MemoryTotalBytes), lbls...)
-		ch <- prometheus.MustNewConstMetric(c.memUsedDesc, prometheus.GaugeValue, float64(m.MemoryUsedBytes), lbls...)
-		ch <- prometheus.MustNewConstMetric(c.memFreeDesc, prometheus.GaugeValue, float64(m.MemoryFreeBytes), lbls...)
+		ch <- prometheus.MustNewConstMetric(c.memTotalDesc, prometheus.GaugeValue, float64(g.MemoryTotalBytes), lbls...)
+		ch <- prometheus.MustNewConstMetric(c.memUsedDesc, prometheus.GaugeValue, float64(g.MemoryUsedBytes), lbls...)
+		ch <- prometheus.MustNewConstMetric(c.memFreeDesc, prometheus.GaugeValue, float64(g.MemoryFreeBytes), lbls...)
 
-		if m.GPUUtilization != nil {
-			ch <- prometheus.MustNewConstMetric(c.gpuUtilDesc, prometheus.GaugeValue, *m.GPUUtilization, lbls...)
+		if g.GPUUtilization != nil {
+			ch <- prometheus.MustNewConstMetric(c.gpuUtilDesc, prometheus.GaugeValue, *g.GPUUtilization, lbls...)
 		}
-		if m.MemoryUtilization != nil {
-			ch <- prometheus.MustNewConstMetric(c.memUtilDesc, prometheus.GaugeValue, *m.MemoryUtilization, lbls...)
+		if g.MemUtilization != nil {
+			ch <- prometheus.MustNewConstMetric(c.memUtilDesc, prometheus.GaugeValue, *g.MemUtilization, lbls...)
 		}
-		if m.Temperature != nil {
-			ch <- prometheus.MustNewConstMetric(c.tempDesc, prometheus.GaugeValue, *m.Temperature, lbls...)
+		if g.Temperature != nil {
+			ch <- prometheus.MustNewConstMetric(c.tempDesc, prometheus.GaugeValue, *g.Temperature, lbls...)
 		}
-		if m.PowerDraw != nil {
-			ch <- prometheus.MustNewConstMetric(c.powerDesc, prometheus.GaugeValue, *m.PowerDraw, lbls...)
+		if g.PowerDraw != nil {
+			ch <- prometheus.MustNewConstMetric(c.powerDesc, prometheus.GaugeValue, *g.PowerDraw, lbls...)
 		}
 
 		healthVal := 0.0
-		if m.Health == "healthy" {
+		if g.Health == "healthy" {
 			healthVal = 1.0
 		}
 		ch <- prometheus.MustNewConstMetric(c.healthDesc, prometheus.GaugeValue, healthVal, lbls...)
 
-		// P1-008: Export GPU available status from devices.
-		for _, d := range c.snap.GPUDevices {
-			dlbls := []string{d.Vendor, d.UUID, itoa(d.Index), d.Name, c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
-			availVal := 0.0
-			if d.Status == "available" {
-				availVal = 1.0
-			}
-			ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, availVal, dlbls...)
+		availVal := 0.0
+		if g.Status == "available" {
+			availVal = 1.0
 		}
+		ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, availVal, lbls...)
 	}
 }
 

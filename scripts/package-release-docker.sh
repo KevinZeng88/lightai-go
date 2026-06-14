@@ -102,13 +102,20 @@ fi
 
 echo "Build image '$BUILD_IMAGE' found."
 
-# --- Step 3: Clean host artifacts ---
+# --- Step 3: Prepare persistent Go build caches ---
+echo "[pre] Preparing Go build caches..."
+CACHE_DIR="$PROJECT_DIR/.cache"
+mkdir -p "$CACHE_DIR/go-mod" "$CACHE_DIR/go-build"
+echo "  go-mod:  $CACHE_DIR/go-mod  -> /go/pkg/mod"
+echo "  go-build: $CACHE_DIR/go-build -> /go-cache"
+
+# --- Step 4: Clean host artifacts ---
 echo "[pre] Cleaning host build artifacts..."
 rm -rf "$PROJECT_DIR/bin/lightai-server" "$PROJECT_DIR/bin/lightai-agent" 2>/dev/null || true
 rm -rf "$PROJECT_DIR/web/dist" 2>/dev/null || true
 echo "  OK"
 
-# --- Step 4: Run package-release.sh inside container ---
+# --- Step 5: Run package-release.sh inside container ---
 echo "[run] Executing scripts/package-release.sh in container..."
 echo ""
 
@@ -124,8 +131,13 @@ fi
 docker run --rm \
   $USER_ARGS \
   -v "$PROJECT_DIR:$CONTAINER_WORKDIR" \
+  -v "$CACHE_DIR/go-mod:/go/pkg/mod" \
+  -v "$CACHE_DIR/go-build:/go-cache" \
   -w "$CONTAINER_WORKDIR" \
   -e HOME=/tmp \
+  -e GOPATH=/go \
+  -e GOMODCACHE=/go/pkg/mod \
+  -e GOCACHE=/go-cache \
   "$BUILD_IMAGE" \
   /bin/sh -c "cd $CONTAINER_WORKDIR && ./scripts/package-release.sh $PACKAGE_ARGS"
 
@@ -133,7 +145,7 @@ echo ""
 echo "=== Container build complete ==="
 echo "Release artifacts: $PROJECT_DIR/dist/"
 
-# --- Step 5: glibc compatibility check ---
+# --- Step 6: glibc compatibility check ---
 if $DO_GLIBC_CHECK; then
   echo ""
   echo "[check] Running glibc ABI compatibility check..."
