@@ -13,12 +13,13 @@ agent_token: "lightai-agent-token-change-me"
 logging:
   level: info
   dir: logs
-  file: server.log
+  file: lightai-server.log
   stdout: true
   file_enabled: true
-  max_size_mb: 50
-  max_files: 5
-  retention_days: 7
+  append: true
+  max_size_mb: 100
+  max_files: 10
+  retention_days: 30
 
 observability:
   mode: bundled

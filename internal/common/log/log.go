@@ -8,26 +8,31 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Config holds logging configuration.
 type Config struct {
-	Level       string
-	Dir         string
-	File        string
-	Stdout      bool
-	FileEnabled bool
-	MaxSizeMB   int
-	MaxFiles    int
+	Level         string
+	Dir           string
+	File          string
+	Stdout        bool
+	FileEnabled   bool
+	Append        bool
+	MaxSizeMB     int
+	MaxFiles      int
+	RetentionDays int
 }
 
 // Init initializes the global structured logger.
 //
 // When FileEnabled is true, a JSON handler writes to the specified log file
-// (under Dir).  The log directory is created automatically.  The file is
-// opened in append mode.  When MaxSizeMB > 0, the file is rotated before
-// writing if it already exceeds the limit (old file is renamed with a
-// ".1" / ".2" … suffix, keeping at most MaxFiles rotated copies).
+// (under Dir).  The log directory is created automatically.  When Append is
+// true, the file is opened in append mode; otherwise it is truncated.
+// When MaxSizeMB > 0, the file is rotated before writing if it already
+// exceeds the limit (old file is renamed with a ".1" / ".2" … suffix,
+// keeping at most MaxFiles rotated copies).  When RetentionDays > 0, log
+// files older than that many days are removed at startup.
 //
 // When Stdout is true, a second JSON handler writes to os.Stdout in
 // parallel so that nohup-style wrapper logs still capture everything.
@@ -61,8 +66,13 @@ func Init(cfg Config) {
 		if err := os.MkdirAll(cfg.Dir, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "log: cannot create log directory %s: %v\n", cfg.Dir, err)
 		} else {
+			// Clean up old log files if retention is configured.
+			if cfg.RetentionDays > 0 {
+				cleanOldLogs(cfg.Dir, cfg.RetentionDays)
+			}
+
 			fpath := filepath.Join(cfg.Dir, cfg.File)
-			f, err := openLogFile(fpath, cfg.MaxSizeMB, cfg.MaxFiles)
+			f, err := openLogFile(fpath, cfg.MaxSizeMB, cfg.MaxFiles, cfg.Append)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "log: cannot open log file %s: %v\n", fpath, err)
 			} else {
@@ -93,15 +103,51 @@ func Init(cfg Config) {
 	slog.SetDefault(logger)
 }
 
-// openLogFile opens path for append.  If maxSizeMB > 0 and the existing file
+// openLogFile opens path.  When append is true the file is opened in append
+// mode; otherwise it is truncated.  If maxSizeMB > 0 and the existing file
 // exceeds the limit, it rotates old files before opening a fresh one.
-func openLogFile(path string, maxSizeMB, maxFiles int) (*os.File, error) {
+func openLogFile(path string, maxSizeMB, maxFiles int, appendMode bool) (*os.File, error) {
 	if maxSizeMB > 0 {
 		if fi, err := os.Stat(path); err == nil && fi.Size() > int64(maxSizeMB)*1024*1024 {
 			rotateLogFiles(path, maxFiles)
 		}
 	}
-	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	flag := os.O_CREATE | os.O_WRONLY
+	if appendMode {
+		flag |= os.O_APPEND
+	} else {
+		flag |= os.O_TRUNC
+	}
+	return os.OpenFile(path, flag, 0644)
+}
+
+// cleanOldLogs removes log files under dir whose modification time is older
+// than retentionDays.  Only files matching the pattern "*.log*" are considered
+// (main log and rotated copies).
+func cleanOldLogs(dir string, retentionDays int) {
+	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return // directory may not exist yet — not an error
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".log") && !strings.Contains(name, ".log.") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			fp := filepath.Join(dir, name)
+			os.Remove(fp)
+		}
+	}
 }
 
 // rotateLogFiles renames path → path.1, path.1 → path.2, etc.,

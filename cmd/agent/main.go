@@ -39,13 +39,15 @@ func main() {
 	}
 
 	log.Init(log.Config{
-		Level:       cfg.LogLevel,
-		Dir:         cfg.Logging.Dir,
-		File:        cfg.Logging.File,
-		Stdout:      cfg.Logging.Stdout,
-		FileEnabled: cfg.Logging.FileEnabled,
-		MaxSizeMB:   cfg.Logging.MaxSizeMB,
-		MaxFiles:    cfg.Logging.MaxFiles,
+		Level:         cfg.LogLevel,
+		Dir:           cfg.Logging.Dir,
+		File:          cfg.Logging.File,
+		Stdout:        cfg.Logging.Stdout,
+		FileEnabled:   cfg.Logging.FileEnabled,
+		Append:        cfg.Logging.Append,
+		MaxSizeMB:     cfg.Logging.MaxSizeMB,
+		MaxFiles:      cfg.Logging.MaxFiles,
+		RetentionDays: cfg.Logging.RetentionDays,
 	})
 
 	agentID := cfg.AgentID

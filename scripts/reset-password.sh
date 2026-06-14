@@ -197,10 +197,6 @@ echo "Password reset summary"
 echo "============================================"
 echo "Credentials saved to: $CRED_FILE"
 echo ""
-if [ -f "$CRED_FILE" ]; then
-  cat "$CRED_FILE"
-fi
-echo ""
 echo "Next steps:"
 echo "  1. Save the new password(s) in a secure location."
 echo "  2. If Grafana was reset, restart: ./scripts/start-observability.sh"

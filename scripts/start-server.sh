@@ -44,8 +44,8 @@ if kill -0 "$PID" 2>/dev/null; then
   echo "  Health:  http://127.0.0.1:18080/healthz"
   echo "  Web:     http://127.0.0.1:18080/"
   echo ""
-  echo "  Server stdout log:   logs/server-stdout.log"
-  echo "  Server main log:     logs/server.log"
+  echo "  Server stdout log: logs/server-stdout.log"
+  echo "  Server main log:   logs/lightai-server.log"
   if [ -f runtime/initial-credentials.txt ]; then
     echo "  Initial credentials: runtime/initial-credentials.txt"
   fi

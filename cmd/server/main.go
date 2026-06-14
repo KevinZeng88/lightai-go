@@ -57,13 +57,15 @@ func main() {
 	}
 
 	log.Init(log.Config{
-		Level:       cfg.LogLevel,
-		Dir:         cfg.Logging.Dir,
-		File:        cfg.Logging.File,
-		Stdout:      cfg.Logging.Stdout,
-		FileEnabled: cfg.Logging.FileEnabled,
-		MaxSizeMB:   cfg.Logging.MaxSizeMB,
-		MaxFiles:    cfg.Logging.MaxFiles,
+		Level:         cfg.LogLevel,
+		Dir:           cfg.Logging.Dir,
+		File:          cfg.Logging.File,
+		Stdout:        cfg.Logging.Stdout,
+		FileEnabled:   cfg.Logging.FileEnabled,
+		Append:        cfg.Logging.Append,
+		MaxSizeMB:     cfg.Logging.MaxSizeMB,
+		MaxFiles:      cfg.Logging.MaxFiles,
+		RetentionDays: cfg.Logging.RetentionDays,
 	})
 
 	log.Info("server starting",
@@ -351,11 +353,8 @@ Next step: Login at the web UI with this new password.
 `, timestamp, newPassword)
 
 	if err := os.WriteFile(credPath, []byte(content), 0600); err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING: password updated but failed to write credentials file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR: password updated but failed to write credentials file: %v\n", err)
 	} else {
-		fmt.Fprintf(os.Stderr, "Credentials saved: %s\n", credPath)
+		fmt.Fprintf(os.Stderr, "Admin password reset. Credentials written to %s\n", credPath)
 	}
-
-	fmt.Fprintf(os.Stderr, "\n=== ADMIN PASSWORD RESET ===\nUsername: admin\nPassword: %s\nSaved to: %s\n=== SUCCESS ===\n\n",
-		newPassword, credPath)
 }

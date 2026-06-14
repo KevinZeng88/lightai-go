@@ -50,7 +50,7 @@ if kill -0 "$PID" 2>/dev/null; then
   echo "  Metrics: http://127.0.0.1:19091/metrics"
   echo ""
   echo "  Agent stdout log: logs/agent-stdout.log"
-  echo "  Agent main log:   logs/agent.log"
+  echo "  Agent main log:   logs/lightai-agent.log"
 else
   echo "Agent failed to start. Check logs/agent-stdout.log"
   rm -f run/agent.pid

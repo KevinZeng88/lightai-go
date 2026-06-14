@@ -32,6 +32,7 @@ type LoggingConfig struct {
 	File          string `yaml:"file" json:"file"`
 	Stdout        bool   `yaml:"stdout" json:"stdout"`
 	FileEnabled   bool   `yaml:"file_enabled" json:"file_enabled"`
+	Append        bool   `yaml:"append" json:"append"`
 	MaxSizeMB     int    `yaml:"max_size_mb" json:"max_size_mb"`
 	MaxFiles      int    `yaml:"max_files" json:"max_files"`
 	RetentionDays int    `yaml:"retention_days" json:"retention_days"`
@@ -135,6 +136,7 @@ func DefaultServerConfig() ServerConfig {
 			File:          "lightai-server.log",
 			Stdout:        true,
 			FileEnabled:   true,
+			Append:        true,
 			MaxSizeMB:     50,
 			MaxFiles:      5,
 			RetentionDays: 7,
@@ -190,6 +192,7 @@ func DefaultAgentConfig() AgentConfig {
 			File:          "lightai-agent.log",
 			Stdout:        true,
 			FileEnabled:   true,
+			Append:        true,
 			MaxSizeMB:     50,
 			MaxFiles:      5,
 			RetentionDays: 7,

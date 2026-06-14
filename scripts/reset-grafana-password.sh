@@ -43,7 +43,7 @@ if [ -z "$NEW_PASS" ]; then
   if [ -z "$NEW_PASS" ]; then
     NEW_PASS="LightAI@$(date +%s | tail -c 9)"
   fi
-  echo "Auto-generated password: $NEW_PASS"
+  echo "Auto-generated Grafana password (saved to credentials file)."
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
