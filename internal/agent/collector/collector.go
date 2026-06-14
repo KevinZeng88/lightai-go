@@ -51,7 +51,9 @@ type NetworkInterfaceSnapshot struct {
 	BytesSent uint64   `json:"bytes_sent"`
 }
 
-// GPUDeviceInfo holds GPU device discovery information.
+// GPUDeviceInfo is a parser-only raw record from vendor collector scripts.
+// Do NOT use in report payload, server ingest, API response, Web, or Prometheus exporter.
+// All downstream consumers must use the unified GPUResource model.
 type GPUDeviceInfo struct {
 	Vendor           string    `json:"vendor"`
 	Index            int       `json:"index"`
@@ -64,7 +66,9 @@ type GPUDeviceInfo struct {
 	CollectedAt      time.Time `json:"collected_at"`
 }
 
-// GPUMetricInfo holds GPU metric information.
+// GPUMetricInfo is a parser-only raw record from vendor collector scripts.
+// Do NOT use in report payload, server ingest, API response, Web, or Prometheus exporter.
+// All downstream consumers must use the unified GPUResource model.
 type GPUMetricInfo struct {
 	Vendor            string    `json:"vendor"`
 	Index             int       `json:"index"`

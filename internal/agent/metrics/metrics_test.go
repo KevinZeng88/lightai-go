@@ -250,8 +250,10 @@ func TestGPUResourceUniqueKey(t *testing.T) {
 	}
 }
 
-// TestGPUPrometheusDuplicateDetection ensures duplicate GPUResources cause Gather failure.
-func TestGPUPrometheusDuplicateDetection(t *testing.T) {
+// TestGPUPrometheusDuplicateDedup verifies exporter-level dedup.
+// Even with duplicate GPUResource entries, Gather must succeed
+// because the exporter silently skips duplicate metric+label combos.
+func TestGPUPrometheusDuplicateDedup(t *testing.T) {
 	resources := []collector.GPUResource{
 		{Vendor: "metax", Index: 0, UUID: "GPU-aaa", Name: "MetaX C500",
 			MemoryTotalBytes: 68719476736, MemoryUsedBytes: 0, MemoryFreeBytes: 68719476736,
@@ -267,28 +269,20 @@ func TestGPUPrometheusDuplicateDetection(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(newGPUCollector(snap))
 
-	_, err := reg.Gather()
-	if err == nil {
-		t.Error("expected Gather to fail with duplicate resources, but it succeeded")
-	} else {
-		t.Logf("Correctly rejected duplicates: %v", err)
-	}
-
-	// Non-duplicate case must succeed.
-	nonDup := []collector.GPUResource{
-		{Vendor: "metax", Index: 0, UUID: "GPU-aaa", Name: "MetaX C500",
-			MemoryTotalBytes: 68719476736, Health: "healthy", Status: "available"},
-	}
-	snap2 := NewSnapshot("node-01", "agent-01", "host-01")
-	snap2.SetGPUResources(nonDup)
-
-	reg2 := prometheus.NewRegistry()
-	reg2.MustRegister(newGPUCollector(snap2))
-
-	_, err = reg2.Gather()
+	// Must NOT fail — exporter dedup should handle duplicates.
+	mfs, err := reg.Gather()
 	if err != nil {
-		t.Fatalf("non-duplicate Gather should succeed: %v", err)
+		t.Fatalf("Gather should succeed with dedup: %v", err)
 	}
+
+	// Each metric should appear exactly once (dedup worked).
+	for _, mf := range mfs {
+		name := mf.GetName()
+		if len(mf.GetMetric()) > 1 {
+			t.Errorf("%s: expected 1 after dedup, got %d", name, len(mf.GetMetric()))
+		}
+	}
+	t.Log("Exporter dedup: duplicate input → Gather succeeds, no duplicate output")
 }
 
 // TestVendorNeutral verifies all known vendors produce valid GPUResource.

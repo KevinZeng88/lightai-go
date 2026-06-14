@@ -31,11 +31,12 @@
           <CopyButton :text="row.uuid" />
         </template>
       </el-table-column>
-      <el-table-column :label="t('gpus.memoryUsed')" width="180">
+      <el-table-column :label="t('gpus.memory')" width="220">
         <template #default="{ row }">
           <div class="mem-bar">
             <el-progress :percentage="memPercent(row)" :stroke-width="10" :show-text="false" />
             <span class="mem-text">{{ formatBytes(row.memory_used_bytes) }} / {{ formatBytes(row.memory_total_bytes) }}</span>
+            <span class="mem-free">{{ t('gpus.free') }}: {{ formatBytes(row.memory_free_bytes) }}</span>
           </div>
         </template>
       </el-table-column>

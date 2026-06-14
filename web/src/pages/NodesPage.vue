@@ -50,13 +50,22 @@
         </el-descriptions>
         <h4 style="margin-top: 16px">{{ t('nodes.gpusOnNode') }}</h4>
         <el-table :data="nodeGpus" size="small" v-loading="gpuLoading">
+          <el-table-column prop="index" :label="t('gpus.index')" width="50" />
           <el-table-column prop="vendor" :label="t('gpus.vendor')" width="80" />
           <el-table-column prop="name" :label="t('gpus.name')" show-overflow-tooltip />
-          <el-table-column :label="t('gpus.memoryUsed')" width="130">
-            <template #default="{ row }">{{ formatBytes(row.memory_used_bytes) }} / {{ formatBytes(row.memory_total_bytes) }}</template>
+          <el-table-column :label="t('gpus.memory')" width="200">
+            <template #default="{ row }">
+              {{ formatBytes(row.memory_used_bytes) }} / {{ formatBytes(row.memory_total_bytes) }}
+              <span style="color: var(--el-text-color-secondary); font-size: 11px; display: block">
+                {{ t('gpus.free') }}: {{ formatBytes(row.memory_free_bytes) }}
+              </span>
+            </template>
           </el-table-column>
           <el-table-column :label="t('gpus.gpuUtilization')" width="100">
             <template #default="{ row }">{{ formatPercent(row.gpu_utilization_percent) }}</template>
+          </el-table-column>
+          <el-table-column :label="t('gpus.health')" width="80">
+            <template #default="{ row }"><StatusTag :status="row.health" /></template>
           </el-table-column>
           <template #empty>{{ t('gpus.noGpus') }}</template>
         </el-table>

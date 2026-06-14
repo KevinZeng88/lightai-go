@@ -99,12 +99,11 @@ func NewResourceHandler(database *db.DB, m *srvmetrics.ServerMetrics) *ResourceH
 
 // ResourceReportRequest is the resource report from an agent.
 type ResourceReportRequest struct {
-	AgentID     string             `json:"agent_id"`
-	System      *SystemSnapshotReq `json:"system"`
-	GPUDevices  []GPUDeviceReq     `json:"gpu_devices"`
-	GPUMetrics  []GPUMetricReq     `json:"gpu_metrics"`
-	Diagnostics []DiagnosisReq     `json:"diagnostics"`
-	CollectedAt string             `json:"collected_at"`
+	AgentID      string             `json:"agent_id"`
+	System       *SystemSnapshotReq `json:"system"`
+	GPUResources []GPUResourceReq   `json:"gpu_resources"`
+	Diagnostics  []DiagnosisReq     `json:"diagnostics"`
+	CollectedAt  string             `json:"collected_at"`
 }
 
 type SystemSnapshotReq struct {
@@ -145,30 +144,26 @@ type NetworkInterfaceSnapshotReq struct {
 	BytesSent uint64 `json:"bytes_sent"`
 }
 
-type GPUDeviceReq struct {
-	Vendor           string `json:"vendor"`
-	Index            int    `json:"index"`
-	Name             string `json:"name"`
-	UUID             string `json:"uuid"`
-	PCIBusID         string `json:"pci_bus_id"`
-	DriverVersion    string `json:"driver_version"`
-	MemoryTotalBytes uint64 `json:"memory_total_bytes"`
-	Status           string `json:"status"`
-	CollectedAt      string `json:"collected_at"`
-}
-
-type GPUMetricReq struct {
-	Vendor            string   `json:"vendor"`
-	Index             int      `json:"index"`
-	UUID              string   `json:"uuid"`
-	MemoryUsedBytes   uint64   `json:"memory_used_bytes"`
-	MemoryFreeBytes   uint64   `json:"memory_free_bytes"`
-	GPUUtilization    *float64 `json:"gpu_utilization_percent,omitempty"`
-	MemoryUtilization *float64 `json:"memory_utilization_percent,omitempty"`
-	Temperature       *float64 `json:"temperature_celsius,omitempty"`
-	PowerDraw         *float64 `json:"power_draw_watts,omitempty"`
-	Health            string   `json:"health"`
-	CollectedAt       string   `json:"collected_at"`
+// GPUResourceReq is the unified GPU resource in an agent report.
+	// GPUResourceReq is the unified GPU resource in an agent report (RC1 model).
+	// GPUDeviceInfo / GPUMetricInfo are parser-only raw records — never used here.
+type GPUResourceReq struct {
+	Vendor           string   `json:"vendor"`
+	Index            int      `json:"index"`
+	UUID             string   `json:"uuid"`
+	Name             string   `json:"name"`
+	PCIBusID         string   `json:"pci_bus_id"`
+	DriverVersion    string   `json:"driver_version"`
+	MemoryTotalBytes uint64   `json:"memory_total_bytes"`
+	MemoryUsedBytes  uint64   `json:"memory_used_bytes"`
+	MemoryFreeBytes  uint64   `json:"memory_free_bytes"`
+	GPUUtilization   *float64 `json:"gpu_utilization_percent,omitempty"`
+	MemUtilization   *float64 `json:"memory_utilization_percent,omitempty"`
+	Temperature      *float64 `json:"temperature_celsius,omitempty"`
+	PowerDraw        *float64 `json:"power_draw_watts,omitempty"`
+	Health           string   `json:"health"`
+	Status           string   `json:"status"`
+	CollectedAt      string   `json:"collected_at"`
 }
 
 type DiagnosisReq struct {
@@ -267,15 +262,18 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 		tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, now, nodeID)
 	}
 
-	// Collect UUIDs from this report for GPU staleness detection.
+	// P0-008: Process unified GPU resources (RC1 model).
+	// No more separate GPUDevices/GPUMetrics merge — the Agent sends pre-normalized GPUResources.
 	reportedUUIDs := make(map[string]bool)
+	if req.GPUResources != nil {
+		for _, g := range req.GPUResources {
+			key := g.Vendor + ":" + g.UUID
+			if g.UUID == "" {
+				key = g.Vendor + ":" + fmt.Sprintf("%d", g.Index)
+			}
+			reportedUUIDs[key] = true
 
-	// Update GPU devices.
-	if req.GPUDevices != nil {
-		for _, dev := range req.GPUDevices {
-			reportedUUIDs[dev.UUID] = true
-
-			collectedAt := dev.CollectedAt
+			collectedAt := g.CollectedAt
 			if collectedAt == "" {
 				collectedAt = now
 			}
@@ -283,18 +281,24 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 			var existingID string
 			err := tx.QueryRow(
 				`SELECT id FROM gpu_devices WHERE node_id = ? AND uuid = ?`,
-				nodeID, dev.UUID,
+				nodeID, g.UUID,
 			).Scan(&existingID)
 
 			if err == sql.ErrNoRows {
-				// Create new GPU.
 				gpuID := uuid.NewString()
 				_, err = tx.Exec(
 					`INSERT INTO gpu_devices (id, node_id, vendor, index_num, name, uuid, pci_bus_id,
-					 driver_version, memory_total_bytes, status, collected_at, created_at, updated_at)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-					gpuID, nodeID, dev.Vendor, dev.Index, dev.Name, dev.UUID, dev.PCIBusID,
-					dev.DriverVersion, dev.MemoryTotalBytes, dev.Status, collectedAt, now, now,
+					 driver_version, memory_total_bytes, memory_used_bytes, memory_free_bytes,
+					 gpu_utilization_percent, memory_utilization_percent,
+					 temperature_celsius, power_draw_watts,
+					 health, status, collected_at, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					gpuID, nodeID, g.Vendor, g.Index, g.Name, g.UUID, g.PCIBusID,
+					g.DriverVersion,
+					g.MemoryTotalBytes, g.MemoryUsedBytes, g.MemoryFreeBytes,
+					g.GPUUtilization, g.MemUtilization,
+					g.Temperature, g.PowerDraw,
+					g.Health, g.Status, collectedAt, now, now,
 				)
 				if err != nil {
 					log.Error("create gpu error", "error", err)
@@ -302,13 +306,18 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 					return
 				}
 			} else if err == nil {
-				// Update existing GPU.
 				_, err = tx.Exec(
 					`UPDATE gpu_devices SET vendor = ?, index_num = ?, name = ?, driver_version = ?,
-					 memory_total_bytes = ?, status = ?, collected_at = ?, updated_at = ?
+					 memory_total_bytes = ?, memory_used_bytes = ?, memory_free_bytes = ?,
+					 gpu_utilization_percent = ?, memory_utilization_percent = ?,
+					 temperature_celsius = ?, power_draw_watts = ?,
+					 health = ?, status = ?, collected_at = ?, updated_at = ?
 					 WHERE id = ?`,
-					dev.Vendor, dev.Index, dev.Name, dev.DriverVersion,
-					dev.MemoryTotalBytes, dev.Status, collectedAt, now, existingID,
+					g.Vendor, g.Index, g.Name, g.DriverVersion,
+					g.MemoryTotalBytes, g.MemoryUsedBytes, g.MemoryFreeBytes,
+					g.GPUUtilization, g.MemUtilization,
+					g.Temperature, g.PowerDraw,
+					g.Health, g.Status, collectedAt, now, existingID,
 				)
 				if err != nil {
 					log.Error("update gpu error", "error", err)
@@ -323,52 +332,20 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	// Update GPU metrics.
-	if req.GPUMetrics != nil {
-		for _, m := range req.GPUMetrics {
-			reportedUUIDs[m.UUID] = true
-
-			collectedAt := m.CollectedAt
-			if collectedAt == "" {
-				collectedAt = now
-			}
-
-			_, err := tx.Exec(
-				`UPDATE gpu_devices SET
-				 memory_used_bytes = ?, memory_free_bytes = ?,
-				 gpu_utilization_percent = ?, memory_utilization_percent = ?,
-				 temperature_celsius = ?, power_draw_watts = ?,
-				 health = ?, collected_at = ?, updated_at = ?
-				 WHERE node_id = ? AND uuid = ?`,
-				m.MemoryUsedBytes, m.MemoryFreeBytes,
-				m.GPUUtilization, m.MemoryUtilization,
-				m.Temperature, m.PowerDraw,
-				m.Health, collectedAt, now,
-				nodeID, m.UUID,
-			)
-			if err != nil {
-				log.Error("update gpu metrics error", "error", err)
-				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
-				return
-			}
-		}
-	}
-
-	// P0-008: Mark GPUs that disappeared since last report as invalid.
-	// GPUs for this node not in the current report should be marked unavailable.
+	// Mark GPUs that disappeared since last report as unavailable.
 	if len(reportedUUIDs) > 0 {
-		rows, err := tx.Query(`SELECT uuid FROM gpu_devices WHERE node_id = ? AND status != 'unavailable'`, nodeID)
+		rows, err := tx.Query(`SELECT vendor, uuid FROM gpu_devices WHERE node_id = ? AND status != 'unavailable'`, nodeID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
-				var uuid string
-				if err := rows.Scan(&uuid); err != nil {
+				var vendor, gpuUUID string
+				if err := rows.Scan(&vendor, &gpuUUID); err != nil {
 					continue
 				}
-				if !reportedUUIDs[uuid] {
-					// GPU was previously reported but not in this report → mark unavailable.
+				key := vendor + ":" + gpuUUID
+				if !reportedUUIDs[key] {
 					tx.Exec(`UPDATE gpu_devices SET status = 'unavailable', updated_at = ? WHERE node_id = ? AND uuid = ?`,
-						now, nodeID, uuid)
+						now, nodeID, gpuUUID)
 				}
 			}
 		}

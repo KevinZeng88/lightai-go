@@ -142,6 +142,8 @@ export default {
     nodeId: 'Node ID',
     pciBusId: 'PCI Bus ID',
     driverVersion: '驱动版本',
+    memory: '显存',
+    free: '空闲',
     memoryUsed: '已用显存',
     memoryTotal: '总显存',
     memoryFree: '空闲显存',

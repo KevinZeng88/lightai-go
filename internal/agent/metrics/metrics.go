@@ -185,39 +185,54 @@ func (c *gpuCollector) Collect(ch chan<- prometheus.Metric) {
 	c.snap.mu.RLock()
 	defer c.snap.mu.RUnlock()
 
-	// Single loop over unified GPUResource — one emission per GPU per metric.
-	// No separate GPUMetrics/GPUDevices loops; no duplicate time series possible.
+	// Dedup protection: even if GPUResources contains duplicates (shouldn't happen
+	// after NormalizeGPUs, but safety net), don't emit duplicate time series.
+	// Key: metric_name + vendor + uuid + index + node_id + agent_id + hostname.
+	emitted := make(map[string]bool)
+	dedupKey := func(metricName string, lbls []string) string {
+		return metricName + "\x00" + lbls[0] + "\x00" + lbls[1] + "\x00" + lbls[2] + "\x00" + lbls[4] + "\x00" + lbls[5] + "\x00" + lbls[6]
+	}
+
+	emit := func(desc *prometheus.Desc, val float64, lbls []string) {
+		key := dedupKey(desc.String(), lbls)
+		if emitted[key] {
+			return // skip duplicate
+		}
+		emitted[key] = true
+		ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, val, lbls...)
+	}
+
 	for _, g := range c.snap.GPUResources {
 		lbls := []string{g.Vendor, g.UUID, itoa(g.Index), g.Name, c.snap.NodeID, c.snap.AgentID, c.snap.Hostname}
 
-		ch <- prometheus.MustNewConstMetric(c.memTotalDesc, prometheus.GaugeValue, float64(g.MemoryTotalBytes), lbls...)
-		ch <- prometheus.MustNewConstMetric(c.memUsedDesc, prometheus.GaugeValue, float64(g.MemoryUsedBytes), lbls...)
-		ch <- prometheus.MustNewConstMetric(c.memFreeDesc, prometheus.GaugeValue, float64(g.MemoryFreeBytes), lbls...)
+		emit(c.memTotalDesc, float64(g.MemoryTotalBytes), lbls)
+		emit(c.memUsedDesc, float64(g.MemoryUsedBytes), lbls)
+		emit(c.memFreeDesc, float64(g.MemoryFreeBytes), lbls)
 
 		if g.GPUUtilization != nil {
-			ch <- prometheus.MustNewConstMetric(c.gpuUtilDesc, prometheus.GaugeValue, *g.GPUUtilization, lbls...)
+			emit(c.gpuUtilDesc, *g.GPUUtilization, lbls)
 		}
 		if g.MemUtilization != nil {
-			ch <- prometheus.MustNewConstMetric(c.memUtilDesc, prometheus.GaugeValue, *g.MemUtilization, lbls...)
+			emit(c.memUtilDesc, *g.MemUtilization, lbls)
 		}
 		if g.Temperature != nil {
-			ch <- prometheus.MustNewConstMetric(c.tempDesc, prometheus.GaugeValue, *g.Temperature, lbls...)
+			emit(c.tempDesc, *g.Temperature, lbls)
 		}
 		if g.PowerDraw != nil {
-			ch <- prometheus.MustNewConstMetric(c.powerDesc, prometheus.GaugeValue, *g.PowerDraw, lbls...)
+			emit(c.powerDesc, *g.PowerDraw, lbls)
 		}
 
 		healthVal := 0.0
 		if g.Health == "healthy" {
 			healthVal = 1.0
 		}
-		ch <- prometheus.MustNewConstMetric(c.healthDesc, prometheus.GaugeValue, healthVal, lbls...)
+		emit(c.healthDesc, healthVal, lbls)
 
 		availVal := 0.0
 		if g.Status == "available" {
 			availVal = 1.0
 		}
-		ch <- prometheus.MustNewConstMetric(c.statusDesc, prometheus.GaugeValue, availVal, lbls...)
+		emit(c.statusDesc, availVal, lbls)
 	}
 }
 
