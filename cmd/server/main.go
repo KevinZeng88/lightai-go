@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -31,9 +33,22 @@ import (
 )
 
 var configPath = flag.String("config", "", "path to config file (YAML)")
+var resetAdminPassword = flag.String("reset-admin-password", "", "reset admin password to the given value and exit")
+var resetAdminPasswordInteractive = flag.Bool("reset-admin-password-interactive", false, "reset admin password via interactive prompt")
 
 func main() {
 	flag.Parse()
+
+	// --- Password reset mode (exits early) ---
+	if *resetAdminPassword != "" || *resetAdminPasswordInteractive {
+		cfg, err := config.LoadServerConfig(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+			os.Exit(1)
+		}
+		runResetAdminPassword(cfg, *resetAdminPassword, *resetAdminPasswordInteractive)
+		return
+	}
 
 	cfg, err := config.LoadServerConfig(*configPath)
 	if err != nil {
@@ -41,7 +56,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Init(cfg.LogLevel)
+	log.Init(log.Config{
+		Level:       cfg.LogLevel,
+		Dir:         cfg.Logging.Dir,
+		File:        cfg.Logging.File,
+		Stdout:      cfg.Logging.Stdout,
+		FileEnabled: cfg.Logging.FileEnabled,
+		MaxSizeMB:   cfg.Logging.MaxSizeMB,
+		MaxFiles:    cfg.Logging.MaxFiles,
+	})
 
 	log.Info("server starting",
 		"version", version.String(),
@@ -256,4 +279,83 @@ type respWriter struct {
 func (rw *respWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// runResetAdminPassword handles --reset-admin-password and --reset-admin-password-interactive.
+func runResetAdminPassword(cfg *config.ServerConfig, newPassword string, interactive bool) {
+	database, err := db.Open(cfg.DBPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: failed to open database: %v\n", err)
+		os.Exit(1)
+	}
+	defer database.Close()
+
+	if interactive {
+		fmt.Fprintf(os.Stderr, "Enter new admin password: ")
+		var input string
+		fmt.Scanln(&input)
+		if input == "" {
+			fmt.Fprintf(os.Stderr, "ERROR: empty password\n")
+			os.Exit(1)
+		}
+		newPassword = input
+	}
+
+	if newPassword == "" {
+		// Auto-generate a secure random password (16 bytes → 32 hex chars).
+		pwBytes := make([]byte, 16)
+		if _, err := rand.Read(pwBytes); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: failed to generate password: %v\n", err)
+			os.Exit(1)
+		}
+		newPassword = hex.EncodeToString(pwBytes)
+	}
+
+	passwordHash, err := auth.HashPassword(newPassword)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: failed to hash password: %v\n", err)
+		os.Exit(1)
+	}
+
+	result, err := database.Exec(
+		`UPDATE users SET password_hash = ?, must_change_password = 1, updated_at = datetime('now') WHERE username = 'admin'`,
+		passwordHash,
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: failed to update password: %v\n", err)
+		os.Exit(1)
+	}
+
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		fmt.Fprintf(os.Stderr, "WARNING: admin user not found (database may not be initialized yet)\n")
+		os.Exit(1)
+	}
+
+	// Write reset credentials file.
+	credDir := "runtime"
+	os.MkdirAll(credDir, 0700)
+	credPath := "runtime/reset-credentials.txt"
+	timestamp := time.Now().Format(time.RFC3339)
+	content := fmt.Sprintf(`============================================
+LightAI Go - Password Reset
+Reset time: %s
+============================================
+
+[Web/Admin]
+Username: admin
+Password: %s
+Note: You must change this password after next login.
+Service restart required: no
+Next step: Login at the web UI with this new password.
+`, timestamp, newPassword)
+
+	if err := os.WriteFile(credPath, []byte(content), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: password updated but failed to write credentials file: %v\n", err)
+	} else {
+		fmt.Fprintf(os.Stderr, "Credentials saved: %s\n", credPath)
+	}
+
+	fmt.Fprintf(os.Stderr, "\n=== ADMIN PASSWORD RESET ===\nUsername: admin\nPassword: %s\nSaved to: %s\n=== SUCCESS ===\n\n",
+		newPassword, credPath)
 }

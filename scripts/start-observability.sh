@@ -24,7 +24,67 @@ for candidate in bin/grafana/bin/grafana-server bin/grafana/bin/grafana; do
 done
 
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-admin}"
-GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-LightAI@123456}"
+GRAFANA_DB="data/grafana/grafana.db"
+CRED_FILE="runtime/initial-credentials.txt"
+GRAFANA_PASSWORD_PROVIDED=true
+
+# If Grafana DB already exists, the env var won't take effect —
+# the password is already stored in the DB.
+if [ -f "$GRAFANA_DB" ]; then
+  # Grafana already initialized. Use whatever the DB has.
+  # Look up saved password from credentials file if available.
+  GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-}"
+  if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+    # Try to read from credentials file (set by previous run).
+    if [ -f "$CRED_FILE" ]; then
+      SAVED_PASS=$(grep -A1 '\[Grafana\]' "$CRED_FILE" 2>/dev/null | grep 'Password:' | sed 's/Password: //')
+      [ -n "$SAVED_PASS" ] && GRAFANA_ADMIN_PASSWORD="$SAVED_PASS"
+    fi
+  fi
+  # If still empty, use a placeholder — Grafana will use its DB.
+  GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-<stored-in-grafana-db>}"
+else
+  # First time Grafana init. Generate password if not provided.
+  if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+    GRAFANA_ADMIN_PASSWORD=$(head -c 16 /dev/urandom 2>/dev/null | base64 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c 20 || echo "")
+    if [ -z "$GRAFANA_ADMIN_PASSWORD" ]; then
+      GRAFANA_ADMIN_PASSWORD=$(date +%s | sha256sum 2>/dev/null | head -c 20 || echo "LightAI@$(date +%s)")
+    fi
+    GRAFANA_PASSWORD_PROVIDED=false
+  fi
+
+  # Write/append Grafana credentials.
+  mkdir -p runtime
+  if [ -f "$CRED_FILE" ]; then
+    # Append Grafana section to existing credentials file.
+    if ! grep -q '^\[Grafana\]$' "$CRED_FILE" 2>/dev/null; then
+      cat >> "$CRED_FILE" << CREDEOF
+
+[Grafana]
+Username: $GRAFANA_ADMIN_USER
+Password: $GRAFANA_ADMIN_PASSWORD
+Note: Grafana admin password. Change after first login.
+Written: $(date -Iseconds)
+CREDEOF
+    fi
+  else
+    # Create standalone credentials file (shouldn't normally happen —
+    # server bootstrap creates it first, but handle edge case).
+    cat > "$CRED_FILE" << CREDEOF
+============================================
+LightAI Go - Initial Credentials
+Generated: $(date -Iseconds)
+============================================
+
+[Grafana]
+Username: $GRAFANA_ADMIN_USER
+Password: $GRAFANA_ADMIN_PASSWORD
+Note: Grafana admin password. Change after first login.
+CREDEOF
+  fi
+  chmod 0600 "$CRED_FILE" 2>/dev/null || true
+fi
+
 [ -f configs/observability/grafana.env ] && . configs/observability/grafana.env
 
 echo "=== LightAI Observability ==="
@@ -123,9 +183,12 @@ YAMLEOF
   PID=$!
   echo "$PID" > run/grafana.pid
   echo "  已启动 (PID $PID)"
-  if [ "${GRAFANA_ADMIN_PASSWORD}" = "LightAI@123456" ]; then
-    echo "  注意: 使用默认密码。生产请修改 configs/observability/grafana.env"
-  fi
+	  if $GRAFANA_PASSWORD_PROVIDED; then
+	    echo "  Grafana 使用环境变量指定的管理员密码。"
+	  else
+	    echo "  Grafana 已生成随机管理员密码（首次初始化）。"
+	    echo "  凭据已保存至: $CRED_FILE"
+	  fi
 fi
 
 # --- Wait for readiness ---
@@ -178,3 +241,9 @@ echo "在上方输入框输入查询表达式后即可看到数据。"
 
 echo "  局域网 Prometheus: http://<server-ip>:19090/"
 echo "  局域网 Grafana:    http://<server-ip>:13000/"
+
+if [ -f "$CRED_FILE" ]; then
+  echo ""
+  echo "  Initial credentials: $CRED_FILE"
+  echo "  登录后请立即修改默认密码。"
+fi

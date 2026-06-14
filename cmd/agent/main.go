@@ -38,10 +38,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Init file logging if configured.
-	initLogging(cfg)
-
-	log.Init(cfg.LogLevel)
+	log.Init(log.Config{
+		Level:       cfg.LogLevel,
+		Dir:         cfg.Logging.Dir,
+		File:        cfg.Logging.File,
+		Stdout:      cfg.Logging.Stdout,
+		FileEnabled: cfg.Logging.FileEnabled,
+		MaxSizeMB:   cfg.Logging.MaxSizeMB,
+		MaxFiles:    cfg.Logging.MaxFiles,
+	})
 
 	agentID := cfg.AgentID
 	if agentID == "" {
@@ -357,8 +362,4 @@ func updateSnapshot(snap *metrics.Snapshot, registry *collector.Registry, agentI
 		snap.SetSystem(report.System)
 	}
 	snap.SetOnline(true)
-}
-
-func initLogging(cfg *config.AgentConfig) {
-	// File logging setup is handled in config/log package.
 }

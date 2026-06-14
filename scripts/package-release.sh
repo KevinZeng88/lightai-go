@@ -49,6 +49,7 @@ mkdir -p "$BUILD_DIR/logs"
 mkdir -p "$BUILD_DIR/data/prometheus"
 mkdir -p "$BUILD_DIR/data/grafana"
 mkdir -p "$BUILD_DIR/run"
+mkdir -p "$BUILD_DIR/runtime"
 
 # 1. Check observability binaries FIRST (fail fast).
 echo "[1/8] Checking observability binaries..."
@@ -127,7 +128,8 @@ cp -r deploy/collectors "$BUILD_DIR/deploy/" 2>/dev/null || true
 cp -r deploy/observability "$BUILD_DIR/deploy/" 2>/dev/null || true
 cp scripts/start-server.sh scripts/start-agent.sh "$BUILD_DIR/scripts/"
 cp scripts/stop-server.sh scripts/stop-agent.sh "$BUILD_DIR/scripts/"
-cp scripts/start-observability.sh scripts/stop-observability.sh scripts/stop-all.sh scripts/reset-grafana-password.sh "$BUILD_DIR/scripts/"
+cp scripts/start-observability.sh scripts/stop-observability.sh scripts/stop-all.sh "$BUILD_DIR/scripts/"
+cp scripts/reset-password.sh scripts/reset-grafana-password.sh "$BUILD_DIR/scripts/"
 cp scripts/status.sh scripts/verify-local.sh "$BUILD_DIR/scripts/"
 cp scripts/collect-logs.sh "$BUILD_DIR/scripts/"
 chmod +x "$BUILD_DIR"/scripts/*.sh
@@ -181,7 +183,7 @@ EOF
 MANIFEST="$BUILD_DIR/MANIFEST.sha256"
 : > "$MANIFEST"
 (cd "$BUILD_DIR" && find . -type f \
-  ! -path './data/*' ! -path './logs/*' ! -path './run/*' \
+  ! -path './data/*' ! -path './logs/*' ! -path './run/*' ! -path './runtime/*' \
   ! -path './data/prometheus/*' ! -path './data/grafana/*' \
   ! -name MANIFEST.sha256 \
   | sort | while IFS= read -r f; do
@@ -189,7 +191,7 @@ MANIFEST="$BUILD_DIR/MANIFEST.sha256"
   done) >> "$MANIFEST"
 # Record symlinks too.
 (cd "$BUILD_DIR" && find . -type l \
-  ! -path './data/*' ! -path './logs/*' ! -path './run/*' \
+  ! -path './data/*' ! -path './logs/*' ! -path './run/*' ! -path './runtime/*' \
   | sort | while IFS= read -r f; do
     target=$(readlink "$f" 2>/dev/null || echo "")
     echo "symlink $target $f"

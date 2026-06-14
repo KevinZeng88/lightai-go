@@ -46,7 +46,7 @@ logging:
   level: info
   dir: logs
   file: agent.log
-  stdout: false
+  stdout: true
   file_enabled: true
   max_size_mb: 50
   max_files: 5

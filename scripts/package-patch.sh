@@ -95,7 +95,7 @@ while IFS= read -r line; do
   esac
   # file starts with "./"
   case "$file" in
-    ./data/*|./logs/*|./run/*|./data/prometheus/*|./data/grafana/*) continue ;;
+    ./data/*|./logs/*|./run/*|./runtime/*|./data/prometheus/*|./data/grafana/*) continue ;;
   esac
 
   # Skip Prometheus binary if unchanged.
@@ -138,7 +138,7 @@ while IFS= read -r line; do
     *)       continue ;;
   esac
   case "$file" in
-    ./data/*|./logs/*|./run/*) continue ;;
+    ./data/*|./logs/*|./run/*|./runtime/*) continue ;;
   esac
   if [ ! -f "$TO_DIR/$file" ]; then
     echo "R $file" >> "$PATCH_DIR/PATCH-MANIFEST.txt"

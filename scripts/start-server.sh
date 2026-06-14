@@ -10,7 +10,7 @@ CONFIG="${1:-$RELEASE_ROOT/configs/server.release.yaml}"
 cd "$RELEASE_ROOT"
 
 # Create required directories.
-mkdir -p logs data run
+mkdir -p logs data run runtime
 
 # Check password.
 if [ -z "${LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
@@ -43,7 +43,12 @@ if kill -0 "$PID" 2>/dev/null; then
   echo "Server started (PID $PID)."
   echo "  Health:  http://127.0.0.1:18080/healthz"
   echo "  Web:     http://127.0.0.1:18080/"
-  echo "  Logs:    logs/server-stdout.log"
+  echo ""
+  echo "  Server stdout log:   logs/server-stdout.log"
+  echo "  Server main log:     logs/server.log"
+  if [ -f runtime/initial-credentials.txt ]; then
+    echo "  Initial credentials: runtime/initial-credentials.txt"
+  fi
 else
   echo "Server failed to start. Check logs/server-stdout.log"
   rm -f run/server.pid
