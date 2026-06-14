@@ -1,6 +1,10 @@
 #!/bin/sh
 # LightAI Go - Incremental Patch Builder
 # Usage: ./scripts/package-patch.sh --from 0.1.0 --to 0.1.1
+# Generates:
+#   apply-patch.sh           – shell-native patch applier (no python3 required)
+#   patch-manifest.json      – JSON metadata (audit / optional python3 enhanced display)
+#   patch-files.tsv          – tab-separated file manifest (primary, shell-native)
 set -e
 
 FROM_VERSION=""
@@ -48,6 +52,9 @@ TO_GRAF_VER=$(to_version_line grafana_version)
 # Helper: get sha256 of a file (empty if file doesn't exist).
 file_sha() { [ -f "$1" ] && sha256sum "$1" | awk '{print $1}' || echo ""; }
 
+# Helper: get octal file mode (e.g. 0755, 0644).
+file_mode() { [ -e "$1" ] && stat -c '%a' "$1" 2>/dev/null | awk '{printf "%04d", $1}' || echo "0644"; }
+
 # Check if bin/prometheus binary itself changed.
 PROM_SHA_FROM=$(file_sha "$FROM_DIR/bin/prometheus")
 PROM_SHA_TO=$(file_sha "$TO_DIR/bin/prometheus")
@@ -61,7 +68,6 @@ GRAF_CHANGED=false
 if [ "$FROM_GRAF_VER" != "$TO_GRAF_VER" ]; then
   GRAF_CHANGED=true
 else
-  # Compare grafana binary SHA.
   GRAF_BIN_FROM=$(file_sha "$FROM_DIR/bin/grafana/bin/grafana")
   GRAF_BIN_TO=$(file_sha "$TO_DIR/bin/grafana/bin/grafana")
   [ "$GRAF_BIN_FROM" != "$GRAF_BIN_TO" ] && GRAF_CHANGED=true
@@ -71,15 +77,19 @@ echo "Comparing files..."
 CHANGED=0
 REMOVED=0
 
-> "$PATCH_DIR/.patch-file-list"
+# Temporary file for accumulating TSV lines (without header yet).
+TSV_TMP="$PATCH_DIR/.tsv-tmp"
+> "$TSV_TMP"
 
-# Function: add a file to the patch.
+# Function: add a file to the patch and record it in the TSV.
 add_patch_file() {
   local file="$1" action="$2" sha="$3"
+  local dir mode
   dir=$(dirname "$file")
   mkdir -p "$PATCH_DIR/$dir"
   cp "$TO_DIR/$file" "$PATCH_DIR/$file"
-  echo "$action $file $sha" >> "$PATCH_DIR/.patch-file-list"
+  mode=$(file_mode "$PATCH_DIR/$file")
+  printf '%s\t%s\t%s\t%s\n' "$action" "$mode" "$sha" "$file" >> "$TSV_TMP"
 }
 
 # Read TO manifest line by line, compare with FROM.
@@ -108,21 +118,20 @@ while IFS= read -r line; do
 
   from_file="$FROM_DIR/$file"
   if [ "$type" = "symlink" ]; then
-    # For symlinks, compare target.
     from_target=$(readlink "$from_file" 2>/dev/null || echo "")
     if [ "$from_target" != "$target" ]; then
-      add_patch_file "$file" "S" "$target"
+      add_patch_file "$file" "update" "$target"
       CHANGED=$((CHANGED + 1))
     fi
   elif [ -f "$from_file" ]; then
     from_sha=$(sha256sum "$from_file" | awk '{print $1}')
     if [ "$from_sha" != "$sha" ]; then
-      add_patch_file "$file" "C" "$sha"
+      add_patch_file "$file" "update" "$sha"
       CHANGED=$((CHANGED + 1))
     fi
   else
     # New entry in TO.
-    add_patch_file "$file" "$type" "${sha:-$target}"
+    add_patch_file "$file" "create" "${sha:-$target}"
     CHANGED=$((CHANGED + 1))
   fi
 done < "$TO_DIR/MANIFEST.sha256"
@@ -141,17 +150,28 @@ while IFS= read -r line; do
     ./data/*|./logs/*|./run/*|./runtime/*) continue ;;
   esac
   if [ ! -f "$TO_DIR/$file" ]; then
-    echo "R $file" >> "$PATCH_DIR/.patch-file-list"
+    printf 'delete\t0000\t-\t%s\n' "$file" >> "$TSV_TMP"
     REMOVED=$((REMOVED + 1))
   fi
 done < "$FROM_DIR/MANIFEST.sha256"
 
-# Convert shell true/false strings to JSON booleans.
-prom_json() { [ "$1" = "true" ] && echo "true" || echo "false"; }
-
-# Write JSON manifest (apply-patch.sh reads from_version / to_version / patch_mode).
-GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+# --- Write patch-files.tsv (shell-native primary manifest) ---
 TIMESTAMP=$(date -Iseconds)
+{
+  echo "# from_version=$FROM_VERSION"
+  echo "# to_version=$TO_VERSION"
+  echo "# patch_mode=cumulative"
+  echo "# created_at=$TIMESTAMP"
+  echo "# changed_files=$CHANGED"
+  echo "# removed_files=$REMOVED"
+  echo "# action	mode	sha256	path"
+  cat "$TSV_TMP"
+} > "$PATCH_DIR/patch-files.tsv"
+rm -f "$TSV_TMP"
+
+# --- Write patch-manifest.json (audit / optional python3 enhanced display) ---
+GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+prom_json() { [ "$1" = "true" ] && echo "true" || echo "false"; }
 cat > "$PATCH_DIR/patch-manifest.json" << JSONEOF
 {
   "from_version": "$FROM_VERSION",
@@ -173,7 +193,6 @@ JSONEOF
 
 # Copy apply-patch.sh into the patch.
 cp "$PROJECT_DIR/scripts/apply-patch.sh" "$PATCH_DIR/apply-patch.sh" 2>/dev/null || true
-rm -f "$PATCH_DIR/.patch-file-list"
 
 # Build tarball.
 rm -f "$PATCH_TAR"
