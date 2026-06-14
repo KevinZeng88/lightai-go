@@ -1,5 +1,7 @@
 # LightAI Go Agent - Development Configuration
 agent_id: agent-dev-01
+# node_id is generated on first start and persisted in runtime/agent-identity.json.
+# Do not copy node_id across machines.
 server_url: http://127.0.0.1:18080
 agent_token: "dev-agent-token"
 log_level: debug
@@ -54,10 +56,11 @@ collectors:
   report_interval: 5s
 
 logging:
+  format: text
   level: "debug"
   dir: "logs"
   file: "lightai-agent.log"
-  stdout: true
+  stdout: false
   file_enabled: true
   max_size_mb: 50
   max_files: 5

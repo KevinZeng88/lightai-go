@@ -38,8 +38,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Determine hostname early (needed for identity and logging).
+	hostname, _ := os.Hostname()
+
 	log.Init(log.Config{
 		Level:         cfg.LogLevel,
+		Format:        cfg.Logging.Format,
 		Dir:           cfg.Logging.Dir,
 		File:          cfg.Logging.File,
 		Stdout:        cfg.Logging.Stdout,
@@ -55,14 +59,25 @@ func main() {
 		agentID = uuid.NewString()
 	}
 
-	// Load persistent state (node_id cache).
-	st, err := state.Load(cfg.DataDir, agentID)
+	// Load or generate persistent node identity.
+	identityDir := cfg.IdentityDir
+	if identityDir == "" {
+		identityDir = "runtime"
+	}
+	st, err := state.Load(identityDir, agentID, hostname)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load agent state: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to load agent identity: %v\n", err)
 		os.Exit(1)
 	}
 
-	hostname, _ := os.Hostname()
+	// Honour explicit node_id from config (validate against identity file).
+	if cfg.NodeID != "" {
+		if st.CachedNodeID() != cfg.NodeID {
+			fmt.Fprintf(os.Stderr, "ERROR: config node_id=%s conflicts with identity file node_id=%s\n  Remove %s or set node_id in config to match.\n", cfg.NodeID, st.CachedNodeID(), st.Path())
+			os.Exit(1)
+		}
+	}
+
 	advertisedAddr := hostname
 	if cfg.AdvertisedAddr != "" {
 		advertisedAddr = cfg.AdvertisedAddr
@@ -71,12 +86,12 @@ func main() {
 	log.Info("agent starting",
 		"version", version.String(),
 		"agent_id", agentID,
+		"node_id", st.CachedNodeID(),
 		"server_url", cfg.ServerURL,
 		"hostname", hostname,
 		"advertise_address", advertisedAddr,
 		"metrics_listen", fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port),
-		"data_dir", cfg.DataDir,
-		"cached_node_id", st.CachedNodeID(),
+		"identity_file", st.Path(),
 		"gpu_profile", cfg.GPU.Profile,
 		"log_level", cfg.LogLevel,
 	)
@@ -219,16 +234,43 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 		RequestTimeout: timeout,
 	}
 
-	nodeID, err := register.Do(client, regCfg, st)
-	if err != nil {
-		log.Error("initial registration failed", "error", err)
-		// Continue with heartbeat loop - will retry on next heartbeat failure.
-	} else {
-		log.Info("agent registered with server",
-			"node_id", nodeID,
-			"agent_id", agentID,
-		)
-		snap.SetNodeID(nodeID)
+	// Initial registration with backoff.
+	nodeID := st.CachedNodeID()
+	regBackoff := 1 * time.Second
+	maxRegBackoff := 60 * time.Second
+	regFailures := 0
+	for {
+		var regErr error
+		nodeID, regErr = register.Do(client, regCfg, st)
+		if regErr == nil {
+			log.Info("agent registered with server",
+				"node_id", nodeID,
+				"agent_id", agentID,
+			)
+			snap.SetNodeID(nodeID)
+			break
+		}
+		regFailures++
+		if regFailures == 1 {
+			log.Error("initial registration failed", "error", regErr)
+		} else if regFailures%10 == 0 {
+			// Every ~10 failures, emit a warning to keep visibility.
+			log.Warn("registration still failing",
+				"failures", regFailures,
+				"next_retry_s", regBackoff.Seconds(),
+				"error", regErr,
+			)
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(regBackoff):
+		}
+		regBackoff *= 2
+		if regBackoff > maxRegBackoff {
+			regBackoff = maxRegBackoff
+		}
 	}
 
 	// Heartbeat ticker.
@@ -252,6 +294,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 
 	consecutiveFailures := 0
 	lastSuccessAt := time.Now()
+	lastHBFailLog := time.Time{} // rate-limit heartbeat failure logs
 
 	for {
 		select {
@@ -261,11 +304,16 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 			hbResp, err := register.SendHeartbeat(client, cfg.ServerURL, cfg.AgentToken, agentID, nodeID)
 			if err != nil {
 				consecutiveFailures++
-				log.Warn("heartbeat failed",
-					"agent_id", agentID,
-					"error", err,
-					"consecutive_failure_count", consecutiveFailures,
-				)
+				// Rate-limit: log at most once per 30 seconds for repeated heartbeat failures.
+				if consecutiveFailures == 1 || time.Since(lastHBFailLog) > 30*time.Second {
+					log.Warn("heartbeat failed",
+						"agent_id", agentID,
+						"node_id", nodeID,
+						"error", err,
+						"consecutive_failure_count", consecutiveFailures,
+					)
+					lastHBFailLog = time.Now()
+				}
 				if hbResp != nil && hbResp.NeedRegister {
 					log.Info("server requested re-registration",
 						"agent_id", agentID,
@@ -293,6 +341,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 	}
 
 	_ = lastSuccessAt
+	_ = lastHBFailLog
 }
 
 func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry, snap *metrics.Snapshot) {

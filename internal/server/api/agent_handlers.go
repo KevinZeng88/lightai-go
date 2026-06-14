@@ -158,8 +158,8 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Update heartbeat.
 	result, err := h.DB.Exec(
-		`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ? OR agent_id = ?`,
-		now, now, req.NodeID, req.AgentID,
+		`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ?`,
+		now, now, req.NodeID,
 	)
 	if err != nil {
 		log.Error("heartbeat update error", "error", err)

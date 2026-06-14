@@ -12,9 +12,10 @@ agent_token: "lightai-agent-token-change-me"
 
 logging:
   level: info
+  format: text
   dir: logs
   file: lightai-server.log
-  stdout: true
+  stdout: false
   file_enabled: true
   append: true
   max_size_mb: 100

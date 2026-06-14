@@ -14,6 +14,7 @@ import (
 // Config holds logging configuration.
 type Config struct {
 	Level         string
+	Format        string // "text" or "json", default "text"
 	Dir           string
 	File          string
 	Stdout        bool
@@ -52,6 +53,9 @@ func Init(cfg Config) {
 	}
 
 	opts := &slog.HandlerOptions{Level: lvl}
+
+	// Choose handler format.
+	isJSON := strings.ToLower(cfg.Format) == "json"
 
 	var writers []io.Writer
 
@@ -98,7 +102,12 @@ func Init(cfg Config) {
 		sink = io.MultiWriter(writers...)
 	}
 
-	handler := slog.NewJSONHandler(sink, opts)
+	var handler slog.Handler
+		if isJSON {
+			handler = slog.NewJSONHandler(sink, opts)
+		} else {
+			handler = slog.NewTextHandler(sink, opts)
+		}
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 }

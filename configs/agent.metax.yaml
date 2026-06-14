@@ -2,6 +2,8 @@
 # Copy to the GPU server and customize as needed.
 
 agent_id: agent-01
+# node_id is generated on first start and persisted in runtime/agent-identity.json.
+# Do not copy node_id across machines.
 server_url: http://127.0.0.1:18080
 agent_token: "lightai-agent-token-change-me"
 log_level: info
@@ -44,10 +46,11 @@ collectors:
   report_interval: 5s
 
 logging:
+  format: text
   level: info
   dir: logs
   file: lightai-agent.log
-  stdout: true
+  stdout: false
   file_enabled: true
   append: true
   max_size_mb: 100

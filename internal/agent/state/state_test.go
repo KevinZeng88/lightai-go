@@ -6,65 +6,111 @@ import (
 	"testing"
 )
 
-func TestLoad_FreshState(t *testing.T) {
+func TestLoad_FirstStart_GeneratesNodeID(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Load(dir, "agent-test-01")
+	s, err := Load(dir, "agent-test-01", "test-host")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
-	if s.CachedNodeID() != "" {
-		t.Errorf("expected empty cached node_id, got %q", s.CachedNodeID())
+	if s.NodeID() == "" {
+		t.Error("expected generated node_id, got empty")
 	}
-	if s.AgentID != "agent-test-01" {
-		t.Errorf("expected agent-test-01, got %q", s.AgentID)
+	if !hasPrefix(s.NodeID(), "node-") {
+		t.Errorf("expected node_id to start with 'node-', got %q", s.NodeID())
+	}
+
+	// Verify file was written with 0600.
+	path := filepath.Join(dir, identityFileName)
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("identity file not created: %v", err)
+	}
+	if fi.Mode().Perm() != 0600 {
+		t.Errorf("expected 0600 permissions, got %#o", fi.Mode().Perm())
+	}
+}
+
+func TestLoad_ReusesExistingNodeID(t *testing.T) {
+	dir := t.TempDir()
+	s1, err := Load(dir, "agent-01", "host-a")
+	if err != nil {
+		t.Fatalf("first Load failed: %v", err)
+	}
+	nodeID := s1.NodeID()
+
+	// Reload — must get the same node_id.
+	s2, err := Load(dir, "agent-01", "host-a")
+	if err != nil {
+		t.Fatalf("second Load failed: %v", err)
+	}
+	if s2.NodeID() != nodeID {
+		t.Errorf("expected %q, got %q on reload", nodeID, s2.NodeID())
+	}
+}
+
+func TestLoad_CorruptState_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, identityFileName), []byte("not json"), 0600)
+
+	_, err := Load(dir, "agent-01", "host-a")
+	if err == nil {
+		t.Fatal("expected error on corrupt identity, got nil")
+	}
+}
+
+func TestLoad_EmptyNodeID_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, identityFileName), []byte(`{"node_id":""}`), 0600)
+
+	_, err := Load(dir, "agent-01", "host-a")
+	if err == nil {
+		t.Fatal("expected error on empty node_id, got nil")
 	}
 }
 
 func TestSetNodeID_Persists(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Load(dir, "agent-01")
+	s, err := Load(dir, "agent-01", "host-a")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
 
-	if err := s.SetNodeID("node-abc-123"); err != nil {
+	if err := s.SetNodeID("node-explicit-123"); err != nil {
 		t.Fatalf("SetNodeID failed: %v", err)
 	}
 
-	// Reload and verify.
-	s2, err := Load(dir, "agent-01")
+	s2, err := Load(dir, "agent-01", "host-b")
 	if err != nil {
 		t.Fatalf("re-Load failed: %v", err)
 	}
-	if s2.CachedNodeID() != "node-abc-123" {
-		t.Errorf("expected node-abc-123, got %q", s2.CachedNodeID())
+	if s2.NodeID() != "node-explicit-123" {
+		t.Errorf("expected node-explicit-123, got %q", s2.NodeID())
 	}
 }
 
 func TestCheckMismatch_NoCached(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Load(dir, "agent-01")
-	if err != nil {
-		t.Fatalf("Load failed: %v", err)
-	}
-	if s.CheckMismatch("server-node-1") {
-		t.Error("expected no mismatch when no cached node_id")
+	s, _ := Load(dir, "agent-01", "host-a")
+	nodeID := s.NodeID()
+	// After Load, node_id is always set. Same node_id should match.
+	if s.CheckMismatch(nodeID) {
+		t.Error("expected no mismatch when server returns same node_id")
 	}
 }
 
 func TestCheckMismatch_Match(t *testing.T) {
 	dir := t.TempDir()
-	s, _ := Load(dir, "agent-01")
-	s.SetNodeID("node-xyz")
+	s, _ := Load(dir, "agent-01", "host-a")
+	nodeID := s.NodeID()
 
-	if s.CheckMismatch("node-xyz") {
+	if s.CheckMismatch(nodeID) {
 		t.Error("expected no mismatch when IDs match")
 	}
 }
 
 func TestCheckMismatch_Mismatch(t *testing.T) {
 	dir := t.TempDir()
-	s, _ := Load(dir, "agent-01")
+	s, _ := Load(dir, "agent-01", "host-a")
 	s.SetNodeID("node-old")
 
 	if !s.CheckMismatch("node-new") {
@@ -74,24 +120,30 @@ func TestCheckMismatch_Mismatch(t *testing.T) {
 
 func TestCheckMismatch_EmptyServer(t *testing.T) {
 	dir := t.TempDir()
-	s, _ := Load(dir, "agent-01")
-	s.SetNodeID("node-old")
+	s, _ := Load(dir, "agent-01", "host-a")
 
 	if s.CheckMismatch("") {
 		t.Error("expected no mismatch when server node_id is empty")
 	}
 }
 
-func TestLoad_CorruptState(t *testing.T) {
+func TestIdentity_FilePermissions(t *testing.T) {
 	dir := t.TempDir()
-	// Write corrupt JSON.
-	os.WriteFile(filepath.Join(dir, stateFileName), []byte("not json"), 0600)
-
-	s, err := Load(dir, "agent-01")
+	s, err := Load(dir, "agent-01", "host-a")
 	if err != nil {
-		t.Fatalf("Load should not error on corrupt state: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
-	if s.CachedNodeID() != "" {
-		t.Errorf("expected empty node_id after corrupt state, got %q", s.CachedNodeID())
+
+	// Verify current perms.
+	fi, err := os.Stat(s.Path())
+	if err != nil {
+		t.Fatalf("stat identity file: %v", err)
 	}
+	if fi.Mode().Perm() != 0600 {
+		t.Errorf("expected 0600, got %#o", fi.Mode().Perm())
+	}
+}
+
+func hasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }

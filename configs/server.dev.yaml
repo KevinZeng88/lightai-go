@@ -8,10 +8,11 @@ dev_mode: true
 agent_token: "dev-agent-token"
 
 logging:
+  format: text
   level: "debug"
   dir: "logs"
   file: "lightai-server.log"
-  stdout: true
+  stdout: false
   file_enabled: true
   max_size_mb: 50
   max_files: 5

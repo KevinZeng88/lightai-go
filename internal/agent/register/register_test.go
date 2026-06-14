@@ -27,7 +27,7 @@ func TestDo_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	st, _ := state.Load(t.TempDir(), "agent-01")
+	st, _ := state.Load(t.TempDir(), "agent-01", "test-host")
 	client := server.Client()
 
 	nodeID, err := Do(client, Config{
@@ -65,7 +65,7 @@ func TestDo_NodeIDEmpty(t *testing.T) {
 	}))
 	defer server.Close()
 
-	st, _ := state.Load(t.TempDir(), "agent-01")
+	st, _ := state.Load(t.TempDir(), "agent-01", "test-host")
 	client := server.Client()
 
 	_, err := Do(client, Config{
@@ -88,7 +88,7 @@ func TestDo_MalformedResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	st, _ := state.Load(t.TempDir(), "agent-01")
+	st, _ := state.Load(t.TempDir(), "agent-01", "test-host")
 	client := server.Client()
 
 	_, err := Do(client, Config{
@@ -110,7 +110,7 @@ func TestDo_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	st, _ := state.Load(t.TempDir(), "agent-01")
+	st, _ := state.Load(t.TempDir(), "agent-01", "test-host")
 	client := server.Client()
 
 	_, err := Do(client, Config{
@@ -137,7 +137,7 @@ func TestDo_NodeIDReused(t *testing.T) {
 	defer server.Close()
 
 	dir := t.TempDir()
-	st, _ := state.Load(dir, "agent-01")
+	st, _ := state.Load(dir, "agent-01", "test-host")
 	st.SetNodeID("node-existing") // Pre-cache same ID.
 
 	client := server.Client()
@@ -172,7 +172,7 @@ func TestDo_Mismatch(t *testing.T) {
 	defer server.Close()
 
 	dir := t.TempDir()
-	st, _ := state.Load(dir, "agent-01")
+	st, _ := state.Load(dir, "agent-01", "test-host")
 	st.SetNodeID("node-old-cached") // Different cached value.
 
 	client := server.Client()
@@ -196,7 +196,7 @@ func TestDo_Mismatch(t *testing.T) {
 }
 
 func TestDo_ServerNotReachable(t *testing.T) {
-	st, _ := state.Load(t.TempDir(), "agent-01")
+	st, _ := state.Load(t.TempDir(), "agent-01", "test-host")
 	client := &http.Client{}
 
 	_, err := Do(client, Config{

@@ -129,7 +129,7 @@ cp -r deploy/observability "$BUILD_DIR/deploy/" 2>/dev/null || true
 cp scripts/start-server.sh scripts/start-agent.sh "$BUILD_DIR/scripts/"
 cp scripts/stop-server.sh scripts/stop-agent.sh "$BUILD_DIR/scripts/"
 cp scripts/start-observability.sh scripts/stop-observability.sh scripts/stop-all.sh "$BUILD_DIR/scripts/"
-cp scripts/reset-password.sh scripts/reset-grafana-password.sh "$BUILD_DIR/scripts/"
+cp scripts/reset-password.sh scripts/reset-grafana-password.sh scripts/reset-agent-identity.sh "$BUILD_DIR/scripts/"
 cp scripts/status.sh scripts/verify-local.sh "$BUILD_DIR/scripts/"
 cp scripts/collect-logs.sh "$BUILD_DIR/scripts/"
 chmod +x "$BUILD_DIR"/scripts/*.sh

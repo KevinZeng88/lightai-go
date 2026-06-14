@@ -58,6 +58,7 @@ func main() {
 
 	log.Init(log.Config{
 		Level:         cfg.LogLevel,
+		Format:        cfg.Logging.Format,
 		Dir:           cfg.Logging.Dir,
 		File:          cfg.Logging.File,
 		Stdout:        cfg.Logging.Stdout,

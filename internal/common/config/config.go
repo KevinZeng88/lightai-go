@@ -28,6 +28,7 @@ type ServerConfig struct {
 // LoggingConfig holds file logging configuration.
 type LoggingConfig struct {
 	Level         string `yaml:"level" json:"level"`
+	Format        string `yaml:"format" json:"format"` // text or json, default text
 	Dir           string `yaml:"dir" json:"dir"`
 	File          string `yaml:"file" json:"file"`
 	Stdout        bool   `yaml:"stdout" json:"stdout"`
@@ -51,10 +52,12 @@ type GPUProfileConfig struct {
 // AgentConfig holds all agent configuration.
 type AgentConfig struct {
 	AgentID        string               `yaml:"agent_id" json:"agent_id"`
+	NodeID         string               `yaml:"node_id" json:"node_id"` // optional, overrides auto-gen
 	ServerURL      string               `yaml:"server_url" json:"server_url"`
 	AgentToken     string               `yaml:"agent_token" json:"-"`
 	LogLevel       string               `yaml:"log_level" json:"log_level"`
 	DataDir        string               `yaml:"data_dir" json:"data_dir"`
+	IdentityDir    string               `yaml:"identity_dir" json:"identity_dir"` // default: runtime
 	AdvertisedAddr string               `yaml:"advertised_address" json:"advertised_address"`
 	RequestTimeout time.Duration        `yaml:"request_timeout" json:"request_timeout"`
 	Metrics        AgentMetricsConfig   `yaml:"metrics" json:"metrics"`
@@ -132,9 +135,10 @@ func DefaultServerConfig() ServerConfig {
 		AgentToken: "lightai-agent-token-change-me",
 		Logging: LoggingConfig{
 			Level:         "info",
+			Format:        "text",
 			Dir:           "logs",
 			File:          "lightai-server.log",
-			Stdout:        true,
+			Stdout:        false,
 			FileEnabled:   true,
 			Append:        true,
 			MaxSizeMB:     50,
@@ -158,6 +162,7 @@ func DefaultAgentConfig() AgentConfig {
 		AgentToken:     "lightai-agent-token-change-me",
 		LogLevel:       "info",
 		DataDir:        "data",
+		IdentityDir:    "runtime",
 		RequestTimeout: 5 * time.Second,
 		Metrics: AgentMetricsConfig{
 			Enabled: true,
@@ -188,9 +193,10 @@ func DefaultAgentConfig() AgentConfig {
 		},
 		Logging: LoggingConfig{
 			Level:         "info",
+			Format:        "text",
 			Dir:           "logs",
 			File:          "lightai-agent.log",
-			Stdout:        true,
+			Stdout:        false,
 			FileEnabled:   true,
 			Append:        true,
 			MaxSizeMB:     50,
