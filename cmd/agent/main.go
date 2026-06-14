@@ -185,29 +185,34 @@ func main() {
 		"request_timeout_s", cfg.RequestTimeout.Seconds(),
 	)
 
-	// Health/metrics HTTP server.
-	healthMux := http.NewServeMux()
-	healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(types.HealthResponse{Status: "ok"})
-	})
-	healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	// P1-003: Only start metrics HTTP server if enabled.
+	var healthSrv *http.Server
+	if cfg.Metrics.Enabled {
+		healthMux := http.NewServeMux()
+		healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(types.HealthResponse{Status: "ok"})
+		})
+		healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
-	metricsAddr := fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port)
-	healthSrv := &http.Server{
-		Addr:         metricsAddr,
-		Handler:      healthMux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	go func() {
-		log.Info("metrics server listening", "addr", metricsAddr)
-		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("metrics server failed", "error", err)
+		metricsAddr := fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port)
+		healthSrv = &http.Server{
+			Addr:         metricsAddr,
+			Handler:      healthMux,
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 15 * time.Second,
+			IdleTimeout:  60 * time.Second,
 		}
-	}()
+
+		go func() {
+			log.Info("metrics server listening", "addr", metricsAddr)
+			if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Error("metrics server failed", "error", err)
+			}
+		}()
+	} else {
+		log.Info("metrics server disabled (metrics.enabled=false)")
+	}
 
 	log.Info("agent started", "agent_id", agentID)
 
@@ -226,8 +231,10 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	if err := healthSrv.Shutdown(shutdownCtx); err != nil {
+	if healthSrv != nil {
+		if err := healthSrv.Shutdown(shutdownCtx); err != nil {
 		log.Error("metrics server forced to shutdown", "error", err)
+		}
 	}
 
 	log.Info("agent stopped")
@@ -440,11 +447,14 @@ func updateSnapshot(snap *metrics.Snapshot, registry *collector.Registry, agentI
 	if report == nil {
 		return
 	}
-	if len(report.GPUResources) > 0 {
+	if report.GPUResources != nil {
 		snap.SetGPUResources(report.GPUResources)
 	}
 	if report.System != nil {
 		snap.SetSystem(report.System)
+		if len(report.GPUResources) == 0 {
+			snap.SetGPUResources(report.GPUResources)
+		}
 	}
 	snap.SetOnline(true)
 }

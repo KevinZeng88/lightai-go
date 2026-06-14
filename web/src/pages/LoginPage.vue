@@ -60,7 +60,7 @@ async function doLogin() {
   availableTenants.value = []
 
   try {
-    await auth.login(username.value, password.value)
+    await auth.login(username.value, password.value, selectedTenantId.value || undefined)
     // P0-007: Check must_change_password from the response.
     if (auth.mustChangePassword) {
       router.replace('/change-password')

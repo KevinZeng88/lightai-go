@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // HandleObservabilityStatus returns Prometheus/Grafana readiness status.
@@ -32,8 +33,10 @@ func HandleObservabilityStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
+var probeClient = &http.Client{Timeout: 5 * time.Second}
+
 func probeHTTP(url string) bool {
-	resp, err := http.Get(url)
+	resp, err := probeClient.Get(url)
 	if err != nil {
 		return false
 	}

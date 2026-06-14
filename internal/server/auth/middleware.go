@@ -24,6 +24,12 @@ func SessionInfoFromContext(ctx context.Context) *SessionInfo {
 	return info
 }
 
+// NewContextWithSessionInfo returns a context with session info injected.
+// Exported for test usage (tenant isolation tests, etc.).
+func NewContextWithSessionInfo(ctx context.Context, info *SessionInfo) context.Context {
+	return context.WithValue(ctx, ctxKeySessionInfo, info)
+}
+
 // PermissionsFromContext extracts permission codes from the request context.
 func PermissionsFromContext(ctx context.Context) []string {
 	perms, _ := ctx.Value(ctxKeyPermissions).([]string)

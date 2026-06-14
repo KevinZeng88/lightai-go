@@ -30,10 +30,12 @@ export const useAuthStore = defineStore('auth', () => {
   const mustChangePassword = ref(false)
   const isLoggedIn = ref(false)
 
-  async function login(username: string, password: string) {
+  async function login(username: string, password: string, tenantId?: string) {
+    // P0-003/CODEX: Pass tenant_id for multi-tenant login.
+    const body: Record<string, string> = { username, password }
+    if (tenantId) body.tenant_id = tenantId
     // P0-007: apiClient.post now throws on non-2xx.
-    // If it succeeds, the response is valid login data.
-    const data = await apiClient.post('/api/auth/login', { username, password })
+    const data = await apiClient.post('/api/auth/login', body)
 
     // P0-007: Only set logged-in state on successful response.
     user.value = {

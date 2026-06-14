@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
 	srvmetrics "lightai-go/internal/server/metrics"
 
@@ -396,28 +397,37 @@ func (h *ResourceHandler) MarkStaleGPUs(nodeID string, threshold time.Duration) 
 }
 
 // HandleListGPUs handles GET /api/gpus.
+// P0-002/CODEX: Scoped to current session tenant via join with nodes.
 func (h *ResourceHandler) HandleListGPUs(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.URL.Query().Get("node_id")
 	vendor := r.URL.Query().Get("vendor")
+	info := auth.SessionInfoFromContext(r.Context())
 
-	query := `SELECT id, node_id, vendor, index_num, name, uuid, pci_bus_id, driver_version,
-		memory_total_bytes, memory_used_bytes, memory_free_bytes,
-		gpu_utilization_percent, memory_utilization_percent,
-		temperature_celsius, power_draw_watts,
-		health, status, collected_at, created_at, updated_at
-		FROM gpu_devices WHERE 1=1`
+	query := `SELECT g.id, g.node_id, g.vendor, g.index_num, g.name, g.uuid, g.pci_bus_id, g.driver_version,
+		g.memory_total_bytes, g.memory_used_bytes, g.memory_free_bytes,
+		g.gpu_utilization_percent, g.memory_utilization_percent,
+		g.temperature_celsius, g.power_draw_watts,
+		g.health, g.status, g.collected_at, g.created_at, g.updated_at
+		FROM gpu_devices g`
 	args := []interface{}{}
+	// P0-002: Join nodes for tenant scoping.
+	if info != nil && info.TenantID != "" {
+		query += " JOIN nodes n ON g.node_id = n.id WHERE n.tenant_id = ?"
+		args = append(args, info.TenantID)
+	} else {
+		query += " WHERE 1=1"
+	}
 
 	if nodeID != "" {
-		query += " AND node_id = ?"
+		query += " AND g.node_id = ?"
 		args = append(args, nodeID)
 	}
 	if vendor != "" {
-		query += " AND vendor = ?"
+		query += " AND g.vendor = ?"
 		args = append(args, vendor)
 	}
 
-	query += " ORDER BY node_id, index_num"
+	query += " ORDER BY g.node_id, g.index_num"
 
 	rows, err := h.DB.Query(query, args...)
 	if err != nil {
@@ -577,6 +587,18 @@ func (h *ResourceHandler) HandleGetNodeSystem(w http.ResponseWriter, r *http.Req
 	if nodeID == "" {
 		http.Error(w, `{"error":"node id required"}`, http.StatusBadRequest)
 		return
+	}
+
+	// P0-002/CODEX: Verify node belongs to current tenant.
+	info := auth.SessionInfoFromContext(r.Context())
+	if info != nil && info.TenantID != "" {
+		var nodeTenant string
+		if err := h.DB.QueryRow(`SELECT tenant_id FROM nodes WHERE id = ?`, nodeID).Scan(&nodeTenant); err == nil {
+			if nodeTenant != info.TenantID {
+				http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+				return
+			}
+		}
 	}
 
 	type FsInfo struct {

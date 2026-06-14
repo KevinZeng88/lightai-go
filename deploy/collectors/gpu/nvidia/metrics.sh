@@ -24,6 +24,11 @@ if [ -z "$OUTPUT" ]; then
   exit 10
 fi
 
+# P1-009: Use mktemp for temp files, trap to clean up.
+OUT_FILE=$(mktemp /tmp/lightai-nvidia-metrics-out.XXXXXX)
+ERR_FILE=$(mktemp /tmp/lightai-nvidia-metrics-err.XXXXXX)
+trap 'rm -f "$OUT_FILE" "$ERR_FILE"' EXIT
+
 # P1-002: Pipe awk output to temp file, validate before emitting status.
 echo "$OUTPUT" | awk -F, '
 function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
@@ -78,20 +83,20 @@ function num_or_null(v) {
   printf "METRIC vendor=nvidia index=%s uuid=%s name=\"%s\" memory_total_bytes=%s memory_used_bytes=%s memory_free_bytes=%s gpu_utilization_percent=%s memory_utilization_percent=%s temperature_celsius=%s power_draw_watts=%s health=%s status=%s\n",
     idx, uuid, quote(name), mt, mu, mf, gu, mu2, tmp, pw, health, status
 }
-' > /tmp/lightai-nvidia-metrics-out.$$ 2>/tmp/lightai-nvidia-metrics-err.$$
+' > $OUT_FILE 2>$ERR_FILE
 
-if [ -s /tmp/lightai-nvidia-metrics-out.$$ ]; then
-  cat /tmp/lightai-nvidia-metrics-out.$$
+if [ -s $OUT_FILE ]; then
+  cat $OUT_FILE
   collector_emit_status nvidia true ok
-elif [ -s /tmp/lightai-nvidia-metrics-err.$$ ]; then
+elif [ -s $ERR_FILE ]; then
   collector_emit_status nvidia false "parse failed"
-  rm -f /tmp/lightai-nvidia-metrics-out.$$ /tmp/lightai-nvidia-metrics-err.$$
+  rm -f $OUT_FILE $ERR_FILE
   exit 40
 else
   collector_emit_status nvidia false "no metrics produced"
-  rm -f /tmp/lightai-nvidia-metrics-out.$$ /tmp/lightai-nvidia-metrics-err.$$
+  rm -f $OUT_FILE $ERR_FILE
   exit 40
 fi
 
-rm -f /tmp/lightai-nvidia-metrics-out.$$ /tmp/lightai-nvidia-metrics-err.$$
+rm -f $OUT_FILE $ERR_FILE
 exit 0

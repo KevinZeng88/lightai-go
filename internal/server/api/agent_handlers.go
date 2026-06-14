@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
 	srvmetrics "lightai-go/internal/server/metrics"
 )
@@ -108,6 +109,18 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	} else {
+		// P0-004/CODEX: Check node_id + agent_id binding.
+		var existingAgentID string
+		err = h.DB.QueryRow(`SELECT agent_id FROM nodes WHERE id = ?`, req.NodeID).Scan(&existingAgentID)
+		if err == nil && existingAgentID != "" && existingAgentID != req.AgentID {
+			log.Warn("node agent_id mismatch — registration rejected",
+				"node_id", serverNodeID,
+				"existing_agent_id", existingAgentID,
+				"incoming_agent_id", req.AgentID,
+			)
+			http.Error(w, `{"error":"node_id already bound to a different agent_id"}`, http.StatusConflict)
+			return
+		}
 		// Update existing node.
 		_, err = h.DB.Exec(
 			`UPDATE nodes SET agent_id = ?, hostname = ?, advertised_address = ?,
@@ -156,6 +169,20 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().Format(time.RFC3339)
 
+	// P0-004/CODEX: Verify agent_id matches registered node.
+	var existingAgentID string
+	if err := h.DB.QueryRow(`SELECT agent_id FROM nodes WHERE id = ?`, req.NodeID).Scan(&existingAgentID); err == nil {
+		if existingAgentID != "" && existingAgentID != req.AgentID {
+			log.Warn("heartbeat agent_id mismatch",
+				"node_id", req.NodeID,
+				"existing_agent_id", existingAgentID,
+				"incoming_agent_id", req.AgentID,
+			)
+			http.Error(w, `{"error":"agent_id mismatch for this node"}`, http.StatusForbidden)
+			return
+		}
+	}
+
 	// Update heartbeat.
 	result, err := h.DB.Exec(
 		`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ?`,
@@ -193,13 +220,21 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleListNode handles GET /api/nodes.
+// P0-002/CODEX: Scoped to current session tenant.
 func (h *AgentHandler) HandleListNodes(w http.ResponseWriter, r *http.Request) {
+	info := auth.SessionInfoFromContext(r.Context())
+	tenantID := "default"
+	if info != nil {
+		tenantID = info.TenantID
+	}
+
 	rows, err := h.DB.Query(
 		`SELECT id, agent_id, hostname, advertised_address, metrics_enabled,
 		        metrics_scheme, metrics_port, metrics_path,
 		        status, last_heartbeat_at, tenant_id, created_at, updated_at
-		 FROM nodes WHERE tenant_id = 'default'
+		 FROM nodes WHERE tenant_id = ?
 		 ORDER BY hostname`,
+		tenantID,
 	)
 	if err != nil {
 		log.Error("list nodes error", "error", err)
@@ -247,12 +282,15 @@ func (h *AgentHandler) HandleListNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleGetNode handles GET /api/nodes/{id}.
+// P0-002/CODEX: Verify node belongs to current tenant.
 func (h *AgentHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
 	if nodeID == "" {
 		http.Error(w, `{"error":"node id required"}`, http.StatusBadRequest)
 		return
 	}
+
+	info := auth.SessionInfoFromContext(r.Context())
 
 	var id, agentID, hostname, addr, scheme, path, status, tenantID, createdAt, updatedAt string
 	var metricsEnabled int
@@ -274,6 +312,12 @@ func (h *AgentHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error("get node error", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// P0-002/CODEX: Tenant scope check.
+	if info != nil && info.TenantID != "" && tenantID != info.TenantID {
+		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 		return
 	}
 

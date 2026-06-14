@@ -45,8 +45,8 @@ if [ -n "${LIGHTAI_GRAFANA_ADMIN_PASSWORD:-}" ]; then
 fi
 
 if [ -f "$GRAFANA_DB" ]; then
-  # Grafana DB already exists. Env var won't take effect for Grafana itself
-  # (password is in DB), but we still need it for our own credential tracking.
+  # P1-011: Grafana DB already exists. LIGHTAI_GRAFANA_ADMIN_PASSWORD env var
+  # will NOT modify the DB password (stored on first init). To reset: ./scripts/reset-grafana-password.sh
   if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
     # Try to read from persisted credentials file.
     if [ -f "$CRED_FILE" ]; then

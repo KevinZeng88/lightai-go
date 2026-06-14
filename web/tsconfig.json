@@ -17,5 +17,6 @@
     "baseUrl": "."
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue", "typings.d.ts"],
+  "exclude": ["src/**/__tests__/**"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

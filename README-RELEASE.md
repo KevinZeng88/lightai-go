@@ -1,6 +1,6 @@
 # LightAI Go Release Package
 
-**Version**: 0.1.6 (RC1)
+**Version**: <version> (RC1)
 **Built with**: glibc 2.28 baseline (linux-build:el8-glibc2.28)
 
 LightAI Go — lightweight GPU infrastructure management platform.
@@ -47,8 +47,8 @@ All components run as native processes managed by shell scripts.
 
 | Component | Version | Port |
 |-----------|---------|------|
-| LightAI Server + Web | 0.1.6 | 18080 |
-| LightAI Agent | 0.1.6 | 19091 |
+| LightAI Server + Web | <version> | 18080 |
+| LightAI Agent | <version> | 19091 |
 | Prometheus | 3.12.0 | 19090 |
 | Grafana OSS | 13.0.2 | 13000 |
 
@@ -57,8 +57,8 @@ All components run as native processes managed by shell scripts.
 ### 1. Extract
 
 ```bash
-tar -xzf lightai-go-0.1.4-linux-amd64.tar.gz
-cd lightai-go-0.1.4-linux-amd64
+tar -xzf <version>-linux-amd64.tar.gz
+cd <version>-linux-amd64
 ```
 
 ### 2. Start All Services

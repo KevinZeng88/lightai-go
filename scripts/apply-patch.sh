@@ -1,5 +1,6 @@
 #!/bin/sh
 # LightAI Go - Apply Cumulative Patch (P0-005: atomic rewrite)
+set -e
 # Shell-native. No python3/jq/external parsers required.
 #
 # Cross-version support:
@@ -133,8 +134,8 @@ if ! $FORCE; then
       exit 1
     fi
 
-    semver_compare "$CURRENT_VERSION" "$TO_VERSION"
-    cmp_to=$?
+    __cmp=0; semver_compare "$CURRENT_VERSION" "$TO_VERSION" || __cmp=$?
+    cmp_to=$__cmp
     if [ $cmp_to -eq 1 ] || [ $cmp_to -eq 0 ]; then
       echo "ERROR: Current version ($CURRENT_VERSION) >= target version ($TO_VERSION)." >&2
       echo "Already up to date or newer. Patch not needed." >&2
@@ -327,10 +328,15 @@ echo "  Staged $PRECHECK_APPLY files to temp directory."
 echo "[Phase 3/4] Committing..."
 
 # Apply creates and updates from stage directory.
+# P0-001/CODEX: Skip VERSION in the loop — it is written last, after all files confirmed.
+COMMIT_FAILED=false
 while IFS="$TAB" read -r action mode sha256 relpath; do
   case "$action" in ""|\#*) continue ;; esac
   case "$relpath" in /*|*..*) continue ;; esac
   relpath="${relpath#./}"
+
+  # Skip VERSION — written atomically at the very end.
+  case "$relpath" in VERSION|./VERSION) continue ;; esac
 
   skip=false
   for ex in $EXCLUDES; do
@@ -343,16 +349,21 @@ while IFS="$TAB" read -r action mode sha256 relpath; do
 
   case "$action" in
     update|create)
-      if [ -f "$src" ]; then
-        mkdir -p "$(dirname "$dst")" 2>/dev/null || true
-        cp "$src" "$dst"
-        echo "  apply   $relpath"
-        APPLIED=$((APPLIED + 1))
+      if [ ! -f "$src" ]; then
+        echo "  FAIL: staged source missing: $relpath" >&2
+        COMMIT_FAILED=true; continue
       fi
+      mkdir -p "$(dirname "$dst")" || { echo "  FAIL: mkdir $relpath" >&2; COMMIT_FAILED=true; continue; }
+      cp "$src" "$dst" || { echo "  FAIL: cp $relpath" >&2; COMMIT_FAILED=true; continue; }
+      if [ -n "$mode" ] && [ "$mode" != "0000" ]; then
+        chmod "$mode" "$dst" 2>/dev/null || true
+      fi
+      echo "  apply   $relpath"
+      APPLIED=$((APPLIED + 1))
       ;;
     delete)
       if [ -f "$dst" ] || [ -L "$dst" ]; then
-        rm -f "$dst"
+        rm -f "$dst" || { echo "  FAIL: rm $relpath" >&2; COMMIT_FAILED=true; continue; }
         echo "  delete  $relpath"
         DELETED=$((DELETED + 1))
       fi
@@ -360,7 +371,32 @@ while IFS="$TAB" read -r action mode sha256 relpath; do
   esac
 done < "$TSV"
 
-# P0-005: Write VERSION LAST — only after all files are successfully applied.
+# P0-001/CODEX: If any commit step failed, rollback. Do NOT write VERSION.
+if $COMMIT_FAILED; then
+  echo ""
+  echo "=== COMMIT FAILED - rolling back ==="
+  if [ -d "$BACKUP_DIR" ]; then
+    (cd "$BACKUP_DIR" && find . -type f -o -type l | while IFS= read -r f; do
+      f="${f#./}"
+      mkdir -p "$(dirname "$ROOT/$f")" 2>/dev/null || true
+      cp -a "$BACKUP_DIR/$f" "$ROOT/$f" 2>/dev/null || true
+      echo "  rollback $f"
+    done)
+  fi
+  # Remove newly-created files.
+  while IFS="$TAB" read -r action mode sha256 relpath; do
+    case "$action" in ""|\#*) continue ;; esac
+    case "$relpath" in /*|*..*) continue ;; esac
+    relpath="${relpath#./}"
+    case "$action" in create) dst="$ROOT/$relpath"; rm -f "$dst" 2>/dev/null || true; echo "  rollback-create $relpath" ;; esac
+  done < "$TSV"
+  rm -rf "$STAGE_DIR" 2>/dev/null || true
+  echo "Original VERSION preserved: $(cat "$ROOT/VERSION" 2>/dev/null || echo not-present)"
+  echo "Backup: $BACKUP_DIR"
+  exit 1
+fi
+
+# P0-005: Write VERSION LAST — only after ALL files confirmed applied.
 echo "$TO_VERSION" > "$ROOT/VERSION"
 echo "  version $TO_VERSION (written to VERSION)"
 

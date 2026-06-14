@@ -55,3 +55,5 @@ logging:
   max_size_mb: 100
   max_files: 10
   retention_days: 30
+# P1-001 NOTE: report_interval (independent report cadence) not yet implemented. Currently report follows collect_interval.
+# P1-002 NOTE: metrics.advertise_addr not yet used for Prometheus target advertisement.

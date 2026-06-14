@@ -1,219 +1,175 @@
-# LightAI Go RC1 Review & Fix Plan
+# LightAI Go RC1 — 主台账
 
-**Created**: 2026-06-14
-**Last Update**: 2026-06-14 (Round 4 — P1-004 host monitoring, P2 polish, manual verification recorded)
+**Last Update**: 2026-06-14 (P1/P2 Risk Closure complete)
+**Current Version**: 0.1.7 (VERSION file; builds produce 0.1.6 with --no-bump, 0.1.7 with next)
+**Recommended Tag**: `v0.1.7-rc1`
 **Branch**: main
-**Base Version**: 0.1.6
-**Build Image**: `linux-build:el8-glibc2.28` (pre-built, glibc 2.28, Go 1.26.4, Node 26.1.0)
 
 ---
 
-## Status Summary (Round 4 Final)
+## 当前 RC1 状态
 
-| Priority | Total | VERIFIED | DONE | TODO | DEFERRED |
-|----------|-------|----------|------|------|----------|
-| P0       | 11    | 11       | 0    | 0    | 0        |
-| P1       | 16    | 10       | 3    | 3    | 0        |
-| P2       | 14    | 2        | 7    | 3    | 2        |
-
----
-
-## P0 Issues — ALL VERIFIED (11/11)
-
-| ID | Issue | Status |
-|----|-------|--------|
-| P0-001 | glibc 2.28 Docker build | **VERIFIED** — Docker build + glibc check executed |
-| P0-002 | Build order (Web→Go) | **VERIFIED** — Docker build log confirms |
-| P0-003 | Version auto-management | **VERIFIED** — VERSION + --version + manifest match |
-| P0-004 | Grafana password logic | **VERIFIED** — grafana.env template-only |
-| P0-005 | Patch atomic + cross-version | **VERIFIED** — 0.1.6→0.1.7 tested end-to-end |
-| P0-006 | RBAC cross-tenant | **VERIFIED** — go vet clean, tenant checks |
-| P0-007 | Web auth/CSRF | **VERIFIED** — Web build in Docker, CSRF rotation |
-| P0-008 | Agent reporting reliability | **VERIFIED** — HTTP status check, transaction, GPU staleness |
-| P0-009 | Node auto-offline | **VERIFIED** — Health checker goroutine |
-| P0-010 | Prometheus multi-node | **VERIFIED** — HTTP SD config |
-| P0-011 | Default token risk | **VERIFIED** — Startup warnings |
-
-### P0-D: Clean Directory Release Startup Verification — VERIFIED (manual)
-
-- **验证来源**: 人工验证（由 Kevin Zeng 完成）
-- **验证对象**: `dist/lightai-go-0.1.6-linux-amd64.tar.gz`
-- **验证方式**: 解压到干净目录后启动
-- **验证内容**:
-  1. Server 启动成功 ✅
-  2. Agent 启动成功 ✅
-  3. Agent 能注册/心跳 ✅
-  4. Observability 启动成功 ✅
-  5. Prometheus 可访问 ✅
-  6. Grafana 可访问 ✅
-  7. Grafana runtime credentials 已生成 ✅
-  8. stop 脚本可正常停止 ✅
-- **备注**: 此项由人工完成，Claude 无需重复执行
-
----
-
-## P1 Issues
-
-### VERIFIED (10 items)
-
-| ID | Issue | Verification |
-|----|-------|-------------|
-| P1-001 | Collect cache staleness | go vet clean; LastSuccessTime + staleness check |
-| P1-002 | GPU collector health/available | Real NVIDIA RTX 5090 + mock tests |
-| P1-003 | MetaX /tmp fix | mktemp + trap cleanup (mock verified, no MetaX hardware) |
-| P1-004 | Host monitoring → Server/Web/Prometheus | Server DB storage + API + Web UI implemented |
-| P1-005 | Network counter params | IOCounters moved outside loop |
-| P1-006 | Host uptime metric | UptimeSeconds + lightai_host_uptime_seconds |
-| P1-007 | Collect/report counters | IncCollectErrors/IncReportErrors/IncReportSuccess |
-| P1-008 | GPU available metric | lightai_gpu_available_status exported |
-| P1-013 | go vet | Clean pass |
-| P1-014 | Schema version + migration | schema_version table with versioned migration |
-
-### DONE (code complete, deployment verification pending)
-
-| ID | Issue |
-|----|-------|
-| P1-010 | Logging level unification |
-| P1-011 | PID validation in stop scripts |
-| P1-012 | Graceful shutdown in stop scripts |
-
-### NVIDIA Collector Real Test (P1-002)
-
-```
-Hardware: NVIDIA GeForce RTX 5090 Laptop GPU (WSL)
-nvidia-smi: ✅ 610.47 driver, 24GB VRAM
-discover.sh: ✅ GPU found (index=0, uuid, pci, driver, memory_total)
-metrics.sh:  ✅ used=0 (preserved), free=24GB, util=0%, temp=42°C, power=13W
-health:      ✅ healthy (determined by data quality, not fixed string)
-```
-
-### P1-004 Host Monitoring Implementation
-
-- **Server**: 3 new DB tables (node_system_snapshots, node_filesystem_snapshots, node_network_snapshots)
-- **API**: `GET /api/nodes/{id}/system` returns CPU/memory/disk/network/uptime
-- **Web**: Node detail drawer shows host resources (CPU cores/usage, memory, load avg, uptime, filesystems, network)
-- **Prometheus**: Agent already exports `lightai_host_*` metrics → scraped via HTTP SD → Grafana dashboards
-- **i18n**: Chinese labels added (主机资源, CPU使用率, 负载均值, etc.)
-
-### TODO (3 items)
-
-| ID | Issue | Reason |
-|----|-------|--------|
-| P1-009 | Config driving behavior | Systematic wiring needed — not RC1 blocker |
-| P1-015 | TLS/proxy docs | Documentation — not RC1 blocker |
-| P1-016 | Integration tests | Needs test infrastructure — not RC1 blocker |
-
----
-
-## P2 Issues
-
-### VERIFIED
-| ID | Issue |
-|----|-------|
-| P2-010 | Top-level checksum — .sha256 generated alongside tarball |
-
-### DONE
-| ID | Issue |
-|----|-------|
-| P2-001 | RBAC Handler boundary notes |
-| P2-004 | Dashboard count consistency — documented in PHASE-STATUS.md |
-| P2-005 | README/RELEASE version updated to 0.1.6 (RC1) |
-| P2-006 | MetaX status unified — "Scripts Ready (mock verified, hardware pending)" |
-| P2-007 | Grafana OSS default — prefer OSS, Enterprise fallback |
-| P2-008 | SHA mismatch aborts — exit 1 instead of continuing |
-| P2-009 | Dependency inventory — DEPENDENCIES.md created (Go+npm+external binaries) |
-| P2-013 | Diagnostic desensitization rules documented |
-
-### DEFERRED
-| ID | Issue | Reason |
-|----|-------|--------|
-| P2-009 (SBOM) | Full SBOM generation | CI/CD infrastructure needed; DEPENDENCIES.md as lightweight alternative |
-| P2-011 | Code signing | GPG key infrastructure needed |
-
-### TODO (3 items)
-| ID | Issue |
-|----|-------|
-| P2-002 | Module boundaries refinement |
-| P2-003 | Chinese localization (partial — i18n keys added for host resources) |
-| P2-012 | glibc build matrix document |
-
----
-
-## Verification Results (Round 4 Executed)
-
-### Build
-```bash
-$ scripts/package-release-docker.sh --no-bump
-→ dist/lightai-go-0.1.6-linux-amd64.tar.gz (435M)
-→ dist/lightai-go-0.1.6-linux-amd64.tar.gz.sha256
-```
-
-### glibc ABI
-```
-ELFs checked: 12, Violations: 0
-lightai-server:  GLIBC_2.28
-lightai-agent:   GLIBC_2.3
-=== RESULT: PASS ===
-```
-
-### Version
-```
-VERSION:        0.1.6
-Server --ver:   0.1.6 (commit: d03b564..., go1.26.4, linux/amd64)
-Agent --ver:    0.1.6 (commit: d03b564..., go1.26.4, linux/amd64)
-```
-
-### NVIDIA Collector
-```
-discover.sh: RTX 5090, UUID, PCI, driver=610.47, memory=24GB ✅
-metrics.sh:  used=0 (preserved), free=24GB, util=0%, temp=42°C, health=healthy ✅
-```
-
-### Code Quality
-```
-go vet ./...     PASS
-go test ./...    PASS (5 packages)
-bash -n *.sh     ALL 23 OK
-```
-
-### Cross-Version Patch
-```
-0.1.6 → 0.1.7: dry-run PASS, apply SUCCESS, SHA fail detected, VERSION rollback ✅
-```
-
----
-
-## Modified Files (Round 4)
-
-| File | Change |
+| Item | Status |
 |------|--------|
-| `internal/server/api/resource_handlers.go` | SystemSnapshotReq fields, HandleGetNodeSystem, 3 new DB tables |
-| `internal/server/api/router.go` | GET /api/nodes/{id}/system route |
-| `web/src/api/nodes.ts` | NodeSystemInfo types, fetchNodeSystem |
-| `web/src/pages/NodesPage.vue` | Host resources section in node detail drawer |
-| `web/src/locales/zh-CN.ts` | Host resource Chinese labels (13 new keys) |
-| `scripts/prepare-observability-binaries.sh` | P2-007 (OSS first) + P2-008 (SHA abort) |
-| `README-RELEASE.md` | Version 0.1.6 RC1, glibc 2.28 baseline, build instructions |
-| `DEPENDENCIES.md` | Created — Go/npm/external binary inventory |
-| `docs/PHASE-STATUS.md` | MetaX status unified, GPU health fix noted |
+| P0 (Codex Review) | 4/4 **VERIFIED** |
+| P1 critical fixes | 6/12 **FIXED** |
+| P1 deferred | 4/12 **DEFERRED** with risk/mitigation/RC2 plan |
+| P1 documented (not implemented) | 2/12 **DOCUMENTED** |
+| P2 | 3/5 FIXED, 1 DEFERRED, 1 ACKNOWLEDGED |
+| RC tag | **可以打 `v0.1.7-rc1`** |
+| MetaX 8-card field validation | **待现场执行** |
+| glibc 2.28 compatibility | **VERIFIED** (12 ELF, 0 violations) |
 
-## New Files (Round 4)
-
-| File | Purpose |
-|------|---------|
-| `DEPENDENCIES.md` | Dependency inventory (lightweight SBOM alternative) |
+**交付口径**: P0 全部 VERIFIED。关键 P1 已修复，剩余 P1 已记录风险、规避方式和 RC2 计划。可以进入 v0.1.7-rc1 tag。该版本仍需在 MetaX 现场验证 Web 是否显示 8 张 MetaX C500。
 
 ---
 
-## RC1 Final Assessment
+## P0 Status — Codex Review
 
-| Criterion | Status | Evidence |
-|-----------|--------|----------|
-| 可构建 | ✅ | Docker build: dist/lightai-go-0.1.6-linux-amd64.tar.gz |
-| 可启动 | ✅ | Manual verification: Server/Agent/Observability start |
-| 可升级 | ✅ | 0.1.6→0.1.7 cumulative patch verified |
-| 可回滚 | ✅ | Backup + rollback instructions on patch apply |
-| 可观测 | ✅ | Prometheus HTTP SD, Grafana credentials safe, NVIDIA metrics |
-| glibc 2.28 | ✅ | 12 ELFs checked, 0 violations, max GLIBC_2.28 |
+| ID | Title | Status | Root Cause | Tests |
+|----|-------|--------|------------|-------|
+| P0-001 | Patch atomicity | **VERIFIED** | No `set -e`; cp failures ignored; VERSION written unconditionally | `tests/test_patch_atomicity.sh` (7 scenarios including cp failure) |
+| P0-002 | Tenant isolation | **VERIFIED** | Hardcoded `WHERE tenant_id='default'` | 6 Go tests in `tenant_isolation_test.go` |
+| P0-003 | Multi-tenant login UI | **VERIFIED** | `selectedTenantId` never sent to backend | 4 Vitest tests in `auth.test.ts` |
+| P0-004 | Agent identity enforcement | **VERIFIED** | Default token only warned; no agent_id binding | 7 Go tests in `agent_identity_test.go` |
 
-**RC1 可以宣布。**
+### P0-001 Detail
+
+- **Fix**: `set -e`, VERSION skipped in commit loop, cp/mkdir errors trigger rollback, semver wrappers for `set -e` safety.
+- **Files**: `scripts/apply-patch.sh`
+- **Verification**: Successful apply, dry-run, SHA mismatch, path traversal, cp failure + rollback, all PASS.
+
+### P0-002 Detail
+
+- **Fix**: HandleListNodes uses session tenant; HandleGetNode returns 404 on cross-tenant; HandleListGPUs joins nodes for tenant scoping; HandleGetNodeSystem tenant check added; `NewContextWithSessionInfo` exported for tests.
+- **Files**: `internal/server/api/agent_handlers.go`, `internal/server/api/resource_handlers.go`, `internal/server/auth/middleware.go`
+- **Tests**: `TestTenantNodesScopedToList`, `TestTenantBBlockedFromTenantANode`, `TestTenantScopedGPUList`, `TestSystemQueryRespectsTenant`, `TestNodesNoHardcodedDefaultTenant`
+
+### P0-003 Detail
+
+- **Fix**: `LoginPage.doLogin()` passes `selectedTenantId` to `auth.login()`; `auth.login()` accepts optional `tenantId` and sends `tenant_id` in request body.
+- **Files**: `web/src/pages/LoginPage.vue`, `web/src/stores/auth.ts`
+- **Tests**: 4 Vitest tests (`sends tenant_id`, `does not send when not provided`, `sets isLoggedIn`, `does not set on failure`)
+
+### P0-004 Detail
+
+- **Fix**: Agent exits on default token (`LIGHTAI_ALLOW_INSECURE_DEFAULT_TOKEN=1` bypasses); Server validates agent_id binding on re-registration (409) and heartbeat (403).
+- **Files**: `cmd/agent/main.go`, `internal/server/api/agent_handlers.go`
+- **Tests**: `TestAgentRegistrationWithGoodToken`, `TestNodeIDAgentIDBindingOnReRegistration`, `TestHeartbeatAgentIDMismatchRejected`, `TestHeartbeatUnregisteredNodeRequestsReregister`, `TestResourceReportAgentIDBinding`, `TestNodeIDAgentIDBindingOnReRegisterSameAgentOK`
+
+---
+
+## P1 Status
+
+| ID | Title | Status | Detail |
+|----|-------|--------|--------|
+| P1-001 | report_interval unused | **DOCUMENTED** | Comment added to config; RC2: implement or remove |
+| P1-002 | advertise_addr unused | **DOCUMENTED** | Comment added to config; RC2: implement or remove |
+| P1-003 | metrics.enabled starts HTTP | **FIXED** | `cfg.Metrics.Enabled` gates server startup |
+| P1-004 | CPU-only LastSuccessAt | **FIXED** | System-only success updates LastSuccessAt |
+| P1-005 | GPU empty → historical not marked | **FIXED** | GPUs not in report marked `unavailable` in handler |
+| P1-006 | SQLite snapshot growth | **DEFERRED** | Risk: ~17K rows/day/node. Mitigation: cron DELETE. RC2: built-in retention |
+| P1-007 | Write errors ignored | **DEFERRED** | Errors logged, not silent. Full transaction hardening in RC2 |
+| P1-008 | Migration incomplete | **DEFERRED** | New tables in handler init, not Migrate(). RC2: all tables registered |
+| P1-009 | NVIDIA temp files unsafe | **FIXED** | `mktemp` + `trap EXIT` in discover.sh/metrics.sh |
+| P1-010 | http.Get no timeout | **FIXED** | `http.Client{Timeout: 5s}` in probeHTTP |
+| P1-011 | Grafana password message | **FIXED** | Explicit message: env var does NOT modify existing DB password |
+| P1-012 | Missing critical tests | **DEFERRED** | 14 API tests + 4 Vitest tests added this round. Full suite in RC2 |
+
+### P1 Deferred Details
+
+**P1-006**: Risk: node_system_snapshots grows ~17K rows/day per node. Workaround: `DELETE FROM node_system_snapshots WHERE collected_at < datetime('now','-7 days')`. RC2: configurable retention.
+
+**P1-007**: Risk: system/disk/network write failures don't block GPU writes. Errors are logged. Workaround: monitor logs for "save system snapshot error". RC2: full transaction wrapper.
+
+**P1-008**: Risk: gpu_devices/node_system_snapshots created in handler init, not via Migrate(). Workaround: manual schema review before upgrade. RC2: migrate all tables through Migrate().
+
+**P1-012**: Risk: untested edge cases. Workaround: manual verification checklist. RC2: API/Shell/Patch integration test suite.
+
+---
+
+## P2 Status
+
+| ID | Title | Status |
+|----|-------|--------|
+| P2-001 | Chinese startup messages | **DEFERRED** |
+| P2-002 | Old version numbers | **FIXED** (README-RELEASE.md uses `<version>` placeholder) |
+| P2-003 | Old credential paths | **FIXED** (references current runtime/ paths) |
+| P2-004 | Grafana consistency | **FIXED** (via P1-011) |
+| P2-005 | Frontend bundle size | **ACKNOWLEDGED** (no action for RC1) |
+
+---
+
+## Verification Results
+
+```
+go test ./...                    ALL PASS (8 packages, 14 API tests)
+go vet ./...                     PASS
+bash -n scripts/*.sh             ALL 23 OK
+tests/test_patch_atomicity.sh    7 scenarios PASS
+npm run build                    ✓ built
+vitest auth.test.ts              4/4 PASS
+nvidia-smi                       ✅ RTX 5090
+discover.sh / metrics.sh         ✅ (mktemp)
+check-glibc-compat.sh            ✅ 12 ELF, 0 violations
+```
+
+---
+
+## Release Checklist
+
+Before tagging:
+
+```bash
+git status                     # clean working tree
+git diff --stat                # review all changes
+git diff --check               # no whitespace errors
+go test ./...                  # PASS
+go vet ./...                   # PASS
+bash -n scripts/*.sh           # ALL OK
+```
+
+After tagging, build release:
+
+```bash
+./scripts/package-release-docker.sh --bump patch
+scripts/check-glibc-compat.sh dist
+sha256sum -c dist/*.sha256
+```
+
+---
+
+## MetaX 8-Card Field Validation
+
+待现场执行（开发环境无 MetaX 硬件）：
+
+```bash
+# Agent metrics
+curl -s -o /tmp/agent_metrics.txt -w '%{http_code}\n' http://127.0.0.1:19091/metrics
+# Expected: 200
+
+grep -c 'collected before' /tmp/agent_metrics.txt               # Expected: 0
+grep -c '^lightai_gpu_available_status' /tmp/agent_metrics.txt  # Expected: 8
+grep -c '^lightai_gpu_memory_total_bytes' /tmp/agent_metrics.txt # Expected: 8
+grep -c '^lightai_gpu_memory_used_bytes' /tmp/agent_metrics.txt  # Expected: 8
+grep -c '^lightai_gpu_memory_free_bytes' /tmp/agent_metrics.txt  # Expected: 8
+
+# Server API
+curl -s http://127.0.0.1:18080/api/gpus | jq 'length'      # Expected: 8
+curl -s http://127.0.0.1:18080/api/gpus | jq '.[0].vendor' # Expected: "metax"
+
+# Web: Nodes page → 8 MetaX C500, GPUs page → 8 MetaX C500
+```
+
+---
+
+## Document Index
+
+| File | Role |
+|------|------|
+| `docs/RC1_REVIEW_FIX_PLAN.md` | **主台账** — 唯一权威状态 |
+| `docs/RC1_CODEX_REVIEW_TRACKING.md` | Codex Review 详细问题清单和验证记录 |
+| `docs/GPU_COLLECTOR_ARCHITECTURE.md` | GPU 抽象架构文档 |
+| `docs/archive/RC1_PATCH_TEST.md` | 已归档 — patch 测试临时文件 |
+| `docs/REVIEW-GPUSTACK-AUDIT.md` | 独立 — GPUStack 审计（非 RC1） |
+| `docs/REVIEW-GPUSTACK-UI.md` | 独立 — GPUStack UI 参考（非 RC1） |
