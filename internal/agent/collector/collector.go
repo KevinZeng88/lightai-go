@@ -115,21 +115,21 @@ type GPUCollector interface {
 // data model for Agent /metrics, Agent report, Server storage, API, and Web.
 // Future API/SDK/daemon-based collectors output the same type.
 type GPUResource struct {
-	Vendor           string   `json:"vendor"`            // nvidia, metax, ascend, cambricon, hygon, intel, unknown
-	Index            int      `json:"index"`             // physical GPU index on the node
-	UUID             string   `json:"uuid"`              // primary unique identifier
-	Name             string   `json:"name"`              // human-readable GPU name
-	PCIBusID         string   `json:"pci_bus_id"`
-	DriverVersion    string   `json:"driver_version"`
-	MemoryTotalBytes uint64   `json:"memory_total_bytes"`
-	MemoryUsedBytes  uint64   `json:"memory_used_bytes"`
-	MemoryFreeBytes  uint64   `json:"memory_free_bytes"`
-	GPUUtilization   *float64 `json:"gpu_utilization_percent,omitempty"`
-	MemUtilization   *float64 `json:"memory_utilization_percent,omitempty"`
-	Temperature      *float64 `json:"temperature_celsius,omitempty"`
-	PowerDraw        *float64 `json:"power_draw_watts,omitempty"`
-	Health           string   `json:"health"`  // healthy / degraded / error / unknown
-	Status           string   `json:"status"`  // available / unavailable
+	Vendor           string    `json:"vendor"` // nvidia, metax, ascend, cambricon, hygon, intel, unknown
+	Index            int       `json:"index"`  // physical GPU index on the node
+	UUID             string    `json:"uuid"`   // primary unique identifier
+	Name             string    `json:"name"`   // human-readable GPU name
+	PCIBusID         string    `json:"pci_bus_id"`
+	DriverVersion    string    `json:"driver_version"`
+	MemoryTotalBytes uint64    `json:"memory_total_bytes"`
+	MemoryUsedBytes  uint64    `json:"memory_used_bytes"`
+	MemoryFreeBytes  uint64    `json:"memory_free_bytes"`
+	GPUUtilization   *float64  `json:"gpu_utilization_percent,omitempty"`
+	MemUtilization   *float64  `json:"memory_utilization_percent,omitempty"`
+	Temperature      *float64  `json:"temperature_celsius,omitempty"`
+	PowerDraw        *float64  `json:"power_draw_watts,omitempty"`
+	Health           string    `json:"health"` // healthy / degraded / error / unknown
+	Status           string    `json:"status"` // available / unavailable
 	CollectedAt      time.Time `json:"collected_at"`
 }
 
@@ -272,11 +272,11 @@ func itoa(i int) string {
 
 // ResourceReport is the full resource report sent to the server.
 type ResourceReport struct {
-	AgentID     string               `json:"agent_id"`
-	System      *SystemSnapshot      `json:"system"`
-	GPUDevices  []GPUDeviceInfo      `json:"gpu_devices"`
-	GPUMetrics  []GPUMetricInfo      `json:"gpu_metrics"`
-	GPUResources []GPUResource       `json:"gpu_resources"` // unified, vendor-neutral
-	Diagnostics []CollectorDiagnosis `json:"diagnostics"`
-	CollectedAt time.Time            `json:"collected_at"`
+	AgentID      string               `json:"agent_id"`
+	System       *SystemSnapshot      `json:"system"`
+	GPUDevices   []GPUDeviceInfo      `json:"gpu_devices"`
+	GPUMetrics   []GPUMetricInfo      `json:"gpu_metrics"`
+	GPUResources []GPUResource        `json:"gpu_resources"` // unified, vendor-neutral
+	Diagnostics  []CollectorDiagnosis `json:"diagnostics"`
+	CollectedAt  time.Time            `json:"collected_at"`
 }

@@ -78,6 +78,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	)
 	mux.Handle("GET /api/nodes", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodes)))
 	mux.Handle("GET /api/nodes/{id}", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNode)))
+	// PATCH /api/nodes/{id}/tenant — platform admin only.
+	mux.Handle("PATCH /api/nodes/{id}/tenant", platformChain(cfg, cfg.AgentHandler.HandlePatchNodeTenant))
 	// P1-004: Host system snapshot endpoint.
 	mux.Handle("GET /api/nodes/{id}/system", resourceChain(http.HandlerFunc(cfg.ResourceHandler.HandleGetNodeSystem)))
 

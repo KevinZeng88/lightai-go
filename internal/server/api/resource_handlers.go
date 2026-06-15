@@ -108,24 +108,24 @@ type ResourceReportRequest struct {
 }
 
 type SystemSnapshotReq struct {
-	Hostname           string                    `json:"hostname"`
-	OS                 string                    `json:"os"`
-	OSVersion          string                    `json:"os_version"`
-	KernelVersion      string                    `json:"kernel_version"`
-	CPUModel           string                    `json:"cpu_model"`
-	CPUCores           int                       `json:"cpu_cores"`
-	CPUUtilization     float64                   `json:"cpu_utilization_percent"`
-	MemoryTotalBytes   uint64                    `json:"memory_total_bytes"`
-	MemoryUsedBytes    uint64                    `json:"memory_used_bytes"`
-	SwapTotalBytes     uint64                    `json:"swap_total_bytes"`
-	SwapUsedBytes      uint64                    `json:"swap_used_bytes"`
-	Load1              float64                   `json:"load1"`
-	Load5              float64                   `json:"load5"`
-	Load15             float64                   `json:"load15"`
-	UptimeSeconds      uint64                    `json:"uptime_seconds"`
-	Filesystems        []FilesystemSnapshotReq   `json:"filesystems"`
-	NetworkInterfaces  []NetworkInterfaceSnapshotReq `json:"network_interfaces"`
-	CollectedAt        string                    `json:"collected_at"`
+	Hostname          string                        `json:"hostname"`
+	OS                string                        `json:"os"`
+	OSVersion         string                        `json:"os_version"`
+	KernelVersion     string                        `json:"kernel_version"`
+	CPUModel          string                        `json:"cpu_model"`
+	CPUCores          int                           `json:"cpu_cores"`
+	CPUUtilization    float64                       `json:"cpu_utilization_percent"`
+	MemoryTotalBytes  uint64                        `json:"memory_total_bytes"`
+	MemoryUsedBytes   uint64                        `json:"memory_used_bytes"`
+	SwapTotalBytes    uint64                        `json:"swap_total_bytes"`
+	SwapUsedBytes     uint64                        `json:"swap_used_bytes"`
+	Load1             float64                       `json:"load1"`
+	Load5             float64                       `json:"load5"`
+	Load15            float64                       `json:"load15"`
+	UptimeSeconds     uint64                        `json:"uptime_seconds"`
+	Filesystems       []FilesystemSnapshotReq       `json:"filesystems"`
+	NetworkInterfaces []NetworkInterfaceSnapshotReq `json:"network_interfaces"`
+	CollectedAt       string                        `json:"collected_at"`
 }
 
 type FilesystemSnapshotReq struct {
@@ -146,8 +146,8 @@ type NetworkInterfaceSnapshotReq struct {
 }
 
 // GPUResourceReq is the unified GPU resource in an agent report.
-	// GPUResourceReq is the unified GPU resource in an agent report (RC1 model).
-	// GPUDeviceInfo / GPUMetricInfo are parser-only raw records — never used here.
+// GPUResourceReq is the unified GPU resource in an agent report (RC1 model).
+// GPUDeviceInfo / GPUMetricInfo are parser-only raw records — never used here.
 type GPUResourceReq struct {
 	Vendor           string   `json:"vendor"`
 	Index            int      `json:"index"`
@@ -259,8 +259,20 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 			)
 		}
 
-		// Update node info.
-		tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, now, nodeID)
+		// Update node info (timestamp + enrich from system snapshot).
+		if sys.OS != "" || sys.KernelVersion != "" {
+			tx.Exec(`UPDATE nodes SET
+				os = CASE WHEN ? != '' THEN ? ELSE os END,
+				kernel = CASE WHEN ? != '' THEN ? ELSE kernel END,
+				updated_at = ?
+				WHERE id = ?`,
+				sys.OS, sys.OS,
+				sys.KernelVersion, sys.KernelVersion,
+				now, nodeID,
+			)
+		} else {
+			tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, now, nodeID)
+		}
 	}
 
 	// P0-008: Process unified GPU resources (RC1 model).
@@ -273,6 +285,11 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 				key = g.Vendor + ":" + fmt.Sprintf("%d", g.Index)
 			}
 			reportedUUIDs[key] = true
+
+			// Fallback: if total is 0 but used+free > 0, derive total.
+			if g.MemoryTotalBytes == 0 && g.MemoryUsedBytes+g.MemoryFreeBytes > 0 {
+				g.MemoryTotalBytes = g.MemoryUsedBytes + g.MemoryFreeBytes
+			}
 
 			collectedAt := g.CollectedAt
 			if collectedAt == "" {
@@ -292,14 +309,14 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 					 driver_version, memory_total_bytes, memory_used_bytes, memory_free_bytes,
 					 gpu_utilization_percent, memory_utilization_percent,
 					 temperature_celsius, power_draw_watts,
-					 health, status, collected_at, created_at, updated_at)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					 health, status, tenant_id, collected_at, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					gpuID, nodeID, g.Vendor, g.Index, g.Name, g.UUID, g.PCIBusID,
 					g.DriverVersion,
 					g.MemoryTotalBytes, g.MemoryUsedBytes, g.MemoryFreeBytes,
 					g.GPUUtilization, g.MemUtilization,
 					g.Temperature, g.PowerDraw,
-					g.Health, g.Status, collectedAt, now, now,
+					g.Health, g.Status, "a0000000-0000-0000-0000-000000000001", collectedAt, now, now,
 				)
 				if err != nil {
 					log.Error("create gpu error", "error", err)
@@ -411,9 +428,14 @@ func (h *ResourceHandler) HandleListGPUs(w http.ResponseWriter, r *http.Request)
 		FROM gpu_devices g`
 	args := []interface{}{}
 	// P0-002: Join nodes for tenant scoping.
-	if info != nil && info.TenantID != "" {
-		query += " JOIN nodes n ON g.node_id = n.id WHERE n.tenant_id = ?"
-		args = append(args, info.TenantID)
+	// Filter by GPU own tenant_id. Platform admin sees all.
+	if info == nil || !info.IsPlatformAdmin {
+		tid := "a0000000-0000-0000-0000-000000000001"
+		if info != nil && info.TenantID != "" {
+			tid = info.TenantID
+		}
+		query += " WHERE g.tenant_id = ?"
+		args = append(args, tid)
 	} else {
 		query += " WHERE 1=1"
 	}
@@ -617,18 +639,18 @@ func (h *ResourceHandler) HandleGetNodeSystem(w http.ResponseWriter, r *http.Req
 		BytesSent uint64 `json:"bytes_sent"`
 	}
 	type SysInfo struct {
-		CPUUtilization string  `json:"cpu_utilization_percent"`
-		MemoryTotal    uint64  `json:"memory_total_bytes"`
-		MemoryUsed     uint64  `json:"memory_used_bytes"`
-		SwapTotal      uint64  `json:"swap_total_bytes"`
-		SwapUsed       uint64  `json:"swap_used_bytes"`
-		UptimeSeconds  string  `json:"uptime_seconds"`
-		CPUCores       int     `json:"cpu_cores"`
-		Load1          string  `json:"load1"`
-		Load5          string  `json:"load5"`
-		Load15         string  `json:"load15"`
-		CollectedAt    string  `json:"collected_at"`
-		Filesystems    []FsInfo `json:"filesystems"`
+		CPUUtilization string    `json:"cpu_utilization_percent"`
+		MemoryTotal    uint64    `json:"memory_total_bytes"`
+		MemoryUsed     uint64    `json:"memory_used_bytes"`
+		SwapTotal      uint64    `json:"swap_total_bytes"`
+		SwapUsed       uint64    `json:"swap_used_bytes"`
+		UptimeSeconds  string    `json:"uptime_seconds"`
+		CPUCores       int       `json:"cpu_cores"`
+		Load1          string    `json:"load1"`
+		Load5          string    `json:"load5"`
+		Load15         string    `json:"load15"`
+		CollectedAt    string    `json:"collected_at"`
+		Filesystems    []FsInfo  `json:"filesystems"`
 		Networks       []NetInfo `json:"networks"`
 	}
 

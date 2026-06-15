@@ -28,11 +28,10 @@ export async function fetchGPUs(params?: { node_id?: string; vendor?: string }):
   if (params?.node_id) query.set('node_id', params.node_id)
   if (params?.vendor) query.set('vendor', params.vendor)
   const qs = query.toString()
-  const resp = await apiClient.get('/api/gpus' + (qs ? '?' + qs : ''))
-  return resp.data || []
+  const data = await apiClient.get('/api/gpus' + (qs ? '?' + qs : ''))
+  return Array.isArray(data) ? data : []
 }
 
 export async function fetchGPU(id: string): Promise<GPU> {
-  const resp = await apiClient.get(`/api/gpus/${id}`)
-  return resp.data
+  return await apiClient.get(`/api/gpus/${id}`)
 }

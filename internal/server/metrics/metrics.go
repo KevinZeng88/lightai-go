@@ -13,11 +13,11 @@ type ServerMetrics struct {
 	Info prometheus.Gauge
 
 	// Gauges refreshed from DB on each scrape.
-	NodesTotal     prometheus.GaugeFunc
-	NodesOnline    prometheus.GaugeFunc
-	GPUsTotal      prometheus.GaugeFunc
-	GPUsAvailable  prometheus.GaugeFunc
-	GPUsHealthy    prometheus.GaugeFunc
+	NodesTotal    prometheus.GaugeFunc
+	NodesOnline   prometheus.GaugeFunc
+	GPUsTotal     prometheus.GaugeFunc
+	GPUsAvailable prometheus.GaugeFunc
+	GPUsHealthy   prometheus.GaugeFunc
 
 	APIRequests        *prometheus.CounterVec
 	APIRequestDuration *prometheus.HistogramVec
@@ -138,7 +138,7 @@ func New(reg *prometheus.Registry, db *sql.DB) *ServerMetrics {
 	))
 
 	// Legacy gauges for code compatibility.
-	m.NodesTotal = nil  // Using GaugeFunc above
+	m.NodesTotal = nil // Using GaugeFunc above
 	m.NodesOnline = nil
 	m.GPUsTotal = nil
 	m.GPUsAvailable = nil

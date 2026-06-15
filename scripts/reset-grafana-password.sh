@@ -43,22 +43,53 @@ if [ -z "$NEW_PASS" ]; then
   if [ -z "$NEW_PASS" ]; then
     NEW_PASS="LightAI@$(date +%s | tail -c 9)"
   fi
-  echo "Auto-generated Grafana password (saved to credentials file)."
+  echo "Auto-generated Grafana password."
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RLS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$RLS_ROOT"
 
+# ---- Locate Grafana binary ----
 GRAF_BIN=""
 for c in bin/grafana/bin/grafana bin/grafana/bin/grafana-server; do
-  [ -x "$c" ] && { GRAF_BIN="$c"; break; }
+  if [ -x "$c" ]; then
+    GRAF_BIN="$c"
+    break
+  fi
 done
 
 if [ ! -x "$GRAF_BIN" ]; then
-  echo "ERROR: Grafana binary not found." >&2; exit 1
+  echo "ERROR: Grafana binary not found at bin/grafana/bin/grafana or bin/grafana/bin/grafana-server" >&2
+  echo "  Run: ./scripts/prepare-observability-binaries.sh --download" >&2
+  exit 1
 fi
 
+# ---- Locate Grafana database (same paths as start-observability.sh) ----
+GRAFANA_HOME="$RLS_ROOT/bin/grafana"
+GRAFANA_INI="$RLS_ROOT/configs/observability/grafana.ini"
+GRAFANA_DATA="$RLS_ROOT/data/grafana"
+GRAFANA_DB="$GRAFANA_DATA/grafana.db"
+
+if [ ! -f "$GRAFANA_INI" ]; then
+  echo "ERROR: Grafana config not found at $GRAFANA_INI" >&2
+  exit 1
+fi
+
+if [ ! -f "$GRAFANA_DB" ]; then
+  echo "ERROR: Grafana database not found at $GRAFANA_DB" >&2
+  echo "  Grafana must be started at least once to initialize the database." >&2
+  echo "  Run: ./scripts/start-observability.sh" >&2
+  exit 1
+fi
+
+echo "Grafana binary : $GRAF_BIN"
+echo "Grafana home   : $GRAFANA_HOME"
+echo "Grafana config : $GRAFANA_INI"
+echo "Grafana DB     : $GRAFANA_DB"
+echo ""
+
+# ---- Stop Grafana if running ----
 GRAFANA_WAS_RUNNING=false
 if [ -f run/grafana.pid ]; then
   PID=$(cat run/grafana.pid)
@@ -67,41 +98,69 @@ if [ -f run/grafana.pid ]; then
     GRAFANA_WAS_RUNNING=true
     kill "$PID" 2>/dev/null || true
     sleep 2
+    if kill -0 "$PID" 2>/dev/null; then
+      kill -9 "$PID" 2>/dev/null || true
+      sleep 1
+    fi
+    rm -f run/grafana.pid
+  else
     rm -f run/grafana.pid
   fi
 fi
 
+# ---- Reset admin password ----
+# Uses the same --homepath / --config pattern as start-observability.sh
+# (flags after the subcommand, both for "server" and "cli").
 echo "Resetting Grafana admin password..."
 "$GRAF_BIN" cli \
-  --homepath "$RLS_ROOT/bin/grafana" \
-  --config "$RLS_ROOT/configs/observability/grafana.ini" \
+  --homepath "$GRAFANA_HOME" \
+  --config "$GRAFANA_INI" \
   admin reset-admin-password "$NEW_PASS"
+echo "Grafana admin password reset successful."
 
-# Write credentials record.
-mkdir -p runtime
-CRED_FILE="runtime/reset-credentials.txt"
+# ---- Write credentials records ----
+mkdir -p runtime runtime/observability
 TIMESTAMP=$(date -Iseconds)
-{
-  echo "============================================"
-  echo "LightAI Go - Grafana Password Reset"
-  echo "Reset time: $TIMESTAMP"
-  echo "============================================"
-  echo ""
-  echo "[Grafana]"
-  echo "Username: admin"
-  echo "Password: $NEW_PASS"
-  echo "Service restart required: yes"
-  echo "Next step: ./scripts/start-observability.sh"
-} > "$CRED_FILE"
-chmod 0600 "$CRED_FILE" 2>/dev/null || true
 
-echo "Password reset complete."
-echo "Credentials saved: $CRED_FILE"
+# 1. Update the runtime credentials file used by start-observability.sh.
+cat > runtime/observability/grafana.credentials << CREDEOF
+# LightAI Go - Grafana Admin Credentials
+# Updated by password reset: $TIMESTAMP
+# DO NOT edit manually. Use LIGHTAI_GRAFANA_ADMIN_PASSWORD env var or reset-grafana-password.sh.
+USERNAME=admin
+PASSWORD=$NEW_PASS
+CREDEOF
+chmod 0600 runtime/observability/grafana.credentials 2>/dev/null || true
+echo "Credentials updated : runtime/observability/grafana.credentials"
 
+# 2. Write human-readable reset record.
+cat > runtime/reset-credentials.txt << EOF
+============================================
+LightAI Go - Grafana Password Reset
+Reset time: $TIMESTAMP
+============================================
+
+[Grafana]
+Username: admin
+Password: $NEW_PASS
+DB path: $GRAFANA_DB
+Service restart required: yes
+Next step: ./scripts/start-observability.sh
+EOF
+chmod 0600 runtime/reset-credentials.txt 2>/dev/null || true
+echo "Reset record saved : runtime/reset-credentials.txt"
+
+# ---- Restart Grafana if it was running ----
 if $GRAFANA_WAS_RUNNING; then
+  echo ""
   echo "Restarting Grafana..."
-  sh "$SCRIPT_DIR/start-observability.sh" 2>/dev/null || \
-    echo "Start manually: ./scripts/start-observability.sh"
+  if sh "$SCRIPT_DIR/start-observability.sh" 2>/dev/null; then
+    echo "Grafana restarted. Verify login: http://127.0.0.1:13000 (admin / <new-password>)"
+  else
+    echo "WARNING: Grafana restart failed." >&2
+    echo "  Start manually: ./scripts/start-observability.sh" >&2
+  fi
 else
-  echo "Start Grafana: ./scripts/start-observability.sh"
+  echo ""
+  echo "Grafana was not running. To start: ./scripts/start-observability.sh"
 fi

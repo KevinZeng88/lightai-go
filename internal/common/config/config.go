@@ -46,7 +46,8 @@ type ObservabilityConfig struct {
 
 // GPUProfileConfig holds GPU collector profile settings.
 type GPUProfileConfig struct {
-	Profile string `yaml:"profile" json:"profile"`
+	Profile       string `yaml:"profile" json:"profile"`
+	CollectorMode string `yaml:"collector_mode" json:"collector_mode"` // auto | explicit | disabled, default auto
 }
 
 // AgentConfig holds all agent configuration.
@@ -59,6 +60,7 @@ type AgentConfig struct {
 	DataDir        string               `yaml:"data_dir" json:"data_dir"`
 	IdentityDir    string               `yaml:"identity_dir" json:"identity_dir"` // default: runtime
 	AdvertisedAddr string               `yaml:"advertised_address" json:"advertised_address"`
+	PrimaryIP      string               `yaml:"primary_ip" json:"primary_ip"`
 	RequestTimeout time.Duration        `yaml:"request_timeout" json:"request_timeout"`
 	Metrics        AgentMetricsConfig   `yaml:"metrics" json:"metrics"`
 	Heartbeat      HeartbeatConfig      `yaml:"heartbeat" json:"heartbeat"`
@@ -96,6 +98,12 @@ type GPUExternalCollectorConfig struct {
 	Enabled    bool                   `yaml:"enabled" json:"enabled"`
 	Timeout    time.Duration          `yaml:"timeout" json:"timeout"`
 	Collectors []ExternalCollectorDef `yaml:"collectors" json:"collectors"`
+	AutoDetect AutoDetectConfig       `yaml:"auto_detect" json:"auto_detect"`
+}
+
+// AutoDetectConfig holds auto-detect probe definitions.
+type AutoDetectConfig struct {
+	Probes []ExternalCollectorDef `yaml:"probes" json:"probes"`
 }
 
 // ExternalCollectorDef defines one external GPU collector.

@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -96,14 +98,24 @@ func main() {
 		advertisedAddr = cfg.AdvertisedAddr
 	}
 
+	// Compute primary IP: prefer config, then auto-detect first non-loopback IPv4.
+	primaryIP := cfg.PrimaryIP
+	if primaryIP == "" {
+		primaryIP = detectPrimaryIP()
+	}
 
-		// P0-011: Warn about default agent token in production.
-		if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
-			log.Warn("using default agent token -- NOT safe for production",
-				"agent_token", cfg.AgentToken,
-				"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
-			)
-		}
+	// Gather OS / arch / kernel info.
+	osName := runtime.GOOS
+	archName := runtime.GOARCH
+	kernelVer := detectKernelVersion()
+
+	// P0-011: Warn about default agent token in production.
+	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
+		log.Warn("using default agent token -- NOT safe for production",
+			"agent_token", cfg.AgentToken,
+			"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
+		)
+	}
 	log.Info("agent starting",
 		"version", version.String(),
 		"agent_id", agentID,
@@ -138,12 +150,22 @@ func main() {
 		profile = "production"
 	}
 
-	// GPU collectors: prefer external command collectors (product path).
-	if cfg.Collectors.GPUExternal.Enabled {
-		timeout := cfg.Collectors.GPUExternal.Timeout
-		if timeout == 0 {
-			timeout = 5 * time.Second
-		}
+	collectorMode := cfg.GPU.CollectorMode
+	if collectorMode == "" {
+		collectorMode = "auto"
+	}
+
+	timeout := cfg.Collectors.GPUExternal.Timeout
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
+
+	switch collectorMode {
+	case "disabled":
+		log.Info("gpu collector_mode=disabled, skipping all GPU collectors")
+
+	case "explicit":
+		// Explicit mode: only collectors explicitly enabled in config.
 		for _, def := range cfg.Collectors.GPUExternal.Collectors {
 			if !def.Enabled {
 				continue
@@ -157,16 +179,58 @@ func main() {
 				Timeout:     timeout,
 			}
 			registry.RegisterGPU(collector.NewExternalCommandCollector(extCfg))
-			log.Info("external gpu collector enabled",
+			log.Info("explicit gpu collector enabled",
 				"collector", def.Name,
 				"vendor", def.Vendor,
-				"discover_cmd", def.DiscoverCmd,
-				"metrics_cmd", def.MetricsCmd,
 			)
 		}
+
+	default: // "auto"
+		// Auto mode: probe each vendor, enable those with GPUs.
+		probes := cfg.Collectors.GPUExternal.AutoDetect.Probes
+		if len(probes) == 0 {
+			// Use built-in defaults.
+			for _, p := range collector.DefaultProbes() {
+				probes = append(probes, config.ExternalCollectorDef{
+					Name:        p.Name,
+					Vendor:      p.Vendor,
+					DiscoverCmd: p.DiscoverCmd,
+					MetricsCmd:  p.MetricsCmd,
+				})
+			}
+		}
+
+		enabledVendors := make([]string, 0)
+		ctx := context.Background()
+		for _, def := range probes {
+			probeDef := collector.ProbeDef{
+				Name:        def.Name,
+				Vendor:      def.Vendor,
+				DiscoverCmd: def.DiscoverCmd,
+				MetricsCmd:  def.MetricsCmd,
+				Timeout:     timeout,
+			}
+			result := collector.Probe(ctx, probeDef)
+			if result.Available {
+				extCfg := collector.ExternalCommandConfig{
+					Name:        def.Name,
+					Vendor:      def.Vendor,
+					Enabled:     true,
+					DiscoverCmd: def.DiscoverCmd,
+					MetricsCmd:  def.MetricsCmd,
+					Timeout:     timeout,
+				}
+				registry.RegisterGPU(collector.NewExternalCommandCollector(extCfg))
+				enabledVendors = append(enabledVendors, def.Vendor)
+			}
+		}
+		log.Info("auto-detect GPU collectors complete",
+			"mode", "auto",
+			"enabled_vendors", enabledVendors,
+		)
 	}
 
-	// Mock GPU for development/test.
+	// Mock GPU for development/test (applies to all modes).
 	if profile == "development" || profile == "test" {
 		if cfg.Collectors.MockGPU.Enabled {
 			registry.RegisterGPU(collector.NewMockGPUCollector())
@@ -219,7 +283,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go runAgentLoop(ctx, cfg, agentID, hostname, advertisedAddr, registry, st, snap)
+	go runAgentLoop(ctx, cfg, agentID, hostname, primaryIP, advertisedAddr, osName, archName, kernelVer, registry, st, snap)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -233,14 +297,14 @@ func main() {
 
 	if healthSrv != nil {
 		if err := healthSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error("metrics server forced to shutdown", "error", err)
+			log.Error("metrics server forced to shutdown", "error", err)
 		}
 	}
 
 	log.Info("agent stopped")
 }
 
-func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostname, advertisedAddr string, registry *collector.Registry, st *state.State, snap *metrics.Snapshot) {
+func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostname, primaryIP, advertisedAddr, osName, archName, kernelVer string, registry *collector.Registry, st *state.State, snap *metrics.Snapshot) {
 	timeout := cfg.RequestTimeout
 	if timeout == 0 {
 		timeout = 5 * time.Second
@@ -253,7 +317,11 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 		AgentToken:     cfg.AgentToken,
 		AgentID:        agentID,
 		Hostname:       hostname,
+		PrimaryIP:      primaryIP,
 		AdvertisedAddr: advertisedAddr,
+		OS:             osName,
+		Arch:           archName,
+		Kernel:         kernelVer,
 		MetricsEnabled: cfg.Metrics.Enabled,
 		MetricsScheme:  cfg.Metrics.Scheme,
 		MetricsPort:    cfg.Metrics.Port,
@@ -457,4 +525,45 @@ func updateSnapshot(snap *metrics.Snapshot, registry *collector.Registry, agentI
 		}
 	}
 	snap.SetOnline(true)
+}
+
+// detectPrimaryIP finds the first non-loopback IPv4 address.
+// Returns empty string if none is found.
+func detectPrimaryIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip := ipNet.IP
+		if ip.IsLoopback() || ip.To4() == nil {
+			continue
+		}
+		if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			continue
+		}
+		return ip.String()
+	}
+	return ""
+}
+
+// detectKernelVersion returns the kernel version using syscall.Uname.
+func detectKernelVersion() string {
+	var uname syscall.Utsname
+	if err := syscall.Uname(&uname); err != nil {
+		return ""
+	}
+	// Convert [65]int8 to string.
+	b := make([]byte, 0, len(uname.Release))
+	for _, c := range uname.Release {
+		if c == 0 {
+			break
+		}
+		b = append(b, byte(c))
+	}
+	return string(b)
 }

@@ -7,13 +7,13 @@ import (
 
 // Registry manages all collectors and executes collection cycles.
 type Registry struct {
-	systemCollectors  []SystemCollector
-	gpuCollectors     []GPUCollector
-	lastSystem        *SystemSnapshot
-	lastGPUDevices    []GPUDeviceInfo
-	lastGPUMetrics    []GPUMetricInfo
-	lastGPUResources  []GPUResource
-	lastDiagnostics   []CollectorDiagnosis
+	systemCollectors []SystemCollector
+	gpuCollectors    []GPUCollector
+	lastSystem       *SystemSnapshot
+	lastGPUDevices   []GPUDeviceInfo
+	lastGPUMetrics   []GPUMetricInfo
+	lastGPUResources []GPUResource
+	lastDiagnostics  []CollectorDiagnosis
 }
 
 // NewRegistry creates a new collector registry.

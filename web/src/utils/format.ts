@@ -32,3 +32,27 @@ export function formatDuration(ms: number): string {
   if (ms < 1000) return ms + 'ms'
   return (ms / 1000).toFixed(1) + 's'
 }
+
+export function shortId(id: string | undefined | null, prefix = 8, suffix = 6): string {
+  if (!id) return 'N/A'
+  if (id.length <= prefix + suffix + 3) return id
+  return id.slice(0, prefix) + '...' + id.slice(-suffix)
+}
+
+export function formatRelativeTime(iso: string | undefined | null): string {
+  if (!iso) return 'N/A'
+  const diff = Date.now() - new Date(iso).getTime()
+  const s = Math.floor(diff / 1000)
+  if (s < 60) return s + 's ago'
+  const m = Math.floor(s / 60)
+  if (m < 60) return m + 'm ago'
+  const h = Math.floor(m / 60)
+  if (h < 24) return h + 'h ago'
+  const d = Math.floor(h / 24)
+  return d + 'd ago'
+}
+
+export function formatGB(bytes: number | undefined | null): string {
+  if (bytes == null) return 'N/A'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB'
+}

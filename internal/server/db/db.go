@@ -17,7 +17,6 @@ type DB struct {
 
 // Open opens (or creates) the SQLite database at the given path.
 func Open(dbPath string) (*DB, error) {
-	// Ensure the directory exists.
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", err)
@@ -28,7 +27,6 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	// Enable WAL mode and foreign keys.
 	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("enable WAL: %w", err)
@@ -42,9 +40,7 @@ func Open(dbPath string) (*DB, error) {
 }
 
 // Migrate creates all required tables if they don't exist.
-// P1-014: Versioned schema migration. Applies migrations incrementally.
 func (db *DB) Migrate() error {
-	// Ensure schema_version table exists first.
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
 		version INTEGER PRIMARY KEY,
 		applied_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -53,20 +49,59 @@ func (db *DB) Migrate() error {
 		return fmt.Errorf("create schema_version: %w", err)
 	}
 
-	// Check current schema version.
 	var currentVersion int
 	err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_version`).Scan(&currentVersion)
 	if err != nil {
 		currentVersion = 0
 	}
 
-	// Apply migrations in order.
 	if currentVersion < 1 {
 		if err := db.migrateV1(); err != nil {
 			return fmt.Errorf("migrate v1: %w", err)
 		}
 	}
 
+	if currentVersion < 2 {
+		if err := db.migrateV2(); err != nil {
+			return fmt.Errorf("migrate v2: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// DefaultTenantID returns the UUID of the default tenant (looked up by slug='default').
+func (db *DB) DefaultTenantID() string {
+	var id string
+	db.QueryRow(`SELECT id FROM tenants WHERE slug = 'default'`).Scan(&id)
+	return id
+}
+
+// migrateV2 adds node detail fields: primary_ip, os, arch, kernel, agent_version.
+func (db *DB) migrateV2() error {
+	cols := []struct {
+		name    string
+		sqlType string
+	}{
+		{"primary_ip", "TEXT NOT NULL DEFAULT ''"},
+		{"os", "TEXT NOT NULL DEFAULT ''"},
+		{"arch", "TEXT NOT NULL DEFAULT ''"},
+		{"kernel", "TEXT NOT NULL DEFAULT ''"},
+		{"agent_version", "TEXT NOT NULL DEFAULT ''"},
+	}
+
+	for _, col := range cols {
+		if _, err := db.Exec("ALTER TABLE nodes ADD COLUMN " + col.name + " " + col.sqlType); err != nil {
+			// Column may already exist from a prior partial migration — ignore.
+			// SQLite doesn't support DROP COLUMN easily, so skip if column exists.
+			continue
+		}
+	}
+
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (2, 'V2: add node detail fields (primary_ip, os, arch, kernel, agent_version)')`); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -82,6 +117,7 @@ func (db *DB) migrateV1() error {
 	schema := `
 		CREATE TABLE IF NOT EXISTS tenants (
 			id TEXT PRIMARY KEY,
+			slug TEXT NOT NULL DEFAULT '',
 			name TEXT NOT NULL,
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -170,7 +206,7 @@ func (db *DB) migrateV1() error {
 			metrics_path TEXT NOT NULL DEFAULT '/metrics',
 			status TEXT NOT NULL DEFAULT 'offline',
 			last_heartbeat_at TEXT,
-			tenant_id TEXT NOT NULL DEFAULT 'default',
+			tenant_id TEXT NOT NULL,
 			owner_id TEXT,
 			created_by TEXT NOT NULL DEFAULT 'system',
 			updated_by TEXT NOT NULL DEFAULT 'system',
@@ -178,22 +214,33 @@ func (db *DB) migrateV1() error {
 			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
 
+		CREATE TABLE IF NOT EXISTS audit_logs (
+			id TEXT PRIMARY KEY,
+			action TEXT NOT NULL,
+			entity_type TEXT NOT NULL,
+			entity_id TEXT NOT NULL,
+			detail TEXT NOT NULL DEFAULT '',
+			operator_user_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+
 		CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 		CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 		CREATE INDEX IF NOT EXISTS idx_tenant_memberships_tenant ON tenant_memberships(tenant_id);
 		CREATE INDEX IF NOT EXISTS idx_tenant_memberships_user ON tenant_memberships(user_id);
 		CREATE INDEX IF NOT EXISTS idx_roles_tenant ON roles(tenant_id);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
 		CREATE INDEX IF NOT EXISTS idx_nodes_agent ON nodes(agent_id);
 		CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
+		CREATE INDEX IF NOT EXISTS idx_nodes_tenant_id ON nodes(tenant_id);
 	`
 
 	if _, err := db.Exec(schema); err != nil {
 		return err
 	}
 
-	// Record schema version 1.
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
-		VALUES (1, 'Initial RC1 schema: tenants, users, memberships, roles, permissions, sessions, nodes')`); err != nil {
+		VALUES (1, 'RC1 schema: tenants(slug), users, memberships, roles, permissions, sessions, nodes, audit_logs')`); err != nil {
 		return err
 	}
 

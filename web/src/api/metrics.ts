@@ -6,6 +6,6 @@ export interface MetricsTarget {
 }
 
 export async function fetchMetricsTargets(): Promise<MetricsTarget[]> {
-  const resp = await apiClient.get('/metrics/targets')
-  return resp.data || []
+  const data = await apiClient.get('/metrics/targets')
+  return Array.isArray(data) ? data : []
 }

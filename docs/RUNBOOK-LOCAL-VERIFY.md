@@ -33,10 +33,36 @@ export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='Admin@123456'
 
 ## 3. Start Agent
 
+Agent defaults to auto-detect GPU vendor mode (`gpu.collector_mode: auto`).
+
 ```bash
+# Development (mock GPU + nvidia probe)
 ./agent -config configs/agent.dev.yaml
 # Agent metrics at http://127.0.0.1:19091
+
+# Production auto-detect (recommended)
+./agent -config configs/agent.yaml
+
+# Explicit vendor (NVIDIA only, MetaX only)
+./agent -config configs/agent.nvidia.yaml
+./agent -config configs/agent.metax.yaml
+
+# Disable GPU collectors (system resources only)
+# Set gpu.collector_mode: disabled in config
 ```
+
+### GPU Collector Modes
+
+| Mode | Config | Behavior |
+|------|--------|----------|
+| `auto` (default) | `gpu.collector_mode: auto` | Probe each vendor's discover.sh; enable those with GPUs |
+| `explicit` | `gpu.collector_mode: explicit` | Only collectors explicitly `enabled: true` |
+| `disabled` | `gpu.collector_mode: disabled` | No GPU collectors, system resources only |
+
+Auto-detect probes run at startup. Check logs for:
+- `auto-detect probe found GPUs vendor=nvidia device_count=N`
+- `auto-detect GPU collectors complete enabled_vendors=[nvidia,metax]`
+- `auto-detect probe: vendor not available` (exit 10 — not an error)
 
 ## 4. Web Dev Server
 
@@ -204,9 +230,31 @@ Set `observability.mode: disabled`. LightAI does not start Prometheus/Grafana.
 ## 15. Grafana — Admin Account
 
 - Username: `admin`
-- Password: auto-generated on first start if `GRAFANA_ADMIN_PASSWORD` not set.
-- Credentials saved to `runtime/initial-credentials.txt`.
-- To reset: `./scripts/reset-grafana-password.sh` or `./scripts/reset-password.sh --grafana-only`.
+- Password: auto-generated on first start if `LIGHTAI_GRAFANA_ADMIN_PASSWORD` env var is not set.
+- First-init credentials saved to `runtime/observability/grafana.credentials` (0600).
+- **If Grafana DB already exists**, `LIGHTAI_GRAFANA_ADMIN_PASSWORD` env var will NOT modify the existing DB password. Use the reset scripts instead.
+
+To reset Grafana admin password:
+```bash
+# Reset Grafana only (recommended if Grafana DB already exists)
+./scripts/reset-grafana-password.sh                    # auto-generate
+./scripts/reset-grafana-password.sh 'NewPass123!'      # specify password
+./scripts/reset-grafana-password.sh --interactive      # prompt (no shell history)
+
+# Reset via unified script (Grafana-only mode)
+./scripts/reset-password.sh --grafana-only             # auto-generate
+./scripts/reset-password.sh --grafana-only --password '<pw>'
+./scripts/reset-password.sh --grafana-only --interactive
+```
+
+The reset scripts:
+- Stop Grafana if running
+- Run `grafana --homepath <path> --config <path> cli admin reset-admin-password <new-password>` (global flags BEFORE `cli` subcommand — required for Grafana 13+)
+- Update `runtime/observability/grafana.credentials` (used by `start-observability.sh` on restart)
+- Write human-readable record to `runtime/reset-credentials.txt`
+- Restart Grafana if it was previously running
+
+**Important**: The `reset-password.sh` script without `--grafana-only` resets BOTH the LightAI Web admin AND Grafana admin passwords. Use `--web-only` or `--grafana-only` to target a single component.
 
 Default dashboards:
 - LightAI Overview (`/d/lightai-overview`)

@@ -962,3 +962,83 @@ type UsageRecord struct {
 28. User Session 不能调用 Agent API；
 29. AgentTask 创建前由 Server 完成 permission 校验；
 30. Agent 不解析用户 RBAC。
+
+---
+
+## 13. Tenant 数据模型（更新）
+
+Tenant 表结构：
+
+```sql
+CREATE TABLE tenants (
+    id TEXT PRIMARY KEY,       -- UUID, e.g., a0000000-0000-0000-0000-000000000001
+    slug TEXT NOT NULL,        -- 短标识，如 'default', 'tenant-a'
+    name TEXT NOT NULL,        -- 显示名称，如 'Default Tenant'
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT,
+    updated_at TEXT
+);
+```
+
+default tenant：
+- id = `a0000000-0000-0000-0000-000000000001`（确定性 UUID）
+- slug = `'default'`
+- name = `'Default Tenant'`
+
+规则：
+- tenant_id 字段必须是 UUID，严禁写入 'default' 字符串。
+- 查询 default tenant 使用 `slug = 'default'`。
+- Agent 注册时写入 `nodes.tenant_id = default tenant UUID`。
+
+---
+
+## 14. Node 租户归属（更新）
+
+Agent 首次注册新 Node：
+- Server 写入 `nodes.tenant_id = default tenant UUID`。
+- Agent 不允许指定租户。
+
+Agent 重新注册：
+- 不覆盖已有 `nodes.tenant_id`。
+- 只更新运行状态字段（hostname, metrics, status 等）。
+
+节点租户转移：
+- `PATCH /api/nodes/{id}/tenant`。
+- platform_admin 可转移任意节点。
+- 租户内拥有 `node:transfer` 权限的用户可转出本租户节点。
+- 转移写入 `audit_logs` 表。
+
+---
+
+## 15. Permissions（更新）
+
+最小权限点：
+- `node:read` — 查看节点（viewer, operator, admin）
+- `node:transfer` — 转移节点租户（admin）
+
+built-in admin 拥有 `node:transfer`。operator/viewer 默认不拥有。
+
+---
+
+## 16. 后续扩展：API Key / Token / 计费预留
+
+以下为文档预留，本轮不实现：
+
+1. **API Key 认证**：未来支持创建 API Key，绑定 Tenant 和 Role，用于程序化访问。
+2. **Token 用量统计**：未来 UsageRecord 记录每次请求的 token 消费。
+3. **跨租户资源共享**：GPUDevice 可从 Node 继承 tenant_id，但未来支持独立分配。
+4. **计费与额度**：未来支持租户级 GPU 配额、优先级、限流、计费策略。
+5. **Resource Owner vs Consumer**：
+   - Tenant 可以是资源拥有者（拥有 GPUDevice、ModelInstance、Endpoint）。
+   - Tenant 也可以是资源使用者（通过 API Key 访问被授权的 Endpoint）。
+   - UsageRecord 可区分 resource_owner_tenant、consumer_tenant、billing_tenant。
+6. **Endpoint 共享**：未来支持跨租户共享推理 Endpoint。
+
+本轮不实现：
+- API Key
+- Token usage 统计
+- 额度/计费/账单
+- 跨租户资源共享
+- 租户级 GPU 配额
+- GPUDevice 独立分配 UI
+- 限流策略

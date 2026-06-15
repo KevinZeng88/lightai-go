@@ -3,10 +3,12 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
@@ -29,7 +31,11 @@ type RegisterRequest struct {
 	NodeID         string `json:"node_id"`
 	AgentID        string `json:"agent_id"`
 	Hostname       string `json:"hostname"`
+	PrimaryIP      string `json:"primary_ip"`
 	AdvertisedAddr string `json:"advertised_address"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	Kernel         string `json:"kernel"`
 	MetricsEnabled bool   `json:"metrics_enabled"`
 	MetricsScheme  string `json:"metrics_scheme"`
 	MetricsPort    int    `json:"metrics_port"`
@@ -80,20 +86,25 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Upsert node: node_id is the ONLY identity key.
+	defaultTenantID := h.DB.DefaultTenantID()
 	var serverNodeID string
 	err := h.DB.QueryRow(`SELECT id FROM nodes WHERE id = ?`, req.NodeID).Scan(&serverNodeID)
 	if err == sql.ErrNoRows {
-		// Create new node with client-provided node_id.
+		// Create new node — assign to default tenant.
 		serverNodeID = req.NodeID
 		_, err = h.DB.Exec(
-			`INSERT INTO nodes (id, agent_id, hostname, advertised_address,
+			`INSERT INTO nodes (id, agent_id, hostname, primary_ip, advertised_address,
+			 os, arch, kernel, agent_version,
 			 metrics_enabled, metrics_scheme, metrics_port, metrics_path,
 			 status, last_heartbeat_at, tenant_id, owner_id, created_by, updated_by,
 			 created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, 'default', NULL, 'system', 'system', ?, ?)`,
-			serverNodeID, req.AgentID, req.Hostname, req.AdvertisedAddr,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+			 ?, ?, ?, ?, 'online', ?, ?, NULL, 'system', 'system', ?, ?)`,
+			serverNodeID, req.AgentID, req.Hostname, req.PrimaryIP, req.AdvertisedAddr,
+			req.OS, req.Arch, req.Kernel, req.Version,
 			boolToInt(req.MetricsEnabled), req.MetricsScheme, req.MetricsPort, req.MetricsPath,
-			now, now, now,
+			now, defaultTenantID,
+			now, now,
 		)
 		if err != nil {
 			log.Error("create node error", "error", err)
@@ -123,11 +134,13 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 		// Update existing node.
 		_, err = h.DB.Exec(
-			`UPDATE nodes SET agent_id = ?, hostname = ?, advertised_address = ?,
+			`UPDATE nodes SET agent_id = ?, hostname = ?, primary_ip = ?, advertised_address = ?,
+			 os = ?, arch = ?, kernel = ?, agent_version = ?,
 			 metrics_enabled = ?, metrics_scheme = ?, metrics_port = ?, metrics_path = ?,
 			 status = 'online', last_heartbeat_at = ?, updated_at = ?
 			 WHERE id = ?`,
-			req.AgentID, req.Hostname, req.AdvertisedAddr,
+			req.AgentID, req.Hostname, req.PrimaryIP, req.AdvertisedAddr,
+			req.OS, req.Arch, req.Kernel, req.Version,
 			boolToInt(req.MetricsEnabled), req.MetricsScheme, req.MetricsPort, req.MetricsPath,
 			now, now, serverNodeID,
 		)
@@ -142,7 +155,7 @@ func (h *AgentHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	resp := RegisterResponse{
 		NodeID:     serverNodeID,
 		AgentID:    req.AgentID,
-		TenantID:   "default",
+		TenantID:   defaultTenantID,
 		ServerTime: now,
 	}
 
@@ -221,21 +234,37 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 // HandleListNode handles GET /api/nodes.
 // P0-002/CODEX: Scoped to current session tenant.
+// Platform admin sees all nodes; regular users see only their tenant.
 func (h *AgentHandler) HandleListNodes(w http.ResponseWriter, r *http.Request) {
 	info := auth.SessionInfoFromContext(r.Context())
-	tenantID := "default"
-	if info != nil {
-		tenantID = info.TenantID
-	}
 
-	rows, err := h.DB.Query(
-		`SELECT id, agent_id, hostname, advertised_address, metrics_enabled,
-		        metrics_scheme, metrics_port, metrics_path,
-		        status, last_heartbeat_at, tenant_id, created_at, updated_at
-		 FROM nodes WHERE tenant_id = ?
-		 ORDER BY hostname`,
-		tenantID,
-	)
+	var rows *sql.Rows
+	var err error
+
+	// Platform admin — no tenant filter.
+	if info != nil && info.IsPlatformAdmin {
+		rows, err = h.DB.Query(
+			`SELECT id, agent_id, hostname, primary_ip, advertised_address,
+			        os, arch, kernel, agent_version,
+			        metrics_enabled, metrics_scheme, metrics_port, metrics_path,
+			        status, last_heartbeat_at, tenant_id, created_at, updated_at
+			 FROM nodes ORDER BY hostname`,
+		)
+	} else {
+		tenantID := "default"
+		if info != nil {
+			tenantID = info.TenantID
+		}
+		rows, err = h.DB.Query(
+			`SELECT id, agent_id, hostname, primary_ip, advertised_address,
+			        os, arch, kernel, agent_version,
+			        metrics_enabled, metrics_scheme, metrics_port, metrics_path,
+			        status, last_heartbeat_at, tenant_id, created_at, updated_at
+			 FROM nodes WHERE tenant_id = ?
+			 ORDER BY hostname`,
+			tenantID,
+		)
+	}
 	if err != nil {
 		log.Error("list nodes error", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
@@ -245,12 +274,13 @@ func (h *AgentHandler) HandleListNodes(w http.ResponseWriter, r *http.Request) {
 
 	var nodes []map[string]interface{}
 	for rows.Next() {
-		var id, agentID, hostname, addr, scheme, path, status, tenantID, createdAt, updatedAt string
+		var id, agentID, hostname, primaryIP, addr, osName, archName, kernelVer, agentVer, scheme, path, status, tenantID, createdAt, updatedAt string
 		var metricsEnabled int
 		var metricsPort int
 		var lastHB sql.NullString
-		if err := rows.Scan(&id, &agentID, &hostname, &addr, &metricsEnabled,
-			&scheme, &metricsPort, &path,
+		if err := rows.Scan(&id, &agentID, &hostname, &primaryIP, &addr,
+			&osName, &archName, &kernelVer, &agentVer,
+			&metricsEnabled, &scheme, &metricsPort, &path,
 			&status, &lastHB, &tenantID, &createdAt, &updatedAt); err != nil {
 			continue
 		}
@@ -258,7 +288,12 @@ func (h *AgentHandler) HandleListNodes(w http.ResponseWriter, r *http.Request) {
 			"id":                 id,
 			"agent_id":           agentID,
 			"hostname":           hostname,
+			"primary_ip":         primaryIP,
 			"advertised_address": addr,
+			"os":                 osName,
+			"arch":               archName,
+			"kernel":             kernelVer,
+			"agent_version":      agentVer,
 			"metrics_enabled":    metricsEnabled == 1,
 			"metrics_scheme":     scheme,
 			"metrics_port":       metricsPort,
@@ -292,18 +327,20 @@ func (h *AgentHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 
 	info := auth.SessionInfoFromContext(r.Context())
 
-	var id, agentID, hostname, addr, scheme, path, status, tenantID, createdAt, updatedAt string
+	var id, agentID, hostname, primaryIP, addr, osName, archName, kernelVer, agentVer, scheme, path, status, tenantID, createdAt, updatedAt string
 	var metricsEnabled int
 	var metricsPort int
 	var lastHB sql.NullString
 
 	err := h.DB.QueryRow(
-		`SELECT id, agent_id, hostname, advertised_address, metrics_enabled,
-		        metrics_scheme, metrics_port, metrics_path,
+		`SELECT id, agent_id, hostname, primary_ip, advertised_address,
+		        os, arch, kernel, agent_version,
+		        metrics_enabled, metrics_scheme, metrics_port, metrics_path,
 		        status, last_heartbeat_at, tenant_id, created_at, updated_at
 		 FROM nodes WHERE id = ?`, nodeID,
-	).Scan(&id, &agentID, &hostname, &addr, &metricsEnabled,
-		&scheme, &metricsPort, &path,
+	).Scan(&id, &agentID, &hostname, &primaryIP, &addr,
+		&osName, &archName, &kernelVer, &agentVer,
+		&metricsEnabled, &scheme, &metricsPort, &path,
 		&status, &lastHB, &tenantID, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		http.Error(w, `{"error":"node not found"}`, http.StatusNotFound)
@@ -315,8 +352,8 @@ func (h *AgentHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// P0-002/CODEX: Tenant scope check.
-	if info != nil && info.TenantID != "" && tenantID != info.TenantID {
+	// P0-002/CODEX: Tenant scope check. Platform admin bypasses.
+	if info != nil && !info.IsPlatformAdmin && info.TenantID != "" && tenantID != info.TenantID {
 		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 		return
 	}
@@ -325,7 +362,12 @@ func (h *AgentHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 		"id":                 id,
 		"agent_id":           agentID,
 		"hostname":           hostname,
+		"primary_ip":         primaryIP,
 		"advertised_address": addr,
+		"os":                 osName,
+		"arch":               archName,
+		"kernel":             kernelVer,
+		"agent_version":      agentVer,
 		"metrics_enabled":    metricsEnabled == 1,
 		"metrics_scheme":     scheme,
 		"metrics_port":       metricsPort,
@@ -407,9 +449,114 @@ func (h *AgentHandler) GetMetricsTargets() []map[string]interface{} {
 	return targets
 }
 
+func hasPerm(perms []string, required string) bool {
+	for _, p := range perms {
+		if p == required {
+			return true
+		}
+	}
+	return false
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1
 	}
 	return 0
+}
+
+// HandlePatchNodeTenant handles PATCH /api/nodes/{id}/tenant.
+// Only platform_admin can transfer node tenant. Target tenant must exist.
+func (h *AgentHandler) HandlePatchNodeTenant(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	if nodeID == "" {
+		http.Error(w, `{"error":"node id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	info := auth.SessionInfoFromContext(r.Context())
+	if info == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		TenantID string `json:"tenant_id"`
+		Reason   string `json:"reason,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+		return
+	}
+	if req.TenantID == "" {
+		http.Error(w, `{"error":"tenant_id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Verify node exists and get current tenant.
+	var currentTenant string
+	err := h.DB.QueryRow(`SELECT tenant_id FROM nodes WHERE id = ?`, nodeID).Scan(&currentTenant)
+	if err == sql.ErrNoRows {
+		http.Error(w, `{"error":"node not found"}`, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Error("query node tenant error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Permission: platform_admin can transfer any node.
+	// Tenant user needs node:transfer permission AND must own the node (tenant match).
+	if !info.IsPlatformAdmin {
+		if currentTenant != info.TenantID {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		perms := auth.PermissionsFromContext(r.Context())
+		if !hasPerm(perms, "node:transfer") {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+	}
+
+	// Verify target tenant exists.
+	var targetExists string
+	err = h.DB.QueryRow(`SELECT id FROM tenants WHERE id = ? AND status = 'active'`, req.TenantID).Scan(&targetExists)
+	if err == sql.ErrNoRows {
+		http.Error(w, `{"error":"target tenant not found"}`, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Update node tenant.
+	now := time.Now().Format(time.RFC3339)
+	_, err = h.DB.Exec(`UPDATE nodes SET tenant_id = ?, updated_at = ? WHERE id = ?`,
+		req.TenantID, now, nodeID)
+	if err != nil {
+		log.Error("update node tenant error", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Audit log.
+	auditID := uuid.NewString()
+	detail := fmt.Sprintf(`{"from_tenant_id":"%s","to_tenant_id":"%s","reason":"%s"}`,
+		currentTenant, req.TenantID, req.Reason)
+	h.DB.Exec(`INSERT INTO audit_logs (id, action, entity_type, entity_id, detail, operator_user_id, created_at)
+		VALUES (?, 'transfer_tenant', 'node', ?, ?, ?, ?)`,
+		auditID, nodeID, detail, info.UserID, now)
+
+	log.Info("node tenant transferred",
+		"node_id", nodeID,
+		"from_tenant", currentTenant,
+		"to_tenant", req.TenantID,
+		"operator", info.UserID,
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "tenant_id": req.TenantID})
 }

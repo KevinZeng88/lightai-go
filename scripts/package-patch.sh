@@ -17,7 +17,18 @@ while [ $# -gt 0 ]; do
     --from) FROM_VERSION="$2"; shift 2 ;;
     --to)   TO_VERSION="$2";   shift 2 ;;
     --from-min) FROM_MIN_VERSION="$2"; shift 2 ;;
-    *) echo "Usage: $0 --from <ver> --to <ver> [--from-min <min-ver>]" >&2; exit 1 ;;
+    *) echo "Usage: $0 --from <ver> --to <ver> [--from-min <min-ver>]" >&2
+       echo "" >&2
+       echo "  --from <ver>      Base version for file diff (REQUIRED)." >&2
+       echo "  --to <ver>        Target version (REQUIRED)." >&2
+       echo "  --from-min <ver>  Min version allowed to apply this patch (optional)." >&2
+       echo "                    Default: same as --from." >&2
+       echo "" >&2
+       echo "NOTE: File comparison is ALWAYS between --from and --to." >&2
+       echo "--from-min only labels the version range; it does NOT add files" >&2
+       echo "from versions between --from-min and --from." >&2
+       echo "For a truly cumulative patch, use --from with the oldest version." >&2
+       exit 1 ;;
   esac
 done
 [ -z "$FROM_VERSION" ] || [ -z "$TO_VERSION" ] && { echo "Usage: $0 --from <ver> --to <ver> [--from-min <min-ver>]" >&2; exit 1; }
@@ -25,6 +36,15 @@ done
 # P0-005: If --from-min is not set, use --from as the minimum.
 if [ -z "$FROM_MIN_VERSION" ]; then
   FROM_MIN_VERSION="$FROM_VERSION"
+fi
+
+# Warn if --from-min differs from --from: the file set only covers --from→--to.
+if [ "$FROM_MIN_VERSION" != "$FROM_VERSION" ]; then
+  echo "NOTE: --from-min ($FROM_MIN_VERSION) != --from ($FROM_VERSION)." >&2
+  echo "File diff is ALWAYS $FROM_VERSION→$TO_VERSION, not $FROM_MIN_VERSION→$TO_VERSION." >&2
+  echo "The patch file set only covers changes from $FROM_VERSION to $TO_VERSION." >&2
+  echo "For a truly cumulative patch, use: --from $FROM_MIN_VERSION --to $TO_VERSION" >&2
+  echo "" >&2
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

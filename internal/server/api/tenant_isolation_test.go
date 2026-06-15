@@ -85,10 +85,10 @@ func TestTenantScopedGPUList(t *testing.T) {
 		VALUES ('node-b1','agent-b1','host','online','tenant-b',datetime('now'),datetime('now'),datetime('now'))`)
 	// NewResourceHandler creates the gpu_devices table.
 	handler := NewResourceHandler(database, nil)
-	database.Exec(`INSERT INTO gpu_devices (id, node_id, vendor, index_num, name, uuid, memory_total_bytes, health, status, collected_at, created_at, updated_at)
-		VALUES ('g1','node-a1','nvidia',0,'A100','gpu-a1',81920,'healthy','available',datetime('now'),datetime('now'),datetime('now'))`)
-	database.Exec(`INSERT INTO gpu_devices (id, node_id, vendor, index_num, name, uuid, memory_total_bytes, health, status, collected_at, created_at, updated_at)
-		VALUES ('g2','node-b1','nvidia',0,'H100','gpu-b1',81920,'healthy','available',datetime('now'),datetime('now'),datetime('now'))`)
+	database.Exec(`INSERT INTO gpu_devices (id, node_id, vendor, index_num, name, uuid, tenant_id, memory_total_bytes, health, status, collected_at, created_at, updated_at)
+		VALUES ('g1','node-a1','nvidia',0,'A100','gpu-a1','tenant-a',81920,'healthy','available',datetime('now'),datetime('now'),datetime('now'))`)
+	database.Exec(`INSERT INTO gpu_devices (id, node_id, vendor, index_num, name, uuid, tenant_id, memory_total_bytes, health, status, collected_at, created_at, updated_at)
+		VALUES ('g2','node-b1','nvidia',0,'H100','gpu-b1','tenant-b',81920,'healthy','available',datetime('now'),datetime('now'),datetime('now'))`)
 
 	req := httptest.NewRequest("GET", "/api/gpus", nil).WithContext(sessionCtx("tenant-a"))
 	w := httptest.NewRecorder()

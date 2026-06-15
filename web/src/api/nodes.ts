@@ -4,7 +4,12 @@ export interface Node {
   id: string
   agent_id: string
   hostname: string
+  primary_ip: string
   advertised_address: string
+  os: string
+  arch: string
+  kernel: string
+  agent_version: string
   metrics_enabled: boolean
   metrics_scheme: string
   metrics_port: number

@@ -25,6 +25,7 @@ heartbeat:
 
 gpu:
   profile: production
+  collector_mode: explicit
 
 collectors:
   system:

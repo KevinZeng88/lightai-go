@@ -34,7 +34,11 @@ type Config struct {
 	AgentToken     string
 	AgentID        string
 	Hostname       string
+	PrimaryIP      string
 	AdvertisedAddr string
+	OS             string
+	Arch           string
+	Kernel         string
 	MetricsEnabled bool
 	MetricsScheme  string
 	MetricsPort    int
@@ -56,7 +60,11 @@ func Do(client *http.Client, cfg Config, st *state.State) (nodeID string, err er
 		"node_id":            st.CachedNodeID(),
 		"agent_id":           cfg.AgentID,
 		"hostname":           cfg.Hostname,
+		"primary_ip":         cfg.PrimaryIP,
 		"advertised_address": cfg.AdvertisedAddr,
+		"os":                 cfg.OS,
+		"arch":               cfg.Arch,
+		"kernel":             cfg.Kernel,
 		"metrics_enabled":    cfg.MetricsEnabled,
 		"metrics_scheme":     cfg.MetricsScheme,
 		"metrics_port":       cfg.MetricsPort,

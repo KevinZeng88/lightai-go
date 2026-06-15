@@ -215,6 +215,7 @@ for d in "$BUILD_DIR/configs" "$BUILD_DIR/configs/observability" "$BUILD_DIR/dep
   fi
 done
 cp configs/server.release.yaml "$BUILD_DIR/configs/"
+cp configs/agent.yaml "$BUILD_DIR/configs/"
 cp configs/agent.metax.yaml "$BUILD_DIR/configs/"
 cp configs/agent.nvidia.yaml "$BUILD_DIR/configs/"
 cp configs/observability/prometheus.yml "$BUILD_DIR/configs/observability/" 2>/dev/null || true

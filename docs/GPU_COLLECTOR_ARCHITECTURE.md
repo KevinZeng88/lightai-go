@@ -99,3 +99,51 @@ func (a *APIGPUCollector) Metrics(ctx) ([]GPUMetricInfo, *CollectorDiagnosis) { 
 ```
 
 All must output the same `GPUResource` via `NormalizeGPUs()`.
+
+## GPU Collector Auto-Detect
+
+LightAI Agent defaults to automatic GPU vendor detection.
+
+### Modes
+
+| Mode | Behavior | Config |
+|------|----------|--------|
+| `auto` (default) | Probe each vendor. Enable collectors that return DEVICE. | `gpu.collector_mode: auto` |
+| `explicit` | Only collectors explicitly `enabled: true` in config. | `gpu.collector_mode: explicit` |
+| `disabled` | No GPU collectors. System resources only. | `gpu.collector_mode: disabled` |
+
+### Auto-Detect Probe Rules
+
+1. Agent iterates over built-in probe list (nvidia, metax) or custom `gpu.auto_detect.probes`.
+2. Each probe runs `deploy/collectors/gpu/<vendor>/discover.sh`.
+3. Exit code semantics:
+   - **0 + DEVICE lines** → enable this vendor collector.
+   - **0 + no DEVICE** → skip, record diagnostic.
+   - **10 (not_available)** → skip, info log (not an error).
+   - **>= 30** → warn log, skip, other collectors continue unaffected.
+4. Enriched probe output is logged at startup: `enabled_vendors: [nvidia, metax]`.
+
+### Multi-Vendor Merge
+
+When both NVIDIA and MetaX are discovered on the same host:
+- Both collectors run in the same collection cycle.
+- Results are merged using `vendor + uuid` as the key.
+- `index` is not a cross-vendor unique identifier.
+- One collector's failure does not clear another collector's results (the registry retains the previous successful state per the `Collect()` contract).
+- Server `/api/gpus` returns all GPUs from all vendors.
+- Agent `/metrics` exposes all GPU metrics with `vendor` as a label.
+
+### Probe Example
+
+```yaml
+# Built-in probes (default):
+gpu:
+  collector_mode: auto
+  # auto_detect.probes can override:
+  # auto_detect:
+  #   probes:
+  #     - name: "nvidia"
+  #       vendor: "nvidia"
+  #       discover_cmd: "deploy/collectors/gpu/nvidia/discover.sh"
+  #       metrics_cmd: "deploy/collectors/gpu/nvidia/metrics.sh"
+```

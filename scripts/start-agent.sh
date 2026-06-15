@@ -1,21 +1,23 @@
 #!/bin/sh
 # LightAI Go - Start Agent (release mode)
 # Usage: ./scripts/start-agent.sh [config]
-# Default: configs/agent.nvidia.yaml
+# Default: configs/agent.yaml (auto-detect GPU vendor)
 # Override: LIGHTAI_AGENT_CONFIG env var or first argument
+# NVIDIA-only:   configs/agent.nvidia.yaml (explicit mode)
+# MetaX-only:    configs/agent.metax.yaml  (explicit mode)
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RELEASE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$RELEASE_ROOT"
 
-# Priority: command-line arg > LIGHTAI_AGENT_CONFIG > default NVIDIA
+# Priority: command-line arg > LIGHTAI_AGENT_CONFIG > default auto
 if [ -n "${1:-}" ]; then
   CONFIG="$1"
 elif [ -n "${LIGHTAI_AGENT_CONFIG:-}" ]; then
   CONFIG="$LIGHTAI_AGENT_CONFIG"
 else
-  CONFIG="$RELEASE_ROOT/configs/agent.nvidia.yaml"
+  CONFIG="$RELEASE_ROOT/configs/agent.yaml"
 fi
 
 if [ ! -f "$CONFIG" ]; then

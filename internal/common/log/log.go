@@ -104,11 +104,11 @@ func Init(cfg Config) {
 	}
 
 	var handler slog.Handler
-		if isJSON {
-			handler = slog.NewJSONHandler(sink, opts)
-		} else {
-			handler = newHumanHandler(sink, opts)
-		}
+	if isJSON {
+		handler = slog.NewJSONHandler(sink, opts)
+	} else {
+		handler = newHumanHandler(sink, opts)
+	}
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 }

@@ -29,6 +29,8 @@
 | RC1 hotfix | Standardize log files + protect credentials output | Done | `95710a0` |
 | RC1 hotfix | Fix patch manifest name/format mismatch | Done | `10a6d02` |
 | RC1 hotfix | Remove python3 dependency from patch apply | Done | `f629311` |
+| RC1 hotfix | Fix Grafana password reset (CLI flag order for v13+, credentials sync) | Done | current |
+| RC1 hotfix | GPU collector auto-detect (auto/explicit/disabled modes) | Done | current |
 
 ## Key Architecture Decisions (Current State)
 

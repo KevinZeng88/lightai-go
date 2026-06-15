@@ -179,6 +179,13 @@ func main() {
 		ResourceHandler: resourceHandler,
 	})
 
+	// Return JSON 404 for unregistered /api/* paths — never fall back to SPA index.html.
+	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"not found","path":"` + r.URL.Path + `"}`))
+	})
+
 	// Serve embedded web assets or fallback.
 	serveWeb(mux)
 

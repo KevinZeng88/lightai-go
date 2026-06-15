@@ -44,6 +44,7 @@ func PermissionCatalog() []PermissionDef {
 		// Read-only permissions.
 		{Code: "dashboard:read", Scope: "tenant", Description: "View dashboard"},
 		{Code: "node:read", Scope: "tenant", Description: "View nodes"},
+		{Code: "node:transfer", Scope: "tenant", Description: "Transfer node to another tenant"},
 		{Code: "gpu:read", Scope: "tenant", Description: "View GPUs"},
 		{Code: "monitoring:read", Scope: "tenant", Description: "View monitoring"},
 		{Code: "log:read", Scope: "tenant", Description: "View logs"},
@@ -97,7 +98,7 @@ func BuiltinRoles() []BuiltinRoleDef {
 				"runtime:write", "model:write", "instance:write", "instance:operate",
 				// Admin permissions.
 				"membership:read", "membership:write", "role:read", "role:write",
-				"tenant:settings:write",
+				"node:transfer", "tenant:settings:write",
 			},
 		},
 		{
@@ -193,16 +194,16 @@ func InitBootstrap(database *db.DB, cfg BootstrapConfig) error {
 		}
 	}
 
-	// 3. Initialize default tenant (idempotent: check by name first).
+	// 3. Initialize default tenant (idempotent: check by slug first).
 	var actualTenantID string
-	row := tx.QueryRow(`SELECT id FROM tenants WHERE name = 'Default Tenant'`)
+	row := tx.QueryRow(`SELECT id FROM tenants WHERE slug = 'default'`)
 	err = row.Scan(&actualTenantID)
 	if err == sql.ErrNoRows {
-		// Create default tenant.
-		tenantID := uuid.NewString()
+		// Create default tenant with deterministic UUID.
+		tenantID := "a0000000-0000-0000-0000-000000000001"
 		_, err = tx.Exec(
-			`INSERT INTO tenants (id, name, status, created_at, updated_at)
-			 VALUES (?, 'Default Tenant', 'active', ?, ?)`,
+			`INSERT INTO tenants (id, slug, name, status, created_at, updated_at)
+			 VALUES (?, 'default', 'Default Tenant', 'active', ?, ?)`,
 			tenantID, now, now,
 		)
 		if err != nil {
