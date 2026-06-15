@@ -1,0 +1,221 @@
+openapi: "3.0.3"
+info:
+  title: LightAI Go API
+  version: "0.1.14"
+  description: |
+    LightAI Go is a lightweight GPU/node management platform.
+    Base URL: http://localhost:18080/api/v1
+servers:
+  - url: http://localhost:18080/api/v1
+    description: Local dev server
+
+paths:
+  # --- Auth ---
+  /auth/login:
+    post:
+      operationId: login
+      summary: Login with username/password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+                tenant_id: { type: string }
+      responses:
+        "200": { description: Login success with session cookie }
+        "401": { description: Invalid credentials }
+        "429": { description: Rate limited }
+
+  /auth/me:
+    get:
+      operationId: getMe
+      summary: Get current user session info
+      responses:
+        "200": { description: Current user, tenant, roles, permissions }
+        "401": { description: Not authenticated }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Logout and revoke session
+      responses:
+        "200": { description: Logged out }
+
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      summary: Change current user password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                current_password: { type: string }
+                new_password: { type: string }
+      responses:
+        "200": { description: Password changed }
+
+  # --- Nodes ---
+  /nodes:
+    get:
+      operationId: listNodes
+      summary: List nodes (tenant-scoped)
+      responses:
+        "200": { description: Node list }
+
+  /nodes/{id}:
+    get:
+      operationId: getNode
+      summary: Get node by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Node details }
+        "404": { description: Node not found }
+
+  /nodes/{id}/tenant:
+    patch:
+      operationId: transferNode
+      summary: Transfer node to another tenant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tenant_id: { type: string }
+
+  # --- GPUs ---
+  /gpus:
+    get:
+      operationId: listGPUs
+      summary: List GPUs (tenant-scoped)
+      parameters:
+        - name: node_id
+          in: query
+          schema: { type: string }
+        - name: vendor
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: GPU list }
+
+  /gpus/{id}:
+    get:
+      operationId: getGPU
+      summary: Get GPU by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: GPU details }
+
+  # --- Tenant / User / Role management (platform admin) ---
+  /tenants:
+    get:
+      operationId: listTenants
+      summary: List tenants
+    post:
+      operationId: createTenant
+      summary: Create tenant
+
+  /users:
+    get:
+      operationId: listUsers
+      summary: List users
+    post:
+      operationId: createUser
+      summary: Create user
+
+  /roles:
+    get:
+      operationId: listRoles
+      summary: List roles (tenant-scoped)
+
+  # --- Model Runtime ---
+  /model-artifacts:
+    get:
+      operationId: listModelArtifacts
+      summary: List model artifacts
+    post:
+      operationId: createModelArtifact
+      summary: Create model artifact
+
+  /runtime-environments:
+    get:
+      operationId: listRuntimeEnvironments
+      summary: List runtime environments
+    post:
+      operationId: createRuntimeEnvironment
+      summary: Create runtime environment
+
+  /run-templates:
+    get:
+      operationId: listRunTemplates
+      summary: List run templates
+
+  /model-deployments:
+    get:
+      operationId: listModelDeployments
+      summary: List model deployments
+
+  /model-deployments/{id}/start:
+    post:
+      operationId: startDeployment
+      summary: Start deployment
+
+  /model-deployments/{id}/stop:
+    post:
+      operationId: stopDeployment
+      summary: Stop deployment
+
+  /model-instances:
+    get:
+      operationId: listModelInstances
+      summary: List model instances
+
+  /model-instances/{id}/logs:
+    get:
+      operationId: getInstanceLogs
+      summary: Get instance logs
+
+  # --- Observability ---
+  /observability/status:
+    get:
+      operationId: getObservabilityStatus
+      summary: Get Prometheus/Grafana status
+
+  # --- Agent API (internal, agent-token auth) ---
+  /agent/register:
+    post:
+      operationId: agentRegister
+      summary: Register agent node
+
+  /agent/heartbeat:
+    post:
+      operationId: agentHeartbeat
+      summary: Agent heartbeat
+
+  /agent/resources/report:
+    post:
+      operationId: agentResourceReport
+      summary: Report GPU/system resources
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: lightai_session
+    agentToken:
+      type: http
+      scheme: bearer

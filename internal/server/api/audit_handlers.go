@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strings"
 
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/server/auth"
@@ -98,25 +97,5 @@ func (h *AuditHandler) HandleListAuditLogs(w http.ResponseWriter, r *http.Reques
 		"entries": entries,
 		"total":   len(entries),
 	})
-}
-
-// auditLog writes an audit entry. Replaces the package-level audit() in model_handlers.go.
-func auditLog(database *db.DB, action, entityType, entityID, detail, operatorUserID string) {
-	if database == nil {
-		return
-	}
-	detail = redactDetailString(detail)
-	if len(detail) > 2000 {
-		detail = detail[:2000]
-	}
-	id := strings.ToLower(action + "-" + entityType + "-" + entityID)
-	if len(id) > 64 {
-		id = id[:64]
-	}
-	database.Exec(
-		`INSERT INTO audit_logs (id, action, entity_type, entity_id, detail, operator_user_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
-		id+"-"+operatorUserID[:min(8, len(operatorUserID))], action, entityType, entityID, detail, operatorUserID,
-	)
 }
 

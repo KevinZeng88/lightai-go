@@ -459,10 +459,6 @@ func (h *ModelHandler) HandleCreateRuntimeEnvironment(w http.ResponseWriter, r *
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
-	// operator cannot create global or high-risk runtime envs
-	perms := auth.PermissionsFromContext(r.Context())
-	isOperator := !isPlatformAdmin(r) && !hasPerm(perms, "membership:write") && hasPerm(perms, "runtime:write")
-	_ = isOperator // reserved for future high-risk checks
 
 	id := uuid.NewString()
 	uid := userID(r)
@@ -604,15 +600,16 @@ func (h *ModelHandler) createOrUpdateDockerSpec(reID string, dockerData interfac
 	if !ok {
 		return
 	}
-	// Upsert.
+	// Upsert: reuse existing id if present, otherwise generate new.
+	// INSERT OR REPLACE is atomic — no DELETE-then-INSERT concurrency gap.
 	var existingID string
 	h.DB.QueryRow(`SELECT id FROM runtime_environment_docker_specs WHERE runtime_environment_id = ?`, reID).Scan(&existingID)
-	if existingID != "" {
-		h.DB.Exec(`DELETE FROM runtime_environment_docker_specs WHERE id = ?`, existingID)
+	specID := existingID
+	if specID == "" {
+		specID = uuid.NewString()
 	}
-	specID := uuid.NewString()
 	h.DB.Exec(
-		`INSERT INTO runtime_environment_docker_specs (id, runtime_environment_id, image, image_pull_policy,
+		`INSERT OR REPLACE INTO runtime_environment_docker_specs (id, runtime_environment_id, image, image_pull_policy,
 		 devices, privileged, ipc_mode, uts_mode, network_mode, shm_size, group_add,
 		 security_options, ulimits, restart_policy, gpu_visible_env_key, created_at, updated_at)
 		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -674,35 +671,69 @@ func redactImageIfSensitive(image string) string {
 func scanRuntimeEnvironments(rows *sql.Rows, database *db.DB) []map[string]interface{} {
 	defer rows.Close()
 	var out []map[string]interface{}
+	var envIDs []string
 	for rows.Next() {
 		re := scanRe(rows)
 		if re != nil {
-			id := re["id"].(string)
-			// Attach docker spec.
-			var specID, image, pullPolicy, devices, priv, ipc, uts, net, shm, ga, sec, ul, restart, gpuEnv, ca, ua string
-			err := database.QueryRow(`SELECT id, image, image_pull_policy, devices, privileged, ipc_mode, uts_mode,
-				network_mode, shm_size, group_add, security_options, ulimits, restart_policy,
-				gpu_visible_env_key, created_at, updated_at
-				FROM runtime_environment_docker_specs WHERE runtime_environment_id = ?`, id).
-				Scan(&specID, &image, &pullPolicy, &devices, &priv, &ipc, &uts, &net, &shm, &ga, &sec, &ul, &restart, &gpuEnv, &ca, &ua)
-			if err == nil {
-				re["docker"] = map[string]interface{}{
-					"id": specID, "image": image, "image_pull_policy": pullPolicy,
-					"devices": json.RawMessage(devices), "privileged": json.RawMessage(priv),
-					"ipc_mode": json.RawMessage(ipc), "uts_mode": json.RawMessage(uts),
-					"network_mode": json.RawMessage(net), "shm_size": json.RawMessage(shm),
-					"group_add": json.RawMessage(ga), "security_options": json.RawMessage(sec),
-					"ulimits": json.RawMessage(ul), "restart_policy": json.RawMessage(restart),
-					"gpu_visible_env_key": gpuEnv, "created_at": ca, "updated_at": ua,
-				}
-			}
 			out = append(out, re)
+			envIDs = append(envIDs, re["id"].(string))
+		}
+	}
+	// Batch query all docker specs to avoid N+1.
+	if len(envIDs) > 0 {
+		specMap := batchGetDockerSpecs(database, envIDs)
+		for _, re := range out {
+			id := re["id"].(string)
+			if spec, ok := specMap[id]; ok {
+				re["docker"] = spec
+			}
 		}
 	}
 	if out == nil {
 		out = []map[string]interface{}{}
 	}
 	return out
+}
+
+// batchGetDockerSpecs fetches all docker specs for the given runtime environment IDs in one query.
+func batchGetDockerSpecs(database *db.DB, ids []string) map[string]map[string]interface{} {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	specRows, err := database.Query(
+		`SELECT runtime_environment_id, id, image, image_pull_policy, devices, privileged, ipc_mode, uts_mode,
+			network_mode, shm_size, group_add, security_options, ulimits, restart_policy,
+			gpu_visible_env_key, created_at, updated_at
+			FROM runtime_environment_docker_specs WHERE runtime_environment_id IN (`+strings.Join(placeholders, ",")+`)`,
+		args...,
+	)
+	if err != nil {
+		return nil
+	}
+	defer specRows.Close()
+	result := make(map[string]map[string]interface{})
+	for specRows.Next() {
+		var envID, specID, image, pullPolicy, devices, priv, ipc, uts, net, shm, ga, sec, ul, restart, gpuEnv, ca, ua string
+		if err := specRows.Scan(&envID, &specID, &image, &pullPolicy, &devices, &priv, &ipc, &uts, &net, &shm, &ga, &sec, &ul, &restart, &gpuEnv, &ca, &ua); err != nil {
+			continue
+		}
+		result[envID] = map[string]interface{}{
+			"id": specID, "image": image, "image_pull_policy": pullPolicy,
+			"devices": json.RawMessage(devices), "privileged": json.RawMessage(priv),
+			"ipc_mode": json.RawMessage(ipc), "uts_mode": json.RawMessage(uts),
+			"network_mode": json.RawMessage(net), "shm_size": json.RawMessage(shm),
+			"group_add": json.RawMessage(ga), "security_options": json.RawMessage(sec),
+			"ulimits": json.RawMessage(ul), "restart_policy": json.RawMessage(restart),
+			"gpu_visible_env_key": gpuEnv, "created_at": ca, "updated_at": ua,
+		}
+	}
+	return result
 }
 
 func scanRe(scanner interface{ Scan(...interface{}) error }) map[string]interface{} {

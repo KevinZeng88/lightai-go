@@ -37,46 +37,60 @@ func sweepOnce(database *db.DB) {
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	// 1. Expired pending/claimed tasks → timed_out.
-	r1, _ := database.Exec(
+	// Use Unix timestamp arithmetic instead of SQLite-specific julianday() for portability.
+	r1, err := database.Exec(
 		`UPDATE agent_tasks SET status = ?, finished_at = ?, updated_at = ?
 		 WHERE status IN (?, ?, ?)
-		 AND (julianday(?) - julianday(created_at)) * 86400 > timeout_seconds`,
+		 AND (strftime('%s', ?) - strftime('%s', created_at)) > timeout_seconds`,
 		TaskStatusTimedOut, now, now,
 		TaskStatusPending, TaskStatusClaimed, TaskStatusInProgress,
 		now,
 	)
-	n1, _ := r1.RowsAffected()
+	var n1, n2, n3, n4 int64
+	if err != nil {
+		log.Warn("sweep: timeout tasks error", "error", err)
+	} else {
+		n1, _ = r1.RowsAffected()
+	}
 
 	// 2. Instances with timed-out tasks: if still pending/starting → unknown.
-	//    Don't force 'failed' — agent may still be loading the model.
-	r2, _ := database.Exec(
+	r2, err := database.Exec(
 		`UPDATE model_instances SET actual_state = ?, updated_at = ?
 		 WHERE id IN (SELECT instance_id FROM agent_tasks WHERE status = ? AND instance_id != '')
 		 AND actual_state IN (?, ?)`,
 		InstanceStateUnknown, now, TaskStatusTimedOut,
 		InstanceStatePending, InstanceStateStarting,
 	)
-	n2, _ := r2.RowsAffected()
+	if err != nil {
+		log.Warn("sweep: unknown instances error", "error", err)
+	} else {
+		n2, _ = r2.RowsAffected()
+	}
 
 	// 3. Expired reserved leases → failed (safe: no container was started).
-	r3, _ := database.Exec(
+	r3, err := database.Exec(
 		`UPDATE gpu_leases SET status = ?, updated_at = ?
 		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status = ?`,
 		LeaseFailed, now, LeaseReserved,
 	)
-	n3, _ := r3.RowsAffected()
+	if err != nil {
+		log.Warn("sweep: fail expired reserved leases error", "error", err)
+	} else {
+		n3, _ = r3.RowsAffected()
+	}
 
 	// 4. Active leases past grace period (2x timeout) without agent heartbeat → failed.
-	//    Active leases are NOT immediately failed on expiry — the agent may
-	//    still be running the container even if a task timed out.
-	//    Only mark active leases as failed if the node has been offline.
-	r4, _ := database.Exec(
+	r4, err := database.Exec(
 		`UPDATE gpu_leases SET status = ?, updated_at = ?
 		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status = ?
 		 AND node_id IN (SELECT id FROM nodes WHERE status = 'offline')`,
 		LeaseFailed, now, LeaseActive,
 	)
-	n4, _ := r4.RowsAffected()
+	if err != nil {
+		log.Warn("sweep: fail expired active leases error", "error", err)
+	} else {
+		n4, _ = r4.RowsAffected()
+	}
 
 	if n1+n2+n3+n4 > 0 {
 		log.Info("sweep: cleaned up stale state",

@@ -304,6 +304,12 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 
 			if err == sql.ErrNoRows {
 				gpuID := uuid.NewString()
+				// Inherit tenant_id from the node, not hardcoded default.
+				nodeTenantID := h.DB.DefaultTenantID()
+				var ntid string
+				if err := tx.QueryRow(`SELECT tenant_id FROM nodes WHERE id = ?`, nodeID).Scan(&ntid); err == nil && ntid != "" {
+					nodeTenantID = ntid
+				}
 				_, err = tx.Exec(
 					`INSERT INTO gpu_devices (id, node_id, vendor, index_num, name, uuid, pci_bus_id,
 					 driver_version, memory_total_bytes, memory_used_bytes, memory_free_bytes,
@@ -316,7 +322,7 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 					g.MemoryTotalBytes, g.MemoryUsedBytes, g.MemoryFreeBytes,
 					g.GPUUtilization, g.MemUtilization,
 					g.Temperature, g.PowerDraw,
-					g.Health, g.Status, "a0000000-0000-0000-0000-000000000001", collectedAt, now, now,
+					g.Health, g.Status, nodeTenantID, collectedAt, now, now,
 				)
 				if err != nil {
 					log.Error("create gpu error", "error", err)
@@ -428,9 +434,9 @@ func (h *ResourceHandler) HandleListGPUs(w http.ResponseWriter, r *http.Request)
 		FROM gpu_devices g`
 	args := []interface{}{}
 	// P0-002: Join nodes for tenant scoping.
-	// Filter by GPU own tenant_id. Platform admin sees all.
+	// Filter by GPU own tenant_id (inherited from node). Platform admin sees all.
 	if info == nil || !info.IsPlatformAdmin {
-		tid := "a0000000-0000-0000-0000-000000000001"
+		tid := h.DB.DefaultTenantID()
 		if info != nil && info.TenantID != "" {
 			tid = info.TenantID
 		}

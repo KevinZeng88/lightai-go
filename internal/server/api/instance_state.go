@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -45,6 +46,16 @@ func CreateInstance(database *db.DB, deploymentID, nodeID, agentID, runtimeType,
 func UpdateInstanceRunning(database *db.DB, instanceID, containerID, endpointURL string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := database.Exec(
+		`UPDATE model_instances SET actual_state = ?, container_id = ?, endpoint_url = ?, started_at = ?, updated_at = ? WHERE id = ?`,
+		InstanceStateRunning, containerID, endpointURL, now, now, instanceID,
+	)
+	return err
+}
+
+// UpdateInstanceRunningTx is the transactional variant for use within an existing *sql.Tx.
+func UpdateInstanceRunningTx(tx *sql.Tx, instanceID, containerID, endpointURL string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := tx.Exec(
 		`UPDATE model_instances SET actual_state = ?, container_id = ?, endpoint_url = ?, started_at = ?, updated_at = ? WHERE id = ?`,
 		InstanceStateRunning, containerID, endpointURL, now, now, instanceID,
 	)

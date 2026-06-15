@@ -162,7 +162,7 @@ func (f *FakeDockerClient) ContainerInspect(ctx context.Context, containerID str
 	}, nil
 }
 
-func (f *FakeDockerClient) ContainerLogs(ctx context.Context, containerID string, opts LogFetchOptions) (string, error) {
+func (f *FakeDockerClient) ContainerLogs(ctx context.Context, containerID string, opts LogFetchOptions) (string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -173,7 +173,7 @@ func (f *FakeDockerClient) ContainerLogs(ctx context.Context, containerID string
 		}
 	}
 	if c == nil {
-		return "", fmt.Errorf("container %s not found", containerID)
+		return "", "", fmt.Errorf("container %s not found", containerID)
 	}
 
 	// Simulate log appending for running containers.
@@ -181,7 +181,8 @@ func (f *FakeDockerClient) ContainerLogs(ctx context.Context, containerID string
 		c.Logs.WriteString(fmt.Sprintf("[%s] container %s running\n", time.Now().Format(time.RFC3339), c.Name))
 	}
 
-	return c.Logs.String(), nil
+	// Fake client stores logs in a single buffer; return as stdout.
+	return c.Logs.String(), "", nil
 }
 
 // SetState allows tests to directly manipulate container state.

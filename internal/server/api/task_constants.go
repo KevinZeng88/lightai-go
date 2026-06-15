@@ -1,5 +1,7 @@
 package api
 
+import "time"
+
 // Task status values.
 const (
 	TaskStatusPending    = "pending"
@@ -14,4 +16,9 @@ const (
 // IsTaskTerminal returns true if the task status is a final state.
 func IsTaskTerminal(status string) bool {
 	return status == TaskStatusSucceeded || status == TaskStatusFailed || status == TaskStatusTimedOut || status == TaskStatusCancelled
+}
+
+// nowUTC returns the current UTC time in RFC3339 format.
+func nowUTC() string {
+	return time.Now().UTC().Format(time.RFC3339)
 }

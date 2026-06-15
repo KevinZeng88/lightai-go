@@ -1,7 +1,9 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"strings"
@@ -212,7 +214,7 @@ func (r *RealDockerClient) ContainerInspect(ctx context.Context, containerID str
 	}, nil
 }
 
-func (r *RealDockerClient) ContainerLogs(ctx context.Context, containerID string, opts LogFetchOptions) (string, error) {
+func (r *RealDockerClient) ContainerLogs(ctx context.Context, containerID string, opts LogFetchOptions) (string, string, error) {
 	tailStr := "all"
 	if opts.Tail > 0 {
 		tailStr = fmt.Sprintf("%d", opts.Tail)
@@ -227,15 +229,61 @@ func (r *RealDockerClient) ContainerLogs(ctx context.Context, containerID string
 		Until:      opts.Until,
 	})
 	if err != nil {
-		return "", fmt.Errorf("docker logs: %w", err)
+		return "", "", fmt.Errorf("docker logs: %w", err)
 	}
 	defer reader.Close()
 
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return "", fmt.Errorf("read docker logs: %w", err)
+	return decodeDockerStream(reader)
+}
+
+// decodeDockerStream decodes Docker's multiplexed stream format.
+//
+// Docker multiplexes stdout and stderr into a single stream using an 8-byte
+// header per frame. The format is:
+//
+//	[1 byte stream type (1=stdout, 2=stderr)]
+//	[3 bytes padding]
+//	[4 bytes big-endian payload length]
+//	[N bytes payload]
+//
+// Returns the accumulated stdout and stderr strings.
+func decodeDockerStream(reader io.Reader) (string, string, error) {
+	var stdout, stderr bytes.Buffer
+	header := make([]byte, 8)
+
+	for {
+		_, err := io.ReadFull(reader, header)
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+			return "", "", fmt.Errorf("read docker stream header: %w", err)
+		}
+
+		streamType := header[0]
+		payloadLen := binary.BigEndian.Uint32(header[4:8])
+
+		if payloadLen == 0 {
+			continue
+		}
+
+		payload := make([]byte, payloadLen)
+		if _, err := io.ReadFull(reader, payload); err != nil {
+			return "", "", fmt.Errorf("read docker stream payload: %w", err)
+		}
+
+		switch streamType {
+		case 1: // stdout
+			stdout.Write(payload)
+		case 2: // stderr
+			stderr.Write(payload)
+		default:
+			// Unknown stream type, write to stdout as fallback.
+			stdout.Write(payload)
+		}
 	}
-	return string(data), nil
+
+	return stdout.String(), stderr.String(), nil
 }
 
 // parseShmSize converts a human-readable shm size string to bytes.

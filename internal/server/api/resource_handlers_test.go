@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"lightai-go/internal/agent/collector"
+	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
 )
 
@@ -78,9 +79,11 @@ func TestServerIngestMetaX8GPUToAPI(t *testing.T) {
 	defer database.Close()
 
 	if err := database.Migrate(); err != nil {
-		database.Exec(`INSERT OR IGNORE INTO tenants (id, slug, name, status) VALUES ('a0000000-0000-0000-0000-000000000001','default','Default Tenant','active')`)
 		t.Fatalf("migrate: %v", err)
 	}
+
+	// Seed default tenant so DefaultTenantID() works in HandleListGPUs.
+	database.Exec(`INSERT OR IGNORE INTO tenants (id, slug, name, status) VALUES ('a0000000-0000-0000-0000-000000000001','default','Default Tenant','active')`)
 
 	// Register a test node.
 	database.Exec(
@@ -102,7 +105,9 @@ func TestServerIngestMetaX8GPUToAPI(t *testing.T) {
 	}
 
 	// Step 2: GET /api/v1/gpus — verify 8 GPUs returned.
+	// Set session context so tenant scoping works.
 	req2 := httptest.NewRequest("GET", "/api/gpus", nil)
+	req2 = req2.WithContext(auth.NewContextWithSessionInfo(req2.Context(), &auth.SessionInfo{TenantID: "a0000000-0000-0000-0000-000000000001"}))
 	w2 := httptest.NewRecorder()
 
 	handler.HandleListGPUs(w2, req2)

@@ -115,7 +115,7 @@ type GPUCollector interface {
 // data model for Agent /metrics, Agent report, Server storage, API, and Web.
 // Future API/SDK/daemon-based collectors output the same type.
 type GPUResource struct {
-	Vendor           string    `json:"vendor"` // nvidia, metax, ascend, cambricon, hygon, intel, unknown
+	Vendor           string    `json:"vendor"` // Currently supported: nvidia, metax. Future/unsupported: ascend, cambricon, hygon, intel, amd, unknown
 	Index            int       `json:"index"`  // physical GPU index on the node
 	UUID             string    `json:"uuid"`   // primary unique identifier
 	Name             string    `json:"name"`   // human-readable GPU name

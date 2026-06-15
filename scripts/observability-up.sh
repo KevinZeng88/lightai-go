@@ -60,6 +60,20 @@ else
 fi
 
 # --- Grafana ---
+
+	# Wait for Prometheus to become healthy before starting Grafana.
+	echo "  Waiting for Prometheus to become ready..."
+	PROM_ADDR=$(echo "$PROMETHEUS_LISTEN" | sed 's/127.0.0.1/localhost/')
+	for i in $(seq 1 30); do
+	  if curl -s "http://$PROM_ADDR/-/healthy" >/dev/null 2>&1; then
+	    echo "  Prometheus is ready."
+	    break
+	  fi
+	  if [ $i -eq 30 ]; then
+	    echo "  WARNING: Prometheus did not become ready within 30s. Continuing anyway."
+	  fi
+	  sleep 1
+	done
 echo "[2/2] Starting Grafana..."
 if [ -f "$RUN_DIR/grafana.pid" ]; then
   if kill -0 "$(cat "$RUN_DIR/grafana.pid")" 2>/dev/null; then

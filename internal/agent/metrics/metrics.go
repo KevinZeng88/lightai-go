@@ -382,11 +382,10 @@ func (c *hostCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.uptimeDesc, prometheus.GaugeValue, float64(s.UptimeSeconds), lbls...)
 	ch <- prometheus.MustNewConstMetric(c.cpuCoresDesc, prometheus.GaugeValue, float64(s.CPUCores), lbls...)
 	ch <- prometheus.MustNewConstMetric(c.cpuUsageDesc, prometheus.GaugeValue, s.CPUUtilization/100.0, lbls...)
-	if s.Load1 > 0 || s.Load5 > 0 || s.Load15 > 0 {
-		ch <- prometheus.MustNewConstMetric(c.load1Desc, prometheus.GaugeValue, s.Load1, lbls...)
-		ch <- prometheus.MustNewConstMetric(c.load5Desc, prometheus.GaugeValue, s.Load5, lbls...)
-		ch <- prometheus.MustNewConstMetric(c.load15Desc, prometheus.GaugeValue, s.Load15, lbls...)
-	}
+	// Always emit load metrics, even when zero (prevents Prometheus data gaps).
+	ch <- prometheus.MustNewConstMetric(c.load1Desc, prometheus.GaugeValue, s.Load1, lbls...)
+	ch <- prometheus.MustNewConstMetric(c.load5Desc, prometheus.GaugeValue, s.Load5, lbls...)
+	ch <- prometheus.MustNewConstMetric(c.load15Desc, prometheus.GaugeValue, s.Load15, lbls...)
 	ch <- prometheus.MustNewConstMetric(c.memTotalDesc, prometheus.GaugeValue, float64(s.MemoryTotalBytes), lbls...)
 	ch <- prometheus.MustNewConstMetric(c.memUsedDesc, prometheus.GaugeValue, float64(s.MemoryUsedBytes), lbls...)
 	if s.MemoryTotalBytes > 0 {

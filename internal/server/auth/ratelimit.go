@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -12,9 +13,16 @@ import (
 // LoginRateLimiter limits login attempts by username and source IP.
 type LoginRateLimiter struct {
 	mu       sync.Mutex
-	limiters map[string]*rate.Limiter
+	limiters map[string]*rateLimiterEntry
 	rate     rate.Limit
 	burst    int
+	// lastCleanup tracks when stale entries were last pruned.
+	lastCleanup time.Time
+}
+
+type rateLimiterEntry struct {
+	limiter  *rate.Limiter
+	lastUsed time.Time
 }
 
 // NewLoginRateLimiter creates a new login rate limiter.
@@ -22,9 +30,10 @@ type LoginRateLimiter struct {
 // burst is the max burst size (e.g., 5).
 func NewLoginRateLimiter(r rate.Limit, burst int) *LoginRateLimiter {
 	return &LoginRateLimiter{
-		limiters: make(map[string]*rate.Limiter),
-		rate:     r,
-		burst:    burst,
+		limiters:    make(map[string]*rateLimiterEntry),
+		rate:        r,
+		burst:       burst,
+		lastCleanup: time.Now(),
 	}
 }
 
@@ -45,13 +54,28 @@ func (l *LoginRateLimiter) Allow(r *http.Request, username string) bool {
 
 func (l *LoginRateLimiter) checkKey(key string) bool {
 	l.mu.Lock()
-	lim, ok := l.limiters[key]
+	entry, ok := l.limiters[key]
 	if !ok {
-		lim = rate.NewLimiter(l.rate, l.burst)
-		l.limiters[key] = lim
+		entry = &rateLimiterEntry{
+			limiter:  rate.NewLimiter(l.rate, l.burst),
+			lastUsed: time.Now(),
+		}
+		l.limiters[key] = entry
+	}
+	entry.lastUsed = time.Now()
+
+	// Periodically evict stale entries: entries older than 1 hour are removed.
+	// Runs at most once per minute to avoid excessive scanning.
+	if time.Since(l.lastCleanup) > time.Minute {
+		for k, e := range l.limiters {
+			if time.Since(e.lastUsed) > time.Hour {
+				delete(l.limiters, k)
+			}
+		}
+		l.lastCleanup = time.Now()
 	}
 	l.mu.Unlock()
-	return lim.Allow()
+	return entry.limiter.Allow()
 }
 
 func clientIP(r *http.Request) string {

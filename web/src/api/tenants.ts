@@ -10,3 +10,4 @@ export async function fetchTenants(): Promise<Tenant[]> {
 }
 export async function createTenant(body: any): Promise<Tenant> { return apiClient.post('/tenants', body) }
 export async function updateTenant(id: string, body: any): Promise<Tenant> { return apiClient.put(`/tenants/${id}`, body) }
+export async function disableTenant(id: string): Promise<void> { await apiClient.post(`/tenants/${id}/disable`) }

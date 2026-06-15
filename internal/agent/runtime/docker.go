@@ -162,7 +162,7 @@ func (d *DockerRuntimeDriver) Logs(ctx context.Context, instanceID string, opts 
 		target = containerNameFromInstance(instanceID)
 	}
 
-	raw, err := d.client.ContainerLogs(ctx, target, LogFetchOptions{
+	stdout, stderr, err := d.client.ContainerLogs(ctx, target, LogFetchOptions{
 		Tail:       opts.Tail,
 		Timestamps: opts.Timestamps,
 		Since:      opts.Since,
@@ -172,13 +172,12 @@ func (d *DockerRuntimeDriver) Logs(ctx context.Context, instanceID string, opts 
 		return nil, fmt.Errorf("logs: %w", err)
 	}
 
-	// Docker multiplexes stdout/stderr into a single stream with an 8-byte
-	// header per frame. For the fake client raw is plain text; for the real
-	// client the Docker SDK already handles demuxing when ShowStdout and
-	// ShowStderr are both true. We return the combined output.
+	// For the real Docker client, the multiplexed stream has been decoded
+	// into separate stdout and stderr strings. The fake client also returns
+	// separated output (stdout only for now).
 	return &RuntimeLogs{
-		Stdout: raw,
-		Stderr: "",
+		Stdout: stdout,
+		Stderr: stderr,
 	}, nil
 }
 

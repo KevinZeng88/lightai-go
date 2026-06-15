@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -32,13 +33,21 @@ func DefaultSessionConfig() SessionConfig {
 
 // SessionStore manages server-side sessions.
 type SessionStore struct {
-	db  *db.DB
-	cfg SessionConfig
+	db      *db.DB
+	cfg     SessionConfig
+	hashKey []byte // HMAC key for session/CSRF hashing
 }
 
 // NewSessionStore creates a new session store.
+// hashKey is used for HMAC-based session ID hashing. A random key is generated
+// on each startup, which invalidates sessions from a previous run.
 func NewSessionStore(database *db.DB, cfg SessionConfig) *SessionStore {
-	return &SessionStore{db: database, cfg: cfg}
+	hashKey := make([]byte, 32)
+	if _, err := rand.Read(hashKey); err != nil {
+		hashKey = nil
+	}
+	sessionHashKey = hashKey // Set package-level key for cross-package use
+	return &SessionStore{db: database, cfg: cfg, hashKey: hashKey}
 }
 
 // CreateSession creates a new session for a user in a tenant.
@@ -53,8 +62,8 @@ func (s *SessionStore) CreateSession(userID, tenantID string) (sessionID, csrfSe
 		return "", "", err
 	}
 
-	csrfSecretHash := hashString(csrfSecret)
-	sessionIDHash := hashString(sessionID)
+	csrfSecretHash := s.hashSessionString(csrfSecret)
+	sessionIDHash := s.hashSessionString(sessionID)
 
 	now := time.Now()
 	expiresAt := now.Add(time.Duration(s.cfg.IdleTimeoutHours) * time.Hour)
@@ -167,8 +176,8 @@ func (s *SessionStore) RotateCSRFSecret(sessionID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	csrfSecretHash := hashString(csrfSecret)
-	sessionIDHash := hashString(sessionID)
+	csrfSecretHash := s.hashSessionString(csrfSecret)
+	sessionIDHash := s.hashSessionString(sessionID)
 	_, err = s.db.Exec(
 		`UPDATE sessions SET csrf_secret_hash = ? WHERE id = ? AND revoked_at IS NULL`,
 		csrfSecretHash, sessionIDHash,
@@ -238,7 +247,22 @@ func generateRandomHex(length int) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
+// sessionHashKey is a package-level HMAC key for session-related hashing.
+// Set during SessionStore creation. If nil, falls back to SHA-256.
+var sessionHashKey []byte
+
 func hashString(s string) string {
+	if len(sessionHashKey) > 0 {
+		mac := hmac.New(sha256.New, sessionHashKey)
+		mac.Write([]byte(s))
+		return hex.EncodeToString(mac.Sum(nil))
+	}
 	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
+}
+
+// hashSessionString uses HMAC-SHA256 when a hash key is configured,
+// falling back to plain SHA-256.
+func (s *SessionStore) hashSessionString(val string) string {
+	return hashString(val)
 }

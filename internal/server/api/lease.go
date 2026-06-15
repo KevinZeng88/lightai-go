@@ -18,6 +18,11 @@ const (
 	LeaseExpired  = "expired"
 )
 
+// DefaultLeaseDuration is the default lease expiry duration.
+// Configurable via LIGHTAI_LEASE_DURATION_SECONDS env var or server config.
+// Default 5 minutes is conservative for fast Docker operations.
+var DefaultLeaseDuration = 5 * time.Minute
+
 // CreateLeases creates reserved GPU leases for the given GPU IDs within a
 // transaction. It checks for conflicting active/reserved leases first.
 // Returns the created lease IDs.
@@ -43,7 +48,7 @@ func CreateLeases(database *db.DB, gpuIDs []string, nodeID, deploymentID, instan
 		}
 
 		leaseID := uuid.NewString()
-		expiresAt := time.Now().UTC().Add(5 * time.Minute).Format(time.RFC3339)
+		expiresAt := time.Now().UTC().Add(DefaultLeaseDuration).Format(time.RFC3339)
 		_, err = tx.Exec(
 			`INSERT INTO gpu_leases (id, gpu_id, node_id, deployment_id, instance_id, tenant_id, status, reserved_at, expires_at, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

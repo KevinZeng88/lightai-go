@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/subtle"
 	"net/http"
+	"net/url"
 )
 
 // CSRFHeader is the header name for CSRF tokens.
@@ -18,7 +19,7 @@ func ValidateCSRF(r *http.Request, csrfSecretHash string) bool {
 	return subtle.ConstantTimeCompare([]byte(tokenHash), []byte(csrfSecretHash)) == 1
 }
 
-// ValidateOrigin validates the Origin/Referer header.
+// ValidateOrigin validates the Origin/Referer header against the request Host.
 func ValidateOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -29,21 +30,18 @@ func ValidateOrigin(r *http.Request) bool {
 		return false
 	}
 
-	// For development, allow localhost origins.
-	// In production, this should match the actual server origin.
 	host := r.Host
 	if host == "" {
 		return false
 	}
 
-	// Simple origin check: the origin should contain the host.
-	// This is a basic check - production should be more strict.
-	return containsOrigin(origin, host)
-}
+	// Parse origin URL and compare host components.
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	originHost := parsed.Host
 
-func containsOrigin(origin, host string) bool {
-	// Check if origin contains the host as a host component.
-	// e.g., "http://127.0.0.1:18080" contains "127.0.0.1:18080"
-	return len(origin) >= len(host) &&
-		origin[len(origin)-len(host):] == host
+	// Allow if origin host matches request host exactly.
+	return originHost == host
 }

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -389,13 +390,36 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 	// Collect immediately after registration.
 	collectAndReport(ctx, client, cfg, agentID, registry, snap)
 
+	// Task processing: fire-and-forget goroutines per task with concurrency
+	// limit so that slow tasks (Docker pull, stop) never block the heartbeat.
+	maxTasks := cfg.Task.MaxConcurrentTasks
+	if maxTasks <= 0 {
+		maxTasks = 3
+	}
+	taskSem := make(chan struct{}, maxTasks)
+	var taskWg sync.WaitGroup
+
 	consecutiveFailures := 0
 	lastHBFailLog := time.Time{} // rate-limit heartbeat failure logs
 
 	for {
 		select {
 		case <-ctx.Done():
+			// Graceful shutdown: wait for running tasks to finish (with timeout).
+			log.Info("shutting down, waiting for running tasks to complete")
+			taskDone := make(chan struct{})
+			go func() {
+				taskWg.Wait()
+				close(taskDone)
+			}()
+			select {
+			case <-taskDone:
+				log.Info("all running tasks completed")
+			case <-time.After(30 * time.Second):
+				log.Warn("timed out waiting for running tasks to complete during shutdown")
+			}
 			return
+
 		case <-heartbeatTicker.C:
 			hbResp, err := register.SendHeartbeat(client, cfg.ServerURL, cfg.AgentToken, agentID, nodeID)
 			if err != nil {
@@ -427,11 +451,27 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 				}
 			} else {
 				consecutiveFailures = 0
-				// Process any pending tasks from heartbeat response.
-				if hbResp != nil && len(hbResp.Tasks) > 0 {
-					processTasks(ctx, client, cfg, agentID, hbResp.Tasks)
+				// Fire-and-forget: spawn one goroutine per task so that slow
+				// tasks never block the heartbeat loop.
+				if hbResp != nil {
+					for _, task := range hbResp.Tasks {
+						task := task // capture loop variable
+						// Acquire semaphore (respect shutdown).
+						select {
+						case taskSem <- struct{}{}:
+						case <-ctx.Done():
+							return
+						}
+						taskWg.Add(1)
+						go func() {
+							defer taskWg.Done()
+							defer func() { <-taskSem }()
+							processTask(ctx, client, cfg, agentID, task)
+						}()
+					}
 				}
 			}
+
 		case <-collectTicker.C:
 			collectAndReport(ctx, client, cfg, agentID, registry, snap)
 			// P1-001: Data staleness — mark offline if no success for too long.
@@ -573,44 +613,44 @@ func detectKernelVersion() string {
 	return string(b)
 }
 
-// processTasks handles agent tasks received via heartbeat.
-func processTasks(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, tasks []register.AgentTask) {
-	for _, task := range tasks {
-		log.Info("processing task",
+// processTask handles a single agent task received via heartbeat.
+// It is called from a fire-and-forget goroutine with concurrency limited by
+// taskSem so that slow tasks never block the heartbeat loop.
+func processTask(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, task register.AgentTask) {
+	log.Info("processing task",
+		"task_id", task.ID,
+		"task_type", task.TaskType,
+		"instance_id", task.InstanceID,
+	)
+
+	result := register.TaskResult{
+		TaskID:     task.ID,
+		InstanceID: task.InstanceID,
+	}
+
+	startTime := time.Now()
+	result.StartedAt = startTime.Format(time.RFC3339)
+
+	switch task.TaskType {
+	case "model_instance_start":
+		processStartTask(ctx, task, &result)
+	case "model_instance_stop":
+		processStopTask(ctx, task, &result)
+	case "model_instance_logs":
+		processLogsTask(ctx, task, &result)
+	default:
+		result.Success = false
+		result.ErrorMessage = "unknown task type: " + task.TaskType
+	}
+
+	result.FinishedAt = time.Now().Format(time.RFC3339)
+
+	// Report result back to server.
+	if err := register.ReportTaskResult(client, cfg.ServerURL, cfg.AgentToken, task.ID, result); err != nil {
+		log.Error("failed to report task result",
 			"task_id", task.ID,
-			"task_type", task.TaskType,
-			"instance_id", task.InstanceID,
+			"error", err,
 		)
-
-		result := register.TaskResult{
-			TaskID:     task.ID,
-			InstanceID: task.InstanceID,
-		}
-
-		startTime := time.Now()
-		result.StartedAt = startTime.Format(time.RFC3339)
-
-		switch task.TaskType {
-		case "model_instance_start":
-			processStartTask(ctx, task, &result)
-		case "model_instance_stop":
-			processStopTask(ctx, task, &result)
-		case "model_instance_logs":
-			processLogsTask(ctx, task, &result)
-		default:
-			result.Success = false
-			result.ErrorMessage = "unknown task type: " + task.TaskType
-		}
-
-		result.FinishedAt = time.Now().Format(time.RFC3339)
-
-		// Report result back to server.
-		if err := register.ReportTaskResult(client, cfg.ServerURL, cfg.AgentToken, task.ID, result); err != nil {
-			log.Error("failed to report task result",
-				"task_id", task.ID,
-				"error", err,
-			)
-		}
 	}
 }
 

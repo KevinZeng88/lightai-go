@@ -25,7 +25,8 @@ type DockerClient interface {
 	ContainerInspect(ctx context.Context, containerID string) (*InspectResult, error)
 
 	// ContainerLogs returns log output from a container.
-	ContainerLogs(ctx context.Context, containerID string, opts LogFetchOptions) (string, error)
+	// Returns stdout, stderr, and any error.
+	ContainerLogs(ctx context.Context, containerID string, opts LogFetchOptions) (string, string, error)
 }
 
 // ContainerCreateOptions holds parameters for creating a container.

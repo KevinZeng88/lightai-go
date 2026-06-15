@@ -97,6 +97,12 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if currentVersion < 8 {
+		if err := db.migrateV8(); err != nil {
+			return fmt.Errorf("migrate v8: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -583,5 +589,20 @@ func (db *DB) migrateV1() error {
 		return err
 	}
 
+	return nil
+}
+
+// migrateV8 adds a partial unique index on gpu_leases to prevent concurrent
+// double-leasing of the same GPU (C4 fix: lease race condition).
+func (db *DB) migrateV8() error {
+	schema := `CREATE UNIQUE INDEX IF NOT EXISTS idx_gpu_leases_reserved_active
+		ON gpu_leases(gpu_id) WHERE status IN ('reserved','active')`
+	if _, err := db.Exec(schema); err != nil {
+		return fmt.Errorf("migrate v8: %w (partial unique index may not be supported on this SQLite version)", err)
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (8, 'V8: partial unique index on gpu_leases(gpu_id) for reserved/active')`); err != nil {
+		return err
+	}
 	return nil
 }

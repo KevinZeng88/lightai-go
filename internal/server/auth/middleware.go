@@ -136,7 +136,7 @@ func RequirePasswordNotExpired(database *db.DB) func(http.Handler) http.Handler 
 			}
 
 			// Allow change-password and logout to proceed even with expired password.
-			if r.URL.Path == "/api/auth/change-password" || r.URL.Path == "/api/auth/logout" {
+			if r.URL.Path == "/api/v1/auth/change-password" || r.URL.Path == "/api/v1/auth/logout" {
 				next.ServeHTTP(w, r)
 				return
 			}

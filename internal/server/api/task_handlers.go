@@ -110,14 +110,22 @@ func (h *TaskHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) {
 
 func (h *TaskHandler) handleStartResult(taskID string, result TaskResult, deploymentID string) {
 	if result.Success {
-		// Update instance to running.
+		// Use a transaction to atomically update instance and activate leases.
+		tx, err := h.DB.Begin()
+		if err != nil {
+			log.Error("handleStartResult: begin tx failed", "task_id", taskID, "error", err)
+			return
+		}
+		defer tx.Rollback()
+
+		// Update instance to running within the transaction.
 		endpointURL := ""
 		if result.RuntimeState == "running" && result.ContainerID != "" {
-			UpdateInstanceRunning(h.DB, result.InstanceID, result.ContainerID, endpointURL)
+			UpdateInstanceRunningTx(tx, result.InstanceID, result.ContainerID, endpointURL)
 		}
 
-		// Activate leases for this instance.
-		rows, err := h.DB.Query(`SELECT id FROM gpu_leases WHERE instance_id = ? AND status = ?`,
+		// Activate leases for this instance within the same transaction.
+		rows, err := tx.Query(`SELECT id FROM gpu_leases WHERE instance_id = ? AND status = ?`,
 			result.InstanceID, LeaseReserved)
 		if err == nil {
 			defer rows.Close()
@@ -128,12 +136,23 @@ func (h *TaskHandler) handleStartResult(taskID string, result TaskResult, deploy
 				leaseIDs = append(leaseIDs, lid)
 			}
 			if len(leaseIDs) > 0 {
-				ActivateLeases(h.DB, leaseIDs)
+				now := nowUTC()
+				for _, leaseID := range leaseIDs {
+					tx.Exec(
+						`UPDATE gpu_leases SET status = ?, activated_at = ?, updated_at = ? WHERE id = ? AND status = ?`,
+						LeaseActive, now, now, leaseID, LeaseReserved,
+					)
+				}
 			}
 		}
 
-		// Update deployment status.
-		h.DB.Exec(`UPDATE model_deployments SET status = 'running', updated_at = datetime('now') WHERE id = ?`, deploymentID)
+		// Update deployment status within the transaction.
+		tx.Exec(`UPDATE model_deployments SET status = 'running', updated_at = ? WHERE id = ?`, nowUTC(), deploymentID)
+
+		if err := tx.Commit(); err != nil {
+			log.Error("handleStartResult: commit tx failed", "task_id", taskID, "error", err)
+			return
+		}
 
 		log.Info("instance started successfully",
 			"task_id", taskID,

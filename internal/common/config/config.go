@@ -67,6 +67,7 @@ type AgentConfig struct {
 	Collectors     AgentCollectorConfig `yaml:"collectors" json:"collectors"`
 	GPU            GPUProfileConfig     `yaml:"gpu" json:"gpu"`
 	Logging        LoggingConfig        `yaml:"logging" json:"logging"`
+	Task           TaskConfig           `yaml:"task" json:"task"`
 }
 
 // AgentMetricsConfig holds agent metrics server settings.
@@ -82,6 +83,11 @@ type AgentMetricsConfig struct {
 // HeartbeatConfig holds heartbeat settings.
 type HeartbeatConfig struct {
 	Interval time.Duration `yaml:"interval" json:"interval"`
+}
+
+// TaskConfig holds agent task execution settings.
+type TaskConfig struct {
+	MaxConcurrentTasks int `yaml:"max_concurrent_tasks" json:"max_concurrent_tasks"`
 }
 
 // AgentCollectorConfig holds agent collector settings.
@@ -210,6 +216,9 @@ func DefaultAgentConfig() AgentConfig {
 			MaxSizeMB:     50,
 			MaxFiles:      5,
 			RetentionDays: 7,
+		},
+		Task: TaskConfig{
+			MaxConcurrentTasks: 3,
 		},
 	}
 }

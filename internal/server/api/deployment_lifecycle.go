@@ -197,11 +197,11 @@ func (h *ModelHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		`INSERT INTO model_instances
 		 (id, deployment_id, replica_index, node_id, agent_id, runtime_type,
 		  gpu_ids, gpu_lease_ids, desired_state, actual_state,
-		  host_port, resolved_run_spec, created_at, updated_at)
-		 VALUES (?, ?, 0, ?, ?, ?, ?, ?, 'running', 'pending', ?, ?, ?, ?)`,
+		  host_port, resolved_run_spec, tenant_id, created_at, updated_at)
+		 VALUES (?, ?, 0, ?, ?, ?, ?, ?, 'running', 'pending', ?, ?, ?, ?, ?)`,
 		instanceID, deploymentID, nodeID, agentID, runtimeType,
 		string(gpuIDsJSONBytes), string(leaseIDsJSONBytes),
-		hostPort, string(specJSON), now, now,
+		hostPort, string(specJSON), currentTenantID, now, now,
 	)
 	if err != nil {
 		// Rollback leases.

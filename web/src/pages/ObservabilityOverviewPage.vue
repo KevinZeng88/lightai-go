@@ -57,7 +57,7 @@ onMounted(async () => {
     cards.value[0].status = data.prometheus?.ready ? 'ok' : 'down'
     cards.value[0].desc = data.prometheus?.ready ? 'Running' : 'Not running. Start: bash scripts/start-observability.sh'
     cards.value[1].status = data.grafana?.ready ? 'ok' : 'down'
-    cards.value[1].desc = data.grafana?.ready ? 'Running (admin/lightai)' : 'Not running. Start: bash scripts/start-observability.sh'
+    cards.value[1].desc = data.grafana?.ready ? t('observability.running') : t('observability.notRunning')
   } catch {
     cards.value[0].status = 'down'; cards.value[0].desc = 'Cannot check status'
     cards.value[1].status = 'down'; cards.value[1].desc = 'Cannot check status'

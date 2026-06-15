@@ -4,7 +4,7 @@
     <el-descriptions :column="1" border style="margin-top: 16px">
       <el-descriptions-item :label="t('observability.url')">{{ grafUrl }}</el-descriptions-item>
       <el-descriptions-item :label="t('observability.status')">{{ status }}</el-descriptions-item>
-      <el-descriptions-item :label="t('observability.defaultLogin')">admin / lightai (dev only)</el-descriptions-item>
+      <el-descriptions-item :label="t('observability.defaultLogin')">{{ t('observability.credentialsHint') }}</el-descriptions-item>
     </el-descriptions>
     <div style="margin-top: 16px">
       <el-button type="primary" @click="openGrafana">Open Grafana</el-button>

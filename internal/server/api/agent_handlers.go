@@ -343,7 +343,7 @@ func sweepExpiredTasks(tx *sql.Tx, nodeID string, now string) {
 	tx.Exec(
 		`UPDATE agent_tasks SET status = ?, finished_at = ?, updated_at = ?
 		 WHERE node_id = ? AND status IN (?, ?, ?)
-		 AND (julianday(?) - julianday(created_at)) * 86400 > timeout_seconds`,
+		 AND (strftime('%s', ?) - strftime('%s', created_at)) > timeout_seconds`,
 		TaskStatusTimedOut, now, now, nodeID,
 		TaskStatusPending, TaskStatusClaimed, TaskStatusInProgress,
 		now,
@@ -356,11 +356,12 @@ func sweepExpiredTasks(tx *sql.Tx, nodeID string, now string) {
 		InstanceStateFailed, now, TaskStatusTimedOut, nodeID,
 	)
 
-	// Leases past expires_at → failed.
+	// Leases past expires_at → failed (reserved leases only).
+	// Active leases are only failed by the server-side sweep when the node is offline.
 	tx.Exec(
 		`UPDATE gpu_leases SET status = ?, updated_at = ?
-		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status IN (?, ?)`,
-		LeaseFailed, now, LeaseReserved, LeaseActive,
+		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status = ?`,
+		LeaseFailed, now, LeaseReserved,
 	)
 
 	// Deployments for failed instances → failed.
@@ -673,7 +674,11 @@ func (h *AgentHandler) HandlePatchNodeTenant(w http.ResponseWriter, r *http.Requ
 
 	// Safety: reject transfer if node has active GPU leases.
 	var activeLeaseCount int
-	h.DB.QueryRow(`SELECT COUNT(*) FROM gpu_leases WHERE node_id = ? AND status IN ('reserved','active')`, nodeID).Scan(&activeLeaseCount)
+	if err := h.DB.QueryRow(`SELECT COUNT(*) FROM gpu_leases WHERE node_id = ? AND status IN ('reserved','active')`, nodeID).Scan(&activeLeaseCount); err != nil {
+		log.Error("transfer safety check: query active leases failed", "node_id", nodeID, "error", err)
+		http.Error(w, `{"error":"internal error: cannot verify lease status"}`, http.StatusInternalServerError)
+		return
+	}
 	if activeLeaseCount > 0 {
 		http.Error(w, `{"error":"node has active GPU leases — release them before transferring"}`, http.StatusConflict)
 		return
@@ -681,29 +686,50 @@ func (h *AgentHandler) HandlePatchNodeTenant(w http.ResponseWriter, r *http.Requ
 
 	// Safety: reject transfer if node has running/starting/stopping instances.
 	var activeInstanceCount int
-	h.DB.QueryRow(`SELECT COUNT(*) FROM model_instances WHERE node_id = ? AND actual_state IN ('pending','starting','running','stopping')`, nodeID).Scan(&activeInstanceCount)
+	if err := h.DB.QueryRow(`SELECT COUNT(*) FROM model_instances WHERE node_id = ? AND actual_state IN ('pending','starting','running','stopping')`, nodeID).Scan(&activeInstanceCount); err != nil {
+		log.Error("transfer safety check: query active instances failed", "node_id", nodeID, "error", err)
+		http.Error(w, `{"error":"internal error: cannot verify instance status"}`, http.StatusInternalServerError)
+		return
+	}
 	if activeInstanceCount > 0 {
 		http.Error(w, `{"error":"node has active model instances — stop them before transferring"}`, http.StatusConflict)
 		return
 	}
 
-	// Update node tenant.
-	now := time.Now().Format(time.RFC3339)
-	_, err = h.DB.Exec(`UPDATE nodes SET tenant_id = ?, updated_at = ? WHERE id = ?`,
-		req.TenantID, now, nodeID)
+	// Update node tenant and audit log in a single transaction for atomicity.
+	tx, err := h.DB.Begin()
 	if err != nil {
-		log.Error("update node tenant error", "error", err)
+		log.Error("transfer: begin tx failed", "node_id", nodeID, "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	now := time.Now().Format(time.RFC3339)
+	if _, err := tx.Exec(`UPDATE nodes SET tenant_id = ?, updated_at = ? WHERE id = ?`,
+		req.TenantID, now, nodeID); err != nil {
+		log.Error("update node tenant error", "node_id", nodeID, "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// Audit log.
+	// Audit log — if this fails, the whole transfer rolls back.
 	auditID := uuid.NewString()
 	detail := fmt.Sprintf(`{"from_tenant_id":"%s","to_tenant_id":"%s","reason":"%s"}`,
 		currentTenant, req.TenantID, req.Reason)
-	h.DB.Exec(`INSERT INTO audit_logs (id, action, entity_type, entity_id, detail, operator_user_id, created_at)
+	if _, err := tx.Exec(`INSERT INTO audit_logs (id, action, entity_type, entity_id, detail, operator_user_id, created_at)
 		VALUES (?, 'transfer_tenant', 'node', ?, ?, ?, ?)`,
-		auditID, nodeID, detail, info.UserID, now)
+		auditID, nodeID, detail, info.UserID, now); err != nil {
+		log.Error("transfer: audit log insert failed", "node_id", nodeID, "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("transfer: commit failed", "node_id", nodeID, "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
 
 	log.Info("node tenant transferred",
 		"node_id", nodeID,

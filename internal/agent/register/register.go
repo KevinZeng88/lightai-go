@@ -238,7 +238,7 @@ func SendHeartbeat(client *http.Client, serverURL, agentToken, agentID, nodeID s
 
 	log.Debug("heartbeat success",
 		"agent_id", agentID,
-		"node_id", agentID, // placeholder, actual node_id is tracked in state
+		"node_id", nodeID,
 		"latency_ms", latency.Milliseconds(),
 		"status", hbResp.Status,
 	)

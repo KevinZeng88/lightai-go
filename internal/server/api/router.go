@@ -26,6 +26,11 @@ type RouterConfig struct {
 
 // SetupRoutes registers all API routes on the given mux.
 func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
+	// Wire login metrics to AuthHandler (C3 fix: login counter was TODO).
+	if cfg.AuthHandler != nil && cfg.ServerMetrics != nil {
+		cfg.AuthHandler.Metrics = cfg.ServerMetrics
+	}
+
 	// Auth endpoints (no session required for login/CSRF).
 	mux.HandleFunc("POST /api/v1/auth/login", cfg.AuthHandler.HandleLogin)
 	mux.HandleFunc("GET /api/v1/auth/csrf-token", cfg.AuthHandler.HandleCSRFToken)
@@ -209,10 +214,4 @@ func chain(middlewares ...func(http.Handler) http.Handler) func(http.Handler) ht
 		}
 		return h
 	}
-}
-
-func handleNotImplemented(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"error":"not implemented"}`))
 }

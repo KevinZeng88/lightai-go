@@ -11,6 +11,13 @@ import (
 	"lightai-go/internal/server/db"
 )
 
+// AuthMetricsSink receives login success/failure notifications.
+// Implementations should be lightweight and never block.
+type AuthMetricsSink interface {
+	IncLoginSuccess()
+	IncLoginFailed()
+}
+
 // AuthHandler holds dependencies for auth API handlers.
 type AuthHandler struct {
 	DB           *db.DB
@@ -18,6 +25,7 @@ type AuthHandler struct {
 	SessionCfg   SessionConfig
 	RateLimiter  *LoginRateLimiter
 	BootstrapCfg BootstrapConfig
+	Metrics      AuthMetricsSink
 }
 
 // LoginRequest is the login request body.
@@ -116,6 +124,9 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		req.Username,
 	).Scan(&userID, &username, &displayName, &passwordHash, &userStatus, &isPlatformAdmin, &mustChangePassword)
 	if err == sql.ErrNoRows {
+		if h.Metrics != nil {
+			h.Metrics.IncLoginFailed()
+		}
 		http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
 		return
 	}
@@ -127,6 +138,9 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Check user status.
 	if userStatus != "active" {
+		if h.Metrics != nil {
+			h.Metrics.IncLoginFailed()
+		}
 		http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
 		return
 	}
@@ -134,6 +148,9 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Verify password.
 	ok, err := VerifyPassword(req.Password, passwordHash)
 	if err != nil || !ok {
+		if h.Metrics != nil {
+			h.Metrics.IncLoginFailed()
+		}
 		http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
 		return
 	}
@@ -212,10 +229,10 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Set cookie.
 	SetSessionCookie(w, sessionID, h.SessionCfg)
 
-	// Increment login counter.
-	// TODO: pass ServerMetrics to AuthHandler for proper counter.
-
-	// Build response.
+	// Increment login success counter.
+	if h.Metrics != nil {
+		h.Metrics.IncLoginSuccess()
+	}
 	platformAdmin := isPlatformAdmin == 1
 	mustChange := mustChangePassword == 1
 
@@ -477,10 +494,13 @@ func (h *AuthHandler) HandleSwitchTenant(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// HandleCSRFToken handles GET /api/auth/csrf-token.
+// Design note: The raw CSRF secret is never stored — only its SHA-256 hash.
+// Therefore this endpoint cannot return the original token. The token is
+// provided at login and must be retained by the client. If lost, the client
+// should call GET /api/v1/auth/me which rotates the CSRF secret and returns
+// a new token (via the csrf_token field in MeResponse).
 func (h *AuthHandler) HandleCSRFToken(w http.ResponseWriter, r *http.Request) {
-	// CSRF token is returned in the login response.
-	// For subsequent requests, the client should use the same token.
-	// This endpoint returns the token again if needed from the session.
 	cookie, err := r.Cookie(h.SessionCfg.CookieName)
 	if err != nil {
 		http.Error(w, `{"error":"no session"}`, http.StatusUnauthorized)
@@ -498,11 +518,12 @@ func (h *AuthHandler) HandleCSRFToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// We can't recover the original CSRF secret from the hash.
-	// The CSRF token is set at login time and should be stored client-side.
-	// This endpoint is a convenience that returns the hash status.
+	// The raw CSRF secret cannot be recovered from its hash.
+	// This endpoint confirms the session exists and has a valid CSRF hash.
+	// Use GET /api/v1/auth/me to obtain a fresh CSRF token if needed.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "CSRF token was provided at login. Use the same token for all requests.",
+		"message":       "CSRF token was provided at login. Use GET /me for a fresh token if lost.",
+		"csrf_valid":    "true",
 	})
 }

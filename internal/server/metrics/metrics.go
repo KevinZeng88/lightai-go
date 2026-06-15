@@ -147,3 +147,9 @@ func New(reg *prometheus.Registry, db *sql.DB) *ServerMetrics {
 	m.Info.Set(1)
 	return m
 }
+
+// IncLoginSuccess increments the successful login counter.
+func (m *ServerMetrics) IncLoginSuccess() { m.AuthLoginTotal.Inc() }
+
+// IncLoginFailed increments the failed login counter.
+func (m *ServerMetrics) IncLoginFailed() { m.AuthLoginFailed.Inc() }
