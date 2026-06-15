@@ -18,6 +18,7 @@ import (
 	"lightai-go/internal/agent/collector"
 	"lightai-go/internal/agent/metrics"
 	"lightai-go/internal/agent/register"
+	agentruntime "lightai-go/internal/agent/runtime"
 	"lightai-go/internal/agent/state"
 	"lightai-go/internal/common/config"
 	"lightai-go/internal/common/log"
@@ -426,6 +427,10 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 				}
 			} else {
 				consecutiveFailures = 0
+				// Process any pending tasks from heartbeat response.
+				if hbResp != nil && len(hbResp.Tasks) > 0 {
+					processTasks(ctx, client, cfg, agentID, hbResp.Tasks)
+				}
 			}
 		case <-collectTicker.C:
 			collectAndReport(ctx, client, cfg, agentID, registry, snap)
@@ -566,4 +571,198 @@ func detectKernelVersion() string {
 		b = append(b, byte(c))
 	}
 	return string(b)
+}
+
+// processTasks handles agent tasks received via heartbeat.
+func processTasks(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, tasks []register.AgentTask) {
+	for _, task := range tasks {
+		log.Info("processing task",
+			"task_id", task.ID,
+			"task_type", task.TaskType,
+			"instance_id", task.InstanceID,
+		)
+
+		result := register.TaskResult{
+			TaskID:     task.ID,
+			InstanceID: task.InstanceID,
+		}
+
+		startTime := time.Now()
+		result.StartedAt = startTime.Format(time.RFC3339)
+
+		switch task.TaskType {
+		case "model_instance_start":
+			processStartTask(ctx, task, &result)
+		case "model_instance_stop":
+			processStopTask(ctx, task, &result)
+		case "model_instance_logs":
+			processLogsTask(ctx, task, &result)
+		default:
+			result.Success = false
+			result.ErrorMessage = "unknown task type: " + task.TaskType
+		}
+
+		result.FinishedAt = time.Now().Format(time.RFC3339)
+
+		// Report result back to server.
+		if err := register.ReportTaskResult(client, cfg.ServerURL, cfg.AgentToken, task.ID, result); err != nil {
+			log.Error("failed to report task result",
+				"task_id", task.ID,
+				"error", err,
+			)
+		}
+	}
+}
+
+func processStartTask(ctx context.Context, task register.AgentTask, result *register.TaskResult) {
+	// Parse the AgentRunSpec from task payload.
+	var spec agentruntime.AgentRunSpec
+	if err := json.Unmarshal(task.AgentRunSpec, &spec); err != nil {
+		result.Success = false
+		result.ErrorMessage = "invalid agent run spec: " + err.Error()
+		return
+	}
+
+	// Create real Docker client and driver.
+	realCli, err := agentruntime.NewRealDockerClient()
+	if err != nil {
+		result.Success = false
+		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		return
+	}
+	defer realCli.Close()
+
+	// Check Docker daemon availability.
+	pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer pingCancel()
+	if _, err := realCli.Ping(pingCtx); err != nil {
+		result.Success = false
+		result.ErrorMessage = "docker daemon unavailable: " + err.Error()
+		return
+	}
+
+	driver := agentruntime.NewDockerRuntimeDriver(realCli)
+
+	// Apply per-task timeout from the task's timeout_seconds.
+	taskCtx, taskCancel := context.WithTimeout(ctx, time.Duration(task.TimeoutSeconds)*time.Second)
+	defer taskCancel()
+	inst, err := driver.Start(taskCtx, spec)
+	if err != nil {
+		result.Success = false
+		result.ErrorMessage = err.Error()
+		result.ExitCode = -1
+		return
+	}
+
+	result.Success = true
+	result.ContainerID = inst.ContainerID
+	result.RuntimeState = "running"
+	result.InstanceID = inst.InstanceID
+	result.DeploymentID = task.DeploymentID
+	result.NodeID = task.NodeID
+}
+
+func processStopTask(ctx context.Context, task register.AgentTask, result *register.TaskResult) {
+	// Parse payload to get instance ID and container ID.
+	var payload struct {
+		InstanceID    string `json:"instance_id"`
+		ContainerID   string `json:"container_id"`
+		ContainerName string `json:"container_name,omitempty"`
+	}
+	if err := json.Unmarshal(task.AgentRunSpec, &payload); err != nil {
+		result.Success = false
+		result.ErrorMessage = "invalid stop payload: " + err.Error()
+		return
+	}
+
+	realCli, err := agentruntime.NewRealDockerClient()
+	if err != nil {
+		result.Success = false
+		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		return
+	}
+	defer realCli.Close()
+
+	driver := agentruntime.NewDockerRuntimeDriver(realCli)
+
+	taskCtx, taskCancel := context.WithTimeout(ctx, time.Duration(task.TimeoutSeconds)*time.Second)
+	defer taskCancel()
+	if err := driver.Stop(taskCtx, payload.InstanceID); err != nil {
+		result.Success = false
+		result.ErrorMessage = err.Error()
+		result.ExitCode = -1
+		return
+	}
+
+	result.Success = true
+	result.RuntimeState = "stopped"
+	result.InstanceID = payload.InstanceID
+	result.ContainerID = payload.ContainerID
+	result.DeploymentID = task.DeploymentID
+	result.NodeID = task.NodeID
+}
+
+func processLogsTask(ctx context.Context, task register.AgentTask, result *register.TaskResult) {
+	var payload struct {
+		InstanceID    string `json:"instance_id"`
+		ContainerID   string `json:"container_id"`
+		ContainerName string `json:"container_name,omitempty"`
+	}
+	if err := json.Unmarshal(task.AgentRunSpec, &payload); err != nil {
+		result.Success = false
+		result.ErrorMessage = "invalid logs payload: " + err.Error()
+		return
+	}
+
+	log.Info("processing logs task",
+		"task_id", task.ID,
+		"instance_id", payload.InstanceID,
+		"container_id", payload.ContainerID,
+	)
+
+	realCli, err := agentruntime.NewRealDockerClient()
+	if err != nil {
+		result.Success = false
+		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		return
+	}
+	defer realCli.Close()
+
+	driver := agentruntime.NewDockerRuntimeDriver(realCli)
+
+	// Use container_id or container_name to locate; fall back to instance-derived name.
+	targetID := payload.ContainerID
+	if targetID == "" {
+		targetID = payload.ContainerName
+	}
+	if targetID == "" {
+		targetID = payload.InstanceID
+	}
+
+	logs, err := driver.Logs(ctx, targetID, agentruntime.LogOptions{Tail: 100})
+	if err != nil {
+		log.Error("logs task failed",
+			"task_id", task.ID,
+			"instance_id", payload.InstanceID,
+			"target_id", targetID,
+			"error", err,
+		)
+		result.Success = false
+		result.ErrorMessage = err.Error()
+		return
+	}
+
+	log.Info("logs task completed",
+		"task_id", task.ID,
+		"instance_id", payload.InstanceID,
+		"bytes", len(logs.Stdout),
+	)
+
+	result.Success = true
+	result.RuntimeState = "ok"
+	result.LogsSummary = logs.Stdout
+	result.InstanceID = payload.InstanceID
+	result.ContainerID = payload.ContainerID
+	result.DeploymentID = task.DeploymentID
+	result.NodeID = task.NodeID
 }

@@ -328,3 +328,25 @@ type Node struct {
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
+
+// AgentTask represents a task dispatched to an Agent node.
+type AgentTask struct {
+	ID             string `json:"id"`
+	TaskType       string `json:"task_type"`
+	Status         string `json:"status"`
+	TenantID       string `json:"tenant_id"`
+	DeploymentID   string `json:"deployment_id"`
+	InstanceID     string `json:"instance_id,omitempty"`
+	NodeID         string `json:"node_id"`
+	AgentID        string `json:"agent_id,omitempty"`
+	RequestedBy    string `json:"requested_by"`
+	Payload        string `json:"payload"`
+	Result         string `json:"result,omitempty"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+	RetryCount     int    `json:"retry_count"`
+	ClaimedAt      string `json:"claimed_at,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	FinishedAt     string `json:"finished_at,omitempty"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+}

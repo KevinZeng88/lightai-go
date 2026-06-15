@@ -95,14 +95,34 @@ type DeploymentInput struct {
 
 // ResolveInput holds all inputs needed for resolution.
 type ResolveInput struct {
-	InstanceID    string
-	DeploymentID  string
-	AgentID       string
-	Artifact      *ModelArtifactInput
-	Env           *EnvironmentInput
-	Deployment    *DeploymentInput
-	ArgsTemplate  []string
-	RequiredVars  []string
+	InstanceID     string
+	DeploymentID   string
+	AgentID        string
+	Artifact       *ModelArtifactInput
+	Env            *EnvironmentInput
+	Deployment     *DeploymentInput
+	ArgsTemplate   []string
+	RequiredVars   []string
+	Image          string
+	VolumeMappings []VolumeMapping
+	EnvMappings    []EnvMapping
+	Devices        []DockerDevice
+	EnvOverrides   map[string]string
+	ArtifactName   string
+	DeploymentName string
+}
+
+// VolumeMapping is a volume mount template (may contain ${VAR} placeholders).
+type VolumeMapping struct {
+	HostPath      string `json:"host_path"`
+	ContainerPath string `json:"container_path"`
+	Readonly      bool   `json:"readonly,omitempty"`
+}
+
+// EnvMapping is an env variable template.
+type EnvMapping struct {
+	Key       string `json:"key"`
+	ValueFrom string `json:"value_from"`
 }
 
 // Resolve generates a ResolvedRunSpec from the given inputs.
@@ -127,21 +147,52 @@ func Resolve(in ResolveInput) (*ResolvedRunSpec, []error, []string) {
 		Args:            make([]string, 0),
 	}
 
-	spec.Docker = DockerSpec{
-		Image:         "lightai-runtime",
-		ContainerName: fmt.Sprintf("lightai-%s", in.InstanceID[:min(12, len(in.InstanceID))]),
-	}
-
-	// Ports.
-	if in.Deployment.HostPort != 0 {
-		spec.Ports = append(spec.Ports, DockerPort{
-			HostPort: in.Deployment.HostPort, ContainerPort: in.Env.DefaultPort, Protocol: "tcp",
-		})
-	}
-
 	// Variable substitution.
 	vars := buildVarMap(in)
 	missing := checkRequiredVars(in.RequiredVars, vars)
+
+	// Image: use deployment override or docker spec image.
+	spec.Docker = DockerSpec{
+		Image:         in.Image,
+		ContainerName: fmt.Sprintf("lightai-%s", in.InstanceID[:min(12, len(in.InstanceID))]),
+	}
+	if spec.Docker.Image == "" {
+		spec.Docker.Image = "lightai-runtime"
+	}
+
+	// Ports — skip if network_mode=host (port mapping has no effect).
+	if in.Deployment.HostPort != 0 {
+		if spec.Docker.NetworkMode == "host" {
+			warnings = append(warnings, "port mapping skipped: network_mode=host makes port mapping ineffective")
+		} else {
+			spec.Ports = append(spec.Ports, DockerPort{
+				HostPort: in.Deployment.HostPort, ContainerPort: in.Env.DefaultPort, Protocol: "tcp",
+			})
+		}
+	}
+
+	// Volumes from template mappings, with variable substitution.
+	for _, vm := range in.VolumeMappings {
+		spec.Volumes = append(spec.Volumes, DockerVolume{
+			HostPath:      substituteVars(vm.HostPath, vars),
+			ContainerPath: substituteVars(vm.ContainerPath, vars),
+			Readonly:      vm.Readonly,
+		})
+	}
+
+	// Env from template mappings.
+	for _, em := range in.EnvMappings {
+		val := substituteVars(em.ValueFrom, vars)
+		spec.Env[em.Key] = val
+	}
+
+	// Env overrides from deployment.
+	for k, v := range in.EnvOverrides {
+		spec.Env[k] = v
+	}
+
+	// Devices from docker spec.
+	spec.Devices = in.Devices
 	if len(missing) > 0 {
 		errors = append(errors, fmt.Errorf("missing required variables: %s", strings.Join(missing, ", ")))
 	}
@@ -272,10 +323,51 @@ func min(a, b int) int {
 }
 
 func buildVarMap(in ResolveInput) map[string]string {
+	// Host path extraction.
+	hostPath := in.Artifact.Path
+	hostDir := hostPath
+	modelFile := hostPath
+	if idx := strings.LastIndex(hostPath, "/"); idx >= 0 {
+		hostDir = hostPath[:idx]
+		modelFile = hostPath[idx+1:]
+	}
+
+	// Compute container model path by applying volume mappings.
+	// If a volume maps a host directory prefix to a container directory,
+	// translate the model path accordingly.
+	containerModelPath := hostPath
+	containerModelDir := hostDir
+	for _, vm := range in.VolumeMappings {
+		if strings.HasPrefix(hostPath, vm.HostPath) {
+			rel := strings.TrimPrefix(hostPath, vm.HostPath)
+			rel = strings.TrimPrefix(rel, "/")
+			containerModelPath = vm.ContainerPath + "/" + rel
+			// Also compute container dir
+			if strings.HasPrefix(hostDir, vm.HostPath) {
+				relDir := strings.TrimPrefix(hostDir, vm.HostPath)
+				relDir = strings.TrimPrefix(relDir, "/")
+				containerModelDir = vm.ContainerPath
+				if relDir != "" {
+					containerModelDir = vm.ContainerPath + "/" + relDir
+				}
+			}
+			break
+		}
+	}
+
 	vars := make(map[string]string)
 	vars["INSTANCE_ID"] = in.InstanceID
 	vars["DEPLOYMENT_ID"] = in.DeploymentID
-	vars["MODEL_PATH"] = in.Artifact.Path
+	// MODEL_PATH = container path (for args inside container).
+	vars["MODEL_PATH"] = containerModelPath
+	vars["HOST_MODEL_PATH"] = hostPath
+	vars["MODEL_FILE"] = modelFile
+	vars["MODEL_DIR"] = containerModelDir
+	vars["MODEL_PATH_DIR"] = containerModelDir
+	vars["HOST_MODEL_DIR"] = hostDir
+	vars["ARTIFACT_PATH"] = hostPath
+	vars["ARTIFACT_NAME"] = in.ArtifactName
+	vars["DEPLOYMENT_NAME"] = in.DeploymentName
 	vars["SERVED_MODEL_NAME"] = in.Deployment.ServedModelName
 	vars["HOST_PORT"] = fmt.Sprintf("%d", in.Deployment.HostPort)
 	vars["CONTAINER_PORT"] = fmt.Sprintf("%d", in.Env.DefaultPort)
@@ -338,6 +430,10 @@ func EquivalentCommandPreview(spec *ResolvedRunSpec) string {
 	}
 	for k, v := range spec.Docker.Ulimits {
 		parts = append(parts, "--ulimit", fmt.Sprintf("%s=%s", k, v))
+	}
+	// GPU device requests (NVIDIA --gpus).
+	if len(spec.Docker.GPUDeviceIDs) > 0 {
+		parts = append(parts, "--gpus", fmt.Sprintf("\"device=%s\"", strings.Join(spec.Docker.GPUDeviceIDs, ",")))
 	}
 	for _, d := range spec.Devices {
 		parts = append(parts, "--device", d.HostPath+":"+d.ContainerPath)

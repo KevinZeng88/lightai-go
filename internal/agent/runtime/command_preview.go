@@ -52,7 +52,14 @@ func EquivalentCommandPreview(spec *AgentRunSpec) string {
 		parts = append(parts, "--ulimit", fmt.Sprintf("%s=%s", k, v))
 	}
 
-	// Devices.
+	// GPU device requests (NVIDIA --gpus).
+	if len(spec.Docker.GPUDeviceIDs) > 0 {
+		if spec.Vendor == "nvidia" {
+			parts = append(parts, "--gpus", fmt.Sprintf(`"device=%s"`, strings.Join(spec.Docker.GPUDeviceIDs, ",")))
+		}
+	}
+
+	// Raw devices.
 	for _, d := range spec.Devices {
 		parts = append(parts, "--device", d.HostPath+":"+d.ContainerPath)
 	}

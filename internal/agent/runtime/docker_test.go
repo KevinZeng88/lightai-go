@@ -487,6 +487,150 @@ func TestDockerRuntimeDriverImplementsInterface(t *testing.T) {
 // Real Docker daemon integration test (opt-in, skipped by default)
 // ==========================================================================
 
+// ==========================================================================
+// GPU DeviceRequests tests
+// ==========================================================================
+
+func TestNvidiaGpuDeviceRequestAll(t *testing.T) {
+	driver, fake := newTestDriver()
+	ctx := context.Background()
+	spec := makeTestSpec("docker")
+	spec.Vendor = "nvidia"
+	spec.GPUDeviceIDs = []string{"0", "1", "2", "3"}
+	spec.Docker.GPUDeviceIDs = []string{"0", "1", "2", "3"}
+
+	_, err := driver.Start(ctx, spec)
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	c := fake.LastContainer()
+	if c == nil {
+		t.Fatal("no container created")
+	}
+	if len(c.DeviceRequests) != 1 {
+		t.Fatalf("expected 1 DeviceRequest, got %d", len(c.DeviceRequests))
+	}
+	dr := c.DeviceRequests[0]
+	if dr.Driver != "nvidia" {
+		t.Errorf("DeviceRequest.Driver = %q, want nvidia", dr.Driver)
+	}
+	if len(dr.Capabilities) != 1 || len(dr.Capabilities[0]) != 1 || dr.Capabilities[0][0] != "gpu" {
+		t.Errorf("DeviceRequest.Capabilities = %v, want [[gpu]]", dr.Capabilities)
+	}
+	if len(dr.DeviceIDs) != 4 {
+		t.Errorf("DeviceRequest.DeviceIDs len = %d, want 4", len(dr.DeviceIDs))
+	}
+}
+
+func TestNvidiaGpuDeviceRequestSpecific(t *testing.T) {
+	driver, fake := newTestDriver()
+	ctx := context.Background()
+	spec := makeTestSpec("docker")
+	spec.Vendor = "nvidia"
+	spec.GPUDeviceIDs = []string{"0", "1"}
+	spec.Docker.GPUDeviceIDs = []string{"0", "1"}
+
+	_, err := driver.Start(ctx, spec)
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	c := fake.LastContainer()
+	if len(c.DeviceRequests) != 1 {
+		t.Fatalf("expected 1 DeviceRequest, got %d", len(c.DeviceRequests))
+	}
+	dr := c.DeviceRequests[0]
+	if dr.Driver != "nvidia" {
+		t.Errorf("DeviceRequest.Driver = %q, want nvidia", dr.Driver)
+	}
+	if len(dr.DeviceIDs) != 2 || dr.DeviceIDs[0] != "0" || dr.DeviceIDs[1] != "1" {
+		t.Errorf("DeviceRequest.DeviceIDs = %v, want [0 1]", dr.DeviceIDs)
+	}
+}
+
+func TestMetaXUsesRawDevicesNotDeviceRequest(t *testing.T) {
+	driver, fake := newTestDriver()
+	ctx := context.Background()
+	spec := makeTestSpec("docker")
+	spec.Vendor = "metax"
+	spec.GPUDeviceIDs = []string{"0"}
+	spec.Devices = []DeviceSpec{
+		{HostPath: "/dev/dri", ContainerPath: "/dev/dri", Permissions: "rwm"},
+		{HostPath: "/dev/mxcd", ContainerPath: "/dev/mxcd", Permissions: "rwm"},
+	}
+	spec.Docker.SecurityOptions = []string{"seccomp=unconfined", "apparmor=unconfined"}
+	spec.Docker.Privileged = true
+	spec.Docker.IPCMode = "host"
+	spec.Docker.UTSMode = "host"
+	spec.Docker.ShmSize = "8gb"
+	spec.Docker.GroupAdd = []string{"video"}
+	spec.Docker.Ulimits = map[string]string{"memlock": "-1"}
+
+	_, err := driver.Start(ctx, spec)
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	c := fake.LastContainer()
+	// MetaX should NOT have DeviceRequests (uses raw devices instead).
+	if len(c.DeviceRequests) != 0 {
+		t.Errorf("MetaX should have 0 DeviceRequests, got %d", len(c.DeviceRequests))
+	}
+	// Must have security options.
+	if len(c.SecurityOpt) < 2 {
+		t.Errorf("MetaX should have security options, got %v", c.SecurityOpt)
+	}
+	if !c.Privileged {
+		t.Error("MetaX should have privileged=true")
+	}
+	if c.IPCMode != "host" {
+		t.Errorf("MetaX IPCMode = %q, want host", c.IPCMode)
+	}
+	if c.UTSMode != "host" {
+		t.Errorf("MetaX UTSMode = %q, want host", c.UTSMode)
+	}
+	if c.ShmSize != "8gb" {
+		t.Errorf("MetaX ShmSize = %q, want 8gb", c.ShmSize)
+	}
+	if c.Ulimits["memlock"] != "-1" {
+		t.Errorf("MetaX ulimit memlock = %q, want -1", c.Ulimits["memlock"])
+	}
+}
+
+func TestEquivalentCommandPreviewShowsGpus(t *testing.T) {
+	spec := makeTestSpec("docker")
+	spec.Vendor = "nvidia"
+	spec.Docker.GPUDeviceIDs = []string{"0", "1"}
+	cmd := EquivalentCommandPreview(&spec)
+
+	if !strings.Contains(cmd, "--gpus") {
+		t.Error("NVIDIA command preview should contain --gpus")
+	}
+	if !strings.Contains(cmd, "device=0,1") {
+		t.Error("NVIDIA command preview should contain device=0,1")
+	}
+}
+
+func TestEquivalentCommandPreviewNoGpusForMetaX(t *testing.T) {
+	spec := makeTestSpec("docker")
+	spec.Vendor = "metax"
+	spec.Docker.GPUDeviceIDs = []string{"0"}
+	spec.Devices = []DeviceSpec{
+		{HostPath: "/dev/dri", ContainerPath: "/dev/dri"},
+	}
+	cmd := EquivalentCommandPreview(&spec)
+
+	// MetaX should NOT have --gpus.
+	if strings.Contains(cmd, "--gpus") {
+		t.Error("MetaX command preview should NOT contain --gpus")
+	}
+	// MetaX should have --device for raw devices.
+	if !strings.Contains(cmd, "--device") {
+		t.Error("MetaX command preview should contain --device")
+	}
+}
+
 // TestRealDockerRuntimeDriver verifies the DockerRuntimeDriver against a real
 // Docker daemon using a lightweight alpine image.  It is skipped unless the
 // LIGHTAI_TEST_DOCKER environment variable is set to "1".

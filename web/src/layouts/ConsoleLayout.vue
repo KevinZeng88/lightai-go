@@ -29,6 +29,7 @@
             <el-icon><Box /></el-icon>
             <span>{{ t('nav.models') }}</span>
           </template>
+          <el-menu-item index="/models/artifacts">{{ t('nav.modelArtifacts') }}</el-menu-item>
           <el-menu-item index="/models/deployments">{{ t('nav.deployments') }}</el-menu-item>
           <el-menu-item index="/models/instances">{{ t('nav.instances') }}</el-menu-item>
         </el-sub-menu>
@@ -39,6 +40,7 @@
             <span>{{ t('nav.runtime') }}</span>
           </template>
           <el-menu-item index="/runtime/environments">{{ t('nav.runtimeEnvironments') }}</el-menu-item>
+          <el-menu-item index="/runtime/templates">{{ t('nav.runTemplates') }}</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="observability">

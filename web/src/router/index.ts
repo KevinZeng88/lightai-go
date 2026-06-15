@@ -33,19 +33,29 @@ const router = createRouter({
           component: () => import('@/pages/GpusPage.vue'),
         },
         {
+          path: 'models/artifacts',
+          name: 'ModelArtifacts',
+          component: () => import('@/pages/ModelArtifactsPage.vue'),
+        },
+        {
           path: 'models/deployments',
           name: 'ModelDeployments',
-          component: () => import('@/pages/PlaceholderPage.vue'),
+          component: () => import('@/pages/ModelDeploymentsPage.vue'),
         },
         {
           path: 'models/instances',
           name: 'ModelInstances',
-          component: () => import('@/pages/PlaceholderPage.vue'),
+          component: () => import('@/pages/ModelInstancesPage.vue'),
         },
         {
           path: 'runtime/environments',
           name: 'RuntimeEnvironments',
-          component: () => import('@/pages/PlaceholderPage.vue'),
+          component: () => import('@/pages/RuntimeEnvironmentsPage.vue'),
+        },
+        {
+          path: 'runtime/templates',
+          name: 'RunTemplates',
+          component: () => import('@/pages/RunTemplatesPage.vue'),
         },
         {
           path: 'observability/overview',

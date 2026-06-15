@@ -119,12 +119,34 @@ func boolVal(m map[string]interface{}, key string, def bool) bool {
 
 func strSlice(m map[string]interface{}, key string) []string {
 	if v, ok := m[key]; ok {
+		// Handle json.RawMessage (stored as raw JSON bytes).
+		if raw, ok := v.(json.RawMessage); ok {
+			var arr []string
+			if err := json.Unmarshal(raw, &arr); err == nil {
+				return arr
+			}
+			// Try as []interface{} within RawMessage.
+			var iarr []interface{}
+			if err := json.Unmarshal(raw, &iarr); err == nil {
+				out := make([]string, len(iarr))
+				for i, e := range iarr {
+					out[i] = fmt.Sprint(e)
+				}
+				return out
+			}
+			return nil
+		}
+		// Handle []interface{} (already parsed).
 		if arr, ok := v.([]interface{}); ok {
 			out := make([]string, len(arr))
 			for i, e := range arr {
 				out[i] = fmt.Sprint(e)
 			}
 			return out
+		}
+		// Handle string (single value).
+		if s, ok := v.(string); ok {
+			return []string{s}
 		}
 	}
 	return nil
@@ -1298,25 +1320,26 @@ func (h *ModelHandler) HandleDryRun(w http.ResponseWriter, r *http.Request) {
 	var resolvedSpec map[string]interface{}
 	var cmdPreview string
 	if result.Valid {
-		artifact := &resolver.ModelArtifactInput{Path: modelPath}
-		env := &resolver.EnvironmentInput{RuntimeType: "docker", BackendType: "custom", Vendor: vendor, DefaultPort: 8000}
-		deploy := &resolver.DeploymentInput{
-			ServedModelName: strVal(md, "served_model_name", ""),
-			NodeID: nodeID, GPUIds: gpuIDs, HostPort: hostPort,
-			MaxModelLen: intVal(md, "max_model_len", 0),
-			GPUMemoryUtilization: floatVal(md, "gpu_memory_utilization", 0.9),
-		}
-		argsTmpl := []string{}
-		if templateID != "" {
-			var atStr string
-			h.DB.QueryRow(`SELECT args_template FROM run_templates WHERE id = ?`, templateID).Scan(&atStr)
-			json.Unmarshal([]byte(atStr), &argsTmpl)
-		}
-		spec, _, _ := resolver.Resolve(resolver.ResolveInput{
-			Artifact: artifact, Env: env, Deployment: deploy,
-			ArgsTemplate: argsTmpl, RequiredVars: requiredVars,
-			AgentID: "dry-run-agent", InstanceID: "dry-run-instance",
-		})
+			resolveIn := buildResolveInputForDeployment(h.DB, resolveDeploymentInput{
+				ArtifactID:  modelArtifactID,
+				EnvID:       envID,
+				TemplateID:  templateID,
+				DeployID:    id,
+				NodeID:      nodeID,
+				GPUIds:      gpuIDs,
+				HostPort:    hostPort,
+				ModelPath:   modelPath,
+				Vendor:      vendor,
+				RuntimeType: "docker",
+				BackendType: "custom",
+				DefaultPort: 8000,
+				ServedModelName:      strVal(md, "served_model_name", ""),
+				MaxModelLen:          intVal(md, "max_model_len", 0),
+				GPUMemoryUtilization: floatVal(md, "gpu_memory_utilization", 0.9),
+			})
+			resolveIn.AgentID = "dry-run-agent"
+			resolveIn.InstanceID = "dry-run-instance"
+			spec, _, _ := resolver.Resolve(resolveIn)
 		resolvedSpec = specToMap(spec)
 		redactResolvedSpec(resolvedSpec)
 		cmdPreview = redactCommandPreview(resolver.EquivalentCommandPreview(spec))

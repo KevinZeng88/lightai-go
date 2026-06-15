@@ -30,23 +30,25 @@ type DockerClient interface {
 
 // ContainerCreateOptions holds parameters for creating a container.
 type ContainerCreateOptions struct {
-	Image         string
-	ContainerName string
-	Command       []string // entrypoint + cmd
-	Env           []string // "KEY=VALUE" format
-	Binds         []string // "host:container[:ro]" format
-	Devices       []DeviceMapping
-	PortBindings  map[string][]PortBinding // containerPort/proto → host bindings
-	Privileged    bool
-	IPCMode       string
-	ShmSize       string
-	NetworkMode   string
-	GroupAdd      []string
-	SecurityOpt   []string
-	Ulimits       map[string]string
-	RestartPolicy string
-	ExtraHosts    []string
-	AutoRemove    bool
+	Image          string
+	ContainerName  string
+	Command        []string // entrypoint + cmd
+	Env            []string // "KEY=VALUE" format
+	Binds          []string // "host:container[:ro]" format
+	Devices        []DeviceMapping
+	PortBindings   map[string][]PortBinding // containerPort/proto → host bindings
+	Privileged     bool
+	IPCMode        string
+	UTSMode        string
+	ShmSize        string
+	NetworkMode    string
+	GroupAdd       []string
+	SecurityOpt    []string
+	Ulimits        map[string]string
+	RestartPolicy  string
+	ExtraHosts     []string
+	AutoRemove     bool
+	DeviceRequests []DeviceRequest // GPU device requests (e.g., NVIDIA --gpus)
 }
 
 // DeviceMapping is a device to pass through to the container.
@@ -54,6 +56,15 @@ type DeviceMapping struct {
 	HostPath      string
 	ContainerPath string
 	Permissions   string
+}
+
+// DeviceRequest represents a request for a device driver (e.g. NVIDIA GPU).
+// This mirrors container.DeviceRequest from the Docker SDK but lives in our
+// own types so the interface stays SDK-free.
+type DeviceRequest struct {
+	Driver       string     // device driver name, e.g. "nvidia"
+	DeviceIDs    []string   // device IDs, e.g. ["0","1"]; nil or empty means all
+	Capabilities [][]string // e.g. [["gpu"]], [["gpu","compute"]]
 }
 
 // PortBinding maps a host port to a container port.

@@ -44,6 +44,8 @@ export default {
     instances: '实例',
     runtime: '运行时',
     runtimeEnvironments: '运行环境',
+    modelArtifacts: '模型资产',
+    runTemplates: '运行模板',
     observability: '可观测性',
     metricsTargets: 'Metrics Targets',
     grafana: 'Grafana',

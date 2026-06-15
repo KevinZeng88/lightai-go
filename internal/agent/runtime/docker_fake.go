@@ -15,26 +15,28 @@ var _ DockerClient = (*FakeDockerClient)(nil)
 
 // fakeContainer holds the in-memory state for a single container.
 type fakeContainer struct {
-	ID           string
-	Name         string
-	Image        string
-	Env          []string
-	Args         []string
-	Binds        []string
-	PortBindings map[string][]PortBinding
-	Privileged   bool
-	IPCMode      string
-	ShmSize      string
-	NetworkMode  string
-	GroupAdd     []string
-	SecurityOpt  []string
-	Ulimits      map[string]string
-	RestartPolicy string
-	State        string // created, running, exited
-	ExitCode     int
-	StartedAt    time.Time
-	FinishedAt   time.Time
-	Logs         strings.Builder
+	ID             string
+	Name           string
+	Image          string
+	Env            []string
+	Args           []string
+	Binds          []string
+	PortBindings   map[string][]PortBinding
+	Privileged     bool
+	IPCMode        string
+	UTSMode        string
+	ShmSize        string
+	NetworkMode    string
+	GroupAdd       []string
+	SecurityOpt    []string
+	Ulimits        map[string]string
+	RestartPolicy  string
+	DeviceRequests []DeviceRequest
+	State          string // created, running, exited
+	ExitCode       int
+	StartedAt      time.Time
+	FinishedAt     time.Time
+	Logs           strings.Builder
 }
 
 // FakeDockerClient implements DockerClient with an in-memory container
@@ -69,22 +71,24 @@ func (f *FakeDockerClient) ContainerCreate(ctx context.Context, opts ContainerCr
 	}
 
 	c := &fakeContainer{
-		ID:            id,
-		Name:          name,
-		Image:         opts.Image,
-		Env:           opts.Env,
-		Args:          opts.Command,
-		Binds:         opts.Binds,
-		PortBindings:  opts.PortBindings,
-		Privileged:    opts.Privileged,
-		IPCMode:       opts.IPCMode,
-		ShmSize:       opts.ShmSize,
-		NetworkMode:   opts.NetworkMode,
-		GroupAdd:      opts.GroupAdd,
-		SecurityOpt:   opts.SecurityOpt,
-		Ulimits:       opts.Ulimits,
-		RestartPolicy: opts.RestartPolicy,
-		State:         "created",
+		ID:             id,
+		Name:           name,
+		Image:          opts.Image,
+		Env:            opts.Env,
+		Args:           opts.Command,
+		Binds:          opts.Binds,
+		PortBindings:   opts.PortBindings,
+		Privileged:     opts.Privileged,
+		IPCMode:        opts.IPCMode,
+		UTSMode:        opts.UTSMode,
+		ShmSize:        opts.ShmSize,
+		NetworkMode:    opts.NetworkMode,
+		GroupAdd:       opts.GroupAdd,
+		SecurityOpt:    opts.SecurityOpt,
+		Ulimits:        opts.Ulimits,
+		RestartPolicy:  opts.RestartPolicy,
+		DeviceRequests: opts.DeviceRequests,
+		State:          "created",
 	}
 	f.containers[id] = c
 	f.nameIndex[name] = id

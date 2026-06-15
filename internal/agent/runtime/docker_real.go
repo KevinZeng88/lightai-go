@@ -67,6 +67,11 @@ func (r *RealDockerClient) Close() error {
 	return r.cli.Close()
 }
 
+// Ping checks whether the Docker daemon is reachable.
+func (r *RealDockerClient) Ping(ctx context.Context) (interface{}, error) {
+	return r.cli.Ping(ctx)
+}
+
 func (r *RealDockerClient) ContainerCreate(ctx context.Context, opts ContainerCreateOptions) (string, error) {
 	cfg := &container.Config{
 		Image: opts.Image,
@@ -90,6 +95,9 @@ func (r *RealDockerClient) ContainerCreate(ctx context.Context, opts ContainerCr
 	if opts.IPCMode != "" {
 		hostCfg.IpcMode = container.IpcMode(opts.IPCMode)
 	}
+	if opts.UTSMode != "" {
+		hostCfg.UTSMode = container.UTSMode(opts.UTSMode)
+	}
 	if opts.RestartPolicy != "" {
 		hostCfg.RestartPolicy = container.RestartPolicy{
 			Name: container.RestartPolicyMode(opts.RestartPolicy),
@@ -101,13 +109,28 @@ func (r *RealDockerClient) ContainerCreate(ctx context.Context, opts ContainerCr
 		hostCfg.Binds = opts.Binds
 	}
 
-	// Devices.
+	// Devices (raw device passthrough, e.g. /dev/dri for MetaX).
 	for _, d := range opts.Devices {
 		hostCfg.Devices = append(hostCfg.Devices, container.DeviceMapping{
 			PathOnHost:        d.HostPath,
 			PathInContainer:   d.ContainerPath,
 			CgroupPermissions: d.Permissions,
 		})
+	}
+
+	// DeviceRequests (GPU driver requests, e.g. NVIDIA --gpus).
+	// Docker API: do NOT set both Count and DeviceIDs simultaneously.
+	for _, dr := range opts.DeviceRequests {
+		req := container.DeviceRequest{
+			Driver:       dr.Driver,
+			Capabilities: dr.Capabilities,
+		}
+		if len(dr.DeviceIDs) > 0 {
+			req.DeviceIDs = dr.DeviceIDs
+		} else {
+			req.Count = -1 // all GPUs
+		}
+		hostCfg.DeviceRequests = append(hostCfg.DeviceRequests, req)
 	}
 
 	// Port bindings.

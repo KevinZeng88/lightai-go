@@ -52,11 +52,23 @@ type RegisterResponse struct {
 	ServerTime string `json:"server_time"`
 }
 
+	// AgentTaskBrief is a lightweight task description sent in the heartbeat response.
+	type AgentTaskBrief struct {
+		ID             string          `json:"id"`
+		TaskType       string          `json:"task_type"`
+		TenantID       string          `json:"tenant_id"`
+		DeploymentID   string          `json:"deployment_id"`
+		InstanceID     string          `json:"instance_id"`
+		NodeID         string          `json:"node_id"`
+		TimeoutSeconds int             `json:"timeout_seconds"`
+		AgentRunSpec   json.RawMessage `json:"agent_run_spec,omitempty"`
+	}
 // HeartbeatResponse is the heartbeat response.
 type HeartbeatResponse struct {
 	Status       string `json:"status"`
 	ServerTime   string `json:"server_time"`
 	NeedRegister bool   `json:"need_register,omitempty"`
+	Tasks        []AgentTaskBrief `json:"tasks,omitempty"`
 }
 
 // HandleRegister handles POST /api/agent/register.
@@ -209,7 +221,6 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		// Node not registered.
 		resp := HeartbeatResponse{
 			Status:       "error",
 			ServerTime:   now,
@@ -223,13 +234,141 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	if h.Metrics != nil {
 		h.Metrics.AgentHeartbeats.Inc()
 	}
+
+	// Claim and return pending tasks for this node (atomic claim in transaction).
+	tasks := claimAndReturnTasks(h.DB, req.NodeID, req.AgentID)
+
 	resp := HeartbeatResponse{
 		Status:     "ok",
 		ServerTime: now,
+		Tasks:      tasks,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// claimAndReturnTasks atomically claims pending tasks for a node and returns them.
+// It runs in a transaction: sweep expired tasks first, then claim pending ones.
+func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBrief {
+	tx, err := database.Begin()
+	if err != nil {
+		log.Error("claim tasks: cannot begin tx", "error", err)
+		return nil
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// Step 1: Sweep expired tasks and leases.
+	sweepExpiredTasks(tx, nodeID, now)
+
+	// Step 2: Select pending tasks.
+	var taskIDs []string
+	type rawTask struct {
+		id, taskType, tenantID, deploymentID, instanceID, taskNodeID, taskPayload string
+		timeoutSeconds int
+	}
+	var rawTasks []rawTask
+
+	rows, err := tx.Query(
+		`SELECT id, task_type, tenant_id, deployment_id, COALESCE(instance_id,''), node_id, timeout_seconds, payload
+		 FROM agent_tasks WHERE node_id = ? AND status = ? ORDER BY created_at ASC LIMIT 10`,
+		nodeID, TaskStatusPending,
+	)
+
+	// Diagnostic: log pending count for this node.
+	pendingCount := 0
+	for rows.Next() {
+		pendingCount++
+	}
+	rows.Close()
+	log.Info("claim: pending tasks for node", "node_id", nodeID, "count", pendingCount)
+
+	// Re-query after count.
+	rows, err = tx.Query(
+		`SELECT id, task_type, tenant_id, deployment_id, COALESCE(instance_id,''), node_id, timeout_seconds, payload
+		 FROM agent_tasks WHERE node_id = ? AND status = ? ORDER BY created_at ASC LIMIT 10`,
+		nodeID, TaskStatusPending,
+	)
+	if err != nil {
+		return nil
+	}
+	for rows.Next() {
+		var rt rawTask
+		if err := rows.Scan(&rt.id, &rt.taskType, &rt.tenantID, &rt.deploymentID, &rt.instanceID, &rt.taskNodeID, &rt.timeoutSeconds, &rt.taskPayload); err != nil {
+			continue
+		}
+		taskIDs = append(taskIDs, rt.id)
+		rawTasks = append(rawTasks, rt)
+	}
+	rows.Close()
+
+	// Step 3: Atomically claim them.
+	for _, id := range taskIDs {
+		tx.Exec(
+			`UPDATE agent_tasks SET status = ?, claimed_at = ?, agent_id = ?, retry_count = retry_count + 1, updated_at = ? WHERE id = ?`,
+			TaskStatusClaimed, now, agentID, now, id,
+		)
+	}
+	log.Info("claim: claimed tasks", "node_id", nodeID, "task_ids", taskIDs, "task_types", func() []string {
+		types := make([]string, len(rawTasks))
+		for i, rt := range rawTasks { types[i] = rt.taskType }
+		return types
+	}())
+
+	if err := tx.Commit(); err != nil {
+		log.Error("claim tasks: commit failed", "error", err)
+		return nil
+	}
+
+	// Build response from claimed tasks.
+	var tasks []AgentTaskBrief
+	for _, rt := range rawTasks {
+		tasks = append(tasks, AgentTaskBrief{
+			ID: rt.id, TaskType: rt.taskType, TenantID: rt.tenantID,
+			DeploymentID: rt.deploymentID, InstanceID: rt.instanceID,
+			NodeID: rt.taskNodeID, TimeoutSeconds: rt.timeoutSeconds,
+			AgentRunSpec: json.RawMessage(rt.taskPayload),
+		})
+	}
+	return tasks
+}
+
+// sweepExpiredTasks transitions timed-out tasks and expired leases within the
+// given transaction. Called during heartbeat claim to piggyback on the
+// existing 2s interval.
+func sweepExpiredTasks(tx *sql.Tx, nodeID string, now string) {
+	// Tasks that exceeded timeout_seconds.
+	tx.Exec(
+		`UPDATE agent_tasks SET status = ?, finished_at = ?, updated_at = ?
+		 WHERE node_id = ? AND status IN (?, ?, ?)
+		 AND (julianday(?) - julianday(created_at)) * 86400 > timeout_seconds`,
+		TaskStatusTimedOut, now, now, nodeID,
+		TaskStatusPending, TaskStatusClaimed, TaskStatusInProgress,
+		now,
+	)
+
+	// Instances for timed-out tasks → failed.
+	tx.Exec(
+		`UPDATE model_instances SET actual_state = ?, updated_at = ?
+		 WHERE id IN (SELECT instance_id FROM agent_tasks WHERE status = ? AND node_id = ? AND instance_id != '')`,
+		InstanceStateFailed, now, TaskStatusTimedOut, nodeID,
+	)
+
+	// Leases past expires_at → failed.
+	tx.Exec(
+		`UPDATE gpu_leases SET status = ?, updated_at = ?
+		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status IN (?, ?)`,
+		LeaseFailed, now, LeaseReserved, LeaseActive,
+	)
+
+	// Deployments for failed instances → failed.
+	tx.Exec(
+		`UPDATE model_deployments SET status = 'failed', updated_at = ?
+		 WHERE id IN (SELECT deployment_id FROM model_instances WHERE actual_state = ?)`,
+		now, InstanceStateFailed,
+	)
 }
 
 // HandleListNode handles GET /api/nodes.

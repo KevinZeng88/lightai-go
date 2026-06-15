@@ -21,11 +21,25 @@ type RegisterResponse struct {
 	ServerTime string `json:"server_time"`
 }
 
+
+// AgentTask is a task dispatched by the server via heartbeat.
+type AgentTask struct {
+	ID             string          `json:"id"`
+	TaskType       string          `json:"task_type"`
+	TenantID       string          `json:"tenant_id"`
+	DeploymentID   string          `json:"deployment_id"`
+	InstanceID     string          `json:"instance_id"`
+	NodeID         string          `json:"node_id"`
+	TimeoutSeconds int             `json:"timeout_seconds"`
+	AgentRunSpec   json.RawMessage `json:"agent_run_spec,omitempty"`
+}
+
 // HeartbeatResponse matches the server's heartbeat response.
 type HeartbeatResponse struct {
-	Status       string `json:"status"`
-	ServerTime   string `json:"server_time"`
-	NeedRegister bool   `json:"need_register,omitempty"`
+	Status       string      `json:"status"`
+	ServerTime   string      `json:"server_time"`
+	NeedRegister bool        `json:"need_register,omitempty"`
+	Tasks        []AgentTask `json:"tasks,omitempty"`
 }
 
 // Config holds registration configuration.
@@ -207,8 +221,16 @@ func SendHeartbeat(client *http.Client, serverURL, agentToken, agentID, nodeID s
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ = io.ReadAll(io.LimitReader(resp.Body, 1024))
-
+	// Read heartbeat with 1 MiB limit to handle task payloads.
+	const maxHB = 1 << 20
+	lr := io.LimitReader(resp.Body, maxHB+1)
+	bodyBytes, readErr := io.ReadAll(lr)
+	if readErr != nil {
+		return nil, fmt.Errorf("read heartbeat response: %w", readErr)
+	}
+	if len(bodyBytes) > maxHB {
+		return nil, fmt.Errorf("heartbeat response too large (exceeds %d bytes)", maxHB)
+	}
 	var hbResp HeartbeatResponse
 	if err := json.Unmarshal(bodyBytes, &hbResp); err != nil {
 		return nil, fmt.Errorf("parse heartbeat response: %w", err)
@@ -229,4 +251,46 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// TaskResult is the payload sent when reporting task completion.
+type TaskResult struct {
+	TaskID       string `json:"task_id"`
+	NodeID       string `json:"node_id"`
+	Success      bool   `json:"success"`
+	InstanceID   string `json:"instance_id"`
+	DeploymentID string `json:"deployment_id,omitempty"`
+	ContainerID  string `json:"container_id"`
+	RuntimeState string `json:"runtime_state"`
+	ExitCode     int    `json:"exit_code"`
+	ErrorMessage string `json:"error_message"`
+	LogsSummary  string `json:"logs_summary,omitempty"`
+	StartedAt    string `json:"started_at,omitempty"`
+	FinishedAt   string `json:"finished_at,omitempty"`
+}
+
+// ReportTaskResult sends a task result back to the server.
+func ReportTaskResult(client *http.Client, serverURL, agentToken, taskID string, result TaskResult) error {
+	body, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("marshal task result: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", serverURL+"/api/v1/agent/tasks/"+taskID+"/result", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create task result request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+agentToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("post task result: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("task result rejected: HTTP %d", resp.StatusCode)
+	}
+	return nil
 }

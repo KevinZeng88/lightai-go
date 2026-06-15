@@ -71,6 +71,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("POST /api/v1/agent/register", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleRegister)))
 	mux.Handle("POST /api/v1/agent/heartbeat", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleHeartbeat)))
 	mux.Handle("POST /api/v1/agent/resources/report", agentMW(http.HandlerFunc(cfg.ResourceHandler.HandleResourceReport)))
+		th := NewTaskHandler(cfg.DB)
+		mux.Handle("POST /api/v1/agent/tasks/{id}/result", agentMW(http.HandlerFunc(th.HandleTaskResult)))
 
 	// Resource routes (node:read permission).
 	resourceChain := chain(
@@ -151,6 +153,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("PATCH /api/v1/model-deployments/{id}", deployWriteChain(http.HandlerFunc(mh.HandlePatchModelDeployment)))
 	mux.Handle("DELETE /api/v1/model-deployments/{id}", deployWriteChain(http.HandlerFunc(mh.HandleDeleteModelDeployment)))
 	mux.Handle("POST /api/v1/model-deployments/{id}/dry-run", deployWriteChain(http.HandlerFunc(mh.HandleDryRun)))
+		mux.Handle("POST /api/v1/model-deployments/{id}/start", deployWriteChain(http.HandlerFunc(mh.HandleStartDeployment)))
+		mux.Handle("POST /api/v1/model-deployments/{id}/stop", deployWriteChain(http.HandlerFunc(mh.HandleStopDeployment)))
 
 	// ModelInstance read-only (instance:read).
 	instanceReadChain := chain(
@@ -159,6 +163,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	)
 	mux.Handle("GET /api/v1/model-instances", instanceReadChain(http.HandlerFunc(mh.HandleListModelInstances)))
 	mux.Handle("GET /api/v1/model-instances/{id}", instanceReadChain(http.HandlerFunc(mh.HandleGetModelInstance)))
+		mux.Handle("GET /api/v1/model-instances/{id}/logs", instanceReadChain(http.HandlerFunc(mh.HandleGetInstanceLogs)))
 
 	// GpuLease read-only (gpu:read).
 	mux.Handle("GET /api/v1/gpu-leases", gpuChain(http.HandlerFunc(mh.HandleListGpuLeases)))

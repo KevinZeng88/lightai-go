@@ -108,6 +108,10 @@ class ApiClient {
   async delete(url: string): Promise<any> {
     return this.request('DELETE', url)
   }
+
+  async patch(url: string, body?: any): Promise<any> {
+    return this.request('PATCH', url, body)
+  }
 }
 
 export const apiClient = new ApiClient()

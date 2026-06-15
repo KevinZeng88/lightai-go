@@ -151,10 +151,18 @@ func (d *DockerRuntimeDriver) Inspect(ctx context.Context, instanceID string) (*
 }
 
 // Logs returns log output from the instance's container.
+// The instanceID parameter can be an instance UUID (from which the container
+// name is derived) or a direct container ID/name.
 func (d *DockerRuntimeDriver) Logs(ctx context.Context, instanceID string, opts LogOptions) (*RuntimeLogs, error) {
-	containerName := containerNameFromInstance(instanceID)
+	// Try the given ID directly first (Docker supports container IDs and names).
+	// Fall back to the derived container name from instance ID.
+	target := instanceID
+	if _, err := d.client.ContainerInspect(ctx, target); err != nil {
+		// Try derived name.
+		target = containerNameFromInstance(instanceID)
+	}
 
-	raw, err := d.client.ContainerLogs(ctx, containerName, LogFetchOptions{
+	raw, err := d.client.ContainerLogs(ctx, target, LogFetchOptions{
 		Tail:       opts.Tail,
 		Timestamps: opts.Timestamps,
 		Since:      opts.Since,
@@ -194,6 +202,9 @@ func (d *DockerRuntimeDriver) buildCreateOptions(spec AgentRunSpec) ContainerCre
 	if spec.Docker.IPCMode != "" {
 		opts.IPCMode = spec.Docker.IPCMode
 	}
+	if spec.Docker.UTSMode != "" {
+		opts.UTSMode = spec.Docker.UTSMode
+	}
 	if spec.Docker.ShmSize != "" {
 		opts.ShmSize = spec.Docker.ShmSize
 	}
@@ -211,6 +222,19 @@ func (d *DockerRuntimeDriver) buildCreateOptions(spec AgentRunSpec) ContainerCre
 	}
 	if spec.Docker.RestartPolicy != "" {
 		opts.RestartPolicy = spec.Docker.RestartPolicy
+	}
+
+	// GPU DeviceRequests — structured GPU access via Docker API.
+	// NVIDIA GPUs use DeviceRequest with driver="nvidia".
+	// MetaX and other vendors use raw device passthrough (/dev/dri, etc.)
+	// via opts.Devices, not DeviceRequest.
+	if spec.Vendor == "nvidia" && len(spec.GPUDeviceIDs) > 0 {
+		dr := DeviceRequest{
+			Driver:       "nvidia",
+			Capabilities: [][]string{{"gpu"}},
+			DeviceIDs:    spec.GPUDeviceIDs,
+		}
+		opts.DeviceRequests = append(opts.DeviceRequests, dr)
 	}
 
 	// Volumes.

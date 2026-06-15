@@ -79,6 +79,18 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if currentVersion < 5 {
+		if err := db.migrateV5(); err != nil {
+			return fmt.Errorf("migrate v5: %w", err)
+		}
+	}
+
+	if currentVersion < 6 {
+		if err := db.migrateV6(); err != nil {
+			return fmt.Errorf("migrate v6: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -330,6 +342,63 @@ func (db *DB) SchemaVersion() int {
 	var v int
 	db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_version`).Scan(&v)
 	return v
+}
+
+// migrateV5 adds agent_tasks table for Phase 2B task dispatch.
+func (db *DB) migrateV5() error {
+	schema := `
+		CREATE TABLE IF NOT EXISTS agent_tasks (
+			id TEXT PRIMARY KEY,
+			task_type TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			tenant_id TEXT NOT NULL,
+			deployment_id TEXT NOT NULL,
+			instance_id TEXT,
+			node_id TEXT NOT NULL,
+			requested_by TEXT NOT NULL DEFAULT '',
+			payload TEXT NOT NULL DEFAULT '{}',
+			result TEXT NOT NULL DEFAULT '{}',
+			timeout_seconds INTEGER NOT NULL DEFAULT 300,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status);
+		CREATE INDEX IF NOT EXISTS idx_agent_tasks_node ON agent_tasks(node_id);
+		CREATE INDEX IF NOT EXISTS idx_agent_tasks_tenant ON agent_tasks(tenant_id);
+	`
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (5, 'V5: agent tasks for Phase 2B task dispatch')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV6 adds task lifecycle columns, model_instances tenant_id, and status cleanup.
+func (db *DB) migrateV6() error {
+	schema := `
+		ALTER TABLE agent_tasks ADD COLUMN claimed_at TEXT;
+		ALTER TABLE agent_tasks ADD COLUMN started_at TEXT;
+		ALTER TABLE agent_tasks ADD COLUMN finished_at TEXT;
+		ALTER TABLE agent_tasks ADD COLUMN agent_id TEXT NOT NULL DEFAULT '';
+		ALTER TABLE agent_tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE model_instances ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
+	`
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+	// Backfill model_instances.tenant_id from parent deployment.
+	db.Exec(`UPDATE model_instances SET tenant_id = (
+		SELECT COALESCE(md.tenant_id, '') FROM model_deployments md WHERE md.id = model_instances.deployment_id
+	) WHERE tenant_id = '' OR tenant_id IS NULL`)
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (6, 'V6: task lifecycle, instance tenant_id, claim support')`); err != nil {
+		return err
+	}
+	return nil
 }
 
 // migrateV1 applies the initial RC1 schema.

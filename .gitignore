@@ -43,3 +43,6 @@ data/
 cookies.txt
 *.tar.gz
 third_party/
+
+# E2E test artifacts
+/run/e2e/
