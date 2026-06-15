@@ -45,6 +45,9 @@
 
         <el-sub-menu index="system">
           <template #title><el-icon><Monitor /></el-icon><span>{{ t('nav.system') }}</span></template>
+          <el-menu-item index="/system/tenants">{{ t('nav.tenants') }}</el-menu-item>
+          <el-menu-item index="/system/users">{{ t('nav.users') }}</el-menu-item>
+          <el-menu-item index="/system/roles">{{ t('nav.roles') }}</el-menu-item>
           <el-menu-item index="/system/audit-logs">{{ t('nav.auditLogs') }}</el-menu-item>
         </el-sub-menu>
 

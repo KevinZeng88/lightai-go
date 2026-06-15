@@ -73,7 +73,7 @@ const router = createRouter({
           component: () => import('@/pages/PrometheusPage.vue'),
         },
         {
-          path: 'system/audit-logs', name: 'AuditLogs', component: () => import('@/pages/AuditLogsPage.vue') }, { path: 'observability/grafana',
+          path: 'system/tenants', name: 'Tenants', component: () => import('@/pages/TenantsPage.vue') }, { path: 'system/users', name: 'Users', component: () => import('@/pages/UsersPage.vue') }, { path: 'system/roles', name: 'Roles', component: () => import('@/pages/RolesPage.vue') }, { path: 'system/audit-logs', name: 'AuditLogs', component: () => import('@/pages/AuditLogsPage.vue') }, { path: 'observability/grafana',
           name: 'Grafana',
           component: () => import('@/pages/GrafanaPage.vue'),
         },
