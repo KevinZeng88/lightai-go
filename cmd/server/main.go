@@ -204,6 +204,10 @@ func main() {
 	nodeHealthStop := make(chan struct{})
 	go runNodeHealthChecker(agentHandler, resourceHandler, cfg, nodeHealthStop)
 
+	// Start task/lease sweep loop for periodic timeout cleanup.
+	sweepStop := make(chan struct{})
+	go api.RunSweepLoop(database, 30*time.Second, sweepStop)
+
 	go func() {
 		log.Info("server listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -215,6 +219,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
 	close(nodeHealthStop)
+	close(sweepStop)
 	log.Info("server shutting down", "signal", sig.String())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

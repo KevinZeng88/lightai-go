@@ -6,6 +6,46 @@
         <el-button type="primary" size="small" @click="openCreate">{{ t('modelDeployments.create') }}</el-button>
         <el-button size="small" @click="refresh" :icon="RefreshRight">{{ t('common.refresh') }}</el-button>
       </div>
+    
+    <!-- Quick Deploy -->
+    <el-collapse style="margin-bottom:12px">
+      <el-collapse-item title="快速部署 (Quick Deploy)" name="quick">
+        <el-form :model="qd" label-width="120px" size="small" inline>
+          <el-form-item label="预设">
+            <el-select v-model="qd.preset" @change="applyPreset" style="width:240px">
+              <el-option label="llama.cpp CUDA + NVIDIA (GGUF)" value="llama-cpp-nvidia" />
+              <el-option label="MetaX / 沐曦 Docker" value="metax-docker" />
+              <el-option label="Generic Docker" value="generic-docker" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="模型路径">
+            <el-input v-model="qd.modelPath" placeholder="/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf" style="width:360px" />
+          </el-form-item>
+          <el-form-item label="端口">
+            <el-input-number v-model="qd.hostPort" :min="1024" :max="65535" />
+          </el-form-item>
+        </el-form>
+        <el-form v-if="qd.preset" :model="qd" label-width="120px" size="small" style="margin-top:8px">
+          <el-form-item label="Node" v-if="nodes.length">
+            <el-select v-model="qd.nodeId" filterable @change="onNodeChange" style="width:240px">
+              <el-option v-for="n in nodes" :key="n.id" :label="n.hostname + ' (' + n.status + ')'" :value="n.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="GPU" v-if="qd.nodeId">
+            <el-select v-model="qd.gpuId" style="width:240px">
+              <el-option v-for="g in nodeGpus" :key="g.id" :label="g.name + ' [idx=' + g.index + '] ' + formatGB(g.memory_free_bytes || g.memory_total_bytes) + ' free'" :value="g.id" :disabled="g.health !== 'healthy'" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="quickDeploy" :loading="quickDeploying">一键部署</el-button>
+          </el-form-item>
+        </el-form>
+        <div v-if="qd.summary" style="margin-top:8px;font-family:monospace;font-size:12px;background:#f5f5f5;padding:8px;border-radius:4px">
+          <div v-for="(v,k) in qd.summary" :key="k"><b>{{ k }}:</b> {{ v }}</div>
+        </div>
+      </el-collapse-item>
+    </el-collapse>
+
     </div>
     <el-table :data="items" v-loading="loading" size="small" @row-click="openDetail" highlight-current-row>
       <el-table-column :label="t('modelDeployments.name')" min-width="140" show-overflow-tooltip>
@@ -107,11 +147,75 @@ import { fetchModelArtifacts, type ModelArtifact } from '@/api/modelArtifacts'
 import { fetchRuntimeEnvironments, type RuntimeEnvironment } from '@/api/runtimeEnvironments'
 import { fetchRunTemplates, type RunTemplate } from '@/api/runTemplates'
 import { fetchNodes, type Node } from '@/api/nodes'
+import { fetchGPUs } from '@/api/gpus'
+import { createModelArtifact } from '@/api/modelArtifacts'
+import { createRuntimeEnvironment } from '@/api/runtimeEnvironments'
+import { createRunTemplate } from '@/api/runTemplates'
+import { formatGB } from '@/utils/format'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { formatDateTime } from '@/utils/format'
 import StatusTag from '@/components/StatusTag.vue'
 
 const { t } = useI18n()
+// Quick deploy state
+const qd = ref({ preset: '', modelPath: '/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf', hostPort: 8002, nodeId: '', gpuId: '', summary: null as Record<string,string>|null })
+const nodeGpus = ref<any[]>([])
+const quickDeploying = ref(false)
+
+const PRESETS: Record<string, any> = {
+  'llama-cpp-nvidia': {
+    image: 'ghcr.io/ggml-org/llama.cpp:server-cuda13',
+    runtime_type: 'docker', backend_type: 'llama_cpp', vendor: 'nvidia', default_port: 8000,
+    docker: { image: 'ghcr.io/ggml-org/llama.cpp:server-cuda13', ipc_mode: {enabled:true,value:'host'}, shm_size: {enabled:true,value:'8gb'} },
+    args_template: ['-m','${MODEL_PATH}','--host','0.0.0.0','--port','${CONTAINER_PORT}'],
+    required_variables: ['MODEL_PATH','CONTAINER_PORT'],
+    volume_host_prefix: '', volume_container: '/models',
+  },
+  'metax-docker': {
+    image: 'metax-runtime:latest', runtime_type: 'docker', backend_type: 'custom', vendor: 'metax', default_port: 8000,
+    docker: { privileged: {enabled:true,value:true}, ipc_mode: {enabled:true,value:'host'}, uts_mode: {enabled:true,value:'host'}, shm_size: {enabled:true,value:'8gb'}, group_add: {enabled:true,value:'video'}, security_options: {enabled:true,value:'seccomp=unconfined,apparmor=unconfined'}, devices: {enabled:true,value:[{host_path:'/dev/dri',container_path:'/dev/dri'},{host_path:'/dev/mxcd',container_path:'/dev/mxcd'}]} },
+    args_template: [],
+    required_variables: ['MODEL_PATH'],
+    volume_host_prefix: '', volume_container: '/models',
+  },
+  'generic-docker': {
+    image: '', runtime_type: 'docker', backend_type: 'custom', vendor: 'custom', default_port: 8000,
+    docker: {},
+    args_template: [],
+    required_variables: [],
+    volume_host_prefix: '', volume_container: '',
+  },
+}
+function applyPreset(val: string) { const p = PRESETS[val]; if (p) { qd.value.modelPath = qd.value.modelPath || '' } }
+async function onNodeChange() { if (qd.value.nodeId) { const gpus = await fetchGPUs({node_id: qd.value.nodeId}); nodeGpus.value = Array.isArray(gpus) ? gpus : [] } }
+
+async function quickDeploy() {
+  quickDeploying.value = true; qd.value.summary = null
+  try {
+    const preset = PRESETS[qd.value.preset]; if (!preset) return
+    const modelDir = qd.value.modelPath.substring(0, qd.value.modelPath.lastIndexOf('/'))
+    const modelName = qd.value.modelPath.split('/').pop() || 'model'
+
+    // 1. Create artifact
+    const art: any = await createModelArtifact({ name: modelName, path: qd.value.modelPath, format: 'gguf', task_type: 'chat', architecture: 'qwen', size_label: '9B', quantization: 'int4' })
+
+    // 2. Create runtime env
+    const env: any = await createRuntimeEnvironment({ name: 'qd-' + modelName, runtime_type: preset.runtime_type, backend_type: preset.backend_type, vendor: preset.vendor, default_port: preset.default_port, docker: preset.docker })
+
+    // 3. Create template
+    const volHost = preset.volume_host_prefix || modelDir
+    const tpl: any = await createRunTemplate({ name: 'qd-' + modelName, runtime_type: preset.runtime_type, vendor: preset.vendor, backend_type: preset.backend_type, required_variables: preset.required_variables, args_template: preset.args_template, volume_mappings: preset.volume_container ? {enabled:true,value:[{host_path:volHost,container_path:preset.volume_container,readonly:true}]} : undefined })
+
+    // 4. Create deployment
+    const deploy: any = await createModelDeployment({ name: 'qd-' + modelName, model_artifact_id: art.id, runtime_environment_id: env.id, run_template_id: tpl.id, node_id: qd.value.nodeId, gpu_ids: qd.value.gpuId ? [qd.value.gpuId] : [], host_port: qd.value.hostPort })
+
+    qd.value.summary = { 'Artifact': art.id, 'Runtime': env.id, 'Template': tpl.id, 'Deployment': deploy.id, 'Status': deploy.status }
+    ElMessage.success('快速部署完成! Deployment: ' + deploy.id)
+    refresh()
+  } catch (e: any) { ElMessage.error(e?.message || 'Quick deploy failed') }
+  finally { quickDeploying.value = false }
+}
+
 const items = ref<ModelDeployment[]>([])
 const { loading, refresh } = useAutoRefresh(async () => { items.value = await fetchModelDeployments() }, { intervalMs: 5000 })
 
