@@ -34,6 +34,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("POST /api/v1/auth/logout", sessionChain(cfg, cfg.AuthHandler.HandleLogout))
 	mux.Handle("POST /api/v1/auth/change-password", sessionChain(cfg, cfg.AuthHandler.HandleChangePassword))
 	mux.Handle("GET /api/v1/auth/me", sessionChain(cfg, cfg.AuthHandler.HandleMe))
+	mux.Handle("POST /api/v1/session/switch-tenant", sessionChain(cfg, cfg.AuthHandler.HandleSwitchTenant))
 
 	// Platform admin routes.
 	mux.Handle("GET /api/v1/users", platformChain(cfg, cfg.RBACHandler.HandleListUsers))

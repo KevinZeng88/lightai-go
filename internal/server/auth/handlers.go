@@ -420,6 +420,63 @@ func (h *AuthHandler) HandleChangePassword(w http.ResponseWriter, r *http.Reques
 
 // HandleCSRFToken handles GET /api/auth/csrf-token.
 // Returns the current CSRF token for the session.
+// HandleSwitchTenant switches the current session's active tenant.
+// POST /api/v1/session/switch-tenant
+func (h *AuthHandler) HandleSwitchTenant(w http.ResponseWriter, r *http.Request) {
+	info := SessionInfoFromContext(r.Context())
+	if info == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		TenantID string `json:"tenant_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.TenantID == "" {
+		http.Error(w, `{"error":"tenant_id is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Platform admin can switch to any active tenant.
+	// Regular users must be a member of the target tenant.
+	if !info.IsPlatformAdmin {
+		var membershipID string
+		err := h.DB.QueryRow(
+			`SELECT id FROM tenant_memberships WHERE tenant_id = ? AND user_id = ? AND status = 'active'`,
+			req.TenantID, info.UserID,
+		).Scan(&membershipID)
+		if err != nil {
+			http.Error(w, `{"error":"not a member of this tenant"}`, http.StatusForbidden)
+			return
+		}
+	}
+
+	// Verify tenant exists and is active.
+	var tenantStatus string
+	if err := h.DB.QueryRow(`SELECT status FROM tenants WHERE id = ?`, req.TenantID).Scan(&tenantStatus); err != nil || tenantStatus != "active" {
+		http.Error(w, `{"error":"tenant not found or inactive"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Get raw session ID from cookie and hash it for the DB lookup.
+	cookie, err := r.Cookie(h.SessionCfg.CookieName)
+	if err != nil {
+		http.Error(w, `{"error":"no session cookie"}`, http.StatusBadRequest)
+		return
+	}
+	sessionHash := hashString(cookie.Value)
+
+	// Update session's current_tenant_id.
+	h.DB.Exec(`UPDATE sessions SET current_tenant_id = ?, last_seen_at = datetime('now') WHERE id = ?`,
+		req.TenantID, sessionHash)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tenant_id": req.TenantID,
+		"status":    "ok",
+	})
+}
+
 func (h *AuthHandler) HandleCSRFToken(w http.ResponseWriter, r *http.Request) {
 	// CSRF token is returned in the login response.
 	// For subsequent requests, the client should use the same token.

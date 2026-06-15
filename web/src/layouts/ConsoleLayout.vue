@@ -68,6 +68,9 @@
       <el-header class="topbar">
         <div class="topbar-left">
           <span class="user-info" v-if="auth.user">
+            <el-select v-model="currentTenantId" @change="doSwitchTenant" size="small" style="width:180px;margin-right:8px" v-if="tenantOpts.length > 1">
+              <el-option v-for="t in tenantOpts" :key="t.id" :label="t.name" :value="t.id" />
+            </el-select>
             {{ auth.user.display_name || auth.user.username }}
             <span v-if="auth.tenant">@ {{ auth.tenant.name }}</span>
           </span>
@@ -88,16 +91,29 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { apiClient } from '@/api/client'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const currentTenantId = ref(auth.tenant?.id || '')
+const tenantOpts = ref<{id:string,name:string}[]>([])
+
+async function loadTenants() {
+  try { const data: any = await apiClient.get('/tenants'); tenantOpts.value = Array.isArray(data) ? data.filter((t:any) => t.status === 'active') : [] }
+  catch { tenantOpts.value = [] }
+}
+async function doSwitchTenant(tid: string) {
+  try { await apiClient.post('/session/switch-tenant', { tenant_id: tid }); window.location.reload() }
+  catch(e:any) { alert('Switch failed: ' + (e?.message || 'unknown')) }
+}
+loadTenants()
 
 const activeMenu = computed(() => route.path)
 
