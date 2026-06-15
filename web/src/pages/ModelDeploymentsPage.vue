@@ -13,8 +13,9 @@
         <el-form :model="qd" label-width="120px" size="small" inline>
           <el-form-item label="预设">
             <el-select v-model="qd.preset" @change="applyPreset" style="width:240px">
-              <el-option label="llama.cpp CUDA + NVIDIA (GGUF)" value="llama-cpp-nvidia" />
-              <el-option label="MetaX / 沐曦 Docker" value="metax-docker" />
+              <el-option label="llama.cpp CUDA + NVIDIA (GGUF) - Local E2E Example" value="llama-cpp-nvidia-local" />
+              <el-option label="llama.cpp CUDA + NVIDIA (GGUF) - Custom" value="llama-cpp-nvidia-custom" />
+              <el-option label="MetaX / 沐曦 Docker - Custom" value="metax-docker-custom" />
               <el-option label="Generic Docker" value="generic-docker" />
             </el-select>
           </el-form-item>
@@ -163,20 +164,31 @@ const nodeGpus = ref<any[]>([])
 const quickDeploying = ref(false)
 
 const PRESETS: Record<string, any> = {
-  'llama-cpp-nvidia': {
+  'llama-cpp-nvidia-local': {
+    image: 'ghcr.io/ggml-org/llama.cpp:server-cuda13',
+    runtime_type: 'docker', backend_type: 'llama_cpp', vendor: 'nvidia', default_port: 8000,
+    docker: { image: 'ghcr.io/ggml-org/llama.cpp:server-cuda13', ipc_mode: {enabled:true,value:'host'}, shm_size: {enabled:true,value:'8gb'} },
+    args_template: ['-m','${MODEL_PATH}','--host','0.0.0.0','--port','${CONTAINER_PORT}'],
+    required_variables: ['MODEL_PATH','CONTAINER_PORT'],
+    volume_host_prefix: '/home/kzeng/models', volume_container: '/models',
+    isExample: true,
+  },
+  'llama-cpp-nvidia-custom': {
     image: 'ghcr.io/ggml-org/llama.cpp:server-cuda13',
     runtime_type: 'docker', backend_type: 'llama_cpp', vendor: 'nvidia', default_port: 8000,
     docker: { image: 'ghcr.io/ggml-org/llama.cpp:server-cuda13', ipc_mode: {enabled:true,value:'host'}, shm_size: {enabled:true,value:'8gb'} },
     args_template: ['-m','${MODEL_PATH}','--host','0.0.0.0','--port','${CONTAINER_PORT}'],
     required_variables: ['MODEL_PATH','CONTAINER_PORT'],
     volume_host_prefix: '', volume_container: '/models',
+    isExample: false,
   },
-  'metax-docker': {
-    image: 'metax-runtime:latest', runtime_type: 'docker', backend_type: 'custom', vendor: 'metax', default_port: 8000,
+  'metax-docker-custom': {
+    image: '', runtime_type: 'docker', backend_type: 'custom', vendor: 'metax', default_port: 8000,
     docker: { privileged: {enabled:true,value:true}, ipc_mode: {enabled:true,value:'host'}, uts_mode: {enabled:true,value:'host'}, shm_size: {enabled:true,value:'8gb'}, group_add: {enabled:true,value:'video'}, security_options: {enabled:true,value:'seccomp=unconfined,apparmor=unconfined'}, devices: {enabled:true,value:[{host_path:'/dev/dri',container_path:'/dev/dri'},{host_path:'/dev/mxcd',container_path:'/dev/mxcd'}]} },
     args_template: [],
     required_variables: ['MODEL_PATH'],
     volume_host_prefix: '', volume_container: '/models',
+    isExample: false,
   },
   'generic-docker': {
     image: '', runtime_type: 'docker', backend_type: 'custom', vendor: 'custom', default_port: 8000,
@@ -184,9 +196,17 @@ const PRESETS: Record<string, any> = {
     args_template: [],
     required_variables: [],
     volume_host_prefix: '', volume_container: '',
+    isExample: false,
   },
 }
-function applyPreset(val: string) { const p = PRESETS[val]; if (p) { qd.value.modelPath = qd.value.modelPath || '' } }
+function applyPreset(val: string) {
+  const p = PRESETS[val]; if (!p) return
+  if (p.isExample && !qd.value.modelPath) {
+    qd.value.modelPath = '/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf'
+  }
+  // Show editable fields for custom presets
+  qd.value.summary = p.isExample ? {'注意': '这是本地 E2E 示例预设，请根据实际路径修改'} : null
+}
 async function onNodeChange() { if (qd.value.nodeId) { const gpus = await fetchGPUs({node_id: qd.value.nodeId}); nodeGpus.value = Array.isArray(gpus) ? gpus : [] } }
 
 async function quickDeploy() {
