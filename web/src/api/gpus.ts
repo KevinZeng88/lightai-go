@@ -28,7 +28,7 @@ export async function fetchGPUs(params?: { node_id?: string; vendor?: string }):
   if (params?.node_id) query.set('node_id', params.node_id)
   if (params?.vendor) query.set('vendor', params.vendor)
   const qs = query.toString()
-  const data = await apiClient.get('/api/v1/gpus' + (qs ? '?' + qs : ''))
+  const data = await apiClient.get('/gpus' + (qs ? '?' + qs : ''))
   return Array.isArray(data) ? data : []
 }
 

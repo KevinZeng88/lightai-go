@@ -103,7 +103,7 @@ func BuiltinRoles() []BuiltinRoleDef {
 				"runtime:write", "model:write", "instance:write", "instance:operate", "deployment:write",
 				// Admin permissions.
 				"membership:read", "membership:write", "role:read", "role:write",
-				"node:transfer", "tenant:settings:write",
+				"node:transfer", "tenant:settings:write", "audit:read",
 			},
 		},
 		{

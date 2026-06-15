@@ -1,9 +1,9 @@
 <template>
   <div>
-    <h2>Prometheus</h2>
+    <h2>{{ t('observability.prometheusTitle') }}</h2>
     <el-descriptions :column="1" border style="margin-top: 16px">
-      <el-descriptions-item label="URL">{{ promUrl }}</el-descriptions-item>
-      <el-descriptions-item label="Status">{{ status }}</el-descriptions-item>
+      <el-descriptions-item :label="t('observability.url')">{{ promUrl }}</el-descriptions-item>
+      <el-descriptions-item :label="t('observability.status')">{{ status }}</el-descriptions-item>
       <el-descriptions-item label="Scrape Targets">Discovered via Server /metrics/targets.</el-descriptions-item>
     </el-descriptions>
     <div style="margin-top: 16px">
@@ -16,6 +16,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import { ref, onMounted } from 'vue'
 
 const promUrl = `http://${window.location.hostname}:19090`
@@ -26,9 +28,9 @@ onMounted(async () => {
   try {
     const resp = await fetch('/api/v1/observability/status')
     const data = await resp.json()
-    if (data.prometheus?.ready) { status.value = 'Running'; running.value = true }
-    else { status.value = 'Not running'; running.value = false }
-  } catch { status.value = 'Cannot check'; running.value = false }
+    if (data.prometheus?.ready) { status.value = t('observability.running'); running.value = true }
+    else { status.value = t('observability.notRunning'); running.value = false }
+  } catch { status.value = t('observability.cannotCheck'); running.value = false }
 })
 
 function openProm() { window.open(promUrl, '_blank') }

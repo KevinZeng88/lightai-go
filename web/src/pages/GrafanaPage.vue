@@ -1,10 +1,10 @@
 <template>
   <div>
-    <h2>Grafana</h2>
+    <h2>{{ t('observability.grafanaTitle') }}</h2>
     <el-descriptions :column="1" border style="margin-top: 16px">
-      <el-descriptions-item label="URL">{{ grafUrl }}</el-descriptions-item>
-      <el-descriptions-item label="Status">{{ status }}</el-descriptions-item>
-      <el-descriptions-item label="Default Login">admin / lightai (dev only)</el-descriptions-item>
+      <el-descriptions-item :label="t('observability.url')">{{ grafUrl }}</el-descriptions-item>
+      <el-descriptions-item :label="t('observability.status')">{{ status }}</el-descriptions-item>
+      <el-descriptions-item :label="t('observability.defaultLogin')">admin / lightai (dev only)</el-descriptions-item>
     </el-descriptions>
     <div style="margin-top: 16px">
       <el-button type="primary" @click="openGrafana">Open Grafana</el-button>
@@ -20,6 +20,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import { ref, onMounted } from 'vue'
 
 const grafUrl = `http://${window.location.hostname}:13000`
@@ -36,9 +38,9 @@ onMounted(async () => {
   try {
     const resp = await fetch('/api/v1/observability/status')
     const data = await resp.json()
-    if (data.grafana?.ready) { status.value = 'Running'; running.value = true }
-    else { status.value = 'Not running'; running.value = false }
-  } catch { status.value = 'Cannot check'; running.value = false }
+    if (data.grafana?.ready) { status.value = t('observability.running'); running.value = true }
+    else { status.value = t('observability.notRunning'); running.value = false }
+  } catch { status.value = t('observability.cannotCheck'); running.value = false }
 })
 
 function openGrafana() { window.open(grafUrl, '_blank') }

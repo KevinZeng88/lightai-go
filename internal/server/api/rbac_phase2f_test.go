@@ -1,6 +1,7 @@
 package api
 
 import (
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -496,4 +497,132 @@ func rbacUserCtxWithPerms(tenantID, userID string, perms []string) context.Conte
 	// Set permissions directly on context (the ctxKeyPermissions is internal to auth package).
 	// Use the permissions context key from auth package.
 	return auth.NewContextWithPermissions(ctx, perms)
+}
+
+// ==========================================================================
+// Review fix tests: transfer blocked by active lease/instance
+// ==========================================================================
+
+func TestNodeTransferBlockedByActiveGpuLease(t *testing.T) {
+	database := initRBACTestDB(t)
+	defer database.Close()
+
+	srcT := "a0000000-0000-0000-0000-000000000001"
+	tgtT := uuid.NewString()
+	database.Exec(`INSERT INTO tenants (id, slug, name, status, type) VALUES (?, 'tgt', 'Target', 'active', 'business')`, tgtT)
+	nID := uuid.NewString()
+	database.Exec(`INSERT INTO nodes (id, agent_id, hostname, status, tenant_id) VALUES (?, 'a1', 'n1', 'online', ?)`, nID, srcT)
+	gID := uuid.NewString()
+	database.Exec(`INSERT INTO gpu_devices (id, node_id, vendor, index_num, name, uuid, health, status, tenant_id) VALUES (?, ?, 'nvidia', 0, 'A100', 'gpu-u', 'healthy', 'available', ?)`, gID, nID, srcT)
+	lID := uuid.NewString()
+	database.Exec(`INSERT INTO gpu_leases (id, gpu_id, node_id, deployment_id, instance_id, tenant_id, status) VALUES (?, ?, ?, 'd1', 'i1', ?, 'active')`, lID, gID, nID, srcT)
+
+	handler := &AgentHandler{DB: database}
+	body, _ := json.Marshal(map[string]string{"tenant_id": tgtT})
+	req := httptest.NewRequest("PATCH", "/api/v1/nodes/"+nID+"/tenant", bytes.NewReader(body))
+	req = req.WithContext(rbacAdminCtx())
+	req.SetPathValue("id", nID)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.HandlePatchNodeTenant(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Error("transfer should be blocked by active GPU lease")
+	}
+	// Node should still be in source tenant.
+	var nt string
+	database.QueryRow(`SELECT tenant_id FROM nodes WHERE id = ?`, nID).Scan(&nt)
+	if nt != srcT {
+		t.Errorf("node tenant changed to %s, want %s", nt, srcT)
+	}
+}
+
+func TestNodeTransferBlockedByActiveDeploymentInstance(t *testing.T) {
+	database := initRBACTestDB(t)
+	defer database.Close()
+
+	srcT := "a0000000-0000-0000-0000-000000000001"
+	tgtT := uuid.NewString()
+	database.Exec(`INSERT INTO tenants (id, slug, name, status, type) VALUES (?, 'tgt2', 'Target2', 'active', 'business')`, tgtT)
+	nID := uuid.NewString()
+	database.Exec(`INSERT INTO nodes (id, agent_id, hostname, status, tenant_id) VALUES (?, 'a2', 'n2', 'online', ?)`, nID, srcT)
+
+	// Create a running instance on the node (needs FK deps).
+	art := uuid.NewString(); env := uuid.NewString(); tpl := uuid.NewString()
+	database.Exec(`INSERT INTO model_artifacts (id, name, path, tenant_id) VALUES (?, 'art', '/tmp', ?)`, art, srcT)
+	database.Exec(`INSERT INTO runtime_environments (id, name, tenant_id) VALUES (?, 'env', ?)`, env, srcT)
+	database.Exec(`INSERT INTO run_templates (id, name, tenant_id) VALUES (?, 'tpl', ?)`, tpl, srcT)
+	dep := uuid.NewString()
+	database.Exec(`INSERT INTO model_deployments (id, name, model_artifact_id, runtime_environment_id, run_template_id, tenant_id, desired_state, status) VALUES (?, 'dep', ?, ?, ?, ?, 'running', 'running')`, dep, art, env, tpl, srcT)
+	database.Exec(`INSERT INTO model_instances (id, deployment_id, node_id, tenant_id, actual_state) VALUES (?, ?, ?, ?, 'running')`, uuid.NewString(), dep, nID, srcT)
+
+	handler := &AgentHandler{DB: database}
+	body, _ := json.Marshal(map[string]string{"tenant_id": tgtT})
+	req := httptest.NewRequest("PATCH", "/api/v1/nodes/"+nID+"/tenant", bytes.NewReader(body))
+	req = req.WithContext(rbacAdminCtx())
+	req.SetPathValue("id", nID)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.HandlePatchNodeTenant(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Error("transfer should be blocked by active deployment instance")
+	}
+	var nt string
+	database.QueryRow(`SELECT tenant_id FROM nodes WHERE id = ?`, nID).Scan(&nt)
+	if nt != srcT {
+		t.Errorf("node tenant changed to %s, want %s", nt, srcT)
+	}
+}
+
+// ==========================================================================
+// Review fix tests: audit:read and instance isolation
+// ==========================================================================
+
+func TestBuiltInAdminHasAuditReadPermission(t *testing.T) {
+	database := initRBACTestDB(t)
+	defer database.Close()
+
+	// Verify audit:read exists in the permission catalog.
+	var permExists int
+	database.QueryRow(`SELECT COUNT(*) FROM permissions WHERE code = 'audit:read'`).Scan(&permExists)
+	if permExists == 0 {
+		t.Error("audit:read permission should exist")
+	}
+
+	// Verify it is assigned to a built-in role (admin).
+	var assigned int
+	database.QueryRow(`SELECT COUNT(*) FROM role_permissions rp JOIN roles r ON rp.role_id = r.id WHERE r.built_in = 1 AND rp.permission_id = (SELECT id FROM permissions WHERE code = 'audit:read')`).Scan(&assigned)
+	if assigned == 0 {
+		t.Error("audit:read should be assigned to at least one built-in role")
+	}
+}
+
+func TestModelInstanceGetOtherTenantDeniedForNonAdmin(t *testing.T) {
+	database := initRBACTestDB(t)
+	defer database.Close()
+
+	// Create instance in tenant B.
+	tB := uuid.NewString()
+	database.Exec(`INSERT INTO tenants (id, slug, name, status, type) VALUES (?, 'tb', 'Tenant B', 'active', 'business')`, tB)
+	art := uuid.NewString(); env := uuid.NewString(); tpl := uuid.NewString()
+	database.Exec(`INSERT INTO model_artifacts (id, name, path, tenant_id) VALUES (?, 'art', '/tmp', ?)`, art, tB)
+	database.Exec(`INSERT INTO runtime_environments (id, name, tenant_id) VALUES (?, 'env', ?)`, env, tB)
+	database.Exec(`INSERT INTO run_templates (id, name, tenant_id) VALUES (?, 'tpl', ?)`, tpl, tB)
+	dep := uuid.NewString()
+	database.Exec(`INSERT INTO model_deployments (id, name, model_artifact_id, runtime_environment_id, run_template_id, tenant_id, desired_state, status) VALUES (?, 'dep', ?, ?, ?, ?, 'stopped', 'stopped')`, dep, art, env, tpl, tB)
+	iID := uuid.NewString()
+	database.Exec(`INSERT INTO model_instances (id, deployment_id, tenant_id, actual_state) VALUES (?, ?, ?, 'stopped')`, iID, dep, tB)
+
+	handler := NewModelHandler(database)
+	// Tenant A user tries to get tenant B's instance.
+	req := httptest.NewRequest("GET", "/api/v1/model-instances/"+iID, nil)
+	req = req.WithContext(rbacUserCtx("a0000000-0000-0000-0000-000000000001", "user-01"))
+	req.SetPathValue("id", iID)
+	w := httptest.NewRecorder()
+	handler.HandleGetModelInstance(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("non-admin should get 404 for other tenant instance, got %d", w.Code)
+	}
 }

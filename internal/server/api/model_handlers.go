@@ -1449,10 +1449,15 @@ func (h *ModelHandler) HandleListModelInstances(w http.ResponseWriter, r *http.R
 			rows, err = h.DB.Query(cols+` FROM model_instances ORDER BY created_at DESC`)
 		}
 	} else {
+		// Non-admin: scope to current tenant.
+		tenantFilter := ` AND COALESCE(tenant_id,'') = ?`
+		info := auth.SessionInfoFromContext(r.Context())
+		tid := ""
+		if info != nil { tid = info.TenantID }
 		if deploymentID != "" {
-			rows, err = h.DB.Query(cols+` FROM model_instances WHERE deployment_id = ? ORDER BY created_at DESC`, deploymentID)
+			rows, err = h.DB.Query(cols+` FROM model_instances WHERE deployment_id = ?`+tenantFilter+` ORDER BY created_at DESC`, deploymentID, tid)
 		} else {
-			rows, err = h.DB.Query(cols+` FROM model_instances ORDER BY created_at DESC`)
+			rows, err = h.DB.Query(cols+` FROM model_instances WHERE 1=1`+tenantFilter+` ORDER BY created_at DESC`, tid)
 		}
 	}
 	if err != nil {
@@ -1471,6 +1476,11 @@ func (h *ModelHandler) HandleGetModelInstance(w http.ResponseWriter, r *http.Req
 	 started_at, stopped_at, last_heartbeat_at, created_at, updated_at
 	 FROM model_instances WHERE id = ?`, id))
 	if mi == nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	// Tenant scope: non-admin users can only see their own tenant's instances.
+	if !tenantScopeCheck(r, strVal(mi, "tenant_id", "")) {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}

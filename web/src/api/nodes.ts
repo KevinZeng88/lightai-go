@@ -55,7 +55,7 @@ export interface NetworkInfo {
 }
 
 export async function fetchNodes(): Promise<Node[]> {
-  const data = await apiClient.get('/api/v1/nodes')
+  const data = await apiClient.get('/nodes')
   return Array.isArray(data) ? data : []
 }
 

@@ -671,6 +671,22 @@ func (h *AgentHandler) HandlePatchNodeTenant(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Safety: reject transfer if node has active GPU leases.
+	var activeLeaseCount int
+	h.DB.QueryRow(`SELECT COUNT(*) FROM gpu_leases WHERE node_id = ? AND status IN ('reserved','active')`, nodeID).Scan(&activeLeaseCount)
+	if activeLeaseCount > 0 {
+		http.Error(w, `{"error":"node has active GPU leases — release them before transferring"}`, http.StatusConflict)
+		return
+	}
+
+	// Safety: reject transfer if node has running/starting/stopping instances.
+	var activeInstanceCount int
+	h.DB.QueryRow(`SELECT COUNT(*) FROM model_instances WHERE node_id = ? AND actual_state IN ('pending','starting','running','stopping')`, nodeID).Scan(&activeInstanceCount)
+	if activeInstanceCount > 0 {
+		http.Error(w, `{"error":"node has active model instances — stop them before transferring"}`, http.StatusConflict)
+		return
+	}
+
 	// Update node tenant.
 	now := time.Now().Format(time.RFC3339)
 	_, err = h.DB.Exec(`UPDATE nodes SET tenant_id = ?, updated_at = ? WHERE id = ?`,

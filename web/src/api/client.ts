@@ -19,7 +19,12 @@ export class ApiError extends Error {
 }
 
 class ApiClient {
+  // All API paths are relative to /api/v1. The client prepends the base.
+  private apiBase = '/api/v1'
+
   private async request(method: string, url: string, body?: any, retryOnCsrf = true): Promise<any> {
+    // Auto-prepend /api/v1 unless the URL already starts with it or is an external path.
+    const fullUrl = url.startsWith('/api/v1') ? url : (url.startsWith('http') ? url : this.apiBase + url)
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
@@ -76,7 +81,7 @@ class ApiClient {
   // P0-007: Refresh CSRF token from server.
   private async refreshCsrfToken(): Promise<boolean> {
     try {
-      const resp = await fetch(BASE + API_BASE + '/auth/me', {
+      const resp = await fetch(API_BASE + '/auth/me', {
         method: 'GET',
         credentials: 'include',
       })

@@ -20,7 +20,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="模型路径">
-            <el-input v-model="qd.modelPath" placeholder="/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf" style="width:360px" />
+            <el-input v-model="qd.modelPath" placeholder="e.g. /data/models/model.gguf (E2E example: /home/kzeng/models/...)" style="width:360px" />
           </el-form-item>
           <el-form-item label="端口">
             <el-input-number v-model="qd.hostPort" :min="1024" :max="65535" />
@@ -159,7 +159,7 @@ import StatusTag from '@/components/StatusTag.vue'
 
 const { t } = useI18n()
 // Quick deploy state
-const qd = ref({ preset: '', modelPath: '/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf', hostPort: 8002, nodeId: '', gpuId: '', summary: null as Record<string,string>|null })
+const qd = ref({ preset: '', modelPath: '', hostPort: 8002, nodeId: '', gpuId: '', summary: null as Record<string,string>|null })
 const nodeGpus = ref<any[]>([])
 const quickDeploying = ref(false)
 
@@ -170,7 +170,7 @@ const PRESETS: Record<string, any> = {
     docker: { image: 'ghcr.io/ggml-org/llama.cpp:server-cuda13', ipc_mode: {enabled:true,value:'host'}, shm_size: {enabled:true,value:'8gb'} },
     args_template: ['-m','${MODEL_PATH}','--host','0.0.0.0','--port','${CONTAINER_PORT}'],
     required_variables: ['MODEL_PATH','CONTAINER_PORT'],
-    volume_host_prefix: '/home/kzeng/models', volume_container: '/models',
+    volume_host_prefix: '', volume_container: '/models',
     isExample: true,
   },
   'llama-cpp-nvidia-custom': {
@@ -202,7 +202,7 @@ const PRESETS: Record<string, any> = {
 function applyPreset(val: string) {
   const p = PRESETS[val]; if (!p) return
   if (p.isExample && !qd.value.modelPath) {
-    qd.value.modelPath = '/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf'
+    qd.value.modelPath = ''  // local E2E example: '/home/kzeng/models/...'
   }
   // Show editable fields for custom presets
   qd.value.summary = p.isExample ? {'注意': '这是本地 E2E 示例预设，请根据实际路径修改'} : null
