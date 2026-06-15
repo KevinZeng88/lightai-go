@@ -5,43 +5,61 @@
 - NVIDIA GPU with driver (verified: RTX 5090 Laptop, driver 610.47)
 - Docker daemon with `nvidia-container-toolkit` installed
 - `ghcr.io/ggml-org/llama.cpp:server-cuda13` Docker image available
-- GGUF model file (verified: `/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf`)
+- GGUF model file (default: `/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf`)
 - Port 8002 available on host
 
 ## Quick Start
 
 ```bash
-# From project root:
 scripts/e2e-model-runtime-local.sh
 ```
 
-Or run manually:
+## Custom Parameters
 
 ```bash
-scripts/e2e-model-runtime-local.sh 8002 /home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf
+scripts/e2e-model-runtime-local.sh --port 8003 --model-path /path/to/model.gguf --image my-image:tag --gpu-index 0 --tail 200
 ```
 
-## Environment Checks
+## Environment Variables
 
-```bash
-# GPU
-nvidia-smi --query-gpu=name,memory.total --format=csv
+All script parameters can also be set via environment variables:
 
-# Docker GPU runtime
-docker run --rm --gpus all nvidia/cuda:13.1.1-base-ubuntu24.04 nvidia-smi
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LIGHTAI_E2E_MODEL_PATH` | `/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf` | Path to GGUF model |
+| `LIGHTAI_E2E_IMAGE` | `ghcr.io/ggml-org/llama.cpp:server-cuda13` | Docker image |
+| `LIGHTAI_E2E_HOST_PORT` | `8002` | Host port for model service |
+| `LIGHTAI_E2E_GPU_INDEX` | `0` | GPU index for DeviceRequests |
 
-# Docker socket
-ls -la /var/run/docker.sock
+## Flags
 
-# Model file
-ls -la ~/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf
+| Flag | Description |
+|------|-------------|
+| `--keep-running` | Don't stop container or kill server/agent after test |
+| `--skip-build` | Skip Go binary rebuild |
+| `--port N` | Override host port |
+| `--model-path PATH` | Override model file path |
+| `--image IMAGE` | Override Docker image |
+| `--tail N` | Number of log lines to fetch |
+| `--gpu-index N` | GPU index for device request |
 
-# Port availability
-ss -tln | grep 8002
-```
+## E2E Artifacts
+
+All temporary files are stored in `run/e2e/`:
+
+| File | Purpose |
+|------|---------|
+| `server.yaml` | Server config |
+| `agent.yaml` | Agent config |
+| `e2e-test.db` | SQLite database |
+| `cookies.txt` | Session cookies |
+| `server.log` | Server output |
+| `agent.log` | Agent output |
+| `agent-identity.json` | Agent node identity |
+
+Clean up: `rm -rf run/e2e`
 
 ## Manual Verification Steps
-
 ### 1. Start Server
 
 ```bash
