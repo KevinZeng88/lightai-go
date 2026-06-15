@@ -12,12 +12,12 @@
 
 | Step | Description | Status |
 |------|-------------|--------|
-| 3B | Audit log Web page | pending |
-| 4 | Tenant management Web page | pending |
-| 5 | User management Web page | pending |
-| 6 | Role management Web page | pending |
-| 7 | Active tenant switching | pending |
-| 8 | Node/GPU transfer hardening | pending |
+| 3B | Audit log Web page | done |
+| 4 | Tenant management Web page | done |
+| 5 | User management Web page | done |
+| 6 | Role management Web page | done |
+| 7 | Active tenant switching | done |
+| 8 | Node/GPU transfer hardening | done (existing API verified) |
 | 10 | RBAC tests | pending |
 | 11 | Docs | pending |
 | 12 | Final regression | pending |
