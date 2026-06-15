@@ -31,6 +31,12 @@ func NewContextWithSessionInfo(ctx context.Context, info *SessionInfo) context.C
 }
 
 // PermissionsFromContext extracts permission codes from the request context.
+
+// NewContextWithPermissions returns a context with the given permissions set.
+// This is intended for test use only.
+func NewContextWithPermissions(ctx context.Context, perms []string) context.Context {
+	return context.WithValue(ctx, ctxKeyPermissions, perms)
+}
 func PermissionsFromContext(ctx context.Context) []string {
 	perms, _ := ctx.Value(ctxKeyPermissions).([]string)
 	return perms

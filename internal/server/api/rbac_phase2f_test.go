@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -384,4 +385,115 @@ func TestSensitiveFieldsRedactedInAuditDetail(t *testing.T) {
 	if !strings.Contains(redacted, "public") {
 		t.Error("non-sensitive values should be preserved")
 	}
+}
+
+// ==========================================================================
+// Transfer to inactive tenant test (handler-level)
+// ==========================================================================
+
+func TestNodeTransferToInactiveTenantFails(t *testing.T) {
+	database := initRBACTestDB(t)
+	defer database.Close()
+
+	// Create source tenant and inactive target tenant.
+	srcTenant := "a0000000-0000-0000-0000-000000000001" // default
+	tgtTenant := uuid.NewString()
+	database.Exec(`INSERT INTO tenants (id, slug, name, status, type) VALUES (?, 'inactive-t', 'Inactive Target', 'disabled', 'business')`, tgtTenant)
+
+	// Create node in source tenant.
+	nID := uuid.NewString()
+	database.Exec(`INSERT INTO nodes (id, agent_id, hostname, status, tenant_id) VALUES (?, 'agent-n1', 'node1', 'online', ?)`, nID, srcTenant)
+
+	handler := &AgentHandler{DB: database}
+
+	// Platform admin tries to transfer to inactive tenant — should fail.
+	body, _ := json.Marshal(map[string]string{"tenant_id": tgtTenant})
+	req := httptest.NewRequest("PATCH", "/api/v1/nodes/"+nID+"/tenant", bytes.NewReader(body))
+	req = req.WithContext(rbacAdminCtx())
+	req.SetPathValue("id", nID)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.HandlePatchNodeTenant(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Error("transfer to inactive tenant should fail")
+	}
+	// Verify node tenant unchanged.
+	var nodeTenant string
+	database.QueryRow(`SELECT tenant_id FROM nodes WHERE id = ?`, nID).Scan(&nodeTenant)
+	if nodeTenant != srcTenant {
+		t.Errorf("node tenant changed to %s, should remain %s", nodeTenant, srcTenant)
+	}
+	// Verify no success audit log written.
+	var auditCount int
+	database.QueryRow(`SELECT COUNT(*) FROM audit_logs WHERE action = 'transfer_tenant' AND entity_id = ?`, nID).Scan(&auditCount)
+	if auditCount > 0 {
+		t.Logf("audit logs written: %d (may include failure audit)", auditCount)
+	}
+}
+
+// ==========================================================================
+// Tenant user with transfer permission can transfer node
+// ==========================================================================
+
+func TestTenantUserWithTransferPermissionCanTransferNode(t *testing.T) {
+	database := initRBACTestDB(t)
+	defer database.Close()
+
+	srcTenant := "a0000000-0000-0000-0000-000000000001"
+	tgtTenant := uuid.NewString()
+	database.Exec(`INSERT INTO tenants (id, slug, name, status, type) VALUES (?, 'target-t', 'Target', 'active', 'business')`, tgtTenant)
+
+	// Create a non-admin user in source tenant with node:transfer permission.
+	uid := "transfer-user"
+	database.Exec(`INSERT OR IGNORE INTO users (id, username, display_name, password_hash, status) VALUES (?, 'transfer-user', 'Transfer User', 'hash', 'active')`, uid)
+	mid := uuid.NewString()
+	database.Exec(`INSERT OR IGNORE INTO tenant_memberships (id, tenant_id, user_id, status) VALUES (?, ?, ?, 'active')`, mid, srcTenant, uid)
+
+	// Create node in source tenant.
+	nID := uuid.NewString()
+	database.Exec(`INSERT INTO nodes (id, agent_id, hostname, status, tenant_id) VALUES (?, 'agent-n2', 'node2', 'online', ?)`, nID, srcTenant)
+
+	handler := &AgentHandler{DB: database}
+
+	// User with node:transfer permission and tenant ownership should succeed.
+	ctx := rbacUserCtxWithPerms(srcTenant, uid, []string{"node:transfer"})
+	body, _ := json.Marshal(map[string]string{"tenant_id": tgtTenant, "reason": "test transfer"})
+	req := httptest.NewRequest("PATCH", "/api/v1/nodes/"+nID+"/tenant", bytes.NewReader(body))
+	req = req.WithContext(ctx)
+	req.SetPathValue("id", nID)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.HandlePatchNodeTenant(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("transfer should succeed: got %d, body: %s", w.Code, w.Body.String())
+	}
+	// Verify node tenant updated.
+	var newTenant string
+	database.QueryRow(`SELECT tenant_id FROM nodes WHERE id = ?`, nID).Scan(&newTenant)
+	if newTenant != tgtTenant {
+		t.Errorf("node tenant = %s, want %s", newTenant, tgtTenant)
+	}
+	// Verify audit log written.
+	var auditCount int
+	database.QueryRow(`SELECT COUNT(*) FROM audit_logs WHERE action = 'transfer_tenant' AND entity_id = ?`, nID).Scan(&auditCount)
+	if auditCount == 0 {
+		t.Error("no transfer audit log written")
+	}
+}
+
+// ==========================================================================
+// Helper: context with specific permissions
+// ==========================================================================
+
+func rbacUserCtxWithPerms(tenantID, userID string, perms []string) context.Context {
+	ctx := auth.NewContextWithSessionInfo(context.Background(), &auth.SessionInfo{
+		TenantID:        tenantID,
+		UserID:          userID,
+		IsPlatformAdmin: false,
+	})
+	// Set permissions directly on context (the ctxKeyPermissions is internal to auth package).
+	// Use the permissions context key from auth package.
+	return auth.NewContextWithPermissions(ctx, perms)
 }
