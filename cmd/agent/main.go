@@ -459,7 +459,7 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 		return
 	}
 
-	req, err := http.NewRequest("POST", cfg.ServerURL+"/api/agent/resources/report", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequest("POST", cfg.ServerURL+"/api/v1/agent/resources/report", bytes.NewReader(bodyBytes))
 	if err != nil {
 		log.Error("failed to create resource report request", "error", err)
 		snap.IncCollectErrors()

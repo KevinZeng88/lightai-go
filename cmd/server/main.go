@@ -148,6 +148,7 @@ func main() {
 
 	agentHandler := api.NewAgentHandler(database, serverMetrics)
 	resourceHandler := api.NewResourceHandler(database, serverMetrics)
+	modelHandler := api.NewModelHandler(database)
 
 	mux := http.NewServeMux()
 
@@ -177,10 +178,11 @@ func main() {
 		RBACHandler:     rbacHandler,
 		AgentHandler:    agentHandler,
 		ResourceHandler: resourceHandler,
+		ModelHandler:    modelHandler,
 	})
 
 	// Return JSON 404 for unregistered /api/* paths — never fall back to SPA index.html.
-	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"error":"not found","path":"` + r.URL.Path + `"}`))
@@ -242,7 +244,7 @@ func serveWeb(mux *http.ServeMux) {
 <pre>cd web && npm run build</pre>
 <p>Then rebuild with <code>-tags web</code>.</p>
 <hr>
-<p><small>API: <a href="/api/auth/me">/api/auth/me</a> | <a href="/healthz">/healthz</a> | <a href="/metrics">/metrics</a> | <a href="/metrics/targets">/metrics/targets</a></small></p>
+<p><small>API: <a href="/api/v1/auth/me">/api/auth/me</a> | <a href="/healthz">/healthz</a> | <a href="/metrics">/metrics</a> | <a href="/metrics/targets">/metrics/targets</a></small></p>
 </body></html>`))
 		})
 		return
@@ -298,7 +300,7 @@ func metricsWrapper(mux *http.ServeMux, m *srvmetrics.ServerMetrics) http.Handle
 
 		// Only record API paths to avoid polluting counters with
 		// Prometheus scrapes, health checks, and static asset requests.
-		if !strings.HasPrefix(r.URL.Path, "/api/") {
+		if !strings.HasPrefix(r.URL.Path, "/api/v1/") {
 			return
 		}
 

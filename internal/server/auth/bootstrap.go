@@ -57,6 +57,10 @@ func PermissionCatalog() []PermissionDef {
 		{Code: "model:read", Scope: "tenant", Description: "View models"},
 		{Code: "model:write", Scope: "tenant", Description: "Manage models"},
 
+		// Deployment permissions.
+		{Code: "deployment:read", Scope: "tenant", Description: "View model deployments"},
+		{Code: "deployment:write", Scope: "tenant", Description: "Manage model deployments"},
+
 		// Instance permissions.
 		{Code: "instance:read", Scope: "tenant", Description: "View instances"},
 		{Code: "instance:write", Scope: "tenant", Description: "Manage instances"},
@@ -93,9 +97,9 @@ func BuiltinRoles() []BuiltinRoleDef {
 			Permissions: []string{
 				// Viewer permissions.
 				"dashboard:read", "node:read", "gpu:read", "monitoring:read", "log:read",
-				"runtime:read", "model:read", "instance:read", "task:read",
+				"runtime:read", "model:read", "instance:read", "deployment:read", "task:read",
 				// Operator permissions.
-				"runtime:write", "model:write", "instance:write", "instance:operate",
+				"runtime:write", "model:write", "instance:write", "instance:operate", "deployment:write",
 				// Admin permissions.
 				"membership:read", "membership:write", "role:read", "role:write",
 				"node:transfer", "tenant:settings:write",
@@ -108,9 +112,9 @@ func BuiltinRoles() []BuiltinRoleDef {
 			Permissions: []string{
 				// Viewer permissions.
 				"dashboard:read", "node:read", "gpu:read", "monitoring:read", "log:read",
-				"runtime:read", "model:read", "instance:read", "task:read",
+				"runtime:read", "model:read", "instance:read", "deployment:read", "task:read",
 				// Operator permissions.
-				"runtime:write", "model:write", "instance:write", "instance:operate",
+				"runtime:write", "model:write", "instance:write", "instance:operate", "deployment:write",
 			},
 		},
 		{
@@ -119,7 +123,7 @@ func BuiltinRoles() []BuiltinRoleDef {
 			Description: "Read-only tenant access",
 			Permissions: []string{
 				"dashboard:read", "node:read", "gpu:read", "monitoring:read", "log:read",
-				"runtime:read", "model:read", "instance:read", "task:read",
+				"runtime:read", "model:read", "instance:read", "deployment:read", "task:read",
 			},
 		},
 	}

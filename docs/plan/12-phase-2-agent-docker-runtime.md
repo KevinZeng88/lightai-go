@@ -116,9 +116,9 @@ ownership labels：`lightai.managed=true`、`lightai.instance_id=<id>`、`lighta
 ## 6. API（新增）
 
 ```text
-POST /api/model-deployments/{id}/start
-POST /api/model-deployments/{id}/stop
-GET  /api/model-instances/{id}/logs?tail=100
+POST /api/v1/model-deployments/{id}/start
+POST /api/v1/model-deployments/{id}/stop
+GET  /api/v1/model-instances/{id}/logs?tail=100
 ```
 
 `start` 流程：
@@ -161,7 +161,7 @@ GET  /api/model-instances/{id}/logs?tail=100
 
 ```bash
 # 启动
-curl -X POST /api/model-deployments/{id}/start -H 'Cookie: ...'
+curl -X POST /api/v1/model-deployments/{id}/start -H 'Cookie: ...'
 # → 200, {"instance_id":"...","actual_state":"starting"}
 
 # 等待几秒后检查状态
@@ -173,7 +173,7 @@ curl /api/model-instances/{id}/logs?tail=100 -H 'Cookie: ...'
 # → vLLM 启动日志
 
 # 停止
-curl -X POST /api/model-deployments/{id}/stop -H 'Cookie: ...'
+curl -X POST /api/v1/model-deployments/{id}/stop -H 'Cookie: ...'
 # → 200, {"actual_state":"stopped"}
 
 # 验证 GpuLease 已释放
@@ -181,7 +181,7 @@ curl /api/gpu-leases?instance_id={id} -H 'Cookie: ...'
 # → [{"status":"released"}]
 
 # 启动失败
-curl -X POST /api/model-deployments/{id}/start -H 'Cookie: ...'  # 镜像不存在
+curl -X POST /api/v1/model-deployments/{id}/start -H 'Cookie: ...'  # 镜像不存在
 # → {"actual_state":"failed","last_error":"docker image not found: ..."}
 
 # 验证 active lease 未泄露
@@ -202,5 +202,5 @@ Phase 2 必须向 Phase 3 提供：
 
 1. Start/Stop/Logs API 稳定
 2. ModelInstance 状态实时更新（Web 轮询或后续 WebSocket）
-3. GPU 占用关系可通过 API 查询（`GET /api/gpus/{id}/leases` 或等价端点）
+3. GPU 占用关系可通过 API 查询（`GET /api/v1/gpus/{id}/leases` 或等价端点）
 4. 启动失败时 `last_error` 可读且准确

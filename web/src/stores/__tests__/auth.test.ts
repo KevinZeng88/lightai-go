@@ -51,7 +51,7 @@ describe('P0-003: Multi-tenant login', () => {
     await auth.login('admin', 'password', 'tenant-a')
 
     // Verify tenant_id was included in the request body.
-    expect(mockPost).toHaveBeenCalledWith('/api/auth/login', {
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/auth/login', {
       username: 'admin',
       password: 'password',
       tenant_id: 'tenant-a',
@@ -74,7 +74,7 @@ describe('P0-003: Multi-tenant login', () => {
     const auth = useAuthStore()
     await auth.login('admin', 'password') // no tenantId
 
-    expect(mockPost).toHaveBeenCalledWith('/api/auth/login', {
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/auth/login', {
       username: 'admin',
       password: 'password',
     })

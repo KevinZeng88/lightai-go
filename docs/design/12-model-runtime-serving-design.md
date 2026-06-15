@@ -452,48 +452,48 @@ Phase 2+ 增加离线超时自动释放策略。
 
 ## 10. API 设计
 
-沿用现有 `/api/` 前缀（无 v1），与现有 `/api/nodes`、`/api/gpus` 风格一致。
+沿用现有 `/api/` 前缀（无 v1），与现有 `/api/v1/nodes`、`/api/v1/gpus` 风格一致。
 
 ```text
 # ModelArtifact
-GET    /api/model-artifacts
-POST   /api/model-artifacts
-GET    /api/model-artifacts/{id}
-PATCH  /api/model-artifacts/{id}
-DELETE /api/model-artifacts/{id}
+GET    /api/v1/model-artifacts
+POST   /api/v1/model-artifacts
+GET    /api/v1/model-artifacts/{id}
+PATCH  /api/v1/model-artifacts/{id}
+DELETE /api/v1/model-artifacts/{id}
 
 # RuntimeEnvironment
-GET    /api/runtime-environments
-POST   /api/runtime-environments
-GET    /api/runtime-environments/{id}
-PATCH  /api/runtime-environments/{id}
-DELETE /api/runtime-environments/{id}
+GET    /api/v1/runtime-environments
+POST   /api/v1/runtime-environments
+GET    /api/v1/runtime-environments/{id}
+PATCH  /api/v1/runtime-environments/{id}
+DELETE /api/v1/runtime-environments/{id}
 
 # RunTemplate
-GET    /api/run-templates
-POST   /api/run-templates
-GET    /api/run-templates/{id}
-PATCH  /api/run-templates/{id}
-DELETE /api/run-templates/{id}
+GET    /api/v1/run-templates
+POST   /api/v1/run-templates
+GET    /api/v1/run-templates/{id}
+PATCH  /api/v1/run-templates/{id}
+DELETE /api/v1/run-templates/{id}
 
 # ModelDeployment
-GET    /api/model-deployments
-POST   /api/model-deployments
-GET    /api/model-deployments/{id}
-PATCH  /api/model-deployments/{id}
-DELETE /api/model-deployments/{id}
-POST   /api/model-deployments/{id}/dry-run
-POST   /api/model-deployments/{id}/start       # Phase 2
-POST   /api/model-deployments/{id}/stop        # Phase 2
+GET    /api/v1/model-deployments
+POST   /api/v1/model-deployments
+GET    /api/v1/model-deployments/{id}
+PATCH  /api/v1/model-deployments/{id}
+DELETE /api/v1/model-deployments/{id}
+POST   /api/v1/model-deployments/{id}/dry-run
+POST   /api/v1/model-deployments/{id}/start       # Phase 2
+POST   /api/v1/model-deployments/{id}/stop        # Phase 2
 
 # ModelInstance
-GET    /api/model-instances
-GET    /api/model-instances/{id}
-GET    /api/model-instances/{id}/logs           # Phase 2
+GET    /api/v1/model-instances
+GET    /api/v1/model-instances/{id}
+GET    /api/v1/model-instances/{id}/logs           # Phase 2
 
 # GpuLease（只读，系统管理）
-GET    /api/gpu-leases
-GET    /api/gpu-leases/{id}
+GET    /api/v1/gpu-leases
+GET    /api/v1/gpu-leases/{id}
 ```
 
 ---

@@ -104,9 +104,9 @@ POST /v1/embeddings                  → 代理到目标实例（预留）
 ## 6. API Key API
 
 ```text
-GET    /api/api-keys                  # 列表（脱敏：只显示 prefix + 状态）
-POST   /api/api-keys                  # 创建（返回完整 key 原文，仅此一次）
-DELETE /api/api-keys/{id}             # 禁用/删除
+GET    /api/v1/api-keys                  # 列表（脱敏：只显示 prefix + 状态）
+POST   /api/v1/api-keys                  # 创建（返回完整 key 原文，仅此一次）
+DELETE /api/v1/api-keys/{id}             # 禁用/删除
 ```
 
 ## 7. 权限
@@ -127,7 +127,7 @@ DELETE /api/api-keys/{id}             # 禁用/删除
 
 ```bash
 # 创建 API Key
-curl -X POST /api/api-keys -H 'Cookie: ...' \
+curl -X POST /api/v1/api-keys -H 'Cookie: ...' \
   -d '{"name":"my-key"}'
 # → {"id":"...","key":"sk-abc123...","prefix":"sk-abc","status":"active"}
 

@@ -77,7 +77,7 @@ func Do(client *http.Client, cfg Config, st *state.State) (nodeID string, err er
 		return "", fmt.Errorf("marshal register request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", cfg.ServerURL+"/api/agent/register", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequest("POST", cfg.ServerURL+"/api/v1/agent/register", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return "", fmt.Errorf("create register request: %w", err)
 	}
@@ -187,7 +187,7 @@ func SendHeartbeat(client *http.Client, serverURL, agentToken, agentID, nodeID s
 	reqBody := map[string]string{"node_id": nodeID, "agent_id": agentID}
 	bodyBytes, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", serverURL+"/api/agent/heartbeat", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequest("POST", serverURL+"/api/v1/agent/heartbeat", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create heartbeat request: %w", err)
 	}

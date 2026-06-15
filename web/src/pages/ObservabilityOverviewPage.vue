@@ -52,7 +52,7 @@ const dashboards = [
 onMounted(async () => {
   // Use backend proxy to avoid CORS.
   try {
-    const resp = await fetch('/api/observability/status')
+    const resp = await fetch('/api/v1/observability/status')
     const data = await resp.json()
     cards.value[0].status = data.prometheus?.ready ? 'ok' : 'down'
     cards.value[0].desc = data.prometheus?.ready ? 'Running' : 'Not running. Start: bash scripts/start-observability.sh'

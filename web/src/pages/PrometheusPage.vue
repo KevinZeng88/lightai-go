@@ -24,7 +24,7 @@ const running = ref(false)
 
 onMounted(async () => {
   try {
-    const resp = await fetch('/api/observability/status')
+    const resp = await fetch('/api/v1/observability/status')
     const data = await resp.json()
     if (data.prometheus?.ready) { status.value = 'Running'; running.value = true }
     else { status.value = 'Not running'; running.value = false }

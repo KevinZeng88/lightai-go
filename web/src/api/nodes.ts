@@ -55,17 +55,17 @@ export interface NetworkInfo {
 }
 
 export async function fetchNodes(): Promise<Node[]> {
-  const data = await apiClient.get('/api/nodes')
+  const data = await apiClient.get('/api/v1/nodes')
   return Array.isArray(data) ? data : []
 }
 
 export async function fetchNode(id: string): Promise<Node> {
-  const data = await apiClient.get(`/api/nodes/${id}`)
+  const data = await apiClient.get(`/api/v1/nodes/${id}`)
   return data
 }
 
 // P1-004: Fetch host system metrics for a node.
 export async function fetchNodeSystem(id: string): Promise<NodeSystemInfo> {
-  const data = await apiClient.get(`/api/nodes/${id}/system`)
+  const data = await apiClient.get(`/api/v1/nodes/${id}/system`)
   return data
 }

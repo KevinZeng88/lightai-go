@@ -1,5 +1,8 @@
 import { useAuthStore } from '@/stores/auth'
 
+/** Base path prefix for all LightAI management API calls. */
+export const API_BASE = '/api/v1'
+
 const BASE = ''
 
 export class ApiError extends Error {
@@ -73,7 +76,7 @@ class ApiClient {
   // P0-007: Refresh CSRF token from server.
   private async refreshCsrfToken(): Promise<boolean> {
     try {
-      const resp = await fetch(BASE + '/api/auth/me', {
+      const resp = await fetch(BASE + API_BASE + '/auth/me', {
         method: 'GET',
         credentials: 'include',
       })

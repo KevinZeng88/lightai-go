@@ -331,7 +331,7 @@ func TestAgentRegistrationSendsNewFields(t *testing.T) {
 	}
 }
 
-// TestNodeListReturnsNewFields verifies GET /api/nodes returns the new fields.
+// TestNodeListReturnsNewFields verifies GET /api/v1/nodes returns the new fields.
 func TestNodeListReturnsNewFields(t *testing.T) {
 	database := initTestDB(t)
 	defer database.Close()

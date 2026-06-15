@@ -124,29 +124,29 @@ GET  /healthz
 GET  /metrics
 GET  /metrics/targets
 
-POST /api/auth/login
-POST /api/auth/logout
-POST /api/auth/change-password
-GET  /api/auth/me
+POST /api/v1/auth/login
+POST /api/v1/auth/logout
+POST /api/v1/auth/change-password
+GET  /api/v1/auth/me
 
-GET  /api/users
-POST /api/users
-GET  /api/tenants
-POST /api/tenants
-GET  /api/tenant-memberships
-POST /api/tenant-memberships
-GET  /api/roles
-POST /api/roles
-GET  /api/permissions
+GET  /api/v1/users
+POST /api/v1/users
+GET  /api/v1/tenants
+POST /api/v1/tenants
+GET  /api/v1/tenant-memberships
+POST /api/v1/tenant-memberships
+GET  /api/v1/roles
+POST /api/v1/roles
+GET  /api/v1/permissions
 
-POST /api/agent/register
-POST /api/agent/heartbeat
-POST /api/agent/resources/report
+POST /api/v1/agent/register
+POST /api/v1/agent/heartbeat
+POST /api/v1/agent/resources/report
 
-GET  /api/nodes
-GET  /api/nodes/{node_id}
-GET  /api/gpus
-GET  /api/gpus/{gpu_id}
+GET  /api/v1/nodes
+GET  /api/v1/nodes/{node_id}
+GET  /api/v1/gpus
+GET  /api/v1/gpus/{gpu_id}
 ```
 
 `/metrics/targets` 只由 Server 提供。

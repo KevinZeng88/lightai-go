@@ -35,7 +35,7 @@ export const useAuthStore = defineStore('auth', () => {
     const body: Record<string, string> = { username, password }
     if (tenantId) body.tenant_id = tenantId
     // P0-007: apiClient.post now throws on non-2xx.
-    const data = await apiClient.post('/api/auth/login', body)
+    const data = await apiClient.post('/api/v1/auth/login', body)
 
     // P0-007: Only set logged-in state on successful response.
     user.value = {
@@ -54,7 +54,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchMe() {
     try {
       // P0-007: apiClient.get now throws on non-2xx.
-      const data = await apiClient.get('/api/auth/me')
+      const data = await apiClient.get('/api/v1/auth/me')
       user.value = {
         id: data.user.id,
         username: data.user.username,
@@ -84,7 +84,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try {
-      await apiClient.post('/api/auth/logout', {})
+      await apiClient.post('/api/v1/auth/logout', {})
     } catch {
       // Ignore errors during logout — we clear state anyway.
     }
@@ -97,7 +97,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function changePassword(currentPassword: string, newPassword: string) {
-    const data = await apiClient.post('/api/auth/change-password', {
+    const data = await apiClient.post('/api/v1/auth/change-password', {
       current_password: currentPassword,
       new_password: newPassword,
     })

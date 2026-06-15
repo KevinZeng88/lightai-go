@@ -90,7 +90,7 @@ func TestServerIngestMetaX8GPUToAPI(t *testing.T) {
 
 	handler := NewResourceHandler(database, nil)
 
-	// Step 1: POST /api/agent/resources/report — ingest the report.
+	// Step 1: POST /api/v1/agent/resources/report — ingest the report.
 	req := httptest.NewRequest("POST", "/api/agent/resources/report", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -101,7 +101,7 @@ func TestServerIngestMetaX8GPUToAPI(t *testing.T) {
 		t.Fatalf("report ingest: expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// Step 2: GET /api/gpus — verify 8 GPUs returned.
+	// Step 2: GET /api/v1/gpus — verify 8 GPUs returned.
 	req2 := httptest.NewRequest("GET", "/api/gpus", nil)
 	w2 := httptest.NewRecorder()
 
