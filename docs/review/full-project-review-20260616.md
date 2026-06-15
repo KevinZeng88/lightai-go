@@ -162,3 +162,116 @@ git status --short        ✅ CLEAN
 | 10 | Format utilities not localized | English suffixes in Chinese UI | Add locale-aware format functions |
 | 11 | Download gpuLeases.ts | Unused API client | Either wire up or remove |
 | 12 | GPU vendor filter hardcoded | New vendors not shown | Make vendor list dynamic |
+
+---
+
+## Phase 2F Final Closure
+
+### Final Status
+
+Phase 2F is **closed** after all 12 review findings were fixed and validated.
+
+### Review Fix Commits
+
+| Commit | Description |
+|--------|-------------|
+| `86ab1d4` | phase-2f: fix all 12 review issues |
+| `3109999` | phase-2f: complete review fix validation coverage |
+| `1c26622` | phase-2f: localize formatRelativeTime with zh-CN/en-US i18n |
+| `df1a212` | test: make model runtime E2E cleanup safe with PID-based trap |
+
+### E2E Exit 144 Root Cause and Fix
+
+The original `scripts/e2e-model-runtime-local.sh` used:
+
+```bash
+pkill -f lightai-server 2>/dev/null || true
+pkill -f lightai-agent 2>/dev/null || true
+```
+
+In the sandbox environment, `pkill -f` matched the parent shell process, causing the script to receive SIGUSR1 (exit code 144).
+
+**Fix:** Replaced with PID-based trap cleanup:
+
+```bash
+trap cleanup EXIT INT TERM
+
+cleanup() {
+  set +e
+  if [ -n "$AGENT_PID" ] && kill -0 "$AGENT_PID" 2>/dev/null; then
+    kill "$AGENT_PID" 2>/dev/null
+    sleep 1
+    kill -0 "$AGENT_PID" 2>/dev/null && kill -9 "$AGENT_PID" 2>/dev/null
+  fi
+  if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null
+    sleep 1
+    kill -0 "$SERVER_PID" 2>/dev/null && kill -9 "$SERVER_PID" 2>/dev/null
+  fi
+  if [ -n "$CONTAINER_ID" ]; then
+    docker rm -f "$CONTAINER_ID" 2>/dev/null || true
+  fi
+  ...
+}
+```
+
+**E2E cleanup rules:**
+- Only kill PIDs that this script started (SERVER_PID, AGENT_PID)
+- Docker cleanup by explicit container_id, not wildcard name/pattern
+- No `pkill`, `pkill -f`, or `killall` anywhere in the script
+- `trap EXIT INT TERM` ensures cleanup runs on any exit
+- Cleanup is idempotent — failed cleanup does not mask test results (uses `set +e`)
+
+### Final E2E Result (2026-06-16 00:40)
+
+```
+deployment_id:  5665def4-09bc-4729-a98c-dadd95a40ff1
+instance_id:    133466ae-5f0e-4214-86ce-14b8a981a1b4
+start_task_id:  9fe683a1-32b2-413c-8445-7be43fe64469
+logs_task_id:   96eced2e-db89-4e74-970e-0cf9b8cac821
+stop_task_id:   2ed8b3ad-1e75-4ccf-9191-33bfe9486268
+container_id:   2c993f58f7839b6ad19621958f476c0b969c2289a585af4f3827573847be810a
+container_name: lightai-133466ae-5f0
+
+Dry-run:         --gpus "device=0" ✅
+/v1/models:      Qwen3.5-9B-Q4_K_M.gguf (8.95B params, 262K ctx) ✅
+Logs:            3142 bytes (CUDA device info) ✅
+Instance:        running → stopped ✅
+Lease:           active → released ✅
+Stop idempotent: ✅
+Cleanup:         trap handler (no pkill) ✅
+Exit code:       0 ✅
+```
+
+### Final Verification
+
+```
+go test ./...                              ✅ ALL PASS
+go build ./cmd/server                      ✅
+go build ./cmd/agent                       ✅
+cd web && npm run build                    ✅
+node web/tests/i18nKeys.test.mjs           ✅ PASS (220/220)
+node web/tests/apiClientPaths.test.mjs     ✅ PASS (12/12)
+node web/tests/formatters.test.mjs         ✅ PASS (8/8)
+git diff --check                           ✅ CLEAN
+git status --short                         ✅ CLEAN
+scripts/e2e-model-runtime-local.sh         ✅ PASS
+scripts/package-release-docker.sh --no-bump ✅ PASS (436MB, glibc ABI OK)
+```
+
+### Closed Review Issues (All 12)
+
+| # | Issue | Fix | Test | Status |
+|---|-------|-----|------|--------|
+| 1 | Transfer no gpu_lease check | Active lease query in HandlePatchNodeTenant | TestNodeTransferBlockedByActiveGpuLease | ✅ |
+| 2 | Transfer no instance check | Running instance query in HandlePatchNodeTenant | TestNodeTransferBlockedByActiveDeploymentInstance | ✅ |
+| 3 | audit:read not assigned | Added to BuiltinRoles admin (tenant admin) | TestBuiltInAdminHasAuditReadPermission | ✅ |
+| 4 | Instance no tenant filter | List: tenant WHERE; Get: tenantScopeCheck | TestModelInstanceGetOtherTenantDeniedForNonAdmin | ✅ |
+| 5 | i18n sections missing | 220/220 keys zh=EN; i18nKeys.test.mjs | PASS | ✅ |
+| 6 | API URL prefix inconsistent | apiClient auto-prepends /api/v1; 12 modules verified | apiClientPaths.test.mjs PASS | ✅ |
+| 7 | Personal paths hardcoded | Replaced with empty defaults + example comments | grep clean | ✅ |
+| 8 | Prometheus/Grafana English | i18n keys + t() calls | web build | ✅ |
+| 9 | UsersPage empty stub | Create dialog: username/display_name/password | web build | ✅ |
+| 10 | Format utilities | formatRelativeTime locale-aware (zh-CN/en-US) | formatters.test.mjs 8/8 PASS | ✅ |
+| 11 | Orphan gpuLeases.ts | Deleted | web build | ✅ |
+| 12 | GPU vendor hardcoded | Dynamic vendorOptions from data | web build | ✅ |
