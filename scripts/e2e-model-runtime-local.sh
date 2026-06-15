@@ -21,6 +21,9 @@ SERVER_CONFIG="run/e2e/server.yaml"
 AGENT_CONFIG="run/e2e/agent.yaml"
 COOKIES="run/e2e/cookies.txt"
 DB="run/e2e/e2e-test.db"
+SERVER_PID=""
+AGENT_PID=""
+CONTAINER_ID=""
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -30,6 +33,29 @@ NC='\033[0m'
 pass() { echo -e "${GREEN}[PASS]${NC} $1"; }
 fail() { echo -e "${RED}[FAIL]${NC} $1"; exit 1; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+
+# Safe cleanup: only kills PIDs this script started. Does NOT use pkill.
+cleanup() {
+  set +e
+  if [ -n "$AGENT_PID" ] && kill -0 "$AGENT_PID" 2>/dev/null; then
+    kill "$AGENT_PID" 2>/dev/null
+    sleep 1
+    kill -0 "$AGENT_PID" 2>/dev/null && kill -9 "$AGENT_PID" 2>/dev/null
+  fi
+  if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null
+    sleep 1
+    kill -0 "$SERVER_PID" 2>/dev/null && kill -9 "$SERVER_PID" 2>/dev/null
+  fi
+  if [ -n "$CONTAINER_ID" ]; then
+    docker rm -f "$CONTAINER_ID" 2>/dev/null || true
+  fi
+  rm -f "$DB" "$DB"-shm "$DB"-wal "$COOKIES" "$SERVER_CONFIG" "$AGENT_CONFIG" 2>/dev/null
+  rm -f run/e2e/agent-identity.json 2>/dev/null
+  rm -f /tmp/logs-resp.txt 2>/dev/null
+  return 0
+}
+trap cleanup EXIT INT TERM
 
 # ── Step 0: Environment Checks ──────────────────────────────────────────
 
@@ -54,16 +80,14 @@ echo -n "Docker socket... "
 echo -n "Port $PORT... "
 ss -tln | grep -q ":$PORT " && fail "Port $PORT is in use" || pass "available"
 
-# ── Step 1: Cleanup ─────────────────────────────────────────────────────
+# ── Step 1: Prepare Clean State ──────────────────────────────────────────
 
 echo ""
-echo "=== Cleanup ==="
-pkill -f lightai-server 2>/dev/null || true
-pkill -f lightai-agent 2>/dev/null || true
-sleep 1
+echo "=== Prepare ==="
+# Clean stale DB/cookies from previous runs (no pkill — trap handles live PIDs).
 rm -f "$DB" "$DB"-shm "$DB"-wal "$COOKIES"
 rm -f run/e2e/agent-identity.json
-echo "Cleaned"
+echo "Ready"
 
 # ── Step 2: Build Binaries ──────────────────────────────────────────────
 
@@ -328,15 +352,6 @@ INST_STATE=$(sqlite3 "$DB" "SELECT actual_state FROM model_instances WHERE id='$
 LEASE_STATUS=$(sqlite3 "$DB" "SELECT status FROM gpu_leases WHERE instance_id='$INSTANCE_ID';" 2>/dev/null || echo "unknown")
 echo "Instance: $INST_STATE  Lease: $LEASE_STATUS"
 
-# ── Step 16: Cleanup ────────────────────────────────────────────────────
-
-echo ""
-echo "=== Cleanup ==="
-kill $AGENT_PID 2>/dev/null || true
-kill $SERVER_PID 2>/dev/null || true
-rm -f "$DB" "$DB"-shm "$DB"-wal "$COOKIES" "$SERVER_CONFIG" "$AGENT_CONFIG"
-rm -f run/e2e/agent-identity.json
-pass "Test complete. Resources cleaned."
-
 echo ""
 echo "=== E2E TEST PASSED ==="
+echo "Resources cleaned by trap handler."
