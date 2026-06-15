@@ -43,6 +43,11 @@
           <el-menu-item index="/runtime/templates">{{ t('nav.runTemplates') }}</el-menu-item>
         </el-sub-menu>
 
+        <el-sub-menu index="system">
+          <template #title><el-icon><Monitor /></el-icon><span>{{ t('nav.system') }}</span></template>
+          <el-menu-item index="/system/audit-logs">{{ t('nav.auditLogs') }}</el-menu-item>
+        </el-sub-menu>
+
         <el-sub-menu index="observability">
           <template #title>
             <el-icon><TrendCharts /></el-icon>

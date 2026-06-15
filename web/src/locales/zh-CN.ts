@@ -46,6 +46,8 @@ export default {
     runtimeEnvironments: '运行环境',
     modelArtifacts: '模型资产',
     runTemplates: '运行模板',
+    system: '系统',
+    auditLogs: '审计日志',
     observability: '可观测性',
     metricsTargets: 'Metrics Targets',
     grafana: 'Grafana',
