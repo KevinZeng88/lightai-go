@@ -39,17 +39,19 @@ export function shortId(id: string | undefined | null, prefix = 8, suffix = 6): 
   return id.slice(0, prefix) + '...' + id.slice(-suffix)
 }
 
-export function formatRelativeTime(iso: string | undefined | null): string {
+export function formatRelativeTime(iso: string | undefined | null, locale?: string): string {
   if (!iso) return 'N/A'
   const diff = Date.now() - new Date(iso).getTime()
   const s = Math.floor(diff / 1000)
-  if (s < 60) return s + 's ago'
+  const isZh = locale === 'zh-CN'
+
+  if (s < 60) return isZh ? '刚刚' : 'just now'
   const m = Math.floor(s / 60)
-  if (m < 60) return m + 'm ago'
+  if (m < 60) return isZh ? `${m} 分钟前` : `${m}m ago`
   const h = Math.floor(m / 60)
-  if (h < 24) return h + 'h ago'
+  if (h < 24) return isZh ? `${h} 小时前` : `${h}h ago`
   const d = Math.floor(h / 24)
-  return d + 'd ago'
+  return isZh ? `${d} 天前` : `${d}d ago`
 }
 
 export function formatGB(bytes: number | undefined | null): string {

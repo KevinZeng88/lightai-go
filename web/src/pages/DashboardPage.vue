@@ -41,7 +41,7 @@
           <template #default="{ row }">{{ nodeGpuMem(row.id) }}</template>
         </el-table-column>
         <el-table-column :label="t('nodes.lastHeartbeat')" width="100">
-          <template #default="{ row }">{{ formatRelativeTime(row.last_heartbeat_at) }}</template>
+          <template #default="{ row }">{{ formatRelativeTime(row.last_heartbeat_at, locale) }}</template>
         </el-table-column>
         <template #empty>{{ t('dashboard.noNodes') }}</template>
       </el-table>
@@ -116,10 +116,10 @@
       </template>
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item :label="t('dashboard.agentLastReport')">
-          {{ latestHeartbeat ? formatRelativeTime(latestHeartbeat) : '—' }}
+          {{ latestHeartbeat ? formatRelativeTime(latestHeartbeat, locale) : '—' }}
         </el-descriptions-item>
         <el-descriptions-item :label="t('dashboard.latestCollection')">
-          {{ latestCollected ? formatRelativeTime(latestCollected) : '—' }}
+          {{ latestCollected ? formatRelativeTime(latestCollected, locale) : '—' }}
         </el-descriptions-item>
         <el-descriptions-item :label="t('dashboard.heartbeatTimeout')">
           <StatusTag :status="heartbeatOk ? 'healthy' : 'warning'" />
@@ -152,7 +152,7 @@ import StatusTag from '@/components/StatusTag.vue'
 import { formatBytes, formatDateTime, formatRelativeTime, formatGB } from '@/utils/format'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const nodes = ref<Node[]>([])
 const gpus = ref<GPU[]>([])

@@ -104,7 +104,7 @@
           <span>{{ t('gpus.collectedAt') }}</span>
           <span class="resize-handle" @mousedown.prevent="startResize('collectedAt', $event)"></span>
         </template>
-        <template #default="{ row }">{{ formatRelativeTime(row.collected_at) }}</template>
+        <template #default="{ row }">{{ formatRelativeTime(row.collected_at, locale) }}</template>
       </el-table-column>
       <template #empty>{{ t('gpus.noGpus') }}</template>
     </el-table>
@@ -161,7 +161,7 @@ import { formatDateTime, formatPercent, formatCelsius, formatWatts, shortId, for
 import { useResizableColumns } from '@/composables/useResizableColumns'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const GPU_COLUMN_DEFAULTS = {
   health: 80, vendor: 80, name: 200, index: 55, uuid: 240,

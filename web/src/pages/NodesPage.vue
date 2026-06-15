@@ -67,7 +67,7 @@
           <span>{{ t('nodes.lastHeartbeat') }}</span>
           <span class="resize-handle" @mousedown.prevent="startResize('lastHeartbeat', $event)"></span>
         </template>
-        <template #default="{ row }">{{ formatRelativeTime(row.last_heartbeat_at) }}</template>
+        <template #default="{ row }">{{ formatRelativeTime(row.last_heartbeat_at, locale) }}</template>
       </el-table-column>
       <el-table-column :label="t('nodes.createdAt')" :width="colWidth('createdAt')">
         <template #header>
@@ -159,7 +159,7 @@ import { formatBytes, formatDateTime, formatPercent, formatRelativeTime, formatG
 import { useResizableColumns, groupGpusByNodeId } from '@/composables/useResizableColumns'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const NODE_COLUMN_DEFAULTS = {
   status: 80, hostname: 140, primaryIp: 140, gpuCount: 90, gpuMemory: 160, agentVersion: 120, lastHeartbeat: 100, createdAt: 160,
