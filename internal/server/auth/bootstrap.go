@@ -68,6 +68,7 @@ func PermissionCatalog() []PermissionDef {
 
 		// Task permissions.
 		{Code: "task:read", Scope: "tenant", Description: "View tasks"},
+		{Code: "audit:read", Scope: "tenant", Description: "View audit logs"},
 
 		// Membership permissions.
 		{Code: "membership:read", Scope: "tenant", Description: "View memberships"},

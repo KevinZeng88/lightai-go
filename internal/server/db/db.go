@@ -91,6 +91,12 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if currentVersion < 7 {
+		if err := db.migrateV7(); err != nil {
+			return fmt.Errorf("migrate v7: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -396,6 +402,50 @@ func (db *DB) migrateV6() error {
 	) WHERE tenant_id = '' OR tenant_id IS NULL`)
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (6, 'V6: task lifecycle, instance tenant_id, claim support')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV7 adds tenant type, ResourcePool, and resource ownership fields.
+func (db *DB) migrateV7() error {
+	schema := `
+		ALTER TABLE tenants ADD COLUMN type TEXT NOT NULL DEFAULT 'business';
+
+		CREATE TABLE IF NOT EXISTS resource_pools (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			slug TEXT NOT NULL DEFAULT '',
+			description TEXT NOT NULL DEFAULT '',
+			owner_tenant_id TEXT NOT NULL,
+			visibility TEXT NOT NULL DEFAULT 'private',
+			status TEXT NOT NULL DEFAULT 'active',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+
+		CREATE TABLE IF NOT EXISTS resource_pool_nodes (
+			pool_id TEXT NOT NULL REFERENCES resource_pools(id),
+			node_id TEXT NOT NULL,
+			PRIMARY KEY (pool_id, node_id)
+		);
+
+		CREATE TABLE IF NOT EXISTS resource_pool_gpus (
+			pool_id TEXT NOT NULL REFERENCES resource_pools(id),
+			gpu_id TEXT NOT NULL,
+			PRIMARY KEY (pool_id, gpu_id)
+		);
+	`
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+
+	// Mark default tenant and existing tenants with sensible defaults.
+	db.Exec(`UPDATE tenants SET type = 'business' WHERE type = '' OR type IS NULL`)
+	db.Exec(`UPDATE tenants SET type = 'infrastructure' WHERE slug = 'default'`)
+
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (7, 'V7: tenant type, resource pools, ownership model')`); err != nil {
 		return err
 	}
 	return nil

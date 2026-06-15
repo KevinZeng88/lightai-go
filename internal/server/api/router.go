@@ -168,6 +168,14 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	// GpuLease read-only (gpu:read).
 	mux.Handle("GET /api/v1/gpu-leases", gpuChain(http.HandlerFunc(mh.HandleListGpuLeases)))
 	mux.Handle("GET /api/v1/gpu-leases/{id}", gpuChain(http.HandlerFunc(mh.HandleGetGpuLease)))
+
+		// Audit logs (platform_admin or audit:read).
+		auditChain := chain(
+			auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
+			auth.RequirePermission("audit:read"),
+		)
+		ah := NewAuditHandler(cfg.DB)
+		mux.Handle("GET /api/v1/audit-logs", auditChain(http.HandlerFunc(ah.HandleListAuditLogs)))
 }
 
 func sessionChain(cfg RouterConfig, h http.HandlerFunc) http.Handler {
