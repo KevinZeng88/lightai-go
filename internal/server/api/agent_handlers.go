@@ -937,10 +937,10 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 		if taskInstanceID != "" {
 			var prevActualState string
 			h.DB.QueryRow(`SELECT COALESCE(actual_state,'pending') FROM model_instances WHERE id = ?`, taskInstanceID).Scan(&prevActualState)
-			h.DB.Exec(`UPDATE model_instances SET actual_state = 'error', last_error = ? WHERE id = ?`, errorMsg, taskInstanceID)
+			h.DB.Exec(`UPDATE model_instances SET actual_state = 'failed', last_error = ? WHERE id = ?`, errorMsg, taskInstanceID)
 			h.DB.Exec(`UPDATE gpu_leases SET status = 'failed' WHERE instance_id = ? AND status = 'reserved'`, taskInstanceID)
 
-			log.StateTransition(r.Context(), "task.result", "instance", taskInstanceID, prevActualState, "error",
+			log.StateTransition(r.Context(), "task.result", "instance", taskInstanceID, prevActualState, "failed",
 				"task_id", taskID, "deployment_id", taskDeploymentID, "node_id", taskNodeID,
 				"error", errorMsg, "duration_ms", log.DurationMs(startTime))
 			if opID != "" {

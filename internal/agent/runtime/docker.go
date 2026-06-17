@@ -223,15 +223,16 @@ func (d *DockerRuntimeDriver) Stop(ctx context.Context, instanceID string) error
 	)
 
 	// Find container ID by name using inspect.
+	// REVIEW-006: Treat missing container as already stopped — idempotent stop.
 	info, err := d.client.ContainerInspect(ctx, containerName)
 	if err != nil {
-		log.Error("docker.stop.inspect_failed",
+		log.Info("docker.stop.container_missing_treat_as_stopped",
 			"instance_id", instanceID,
 			"container_name", containerName,
 			"duration_ms", time.Since(startTime).Milliseconds(),
 			"error", err,
 		)
-		return fmt.Errorf("stop: container not found: %w", err)
+		return nil // Already stopped/removed — success.
 	}
 
 	stopStart := time.Now()
