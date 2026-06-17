@@ -69,7 +69,9 @@
           {{ preflightResult.can_run ? $t('preflight.canRun') : $t('preflight.noNodes') }}
         </el-alert>
         <el-table v-if="preflightResult?.candidate_nodes?.length" :data="preflightResult.candidate_nodes" stripe size="small" style="margin-top:8px" @row-click="onPreflightNodeClick" highlight-current-row>
-          <el-table-column prop="node_id" :label="$t('modelLocations.node')" />
+          <el-table-column :label="$t('modelLocations.node')">
+            <template #default="{ row }">{{ nodeLabel(row.node_id) }}</template>
+          </el-table-column>
           <el-table-column prop="status" :label="$t('preflight.canRun')" width="80" />
         </el-table>
         <div v-if="preflightResult?.errors?.length" style="margin-top:8px">
@@ -103,6 +105,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
+import { useNodeLabels } from '@/composables/useNodeLabels'
 
 const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([])
@@ -119,9 +122,12 @@ const wizardStarting = ref(false)
 
 onMounted(async () => { await refresh(); await loadRefs() })
 async function refresh() { loading.value = true; try { items.value = await apiClient.get('/deployments') } catch (e: any) {} loading.value = false }
+const { loadNodes, nodeLabel } = useNodeLabels()
+
 async function loadRefs() {
   try { models.value = await apiClient.get('/model-artifacts') } catch { models.value = [] }
   try { runtimes.value = await apiClient.get('/backend-runtimes') } catch { runtimes.value = [] }
+  loadNodes()
 }
 
 function showCreate() { createVisible.value = true }

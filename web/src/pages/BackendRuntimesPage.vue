@@ -84,7 +84,7 @@
         <h4 style="margin-top:16px">{{ $t('nodeRuntime.title') }}</h4>
         <el-button size="small" type="primary" @click="showAddNode" style="margin-bottom:8px">{{ $t('nodeRuntime.addNode') }}</el-button>
         <el-table :data="nodeRuntimes" stripe size="small" v-loading="nrLoading">
-          <el-table-column prop="node_id" :label="$t('modelLocations.node')" width="220" show-overflow-tooltip />
+          <el-table-column :label="$t('modelLocations.node')" width="240" show-overflow-tooltip><template #default="{ row }">{{ nodeLabel(row.node_id) }}</template></el-table-column>
           <el-table-column :label="$t('nodeRuntime.imageRef')" min-width="180" show-overflow-tooltip>
             <template #default="{ row }">{{ row.image_ref || '-' }}</template>
           </el-table-column>
@@ -107,7 +107,7 @@
     <!-- Add node dialog -->
     <el-dialog v-model="addNodeVisible" :title="$t('nodeRuntime.addNode')" width="700px">
       <el-select v-model="addNodeId" :placeholder="$t('runtimeWizard.selectNode')" style="width:100%;margin-bottom:8px" filterable>
-        <el-option v-for="n in nodes" :key="n.id" :label="n.id" :value="n.id" />
+        <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
       </el-select>
       <DockerImagePicker v-if="addNodeId" :node-id="addNodeId" @select="(img:any) => addNodeImage = img.image_ref || img.image_ref" />
       <template #footer>
@@ -124,7 +124,9 @@ import { ElCheckbox, ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { listRuntimes, createRuntimeFromTemplate, patchRuntime, deleteRuntime, type BackendRuntime } from '@/api/runtimes'
 import { listRuntimeTemplates, type BackendRuntimeTemplate } from '@/api/backends'
 import { apiClient } from '@/api/client'
+import { useNodeLabels } from '@/composables/useNodeLabels'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
+const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
 import { useI18n } from 'vue-i18n'
 
 const RuntimeOption = defineComponent({
@@ -187,7 +189,8 @@ const addNodeVisible = ref(false); const addNodeId = ref(''); const addNodeImage
 onMounted(async () => { await refresh(); await loadRefs() })
 async function refresh() { loading.value = true; try { runtimes.value = await listRuntimes() } finally { loading.value = false } }
 async function loadRefs() {
-  try { templates.value = await listRuntimeTemplates(); nodes.value = await apiClient.get('/nodes') } catch { nodes.value = [] }
+  try { templates.value = await listRuntimeTemplates() } catch { templates.value = [] }
+  loadNodes()
 }
 
 function showCreate() { createVisible.value = true }
@@ -206,7 +209,7 @@ async function doClone(row: BackendRuntime) {
 
 // Detail + node management
 async function showDetail(row: BackendRuntime) { selected.value = row; await loadNodeRuntimes(row.id); detailVisible.value = true }
-async function loadNodeRuntimes(runtimeID: string) { nrLoading.value = true; try { nodeRuntimes.value = await apiClient.get(`/nodes/${nodes.value[0]?.id || ''}/backend-runtimes`) } catch { nodeRuntimes.value = [] }; nrLoading.value = false }
+async function loadNodeRuntimes(runtimeID: string) { nrLoading.value = true; try { const all: any[] = []; for (const n of nodeItems.value) { try { const nrs = await apiClient.get(`/nodes/${n.id}/backend-runtimes`); if (Array.isArray(nrs)) for (const nr of nrs) { if (nr.backend_runtime_id === runtimeID) all.push(nr) } } catch {} }; nodeRuntimes.value = all } catch { nodeRuntimes.value = [] }; nrLoading.value = false }
 
 function showAddNode() { addNodeVisible.value = true; addNodeId.value = ''; addNodeImage.value = '' }
 async function doAddNode() {

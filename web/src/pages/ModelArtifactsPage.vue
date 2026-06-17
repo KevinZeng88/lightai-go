@@ -3,7 +3,6 @@
     <div class="page-header">
       <h2>{{ $t('artifacts.title') }}</h2>
       <div>
-        <el-button type="primary" @click="showCreate">{{ $t('common.create') }}</el-button>
         <el-button type="primary" @click="startWizard">{{ $t('modelWizard.title') }}</el-button>
       </div>
     </div>
@@ -44,7 +43,7 @@
         <h4 style="margin-top:16px">{{ $t('modelLocations.title') }}</h4>
         <el-button size="small" type="primary" @click="showAddLocation" style="margin-bottom:8px">{{ $t('modelLocations.addLocation') }}</el-button>
         <el-table :data="locations" stripe size="small">
-          <el-table-column prop="node_id" :label="$t('modelLocations.node')" width="220" show-overflow-tooltip />
+          <el-table-column :label="$t('modelLocations.node')" width="240" show-overflow-tooltip><template #default="{ row }">{{ nodeLabel(row.node_id) }}</template></el-table-column>
           <el-table-column prop="absolute_path" :label="$t('modelLocations.path')" min-width="200" show-overflow-tooltip />
           <el-table-column prop="verification_status" :label="$t('modelLocations.status')" width="100" />
           <el-table-column prop="match_status" :label="$t('modelLocations.matchStatus')" width="110" />
@@ -68,7 +67,7 @@
       <!-- Step 1: Select node -->
       <div v-if="wizardStep === 0">
         <el-select v-model="wizardNodeId" :placeholder="$t('modelWizard.selectNode')" style="width:100%" filterable>
-          <el-option v-for="n in nodes" :key="n.id" :label="n.id" :value="n.id" />
+          <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizardNodeId" @click="wizardStep=1">{{ $t('common.next') }}</el-button></div>
       </div>
@@ -103,7 +102,7 @@
     <!-- Add Location Dialog -->
     <el-dialog v-model="addLocVisible" :title="$t('modelLocations.addLocation')" width="600px">
       <el-select v-model="addLocNodeId" :placeholder="$t('modelWizard.selectNode')" style="width:100%;margin-bottom:8px" filterable>
-        <el-option v-for="n in nodes" :key="n.id" :label="n.id" :value="n.id" />
+        <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
       </el-select>
       <RemoteFileBrowser v-if="addLocNodeId" :node-id="addLocNodeId" @select="(e:any) => { addLocPath = e.name; addLocSelected = e }" />
       <template #footer>
@@ -118,11 +117,12 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
+import { useNodeLabels } from '@/composables/useNodeLabels'
 import RemoteFileBrowser from '@/components/RemoteFileBrowser.vue'
+const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
 
 const loading = ref(false); const saving = ref(false)
-const items = ref<any[]>([]); const nodes = ref<any[]>([])
-const dialogVisible = ref(false); const detailVisible = ref(false); const selected = ref<any>(null); const locations = ref<any[]>([])
+const items = ref<any[]>([]); const dialogVisible = ref(false); const detailVisible = ref(false); const selected = ref<any>(null); const locations = ref<any[]>([])
 const form = ref({ name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' })
 let editingId = ''
 
@@ -138,16 +138,14 @@ const addLocVisible = ref(false); const addLocNodeId = ref(''); const addLocPath
 const formatOptions = ['gguf', 'safetensors', 'huggingface', 'pt', 'onnx', 'other']
 const quantOptions = ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'FP16', 'BF16', 'FP8', 'INT8', 'INT4', 'none', 'other']
 
-onMounted(async () => { await refresh(); await loadNodes() })
+onMounted(async () => { await refresh(); loadNodes() })
 
 async function refresh() {
   loading.value = true
   try { items.value = await apiClient.get('/api/v1/model-artifacts') } catch (e: any) { console.error(e) }
   loading.value = false
 }
-async function loadNodes() {
-  try { nodes.value = await apiClient.get('/api/v1/nodes') } catch { nodes.value = [] }
-}
+async function loadNodesLocal() { loadNodes() }
 
 function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; dialogVisible.value = true }
 function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); dialogVisible.value = true }

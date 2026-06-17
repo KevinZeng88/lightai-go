@@ -28,33 +28,33 @@
     <!-- Wizard dialog -->
     <el-dialog v-model="wizardVisible" :title="$t('runnerConfigs.wizardTitle')" width="800px" :close-on-click-modal="false">
       <el-steps :active="step" finish-status="success" simple style="margin-bottom:20px">
-        <el-step :title="$t('runnerConfigs.selectTemplate')" />
         <el-step :title="$t('runnerConfigs.selectRunnerType')" />
+        <el-step :title="$t('runnerConfigs.selectTemplate')" />
         <el-step :title="$t('runnerConfigs.selectNode')" />
         <el-step :title="$t('runnerConfigs.selectImage')" />
         <el-step :title="$t('runnerConfigs.create')" />
       </el-steps>
 
       <div v-if="step===0">
-        <el-select v-model="wizTemplateId" :placeholder="$t('runnerConfigs.selectTemplate')" style="width:100%" filterable>
-          <el-option v-for="t in templates" :key="t.id" :label="`${t.name} (${t.vendor})`" :value="t.id" />
-        </el-select>
-        <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizTemplateId" @click="step=1">{{ $t('common.next') }}</el-button></div>
-      </div>
-
-      <div v-if="step===1">
         <el-select v-model="wizRunnerType" :placeholder="$t('runnerConfigs.selectRunnerType')" style="width:100%">
           <el-option label="Docker" value="docker" />
         </el-select>
+        <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizRunnerType" @click="step=1">{{ $t('common.next') }}</el-button></div>
+      </div>
+
+      <div v-if="step===1">
+        <el-select v-model="wizTemplateId" :placeholder="$t('runnerConfigs.selectTemplate')" style="width:100%" filterable>
+          <el-option v-for="t in templates" :key="t.id" :label="`${t.name} (${t.vendor})`" :value="t.id" />
+        </el-select>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="step=0">{{ $t('common.prev') }}</el-button>
-          <el-button type="primary" :disabled="!wizRunnerType" @click="step=2">{{ $t('common.next') }}</el-button>
+          <el-button type="primary" :disabled="!wizTemplateId" @click="step=2">{{ $t('common.next') }}</el-button>
         </div>
       </div>
 
       <div v-if="step===2">
         <el-select v-model="wizNodeId" :placeholder="$t('runnerConfigs.selectNode')" style="width:100%" filterable>
-          <el-option v-for="n in nodes" :key="n.id" :label="n.id" :value="n.id" />
+          <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="step=1">{{ $t('common.prev') }}</el-button>
@@ -100,7 +100,7 @@
         </el-descriptions>
         <h4 style="margin-top:16px">{{ $t('nodeRuntime.title') }}</h4>
         <el-table :data="detailNodeRuntimes" stripe size="small">
-          <el-table-column prop="node_id" :label="$t('modelLocations.node')" width="220" show-overflow-tooltip />
+          <el-table-column :label="$t('modelLocations.node')" width="240" show-overflow-tooltip><template #default="{ row }">{{ nodeLabel(row.node_id) }}</template></el-table-column>
           <el-table-column :label="$t('nodeRuntime.imageRef')" min-width="160" show-overflow-tooltip>
             <template #default="{ row }">{{ row.image_ref || '-' }}</template>
           </el-table-column>
@@ -117,14 +117,15 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
+import { useNodeLabels } from '@/composables/useNodeLabels'
 import { listRuntimes } from '@/api/runtimes'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
+const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
 const loading = ref(false); const saving = ref(false); const checking = ref(false)
-const items = ref<any[]>([]); const templates = ref<any[]>([]); const nodes = ref<any[]>([])
-const selected = ref<any>(null); const detailVisible = ref(false)
+const items = ref<any[]>([]); const templates = ref<any[]>([]); const selected = ref<any>(null); const detailVisible = ref(false)
 const detailNodeRuntimes = ref<any[]>([])
 
 // Wizard
@@ -149,7 +150,7 @@ async function refresh() {
 
 async function loadRefs() {
   try { templates.value = await listRuntimes() } catch { templates.value = [] }
-  try { nodes.value = await apiClient.get('/nodes') } catch { nodes.value = [] }
+  loadNodes()
 }
 
 function startWizard() { wizardVisible.value = true; step.value = 0; wizTemplateId.value = ''; wizRunnerType.value = 'docker'; wizNodeId.value = ''; wizImageRef.value = ''; wizConfigName.value = ''; wizCheckResult.value = null; loadRefs() }
@@ -177,8 +178,8 @@ async function doCreateConfig() {
 
 async function showDetail(row: any) {
   selected.value = row
-  detailNodeRuntimes.value = []; // populated when nodes are available
-  for (const n of nodes.value) {
+  detailNodeRuntimes.value = [];
+  for (const n of nodeItems.value) {
     try {
       const nrs = await apiClient.get(`/nodes/${n.id}/backend-runtimes`)
       if (Array.isArray(nrs)) {
