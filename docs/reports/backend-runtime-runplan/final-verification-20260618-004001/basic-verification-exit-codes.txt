@@ -1,0 +1,5 @@
+go_test=0
+go_vet=0
+web_build=0
+web_test=0
+git_diff_check=0

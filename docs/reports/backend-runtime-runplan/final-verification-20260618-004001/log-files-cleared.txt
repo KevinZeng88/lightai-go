@@ -1,0 +1,4 @@
+logs/server-stdout.log
+logs/lightai-server.log
+logs/lightai-agent.log
+logs/agent-stdout.log
