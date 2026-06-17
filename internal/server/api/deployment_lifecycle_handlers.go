@@ -391,8 +391,12 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"operation_id":        operationID,
 		"env":                 plan.Env,
 		"args":                plan.Args,
+		"volumes":             plan.Mounts,
 		"host_port":           service.HostPort,
 		"container_port":      bvPort,
+		"ports": []map[string]interface{}{
+			{"host_port": service.HostPort, "container_port": bvPort},
+		},
 		"docker": map[string]interface{}{
 			"image":            plan.Image,
 			"container_name":   plan.ContainerName,
@@ -409,6 +413,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		},
 		"health_check": map[string]interface{}{
 			"enabled":          plan.HealthCheck.Path != "",
+
 			"path":             plan.HealthCheck.Path,
 			"port":             service.HostPort,
 			"port_source":      "host_port",
