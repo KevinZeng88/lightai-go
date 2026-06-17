@@ -27,3 +27,13 @@ After finishing, provide:
 - Verification commands.
 - Before/after behavior.
 - Remaining risks.
+
+## Problem Closure
+
+Every problem goes to one of three states: **FIXED**, **DOCUMENTED_BLOCKER**, or **INVALID**.
+
+Do not close problems with: later, TODO, known issue, low priority, pre-existing, not from this round, mechanical gap, equivalent logs enough.
+
+Unresolved problems must be in `docs/reports/<phase>/open-issues-closeout.md`.
+
+See `AGENTS.md §7` for the full Problem Closure Policy.

@@ -123,3 +123,109 @@ Every completion report must include:
 - For API/UI data fixes, include a sample API response or curl command used for verification.
 
 Do not report success if tests or verification failed.
+
+## 7. Problem Closure Policy / 问题闭环原则
+
+Every problem discovered during development must be formally resolved before considering work complete. Problems cannot live only in chat history, temporary reports, or verbal explanations.
+
+### 7.1 Allowed Problem States
+
+Every problem must be in exactly one of these three states:
+
+| State | Meaning | Requirements |
+|-------|---------|-------------|
+| **FIXED** | Repaired and verified | Fix applied; verification commands run; results recorded |
+| **DOCUMENTED_BLOCKER** | Cannot be fixed now for concrete technical reasons | Written into formal open-issues document; includes: reproduction steps, impact scope, technical blocker, risk, minimal fix location, suggested verification command |
+| **INVALID** | Verified not to be a real problem | Judgment basis and verification evidence recorded |
+
+### 7.2 Forbidden Closure Patterns
+
+The following phrases indicate a problem was NOT properly closed:
+
+- later / 后续再说 / TODO
+- known issue / known risk (without formal documentation)
+- low priority / low traffic / non-blocking
+- pre-existing / not from this round
+- no blocker but not fixed / mechanical gap
+- equivalent logs enough / acceptable partial
+- runtime validation partial but acceptable
+- 暂不处理 / 提交后再修
+- "Remaining Risk" section without corresponding formal issue entry
+
+Any of these in a final report makes the status **FAIL**.
+
+### 7.3 When to Check
+
+The closure policy applies to problems found during:
+
+- Code development
+- Log review / audit
+- Runtime verification
+- E2E / smoke / diagnose
+- Build / test / npm / bash checks
+- `git status` / `git diff` review
+- Document review
+- Working tree reconciliation
+- Pre-commit acceptance
+
+### 7.4 Handling Order
+
+1. Fix in-place if safe.
+2. If safe to fix, do not defer.
+3. If cannot safely fix, write into formal open-issues document.
+4. If not a real problem, record verification evidence.
+5. Final report must reference open-issues document status.
+
+### 7.5 Formal Open-Issues Document
+
+If unresolved problems exist, maintain a formal document:
+
+```
+docs/reports/<phase>/open-issues-closeout.md
+```
+
+Format:
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+
+Status must be one of:
+
+- `FIXED`
+- `DOCUMENTED_BLOCKER`
+- `INVALID`
+
+Status must NOT be:
+
+- TODO / LATER / PARTIAL / KNOWN / LOW / DEFERRED
+
+### 7.6 Final Report Requirements
+
+Every final report must state:
+
+1. Whether any unresolved problems remain.
+2. Whether all unresolved problems are in the formal open-issues document.
+3. Each problem's status: FIXED / DOCUMENTED_BLOCKER / INVALID.
+4. Whether any problems exist only in chat (not documented) — if yes, status is **FAIL**.
+5. If problems are only in "Remaining Risk" without formal entries, status is **FAIL**.
+
+### 7.7 Final Status Values
+
+| Status | Conditions |
+|--------|-----------|
+| **PASS** | All known problems FIXED or INVALID; no undocumented problems; all verification passes |
+| **ACCEPTABLE_WITH_BLOCKER** | All fixable problems FIXED; remaining are DOCUMENTED_BLOCKER in formal open-issues document; no undocumented problems |
+| **FAIL** | Unfixed + undocumented problems exist; report contradicts reality; verification failures unaddressed; unexplained `git status` changes; "Remaining Risk" without formal issue entries |
+
+### 7.8 Pre-Commit Gate
+
+Before committing, check:
+
+- Are there any Remaining Risks not in the formal open-issues document?
+- Are there any Known Issues without formal entries?
+- Any PARTIAL without documented blocker?
+- Any TODO / later?
+- Any "not from this round / pre-existing" without formal tracking?
+- Any unexplained `git status` entries?
+
+If any check fails, **do not commit**.
