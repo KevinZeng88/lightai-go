@@ -1,56 +1,44 @@
 # Model Runtime Node Wizard Implementation Plan
 
-**Phase:** 4 — Model Runtime Wizards
-**Branch:** `phase-4-model-runtime-wizards`
-**Date:** 2026-06-18
+**Status: COMPLETED** (Phase 4 closed at `50a25a5`)
 
-## Phase 1: Agent Capabilities (Backend)
+## Phase 1: Agent Capabilities ✅
 
-### 1.1 Agent File Browser
-- **Goal:** Agent exposes `GET /files` on its metrics port for controlled directory browsing
-- **Files:** `cmd/agent/main.go`, `configs/agent.yaml`
-- **Config:** Add `model_browser.allowed_roots`, `max_entries`, `max_scan_depth`
-- **Security:** Path traversal prevention, root-only browsing
-- **API:** `GET /files?root=X&path=Y&limit=200&cursor=Z`
+| Item | Endpoint | File |
+|------|----------|------|
+| File browser | `GET /files` | `cmd/agent/main.go` |
+| Model scanner | `POST /model-paths/scan` | `internal/agent/collector/model_scanner.go` |
+| Enhanced Docker images | `GET /docker-images` | `cmd/agent/main.go` |
+| Dynamic extra_roots | query param | `cmd/agent/main.go` |
 
-### 1.2 Agent Model Scanner
-- **Goal:** Agent scans model directories for metadata
-- **Files:** `internal/agent/collector/` (new `model_scanner.go`)
-- **Capability:** Read config.json, detect safetensors, GGUF detection, estimate parameters
-- **API:** `POST /model-paths/scan` with `{root, relative_path}`
+## Phase 2: Server API ✅
 
-### 1.3 Agent Docker Image Enhancement
-- **Goal:** Return full image metadata (id, digest, created, repo_tags)
-- **Files:** `cmd/agent/main.go` (enhance existing handler)
-- **API:** Enhance `GET /docker-images` with search, pagination, richer fields
+| Item | Endpoint | File |
+|------|----------|------|
+| ModelLocation PATCH/DELETE | `/api/v1/model-artifacts/{id}/locations/{lid}` | `model_location_handlers.go` |
+| NodeBackendRuntime PATCH/DELETE | `/api/v1/nodes/{id}/backend-runtimes/{nbr_id}` | `node_runtime_handlers.go` |
+| BackendRuntime clone | `/api/v1/backend-runtimes/{id}/clone` | `node_runtime_handlers.go` |
+| File proxy | `/api/v1/nodes/{id}/files` | `agent_proxy_handlers.go` |
+| Model scan proxy | `/api/v1/nodes/{id}/model-paths/scan` | `agent_proxy_handlers.go` |
+| Dynamic roots CRUD | `/api/v1/nodes/{id}/model-browser/roots` | `model_browser_handlers.go` |
+| Standalone preflight | `/api/v1/deployments/preflight` | `preflight_handlers.go` |
+| DB migration V14 | `model_browser_extra_roots` | `db.go` |
 
-## Phase 2: Server API (Backend)
+## Phase 3: Web Wizards ✅
 
-### 2.1 ModelLocation Management
-- **Goal:** PATCH, DELETE for ModelLocation
-- **Files:** `internal/server/api/artifact_handlers.go`, `router.go`
+| Page/Component | Route | File |
+|---------------|-------|------|
+| RemoteFileBrowser | — | `components/RemoteFileBrowser.vue` |
+| DockerImagePicker | — | `components/DockerImagePicker.vue` |
+| BackendRuntimesPage (运行模板) | `/runtimes` | `pages/BackendRuntimesPage.vue` |
+| RunnerConfigsPage (运行配置) | `/runner-configs` | `pages/RunnerConfigsPage.vue` |
+| ModelArtifactsPage (模型) | `/models/artifacts` | `pages/ModelArtifactsPage.vue` |
+| ModelDeploymentsPage (实例) | `/models/deployments` | `pages/ModelDeploymentsPage.vue` |
 
-### 2.2 NodeBackendRuntime Management
-- **Goal:** PATCH, DELETE for NodeBackendRuntime
-- **Files:** `internal/server/api/runtime_handlers.go`, `router.go`
+## Concept Mapping
 
-### 2.3 BackendRuntime Clone
-- **Goal:** `POST /api/v1/backend-runtimes/{id}/clone`
-- **Files:** `internal/server/api/runtime_handlers.go`, `router.go`
-
-### 2.4 Agent Proxy Endpoints
-- **Goal:** Server proxies file browsing and model scanning to agent
-- **Files:** `internal/server/api/agent_handlers.go`, `router.go`
-
-### 2.5 Standalone Preflight
-- **Goal:** `POST /api/v1/deployments/preflight` computes candidate nodes
-- **Files:** `internal/server/api/deployment_lifecycle_handlers.go`, `router.go`
-
-## Phase 3: Web Wizards (Frontend)
-
-### 3.1 File Browser Component
-### 3.2 Docker Image Browser Component
-### 3.3 Model Creation Wizard
-### 3.4 Runtime Creation Wizard
-### 3.5 Instance Start Wizard
-### 3.6 i18n Keys
+```
+Backend (推理后端)     →  BackendRuntime (运行模板)  →  NodeBackendRuntime (节点配置)
+/backends                  /runtimes                    (内嵌在详情抽屉)
+                           /runner-configs (组合模板+节点+镜像=运行配置)
+```
