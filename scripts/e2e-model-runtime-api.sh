@@ -118,7 +118,7 @@ cmd_start_server() {
 host: "127.0.0.1"
 port: $SERVER_PORT
 db_path: "$td/data/lightai.db"
-log_level: "error"
+log_level: "info"
 log_dir: "$td/logs"
 agent_token: "$AGENT_TOKEN"
 YAML

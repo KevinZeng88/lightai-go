@@ -1,8 +1,8 @@
-[08:30:23] === QUICK ===
-[08:30:24] PASS: env OK
-[08:30:24] Starting server...
-[08:30:28] PASS: server PID=1487809
-[08:30:28] Login...
-[08:30:28] PASS: login OK
+[15:54:15] === QUICK ===
+[15:54:15] PASS: env OK
+[15:54:15] Starting server...
+[15:54:19] PASS: server PID=239409
+[15:54:19] Login...
+[15:54:19] PASS: login OK
 3 backends
-[08:30:28] PASS: quick OK
+[15:54:19] PASS: quick OK

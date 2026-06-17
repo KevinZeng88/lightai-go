@@ -1,59 +1,59 @@
-[11:22:13] === API-ONLY (no model load) ===
-[11:22:13] PASS: env OK
-[11:22:13] Starting server...
-[11:22:17] PASS: server PID=33710
-[11:22:17] Starting agent...
-[11:22:23] PASS: agent PID=33839
-[11:22:23] Login...
-[11:22:23] PASS: login OK
-[11:22:23] Seed vllm...
-[11:22:23] PASS: seed-vllm
-[11:22:23] Start vllm (api-only)...
-[11:22:23]   Instance: 4c38dcf8-9557-4af7-8a49-348099c140d6
-[11:22:23] [TIMING] start-vllm.instance_created ts=1781666543
-[11:22:25]   State: pending
-[11:22:25] PASS: start-vllm: instance=4c38dcf8-9557-4af7-8a49-348099c140d6 state=pending
-[11:22:25] Stop vllm...
-[11:22:25]   Stop response: status=stopped
-[11:22:27]   Instance state after stop: stopped
-[11:22:27] PASS: stop-vllm
-[11:22:27] Seed sglang...
-[11:22:27] PASS: seed-sglang
-[11:22:27] Start sglang (api-only)...
-[11:22:27]   Instance: 789c97f5-17a0-4ada-b364-5eab4c785456
-[11:22:27] [TIMING] start-sglang.instance_created ts=1781666547
-[11:22:31]   State: pending
-[11:22:31] PASS: start-sglang: instance=789c97f5-17a0-4ada-b364-5eab4c785456 state=pending
-[11:22:31] Stop sglang...
-[11:22:31]   Stop response: status=stopped
-[11:22:33]   Instance state after stop: failed
-[11:22:33] PASS: stop-sglang
-[11:22:33] Seed llamacpp...
-[11:22:33] PASS: seed-llamacpp
-[11:22:33] Start llamacpp (api-only)...
-[11:22:33]   Instance: ce5c001b-7cf6-4b31-af32-66c2c664e8e0
-[11:22:33] [TIMING] start-llamacpp.instance_created ts=1781666553
-[11:22:35]   State: pending
-[11:22:35] PASS: start-llamacpp: instance=ce5c001b-7cf6-4b31-af32-66c2c664e8e0 state=pending
-[11:22:35] Stop llamacpp...
-[11:22:35]   Stop response: status=stopped
-[11:22:37]   Instance state after stop: failed
-[11:22:37] PASS: stop-llamacpp
-[11:22:37] Cleanup...
-[11:22:37] Stop vllm...
-[11:22:37]   Stop response: status=stopped
-[11:22:39]   Instance state after stop: stopped
-[11:22:39] PASS: stop-vllm
-[11:22:39] Stop sglang...
-[11:22:39]   Stop response: status=stopped
-[11:22:41]   Instance state after stop: stopped
-[11:22:41] PASS: stop-sglang
-[11:22:41] Stop llamacpp...
-[11:22:41]   Stop response: status=stopped
-[11:22:43]   Instance state after stop: stopped
-[11:22:43] PASS: stop-llamacpp
-[11:22:43] Stopped server (pid=33710)
-[11:22:43] Stopped agent (pid=33839)
-[11:22:43] PASS: cleanup done
-[11:22:43] api-only summary: instances=3
-[11:22:43] PASS: api-only: all 3 backends verified
+[15:54:25] === API-ONLY (no model load) ===
+[15:54:25] PASS: env OK
+[15:54:25] Starting server...
+[15:54:29] PASS: server PID=239616
+[15:54:29] Starting agent...
+[15:54:34] PASS: agent PID=239713
+[15:54:34] Login...
+[15:54:34] PASS: login OK
+[15:54:34] Seed vllm...
+[15:54:34] PASS: seed-vllm
+[15:54:34] Start vllm (api-only)...
+[15:54:34]   Instance: d5dcd7f3-e94e-4c51-92f8-ea6173a4283b
+[15:54:34] [TIMING] start-vllm.instance_created ts=1781682874
+[15:54:36]   State: pending
+[15:54:36] PASS: start-vllm: instance=d5dcd7f3-e94e-4c51-92f8-ea6173a4283b state=pending
+[15:54:36] Stop vllm...
+[15:54:37]   Stop response: status=stopped
+[15:54:39]   Instance state after stop: stopped
+[15:54:39] PASS: stop-vllm
+[15:54:39] Seed sglang...
+[15:54:39] PASS: seed-sglang
+[15:54:39] Start sglang (api-only)...
+[15:54:39]   Instance: 16ed5ae5-79bd-49b8-994c-bf9b29d7ef6d
+[15:54:39] [TIMING] start-sglang.instance_created ts=1781682879
+[15:54:41]   State: pending
+[15:54:41] PASS: start-sglang: instance=16ed5ae5-79bd-49b8-994c-bf9b29d7ef6d state=pending
+[15:54:41] Stop sglang...
+[15:54:41]   Stop response: status=stopped
+[15:54:43]   Instance state after stop: stopped
+[15:54:43] PASS: stop-sglang
+[15:54:43] Seed llamacpp...
+[15:54:43] PASS: seed-llamacpp
+[15:54:43] Start llamacpp (api-only)...
+[15:54:43]   Instance: 7316535a-f3a4-4446-9d46-b8139cf56787
+[15:54:43] [TIMING] start-llamacpp.instance_created ts=1781682883
+[15:54:47]   State: pending
+[15:54:47] PASS: start-llamacpp: instance=7316535a-f3a4-4446-9d46-b8139cf56787 state=pending
+[15:54:47] Stop llamacpp...
+[15:54:47]   Stop response: status=stopped
+[15:54:49]   Instance state after stop: stopped
+[15:54:49] PASS: stop-llamacpp
+[15:54:49] Cleanup...
+[15:54:49] Stop vllm...
+[15:54:49]   Stop response: status=stopped
+[15:54:51]   Instance state after stop: stopped
+[15:54:51] PASS: stop-vllm
+[15:54:51] Stop sglang...
+[15:54:51]   Stop response: status=stopped
+[15:54:53]   Instance state after stop: stopped
+[15:54:53] PASS: stop-sglang
+[15:54:53] Stop llamacpp...
+[15:54:53]   Stop response: status=stopped
+[15:54:55]   Instance state after stop: stopped
+[15:54:55] PASS: stop-llamacpp
+[15:54:55] Stopped server (pid=239616)
+[15:54:55] Stopped agent (pid=239713)
+[15:54:55] PASS: cleanup done
+[15:54:55] api-only summary: instances=3
+[15:54:55] PASS: api-only: all 3 backends verified

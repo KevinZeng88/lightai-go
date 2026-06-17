@@ -29,7 +29,7 @@
             <el-icon><Box /></el-icon>
             <span>{{ t('nav.models') }}</span>
           </template>
-          <el-menu-item index="/models/artifacts">{{ t('nav.modelArtifacts') }}</el-menu-item>
+          <el-menu-item index="/models/artifacts">{{ t('artifacts.title') }}</el-menu-item>
           <el-menu-item index="/models/deployments">{{ t('deployments.title') }}</el-menu-item>
           <el-menu-item index="/models/instances">{{ t('instances.title') }}</el-menu-item>
         </el-sub-menu>

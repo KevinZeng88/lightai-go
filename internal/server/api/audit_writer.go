@@ -17,8 +17,8 @@ type AuditEntry struct {
 	Action       string `json:"action"`
 	ResourceType string `json:"resource_type"`
 	ResourceID   string `json:"resource_id"`
-	Result       string `json:"result"`            // "success", "failure"
-	Detail       string `json:"detail,omitempty"`  // JSON string with extra context
+	Result       string `json:"result"`           // "success", "failure"
+	Detail       string `json:"detail,omitempty"` // JSON string with extra context
 	RequestID    string `json:"request_id,omitempty"`
 	OperationID  string `json:"operation_id,omitempty"`
 	Error        string `json:"error,omitempty"`

@@ -476,7 +476,6 @@ func buildMounts(in ResolveInput) []MountMapping {
 		hostDir = in.NodeRuntimeOverride.ModelRootHostPath
 	}
 
-
 	// Mount the parent directory as /models:ro
 	mounts = append(mounts, MountMapping{
 		HostPath:      hostDir,

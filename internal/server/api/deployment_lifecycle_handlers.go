@@ -462,7 +462,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 			"gpu_device_ids":   gpuDeviceIDs,
 		},
 		"health_check": map[string]interface{}{
-			"enabled":          plan.HealthCheck.Path != "",
+			"enabled": plan.HealthCheck.Path != "",
 
 			"path":             plan.HealthCheck.Path,
 			"port":             service.HostPort,
@@ -813,7 +813,7 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 			Action: "deployment.dry_run", ResourceType: "deployment",
 			ResourceID: deployID, Result: "success",
 			RequestID: requestID,
-			Detail: fmt.Sprintf("runtime=%s vendor=%s image=%s", runtimeID, rtVendor, rtImage),
+			Detail:    fmt.Sprintf("runtime=%s vendor=%s image=%s", runtimeID, rtVendor, rtImage),
 		})
 	} else {
 		log.Warn("deployment.dry_run.failed", "request_id", requestID,

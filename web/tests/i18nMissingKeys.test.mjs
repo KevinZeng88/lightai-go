@@ -1,4 +1,5 @@
-// Verify all i18n keys referenced in Vue/TS templates exist in both locale files.
+// Verify all i18n keys referenced in Vue/TS templates exist in both locale files,
+// AND resolve to displayable values (strings), not objects/arrays.
 // Also catches non-i18n patterns like raw keys, hardcoded English/Chinese, etc.
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { resolve, relative } from 'path';
@@ -24,11 +25,70 @@ function flattenKeys(obj, prefix = '') {
   return keys;
 }
 
+/**
+ * Build a map from full key path to the actual resolved value.
+ * For leaf keys, this stores the primitive value (string/number/boolean).
+ * For intermediate object keys, this stores the object itself.
+ */
+function buildValueMap(obj, prefix = '') {
+  const map = new Map();
+  for (const [k, v] of Object.entries(obj)) {
+    const full = prefix ? `${prefix}.${k}` : k;
+    map.set(full, v);
+    if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      const childMap = buildValueMap(v, full);
+      childMap.forEach((cv, ck) => map.set(ck, cv));
+    }
+  }
+  return map;
+}
+
 const zh = loadLocale('src/locales/zh-CN.ts');
 const en = loadLocale('src/locales/en-US.ts');
 const zhKeys = new Set(flattenKeys(zh));
 const enKeys = new Set(flattenKeys(en));
 const allKeys = new Set([...zhKeys, ...enKeys]);
+
+// Build value maps for type-checking
+const zhValueMap = buildValueMap(zh);
+const enValueMap = buildValueMap(en);
+
+/**
+ * Check if a key resolves to a displayable primitive (string/number/boolean).
+ * Returns { ok: boolean, reason: string }.
+ *   ok=false when key resolves to an object/array (would render as [object Object]).
+ *   ok=false when key doesn't exist at all (covered by missing-key check elsewhere).
+ */
+function checkKeyIsDisplayable(key, valueMap, keySet) {
+  // Key doesn't exist at all
+  if (!valueMap.has(key)) {
+    // Could be a parent key like 'nav' when 'nav.backends' exists
+    // That's a problem too — t('nav') returns the whole nav object
+    const isParent = [...keySet].some(k => k.startsWith(key + '.'));
+    if (isParent) {
+      return { ok: false, reason: `resolves to object (parent of "${[...keySet].find(k => k.startsWith(key + '.'))}")` };
+    }
+    return { ok: false, reason: 'not found' };
+  }
+
+  const val = valueMap.get(key);
+  if (typeof val === 'object' && val !== null) {
+    // It's an intermediate object — t() would return the object, not a string
+    const childKeys = Object.keys(val).slice(0, 3).join(', ');
+    return { ok: false, reason: `resolves to object with keys: {${childKeys}${Object.keys(val).length > 3 ? '...' : ''}}` };
+  }
+
+  if (Array.isArray(val)) {
+    return { ok: false, reason: 'resolves to array' };
+  }
+
+  // null/undefined shouldn't happen but check anyway
+  if (val === null || val === undefined) {
+    return { ok: false, reason: `resolves to ${String(val)}` };
+  }
+
+  return { ok: true, reason: 'string' };
+}
 
 // --- 2. Collect all source files ---
 function collectFiles(dir, exts) {
@@ -70,6 +130,9 @@ for (const f of srcFiles) {
 // --- 4. Check each reference exists in zh-CN and en-US ---
 const missingInZh = [];
 const missingInEn = [];
+// --- 4b. Check each reference resolves to a displayable primitive ---
+const objectKeysInZh = [];
+const objectKeysInEn = [];
 const seen = new Set();
 
 for (const [file, refs] of fileRefs) {
@@ -93,6 +156,17 @@ for (const [file, refs] of fileRefs) {
     }
     if (!keyExists(enKeys)) {
       missingInEn.push(`${file}: ${key}`);
+    }
+
+    // NEW: Check that the key resolves to a displayable primitive, not an object
+    const zhDisplayable = checkKeyIsDisplayable(key, zhValueMap, zhKeys);
+    const enDisplayable = checkKeyIsDisplayable(key, enValueMap, enKeys);
+
+    if (!zhDisplayable.ok) {
+      objectKeysInZh.push(`${file}: ${key} → ${zhDisplayable.reason}`);
+    }
+    if (!enDisplayable.ok) {
+      objectKeysInEn.push(`${file}: ${key} → ${enDisplayable.reason}`);
     }
   }
 }
@@ -137,13 +211,25 @@ if (missingInEn.length > 0) {
   exitCode = 1;
 }
 
+// NEW: Report keys that resolve to objects instead of displayable strings
+if (objectKeysInZh.length > 0) {
+  console.log(`\nOBJECT-VALUE keys in zh-CN (${objectKeysInZh.length}) — t() would render [object Object]:`);
+  objectKeysInZh.forEach(k => console.log(`  ${k}`));
+  exitCode = 1;
+}
+if (objectKeysInEn.length > 0) {
+  console.log(`\nOBJECT-VALUE keys in en-US (${objectKeysInEn.length}) — t() would render [object Object]:`);
+  objectKeysInEn.forEach(k => console.log(`  ${k}`));
+  exitCode = 1;
+}
+
 if (hardcodedIssues.length > 0) {
   console.log(`\nPOTENTIAL HARDCODED i18n key leaks (${hardcodedIssues.length}):`);
   hardcodedIssues.forEach(k => console.log(`  ${k}`));
 }
 
 if (exitCode === 0) {
-  console.log(`PASS: all ${seen.size} i18n key references found in both locale files`);
+  console.log(`PASS: all ${seen.size} i18n key references found in both locale files and resolve to strings`);
   console.log(`  zh-CN leaf keys: ${zhKeys.size}`);
   console.log(`  en-US leaf keys: ${enKeys.size}`);
 }
