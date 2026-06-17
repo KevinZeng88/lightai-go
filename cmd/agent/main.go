@@ -356,8 +356,20 @@ func main() {
 				json.NewEncoder(w).Encode(map[string]interface{}{"allowed_roots": roots, "entries": []map[string]interface{}{}})
 				return
 			}
-			rootOK := false
-			for _, ar := range cfg.ModelBrowser.AllowedRoots {
+			// Merge extra_roots from query param with allowed_roots.
+		extraRootsParam := r.URL.Query().Get("extra_roots")
+		allRoots := cfg.ModelBrowser.AllowedRoots
+		if extraRootsParam != "" {
+			for _, er := range strings.Split(extraRootsParam, ",") {
+				er = strings.TrimSpace(er)
+				if er != "" {
+					allRoots = append(allRoots, er)
+				}
+			}
+		}
+
+		rootOK := false
+		for _, ar := range allRoots {
 				if root == ar {
 					rootOK = true
 					break
@@ -422,8 +434,20 @@ func main() {
 				json.NewEncoder(w).Encode(map[string]interface{}{"error": "model browser not enabled"})
 				return
 			}
-			rootOK := false
-			for _, ar := range cfg.ModelBrowser.AllowedRoots {
+			// Merge extra_roots from query param with allowed_roots.
+		extraRootsParam := r.URL.Query().Get("extra_roots")
+		allRoots := cfg.ModelBrowser.AllowedRoots
+		if extraRootsParam != "" {
+			for _, er := range strings.Split(extraRootsParam, ",") {
+				er = strings.TrimSpace(er)
+				if er != "" {
+					allRoots = append(allRoots, er)
+				}
+			}
+		}
+
+		rootOK := false
+		for _, ar := range allRoots {
 				if req.Root == ar {
 					rootOK = true
 					break

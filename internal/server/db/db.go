@@ -138,6 +138,12 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+		if currentVersion < 14 {
+			if err := db.migrateV14(); err != nil {
+				return fmt.Errorf("migrate v14: %w", err)
+			}
+		}
+
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
 	db.seedTargetBackendCatalog()
@@ -1224,6 +1230,22 @@ func (db *DB) seedBuiltInBackends() {
 		8080,
 		'{"nvidia":"ghcr.io/ggerganov/llama.cpp:server-b4817"}',
 		'{}', 0)`)
+}
+
+// migrateV14 adds model_browser_extra_roots to nodes and schema v14.
+func (db *DB) migrateV14() error {
+	for _, col := range []struct{ name, sqlType string }{
+		{"model_browser_extra_roots", "TEXT NOT NULL DEFAULT '[]'"},
+	} {
+		if _, err := db.Exec("ALTER TABLE nodes ADD COLUMN " + col.name + " " + col.sqlType); err != nil {
+			// Column may already exist.
+		}
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (14, 'V14: model browser dynamic roots')`); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (db *DB) seedTargetBackendCatalog() {

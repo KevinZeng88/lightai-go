@@ -2,9 +2,11 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // HandleProxyNodeFiles proxies file browsing requests to the agent's /files endpoint.
@@ -16,11 +18,21 @@ func (h *AgentHandler) HandleProxyNodeFiles(w http.ResponseWriter, r *http.Reque
 	if port == 0 {
 		port = 19091
 	}
-	agentURL := fmt.Sprintf("http://%s:%d/files?root=%s&path=%s&limit=%s",
+	// Merge dynamic extra_roots from DB into the agent request.
+	var extraJSON string
+	var extraRoots string
+	if err := h.DB.QueryRow(`SELECT model_browser_extra_roots FROM nodes WHERE id = ?`, nodeID).Scan(&extraJSON); err == nil && extraJSON != "" {
+		var extra []string
+		if json.Unmarshal([]byte(extraJSON), &extra) == nil && len(extra) > 0 {
+			extraRoots = strings.Join(extra, ",")
+		}
+	}
+	agentURL := fmt.Sprintf("http://%s:%d/files?root=%s&path=%s&limit=%s&extra_roots=%s",
 		ip, port,
 		r.URL.Query().Get("root"),
 		r.URL.Query().Get("path"),
-		r.URL.Query().Get("limit"))
+		r.URL.Query().Get("limit"),
+		extraRoots)
 	resp, err := http.Get(agentURL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())

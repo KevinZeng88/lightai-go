@@ -87,6 +87,10 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	// PATCH /api/v1/nodes/{id}/tenant — platform admin only.
 	mux.Handle("PATCH /api/v1/nodes/{id}/tenant", platformChain(cfg, cfg.AgentHandler.HandlePatchNodeTenant))
 	mux.Handle("GET /api/v1/nodes/{id}/system", resourceChain(http.HandlerFunc(cfg.ResourceHandler.HandleGetNodeSystem)))
+	mux.Handle("GET /api/v1/nodes/{id}/model-browser/roots", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodeModelBrowserRoots)))
+	mux.Handle("POST /api/v1/nodes/{id}/model-browser/roots", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleAddNodeModelBrowserRoot)))
+	mux.Handle("DELETE /api/v1/nodes/{id}/model-browser/roots", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteNodeModelBrowserRoot)))
+
 	mux.Handle("GET /api/v1/nodes/{id}/docker-images", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeDockerImages)))
 	mux.Handle("GET /api/v1/nodes/{id}/files", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleProxyNodeFiles)))
 	mux.Handle("POST /api/v1/nodes/{id}/model-paths/scan", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleProxyNodeModelScan)))

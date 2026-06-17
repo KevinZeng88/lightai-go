@@ -3,10 +3,26 @@
     <!-- Root picker (shown when no root selected) -->
     <div v-if="!currentRoot" class="browser-picker">
       <div class="picker-label">{{ $t('fileBrowser.selectRoot') }}</div>
-      <el-select v-model="selectedRoot" :placeholder="$t('fileBrowser.selectRoot')" style="width:100%" @change="onRootSelected" :loading="rootsLoading">
-        <el-option v-for="r in allowedRoots" :key="r.root" :label="r.label" :value="r.root" />
-      </el-select>
+      <div class="picker-row">
+        <el-select v-model="selectedRoot" :placeholder="$t('fileBrowser.selectRoot')" style="flex:1" @change="onRootSelected" :loading="rootsLoading">
+          <el-option v-for="r in mergedRoots" :key="r.root" :label="r.label" :value="r.root" />
+        </el-select>
+        <el-button :icon="Plus" size="small" @click="showAddRoot">{{ $t('fileBrowser.addRoot') }}</el-button>
+      </div>
+      <div v-if="dynamicRoots.length" class="dynamic-roots">
+        <el-tag v-for="r in dynamicRoots" :key="r" closable size="small" @close="doRemoveRoot(r)">{{ r }}</el-tag>
+      </div>
     </div>
+
+    <!-- Add root dialog -->
+    <el-dialog v-model="addRootVisible" :title="$t('fileBrowser.addRoot')" width="400px">
+      <el-input v-model="newRootPath" :placeholder="$t('fileBrowser.addRootPlaceholder')" />
+      <el-alert type="warning" :title="$t('fileBrowser.addRootWarning')" show-icon :closable="false" style="margin-top:8px" />
+      <template #footer>
+        <el-button @click="addRootVisible=false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :disabled="!newRootPath" @click="doAddRoot">{{ $t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
 
     <div v-if="error" class="browser-error">
       <el-alert type="error" :title="error" show-icon :closable="false" />
@@ -54,7 +70,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { useI18n } from 'vue-i18n'
 
@@ -64,10 +81,19 @@ const props = defineProps<{ nodeId: string; root?: string }>()
 defineEmits<{ select: [entry: any] }>()
 
 const loading = ref(false); const rootsLoading = ref(false)
-const entries = ref<any[]>([]); const allowedRoots = ref<any[]>([])
+const entries = ref<any[]>([]); const staticRoots = ref<any[]>([]); const dynamicRoots = ref<string[]>([])
 const error = ref(''); const selectedRoot = ref('')
 const currentRoot = ref(props.root || '')
 const currentPath = ref(''); const truncated = ref(false)
+
+// Add root dialog
+const addRootVisible = ref(false); const newRootPath = ref('')
+
+const mergedRoots = computed(() => {
+  const all = [...staticRoots.value]
+  for (const dr of dynamicRoots.value) { all.push({ root: dr, label: dr }) }
+  return all
+})
 
 const breadcrumbs = computed(() => {
   const parts: { label: string; path: string }[] = []
@@ -85,10 +111,33 @@ async function fetchRoots() {
   rootsLoading.value = true
   try {
     const resp = await apiClient.get(`/nodes/${props.nodeId}/files?root=&path=`)
-    allowedRoots.value = resp.allowed_roots || []
+    staticRoots.value = resp.allowed_roots || []
     if (props.root) { currentRoot.value = props.root; loadDir() }
-  } catch { allowedRoots.value = [] }
+  } catch { staticRoots.value = [] }
+  // Also fetch dynamic roots from DB
+  try {
+    const dr = await apiClient.get(`/nodes/${props.nodeId}/model-browser/roots`)
+    dynamicRoots.value = dr.extra_roots || []
+  } catch { dynamicRoots.value = [] }
   rootsLoading.value = false
+}
+
+function showAddRoot() { newRootPath.value = ''; addRootVisible.value = true }
+async function doAddRoot() {
+  if (!newRootPath.value) return
+  try {
+    const resp = await apiClient.post(`/nodes/${props.nodeId}/model-browser/roots`, { root: newRootPath.value })
+    dynamicRoots.value = resp.extra_roots || []
+    ElMessage.success(t('fileBrowser.rootAdded'))
+    addRootVisible.value = false
+  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+}
+async function doRemoveRoot(root: string) {
+  try {
+    const resp = await apiClient.delete(`/nodes/${props.nodeId}/model-browser/roots?root=${encodeURIComponent(root)}`)
+    dynamicRoots.value = resp.extra_roots || []
+    ElMessage.success(t('fileBrowser.rootRemoved'))
+  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
 }
 
 function onRootSelected(root: string) { currentRoot.value = root; currentPath.value = ''; loadDir() }
@@ -134,6 +183,8 @@ watch(() => props.nodeId, () => { fetchRoots() })
 .file-browser { border: 1px solid var(--el-border-color); border-radius: 6px; padding: 12px; }
 .browser-picker { padding: 12px 0; }
 .picker-label { margin-bottom: 6px; font-weight: 500; color: var(--el-text-color-primary); }
+.picker-row { display: flex; align-items: center; gap: 8px; }
+.dynamic-roots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .browser-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .browser-error { margin-bottom: 8px; }
 .browser-truncated { margin-top: 8px; }
