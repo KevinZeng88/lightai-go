@@ -138,6 +138,10 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	// Target Backend Catalog seed is idempotent and must also repair existing
+	// databases that reached V13 before the target stable IDs were added.
+	db.seedTargetBackendCatalog()
+
 	log.Info("db migrate: completed", "duration_ms", time.Since(migrateStart).Milliseconds())
 	return nil
 }
@@ -1224,6 +1228,7 @@ func (db *DB) seedBuiltInBackends() {
 
 func (db *DB) seedTargetBackendCatalog() {
 	now := time.Now().Format(time.RFC3339)
+	db.normalizeLegacyBackendCatalogIDs()
 	backends := []struct {
 		id, slug, name, display, formats, protocols string
 	}{
@@ -1238,6 +1243,11 @@ func (db *DB) seedTargetBackendCatalog() {
 			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			b.id, b.name, b.display, b.display+" inference backend", b.protocols, "latest", "space", "[]", "{}", 1, 1,
 			b.slug, "system", "embedded", "v1", catalogChecksum(b.id+b.formats+b.protocols), "active", now, now)
+		db.Exec(`UPDATE inference_backends
+			SET slug = ?, managed_by = 'system', source = 'embedded', catalog_version = 'v1',
+				checksum = ?, status = 'active', is_builtin = 1, is_enabled = 1, updated_at = ?
+			WHERE id = ?`,
+			b.slug, catalogChecksum(b.id+b.formats+b.protocols), now, b.id)
 	}
 
 	versions := []struct {
@@ -1280,6 +1290,24 @@ func (db *DB) seedTargetBackendCatalog() {
 			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			rt.id, rt.name, rt.display, rt.backendID, rt.versionID, rt.slug, rt.vendor, "docker", rt.image, "if_not_present", "[]", "[]", rt.env, rt.docker, rt.mount, "{}", 1, 0, "",
 			rt.slug, "system", "embedded", "v1", catalogChecksum(rt.id+rt.docker+rt.image), "active", rt.verification, now, now)
+	}
+}
+
+func (db *DB) normalizeLegacyBackendCatalogIDs() {
+	type mapping struct {
+		oldID, newID, name string
+	}
+	mappings := []mapping{
+		{"backend-vllm", "backend.vllm", "vllm"},
+		{"backend-sglang", "backend.sglang", "sglang"},
+		{"backend-llamacpp", "backend.llamacpp", "llamacpp"},
+	}
+	db.Exec(`PRAGMA foreign_keys=OFF`)
+	defer db.Exec(`PRAGMA foreign_keys=ON`)
+	for _, m := range mappings {
+		db.Exec(`UPDATE backend_versions SET backend_id = ? WHERE backend_id = ?`, m.newID, m.oldID)
+		db.Exec(`UPDATE backend_runtimes SET backend_id = ? WHERE backend_id = ?`, m.newID, m.oldID)
+		db.Exec(`UPDATE inference_backends SET id = ? WHERE id = ? AND name = ?`, m.newID, m.oldID, m.name)
 	}
 }
 

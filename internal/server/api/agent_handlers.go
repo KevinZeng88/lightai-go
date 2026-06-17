@@ -881,13 +881,14 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 	status := strVal(req, "status", "completed")
 	opID := strVal(req, "operation_id", "")
 	now := time.Now().UTC().Format(time.RFC3339)
+	resultJSON, _ := json.Marshal(req)
 
 	// REVIEW-004: Validate task lease and generation before accepting result.
 	// Reject stale, duplicate, or old-generation results.
-	var taskStatus, taskOpID, taskLeaseOwner string
+	var taskStatus, taskOpID, taskLeaseOwner, taskType string
 	var taskGeneration int
-	err := h.DB.QueryRow(`SELECT status, COALESCE(operation_id,''), COALESCE(lease_owner,''), generation
-		FROM agent_tasks WHERE id = ?`, taskID).Scan(&taskStatus, &taskOpID, &taskLeaseOwner, &taskGeneration)
+	err := h.DB.QueryRow(`SELECT status, COALESCE(operation_id,''), COALESCE(lease_owner,''), generation, task_type
+		FROM agent_tasks WHERE id = ?`, taskID).Scan(&taskStatus, &taskOpID, &taskLeaseOwner, &taskGeneration, &taskType)
 	if err != nil {
 		log.Warn("task_result: task not found", "task_id", taskID, "error", err)
 		w.WriteHeader(http.StatusOK) // ack to prevent agent retry
@@ -919,15 +920,53 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 	if taskInstanceID == "" {
 		taskInstanceID = strVal(req, "instance_id", "")
 	}
+	isLogsTask := taskType == "model_instance_logs"
 
 	switch status {
 	case "completed", "success":
-		h.DB.Exec(`UPDATE agent_tasks SET status = 'completed', finished_at = ? WHERE id = ?`, now, taskID)
+		errorMsg := strVal(req, "error_message", strVal(req, "error", ""))
+		success := boolVal(req, "success", true) && errorMsg == ""
+		if isLogsTask {
+			if success {
+				h.DB.Exec(`UPDATE agent_tasks SET status = 'completed', result = ?, finished_at = ?, updated_at = ? WHERE id = ?`, string(resultJSON), now, now, taskID)
+			} else {
+				h.DB.Exec(`UPDATE agent_tasks SET status = 'failed', result = ?, finished_at = ?, updated_at = ? WHERE id = ?`, string(resultJSON), now, now, taskID)
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+		if taskType == "model_instance_stop" {
+			if success {
+				h.DB.Exec(`UPDATE agent_tasks SET status = 'completed', result = ?, finished_at = ?, updated_at = ? WHERE id = ?`, string(resultJSON), now, now, taskID)
+			} else {
+				h.DB.Exec(`UPDATE agent_tasks SET status = 'failed', result = ?, finished_at = ?, updated_at = ? WHERE id = ?`, string(resultJSON), now, now, taskID)
+			}
+			if taskInstanceID != "" {
+				if success {
+					var prevActualState string
+					h.DB.QueryRow(`SELECT COALESCE(actual_state,'pending') FROM model_instances WHERE id = ?`, taskInstanceID).Scan(&prevActualState)
+					h.DB.Exec(`UPDATE model_instances SET actual_state = 'stopped', desired_state = 'stopped', stopped_at = ?, updated_at = ? WHERE id = ?`, now, now, taskInstanceID)
+					h.DB.Exec(`UPDATE gpu_leases SET status = 'released', released_at = ?, updated_at = ? WHERE instance_id = ? AND status IN ('reserved','active')`, now, now, taskInstanceID)
+					log.StateTransition(r.Context(), "task.result", "instance", taskInstanceID, prevActualState, "stopped",
+						"task_id", taskID, "deployment_id", taskDeploymentID, "node_id", taskNodeID,
+						"duration_ms", log.DurationMs(startTime))
+				} else {
+					errorMsg := strVal(req, "error_message", strVal(req, "error", "docker stop failed"))
+					h.DB.Exec(`UPDATE model_instances SET actual_state = 'failed', last_error = ?, updated_at = ? WHERE id = ?`, errorMsg, now, taskInstanceID)
+				}
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+
+		if success {
+			h.DB.Exec(`UPDATE agent_tasks SET status = 'completed', result = ?, finished_at = ?, updated_at = ? WHERE id = ?`, string(resultJSON), now, now, taskID)
+		} else {
+			h.DB.Exec(`UPDATE agent_tasks SET status = 'failed', result = ?, finished_at = ?, updated_at = ? WHERE id = ?`, string(resultJSON), now, now, taskID)
+		}
 
 		if taskInstanceID != "" {
 			containerID := strVal(req, "container_id", "")
-			errorMsg := strVal(req, "error_message", strVal(req, "error", ""))
-			success := boolVal(req, "success", true) && errorMsg == ""
 			actualState := "running"
 			prevActualState := "pending"
 			if !success {
@@ -947,14 +986,18 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 			h.DB.Exec(`UPDATE model_instances SET actual_state = ?, container_id = ?, endpoint_url = ?, started_at = ? WHERE id = ?`,
 				actualState, containerID, endpointURL, now, taskInstanceID)
 
-			// Activate leases.
-			lr, lerr := h.DB.Exec(`UPDATE gpu_leases SET status = 'active', activated_at = ? WHERE instance_id = ? AND status = 'reserved'`, now, taskInstanceID)
-			if lerr != nil {
-				log.Error("gpu_lease.activate.failed", "instance_id", taskInstanceID, "error", lerr)
-			} else if ln, _ := lr.RowsAffected(); ln > 0 {
-				log.StateTransition(r.Context(), "task.result", "gpu_lease", taskInstanceID, "reserved", "active",
-					"instance_id", taskInstanceID, "count", ln)
-				log.Info("gpu_lease.activated", "instance_id", taskInstanceID, "count", ln)
+			if success {
+				// Activate leases only after the Agent confirmed container start success.
+				lr, lerr := h.DB.Exec(`UPDATE gpu_leases SET status = 'active', activated_at = ? WHERE instance_id = ? AND status = 'reserved'`, now, taskInstanceID)
+				if lerr != nil {
+					log.Error("gpu_lease.activate.failed", "instance_id", taskInstanceID, "error", lerr)
+				} else if ln, _ := lr.RowsAffected(); ln > 0 {
+					log.StateTransition(r.Context(), "task.result", "gpu_lease", taskInstanceID, "reserved", "active",
+						"instance_id", taskInstanceID, "count", ln)
+					log.Info("gpu_lease.activated", "instance_id", taskInstanceID, "count", ln)
+				}
+			} else {
+				h.DB.Exec(`UPDATE gpu_leases SET status = 'failed' WHERE instance_id = ? AND status = 'reserved'`, taskInstanceID)
 			}
 
 			// State transition logging.
@@ -975,8 +1018,21 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	case "failed", "error":
-		h.DB.Exec(`UPDATE agent_tasks SET status = 'failed', finished_at = ? WHERE id = ?`, now, taskID)
+		h.DB.Exec(`UPDATE agent_tasks SET status = 'failed', result = ?, finished_at = ?, updated_at = ? WHERE id = ?`, string(resultJSON), now, now, taskID)
 		errorMsg := strVal(req, "error_message", strVal(req, "error", "unknown"))
+		if isLogsTask {
+			log.Error("logs.task.result.failed", "task_id", taskID, "error", errorMsg)
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+		if taskType == "model_instance_stop" {
+			if taskInstanceID != "" {
+				h.DB.Exec(`UPDATE model_instances SET actual_state = 'failed', last_error = ?, updated_at = ? WHERE id = ?`, errorMsg, now, taskInstanceID)
+			}
+			log.Error("stop.task.result.failed", "task_id", taskID, "instance_id", taskInstanceID, "error", errorMsg)
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
 		if taskInstanceID != "" {
 			var prevActualState string
 			h.DB.QueryRow(`SELECT COALESCE(actual_state,'pending') FROM model_instances WHERE id = ?`, taskInstanceID).Scan(&prevActualState)

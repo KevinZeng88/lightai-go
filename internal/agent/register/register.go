@@ -265,6 +265,9 @@ type TaskResult struct {
 	ExitCode     int    `json:"exit_code"`
 	ErrorMessage string `json:"error_message"`
 	LogsSummary  string `json:"logs_summary,omitempty"`
+	Stdout       string `json:"stdout,omitempty"`
+	Stderr       string `json:"stderr,omitempty"`
+	Logs         string `json:"logs,omitempty"`
 	StartedAt    string `json:"started_at,omitempty"`
 	FinishedAt   string `json:"finished_at,omitempty"`
 }

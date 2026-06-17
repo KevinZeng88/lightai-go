@@ -952,17 +952,23 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 		InstanceID    string `json:"instance_id"`
 		ContainerID   string `json:"container_id"`
 		ContainerName string `json:"container_name,omitempty"`
+		Tail          int    `json:"tail,omitempty"`
+		Since         string `json:"since,omitempty"`
 	}
 	if err := json.Unmarshal(task.AgentRunSpec, &payload); err != nil {
 		result.Success = false
 		result.ErrorMessage = "invalid logs payload: " + err.Error()
 		return
 	}
+	if payload.Tail <= 0 {
+		payload.Tail = 200
+	}
 
 	log.Info("processing logs task",
 		"task_id", task.ID,
 		"instance_id", payload.InstanceID,
 		"container_id", payload.ContainerID,
+		"tail", payload.Tail,
 	)
 
 	realCli, err := agentruntime.NewRealDockerClient()
@@ -986,7 +992,7 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 		targetID = payload.InstanceID
 	}
 
-	logs, err := driver.Logs(ctx, targetID, agentruntime.LogOptions{Tail: 100})
+	logs, err := driver.Logs(ctx, targetID, agentruntime.LogOptions{Tail: payload.Tail, Since: payload.Since})
 	if err != nil {
 		log.Error("logs task failed",
 			"task_id", task.ID,
@@ -1002,12 +1008,16 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 	log.Info("logs task completed",
 		"task_id", task.ID,
 		"instance_id", payload.InstanceID,
-		"bytes", len(logs.Stdout),
+		"stdout_bytes", len(logs.Stdout),
+		"stderr_bytes", len(logs.Stderr),
 	)
 
 	result.Success = true
 	result.RuntimeState = "ok"
-	result.LogsSummary = logs.Stdout
+	result.Stdout = logs.Stdout
+	result.Stderr = logs.Stderr
+	result.Logs = logs.Stdout + logs.Stderr
+	result.LogsSummary = result.Logs
 	result.InstanceID = payload.InstanceID
 	result.ContainerID = payload.ContainerID
 	result.DeploymentID = task.DeploymentID

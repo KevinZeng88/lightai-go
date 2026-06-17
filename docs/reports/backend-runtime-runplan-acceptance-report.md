@@ -21,6 +21,12 @@ Date: 2026-06-17
 - Huawei runtime is seeded as template-only and is not marked ready.
 - Runtime Web page now has enabled blocks for high-risk single values, list textareas, custom args/env/docker options, readonly system runtime handling, and command preview.
 - NVIDIA API E2E script added at `scripts/e2e-backend-runtime-nvidia-api.sh`.
+- `GET /api/v1/node-run-plans/{id}/logs?tail=200&since=...` now proxies Docker logs through the owning Agent instead of returning `DOCUMENTED_BLOCKER`.
+- Agent `model_instance_logs` tasks return stdout, stderr, and merged logs from local Docker.
+- Instance page now has a Docker logs drawer with tail selection, refresh, copy, failed-state auto-open, and translated error display.
+- Deployment stop now dispatches Agent `model_instance_stop` tasks, waits for completion, marks instances stopped, and releases GPU leases.
+- Deployment/artifact cleanup now deletes dependent run plans, run plan groups, tasks, leases, instances, and model locations in FK-safe order.
+- Backend catalog seed now repairs legacy `backend-*` IDs to target stable IDs such as `backend.vllm` and `backend-version.vllm.openai-latest`.
 
 ## BackendVersion
 
@@ -81,20 +87,26 @@ New i18n keys were added under `runtimes.*` in:
 - `web/src/locales/zh-CN.ts`
 - `web/src/locales/en-US.ts`
 
+This closeout also added `dockerLogs.*` keys for the instance log drawer in both locales.
+
 Verification:
 
 ```bash
-cd web && node tests/i18nKeys.test.mjs && node tests/i18nMissingKeys.test.mjs
+npm --prefix web run build
+npm --prefix web test -- --runInBand || true
 ```
 
 Result:
 
 ```text
+vite build completed successfully.
 PASS: i18n keys consistent between zh-CN and en-US
-PASS: all 348 i18n key references found in both locale files and resolve to strings
+PASS: all 360 i18n key references found in both locale files and resolve to strings
+zh-CN leaf count: 407
+en-US leaf count: 407
 ```
 
-Object leaf checking is included in `web/tests/i18nMissingKeys.test.mjs`.
+Object leaf checking is included in `web/tests/i18nMissingKeys.test.mjs`. The added Docker logs UI does not display raw keys such as `dockerLogs.*`, `runtimes.*`, or `nodeRunPlan.*`.
 
 ## Local NVIDIA E2E
 
@@ -106,7 +118,7 @@ scripts/e2e-backend-runtime-nvidia-api.sh
 
 Behavior:
 
-- skips if Server is not running
+- attempts to build local `bin/lightai-server` and `bin/lightai-agent`, then starts Server/Agent with project scripts if Server is not running
 - skips if Docker, image, model, or credentials are unavailable
 - uses `e2e-nvidia-*` resource prefix
 - creates ModelArtifact + ModelLocation
@@ -115,21 +127,54 @@ Behavior:
 - starts deployment
 - queries RunPlanGroup, NodeRunPlan, command preview
 - attempts `/v1/models`
+- verifies `GET /api/v1/node-run-plans/{id}/logs?tail=200`
 - stops deployment
+- deletes the E2E DeploymentPlan and ModelArtifact
+- verifies cleanup instead of ignoring delete failures
 
 Result for this run:
 
 ```text
-[22:53:38] SKIP: LightAI Server is not running at http://127.0.0.1:18080
+[23:58:19] LightAI Server is not running; building local binaries and starting services
+[23:58:24] node_id=node-70894186-093c-403d-87d1-08f17a690521
+[23:58:24] gpu_id=28212356-3831-4f47-8693-fa6906e75a4c
+[23:58:25] instance_id=c3c40bee-52fa-4144-abf4-de7d9bfbbb73 run_plan_id=b951247d-d099-4818-9358-475107325296
+[23:59:44] /v1/models PASS
+[23:59:49] PASS: backend runtime NVIDIA API E2E completed
 ```
 
-This is an environment skip, not a pass. The script itself passed shell syntax validation.
+Post-run cleanup verification:
+
+```text
+model_deployments name LIKE 'e2e-nvidia-%': 0
+model_artifacts name LIKE 'e2e-nvidia-%': 0
+model_instances for e2e deployments: 0
+docker ps -a --filter name=lightai-: no rows
+```
 
 ## Docker Logs / Status / Cleanup
 
-- Docker status and health are still handled by Agent runtime start/inspect code.
-- Stop path releases GPU leases and cancels non-terminal tasks.
-- Server-side Docker logs API is documented as `BRR-BLOCKER-001` in `docs/reports/backend-runtime-runplan/open-issues-closeout.md`.
+- Docker status and health are handled by Agent runtime start/inspect code.
+- `GET /api/v1/node-run-plans/{id}/logs?tail=200` resolves the run plan, validates node status, sends a `model_instance_logs` task to the owning Agent, waits for result, redacts sensitive env-like values, and returns stdout/stderr/logs.
+- Agent uses `DockerRuntimeDriver.Logs` with requested `tail` and optional `since`.
+- Stop path dispatches `model_instance_stop` tasks to the owning Agent, releases GPU leases on success, and marks instances stopped.
+- Delete path removes dependent records in FK-safe order. The final E2E run deleted its deployment and artifact successfully.
+- BRR-BLOCKER-001 is marked `FIXED` in `docs/reports/backend-runtime-runplan/open-issues-closeout.md`.
+
+## MetaX AppArmor Spelling Verification
+
+Command:
+
+```bash
+grep -R "appamor\|apparmor" -n configs docs internal cmd web scripts || true
+```
+
+Result:
+
+```text
+No appamor misspelling found.
+All matched runtime/catalog/code/doc entries use apparmor=unconfined.
+```
 
 ## Problem Closure
 
@@ -138,5 +183,11 @@ Unresolved problems remain only as formal `DOCUMENTED_BLOCKER` entries in:
 ```text
 docs/reports/backend-runtime-runplan/open-issues-closeout.md
 ```
+
+Current formal blocker status:
+
+- `BRR-BLOCKER-001`: `FIXED`
+- `BRR-BLOCKER-002`: `DOCUMENTED_BLOCKER` because this workspace does not have MetaX hardware for real validation.
+- `BRR-BLOCKER-003`: `DOCUMENTED_BLOCKER` because Huawei/Ascend remains template-only until a vendor adapter is implemented and validated.
 
 No unresolved problem is intentionally left only in chat.

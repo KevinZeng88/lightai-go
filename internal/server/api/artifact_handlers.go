@@ -142,9 +142,37 @@ func (h *AgentHandler) HandleDeleteArtifact(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	_, err := h.DB.Exec(`DELETE FROM model_artifacts WHERE id = ?`, id)
-	if err != nil {
+
+	tx, txErr := h.DB.Begin()
+	if txErr != nil {
+		log.OperationFailed(ctx, "model_artifact.delete", "tx_begin", opStart, txErr, "id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer tx.Rollback()
+
+	var deploymentCount int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM model_deployments WHERE model_artifact_id = ?`, id).Scan(&deploymentCount); err != nil {
+		log.OperationFailed(ctx, "model_artifact.delete", "deployment_check", opStart, err, "id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if deploymentCount > 0 {
+		writeError(w, http.StatusConflict, "model artifact is still referenced by deployments")
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM model_locations WHERE model_artifact_id = ?`, id); err != nil {
+		log.OperationFailed(ctx, "model_artifact.delete", "location_delete", opStart, err, "id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM model_artifacts WHERE id = ?`, id); err != nil {
 		log.OperationFailed(ctx, "model_artifact.delete", "db_write", opStart, err, "id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		log.OperationFailed(ctx, "model_artifact.delete", "tx_commit", opStart, err, "id", id)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}

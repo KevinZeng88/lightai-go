@@ -349,4 +349,5 @@ export default {
   artifacts: {title:"Model Files",name:"Name",path:"Path",format:"Format",taskType:"Task Type",architecture:"Architecture",size:"Size",quantization:"Quantization"},
   deployments: {title:"Model Deployments",name:"Name",status:"Status",artifact:"Model Files",runtime:"Runtime",nodeId:"Node ID",gpuIds:"GPU IDs",hostPort:"Host Port",dryRun:"Dry Run",start:"Start",stop:"Stop"},
   instances: {title:"Model Instances",deployment:"Deployment",state:"State",node:"Node",container:"Container",port:"Port",endpoint:"Endpoint",detail:"Instance Detail"},
+  dockerLogs: {title:"Docker Logs",refresh:"Refresh Logs",copy:"Copy Logs",loadFailed:"Failed to load logs",empty:"No logs available",taskId:"Task ID",runtimeState:"Runtime State",noRunPlan:"This instance has no run plan logs to query"},
 }

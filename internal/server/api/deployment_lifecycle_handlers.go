@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"lightai-go/internal/common/log"
@@ -204,9 +207,24 @@ func (h *AgentHandler) HandleDeleteDeployment(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if _, err := tx.Exec(`DELETE FROM agent_tasks WHERE deployment_id = ?`, id); err != nil {
+		log.Error("deployment.delete.task_delete_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	// Delete resolved_run_plans for this deployment
 	if _, err := tx.Exec(`DELETE FROM resolved_run_plans WHERE deployment_id = ?`, id); err != nil {
 		log.Error("deployment.delete.runplan_delete_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM run_plan_groups WHERE deployment_plan_id = ?`, id); err != nil {
+		log.Error("deployment.delete.run_plan_group_delete_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM gpu_leases WHERE deployment_id = ?`, id); err != nil {
+		log.Error("deployment.delete.lease_delete_failed", "error", err, "deployment_id", id)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -410,6 +428,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	if rtEntryOverride != nil {
 		entrypoint = rtEntryOverride
 	}
+	healthTimeoutSeconds := planHealthTimeout(hc, bvHC)
 
 	// Build default args list
 	var defaultArgs []string
@@ -501,7 +520,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 			"container_port":   bvPort,
 			"scheme":           "http",
 			"expected_status":  plan.HealthCheck.ExpectedStatus,
-			"timeout_seconds":  plan.HealthCheck.TimeoutSeconds,
+			"timeout_seconds":  healthTimeoutSeconds,
 			"interval_seconds": plan.HealthCheck.IntervalSeconds,
 		},
 	}
@@ -614,6 +633,33 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+func planHealthTimeout(hc runplan.HealthCheckInput, raw string) int {
+	if hc.StartupTimeoutSeconds > 0 {
+		return hc.StartupTimeoutSeconds
+	}
+	var m map[string]interface{}
+	if json.Unmarshal([]byte(raw), &m) == nil {
+		for _, key := range []string{"startup_timeout_seconds", "startupTimeoutSeconds", "timeout_seconds", "timeoutSeconds"} {
+			if v, ok := m[key]; ok {
+				switch n := v.(type) {
+				case float64:
+					if n > 0 {
+						return int(n)
+					}
+				case int:
+					if n > 0 {
+						return n
+					}
+				}
+			}
+		}
+	}
+	if hc.TimeoutSeconds > 0 {
+		return hc.TimeoutSeconds
+	}
+	return 30
+}
+
 func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Request) {
 	deployID := r.PathValue("id")
 	operationID := uuid.NewString()
@@ -633,18 +679,21 @@ func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Reque
 	tid := deploy["tenant_id"].(string)
 	actorID := actorIDFromSession(r)
 
-	// Find ALL non-terminal instances (running, starting, failed, pending, initializing)
-	rows, err := h.DB.Query(`SELECT id, node_id, container_id, actual_state FROM model_instances WHERE deployment_id = ? AND actual_state NOT IN ('stopped')`, deployID)
+	// Find ALL non-terminal instances (running, starting, failed, pending, initializing).
+	rows, err := h.DB.Query(`SELECT mi.id, mi.node_id, mi.container_id, mi.actual_state, COALESCE(n.status,'unknown')
+		FROM model_instances mi
+		LEFT JOIN nodes n ON n.id = mi.node_id
+		WHERE mi.deployment_id = ? AND mi.actual_state NOT IN ('stopped')`, deployID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	defer rows.Close()
-	type inst struct{ id, nodeID, containerID, state string }
+	type inst struct{ id, nodeID, containerID, state, nodeStatus string }
 	var instances []inst
 	for rows.Next() {
 		var i inst
-		rows.Scan(&i.id, &i.nodeID, &i.containerID, &i.state)
+		rows.Scan(&i.id, &i.nodeID, &i.containerID, &i.state, &i.nodeStatus)
 		instances = append(instances, i)
 	}
 
@@ -663,22 +712,37 @@ func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Reque
 	// Idempotent: if no non-stopped instances, still update deployment status
 	warnings := []string{}
 	for _, i := range instances {
-		// Mark instance stopping/stopped based on current state
-		h.DB.Exec(`UPDATE model_instances SET desired_state = 'stopped', actual_state = CASE WHEN actual_state IN ('failed','pending') THEN 'stopped' ELSE actual_state END, stopped_at = ?, updated_at = ? WHERE id = ?`, now, now, i.id)
+		h.DB.Exec(`UPDATE model_instances SET desired_state = 'stopped', actual_state = CASE WHEN actual_state = 'running' THEN 'stopping' ELSE actual_state END, updated_at = ? WHERE id = ?`, now, i.id)
 
-		// Release all leases for this instance, regardless of status
-		result, lerr := h.DB.Exec(`UPDATE gpu_leases SET status = 'released', released_at = ? WHERE instance_id = ? AND status IN ('reserved','active')`, now, i.id)
-		n, _ := result.RowsAffected()
-		if lerr != nil {
-			log.Error("gpu_lease.release.failed", "instance_id", i.id, "error", lerr)
-		} else if n > 0 {
-			log.StateTransition(r.Context(), "deployment.stop", "gpu_lease", i.id, "reserved/active", "released",
-				"instance_id", i.id, "count", n)
-			log.Info("gpu_lease.released", "operation_id", operationID, "instance_id", i.id, "count", n)
+		if i.nodeStatus != "online" {
+			warnings = append(warnings, fmt.Sprintf("node %s is %s; stop task not dispatched for instance %s", i.nodeID, i.nodeStatus, i.id))
+			continue
 		}
 
-		// Cancel pending agent tasks
-		h.DB.Exec(`UPDATE agent_tasks SET status = 'failed', finished_at = ? WHERE instance_id = ? AND status NOT IN ('completed','failed')`, now, i.id)
+		taskID := uuid.NewString()
+		payloadMap := map[string]interface{}{
+			"instance_id":    i.id,
+			"container_id":   i.containerID,
+			"container_name": fmt.Sprintf("lightai-%s", shortContainerSuffix(i.id)),
+		}
+		payloadJSON, _ := json.Marshal(payloadMap)
+		if _, err := h.DB.Exec(`INSERT INTO agent_tasks (id, task_type, status, tenant_id, deployment_id, instance_id, node_id, payload, timeout_seconds, operation_id, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+			taskID, "model_instance_stop", "pending", tid, deployID, i.id, i.nodeID, string(payloadJSON), 90, operationID, now, now); err != nil {
+			log.Error("deployment.stop.task_insert_failed", "instance_id", i.id, "error", err)
+			warnings = append(warnings, fmt.Sprintf("failed to dispatch stop task for instance %s", i.id))
+			continue
+		}
+		status, result, waitErr := h.waitForAgentTaskResult(r.Context(), taskID, 90*time.Second)
+		if waitErr != nil {
+			warnings = append(warnings, fmt.Sprintf("stop task timed out for instance %s: %v", i.id, waitErr))
+			continue
+		}
+		if status != "completed" {
+			errMsg := strVal(result, "error_message", strVal(result, "error", "docker stop task failed"))
+			warnings = append(warnings, fmt.Sprintf("stop task failed for instance %s: %s", i.id, errMsg))
+			continue
+		}
 	}
 
 	h.DB.Exec(`UPDATE model_deployments SET desired_state = 'stopped', status = 'stopped', updated_at = ? WHERE id = ?`, now, deployID)
@@ -759,7 +823,7 @@ func (h *AgentHandler) HandleListInstances(w http.ResponseWriter, r *http.Reques
 		}
 		m := map[string]interface{}{
 			"id": id, "deployment_id": did, "tenant_id": tid2,
-			"node_id": nid.String, "actual_state": as,
+			"node_id": nid.String, "current_run_plan_id": rpid.String, "actual_state": as,
 			"container_id": cid.String, "endpoint_url": eurl.String,
 			"host_port": hp, "last_error": le.String,
 			"started_at": sa.String, "stopped_at": soa.String, "created_at": ca,
@@ -833,18 +897,153 @@ func (h *AgentHandler) HandleGetNodeRunPlanPreview(w http.ResponseWriter, r *htt
 }
 
 func (h *AgentHandler) HandleGetNodeRunPlanLogs(w http.ResponseWriter, r *http.Request) {
-	m := h.getNodeRunPlanJSON(r.PathValue("id"))
-	if m == nil {
+	runPlanID := r.PathValue("id")
+	tail := 200
+	if rawTail := strings.TrimSpace(r.URL.Query().Get("tail")); rawTail != "" {
+		parsed, err := strconv.Atoi(rawTail)
+		if err != nil || parsed <= 0 {
+			writeError(w, http.StatusBadRequest, "tail must be a positive integer")
+			return
+		}
+		tail = parsed
+	}
+	if tail > 5000 {
+		tail = 5000
+	}
+	since := strings.TrimSpace(r.URL.Query().Get("since"))
+
+	var deploymentID, instanceID, tenantID, nodeID, agentID, containerID, nodeStatus string
+	err := h.DB.QueryRow(`SELECT r.deployment_id, r.instance_id, r.tenant_id,
+			COALESCE(mi.node_id,''), COALESCE(mi.agent_id,''), COALESCE(mi.container_id,''),
+			COALESCE(n.status,''), COALESCE(n.agent_id,'')
+		FROM resolved_run_plans r
+		JOIN model_instances mi ON mi.id = r.instance_id
+		JOIN nodes n ON n.id = mi.node_id
+		WHERE r.id = ?`, runPlanID).Scan(&deploymentID, &instanceID, &tenantID, &nodeID, &agentID, &containerID, &nodeStatus, &agentID)
+	if err == sql.ErrNoRows {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	// Agent log proxy is not available in the current HTTP protocol. Return a
-	// structured response instead of fabricating Docker logs.
-	writeJSON(w, http.StatusAccepted, map[string]interface{}{
-		"id":      m["id"],
-		"status":  "DOCUMENTED_BLOCKER",
-		"message": "Docker logs require Agent log proxy support; use local docker logs on the target node for now.",
+	if err != nil {
+		log.Error("node_run_plan.logs.lookup_failed", "run_plan_id", runPlanID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if !tenantScopeCheck(r, tenantID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if nodeStatus != "online" {
+		writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("node %s is offline; docker logs cannot be fetched", nodeID))
+		return
+	}
+
+	taskID := uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339)
+	payloadMap := map[string]interface{}{
+		"instance_id":    instanceID,
+		"container_id":   containerID,
+		"container_name": fmt.Sprintf("lightai-%s", shortContainerSuffix(instanceID)),
+		"tail":           tail,
+	}
+	if since != "" {
+		payloadMap["since"] = since
+	}
+	payloadJSON, _ := json.Marshal(payloadMap)
+
+	if _, err := h.DB.Exec(`INSERT INTO agent_tasks (id, task_type, status, tenant_id, deployment_id, instance_id, node_id, payload, timeout_seconds, operation_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		taskID, "model_instance_logs", "pending", tenantID, deploymentID, instanceID, nodeID, string(payloadJSON), 30, taskID, now, now); err != nil {
+		log.Error("node_run_plan.logs.task_insert_failed", "run_plan_id", runPlanID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	status, result, waitErr := h.waitForAgentTaskResult(r.Context(), taskID, 30*time.Second)
+	if waitErr != nil {
+		writeJSON(w, http.StatusGatewayTimeout, map[string]interface{}{
+			"error":   waitErr.Error(),
+			"id":      runPlanID,
+			"task_id": taskID,
+			"status":  "timeout",
+		})
+		return
+	}
+	if status != "completed" {
+		errorMsg := strVal(result, "error_message", strVal(result, "error", "docker logs task failed"))
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"error":        errorMsg,
+			"id":           runPlanID,
+			"task_id":      taskID,
+			"status":       status,
+			"container_id": containerID,
+		})
+		return
+	}
+
+	stdout := redactDockerLogText(strVal(result, "stdout", ""))
+	stderr := redactDockerLogText(strVal(result, "stderr", ""))
+	logsText := redactDockerLogText(strVal(result, "logs", strVal(result, "logs_summary", stdout+stderr)))
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id":            runPlanID,
+		"task_id":       taskID,
+		"deployment_id": deploymentID,
+		"instance_id":   instanceID,
+		"node_id":       nodeID,
+		"container_id":  strVal(result, "container_id", containerID),
+		"tail":          tail,
+		"since":         since,
+		"status":        "ok",
+		"runtime_state": strVal(result, "runtime_state", "ok"),
+		"stdout":        stdout,
+		"stderr":        stderr,
+		"logs":          logsText,
 	})
+}
+
+func (h *AgentHandler) waitForAgentTaskResult(ctx interface{ Done() <-chan struct{} }, taskID string, timeout time.Duration) (string, map[string]interface{}, error) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return "", nil, fmt.Errorf("request cancelled while waiting for agent task")
+		case <-deadline.C:
+			return "", nil, fmt.Errorf("timed out waiting for agent task")
+		case <-ticker.C:
+			var status string
+			var raw sql.NullString
+			err := h.DB.QueryRow(`SELECT status, result FROM agent_tasks WHERE id = ?`, taskID).Scan(&status, &raw)
+			if err != nil {
+				return "", nil, fmt.Errorf("agent logs task disappeared")
+			}
+			if status == "completed" || status == "failed" || status == "timed_out" {
+				out := map[string]interface{}{}
+				if raw.Valid && strings.TrimSpace(raw.String) != "" {
+					_ = json.Unmarshal([]byte(raw.String), &out)
+				}
+				return status, out, nil
+			}
+		}
+	}
+}
+
+func shortContainerSuffix(id string) string {
+	if len(id) <= 12 {
+		return id
+	}
+	return id[:12]
+}
+
+var sensitiveEnvLogPattern = regexp.MustCompile(`(?i)([A-Z0-9_]*(TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|SESSION|CSRF)[A-Z0-9_]*=)[^\s]+`)
+
+func redactDockerLogText(s string) string {
+	if s == "" {
+		return ""
+	}
+	return sensitiveEnvLogPattern.ReplaceAllString(s, `${1}<redacted>`)
 }
 
 func (h *AgentHandler) getNodeRunPlanJSON(id string) map[string]interface{} {

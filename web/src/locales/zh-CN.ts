@@ -349,4 +349,5 @@ export default {
   artifacts: {title:"模型文件",name:"名称",path:"路径",format:"格式",taskType:"任务类型",architecture:"架构",size:"规模",quantization:"量化"},
   deployments: {title:"模型部署",name:"名称",status:"状态",artifact:"模型文件",runtime:"运行配置",nodeId:"节点ID",gpuIds:"GPU IDs",hostPort:"主机端口",dryRun:"Dry Run",start:"启动",stop:"停止"},
   instances: {title:"模型实例",deployment:"部署ID",state:"状态",node:"节点",container:"容器ID",port:"端口",endpoint:"端点",detail:"实例详情"},
+  dockerLogs: {title:"Docker 日志",refresh:"刷新日志",copy:"复制日志",loadFailed:"日志加载失败",empty:"暂无日志",taskId:"任务 ID",runtimeState:"运行状态",noRunPlan:"当前实例没有可查询的运行计划"},
 }
