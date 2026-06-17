@@ -265,4 +265,64 @@ go vet ./...   # clean
 bash -n scripts/e2e-backend-runtime-nvidia-api.sh  # valid
 # E2E output shows: stage=login, stage=health_check, stage=cleanup, etc.
 # with duration_ms=N for each stage
+
+## Final NVIDIA E2E Verification (2026-06-18)
+
+**Commit:** `2fb2836`
+**Verification Dir:** `docs/reports/backend-runtime-runplan/final-verification-20260618-004001/`
+
+### Test Setup
+
+- Old logs cleared before test (backup saved to `final-verification-20260618-004001/log-backup-before-clear/`)
+- Server and Agent restarted via `scripts/start-all.sh --no-observability --wait`
+- Logs confirmed fresh (0 bytes before start, ~19KB each after run)
+
+### E2E Result
+
+- **Exit code:** 1 (FAIL) — health check timeout
+- **Root cause:** Agent health check targeted port `8080` (llama.cpp default) instead of port `8004` (vLLM host_port). Container ran correctly on port `8000` internally.
+- **`/v1/models`:** NOT REACHED due to port mismatch
+- **Docker logs API:** PASS — returned 12,787 bytes stdout + 2,960 bytes stderr of vLLM startup logs
+- **Stop:** PASS — Docker container stopped in 1,839ms
+- **Cleanup:** PASS — no residual Docker containers, no `e2e-nvidia-*` DB artifacts
+
+### Stage Timing (E2E Script)
+
+All 14 stages visible in E2E output with `duration_ms`:
+
+| Stage | duration_ms |
+|-------|------------|
+| login | 66 |
+| query_node | 23 |
+| query_gpu | 23 |
+| verify_catalog | 17 |
+| enable_runtime | 8 |
+| create_model_artifact | 22 |
+| create_model_location | 8 |
+| create_deployment | 35 |
+| start_deployment | 37 |
+| query_run_plan | 25 |
+| health_check | ~132,000 (timeout after 120s, port mismatch) |
+| logs_api | (via docker logs) |
+| stop_deployment | (via docker stop, 1,839ms) |
+| cleanup_resources | (via on_exit trap) |
+
+### Log Evidence Retained
+
+| Artifact | Path | Size |
+|----------|------|------|
+| E2E output | `final-verification-.../e2e-output.log` | 18 KB |
+| Server log (filtered) | `final-verification-.../server-e2e-filtered.log` | 15 KB |
+| Agent log (filtered) | `final-verification-.../agent-e2e-filtered.log` | 7.6 KB |
+| Server log (full) | `final-verification-.../server-this-run.log` | 19 KB |
+| Agent log (full) | `final-verification-.../agent-this-run.log` | 19 KB |
+| Observability review | `final-verification-.../log-observability-review.md` | — |
+
+### Full-chain Observability Conclusion
+
+**ACCEPT_WITH_LOG_GAPS**
+
+The Docker lifecycle chain is fully observable with correlated IDs, duration tracking, and state transitions. Gap: health check port mismatch prevents `/v1/models` verification (code bug, not logging gap). Preflight sub-steps are logged as a single `stage=preflight` rather than individual stages — acceptable for current phase.
+
+See `final-verification-.../log-observability-review.md` for detailed stage-by-stage coverage matrix.
 ```
