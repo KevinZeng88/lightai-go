@@ -91,16 +91,19 @@ func main() {
 				"agent_token", maskedToken,
 			)
 		} else {
-			log.Error("DEFAULT AGENT TOKEN DETECTED",
+			// REVIEW-001: Refuse startup in non-dev mode with default/empty agent token.
+			log.Error("DEFAULT AGENT TOKEN DETECTED — refusing to start in non-dev mode",
 				"agent_token", maskedToken,
 				"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
 			)
-			fmt.Fprintf(os.Stderr, "\n=== SECURITY WARNING ===\n")
-			fmt.Fprintf(os.Stderr, "Default agent token detected (value redacted in logs).\n")
-			fmt.Fprintf(os.Stderr, "This is NOT safe for production.\n")
+			fmt.Fprintf(os.Stderr, "\n=== SECURITY ERROR ===\n")
+			fmt.Fprintf(os.Stderr, "Default or empty agent token detected.\n")
+			fmt.Fprintf(os.Stderr, "LightAI Go refuses to start in non-dev mode without a secure agent token.\n")
 			fmt.Fprintf(os.Stderr, "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.\n")
 			fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(openssl rand -hex 32)\n")
+			fmt.Fprintf(os.Stderr, "Or set dev_mode: true in server config for development.\n")
 			fmt.Fprintf(os.Stderr, "=========================\n\n")
+			os.Exit(1)
 		}
 	}
 

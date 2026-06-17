@@ -523,18 +523,28 @@ func (h *ResourceHandler) HandleListGPUs(w http.ResponseWriter, r *http.Request)
 }
 
 // HandleGetGPU handles GET /api/gpus/{id}.
+// REVIEW-002: Tenant-scoped access — non-admin users can only access GPUs in their tenant.
 func (h *ResourceHandler) HandleGetGPU(w http.ResponseWriter, r *http.Request) {
 	gpuID := r.PathValue("id")
-	gpu := scanGPUFromRow(h.DB.QueryRow(
+	// Include tenant_id in the query for tenant scope check.
+	var tid string
+	gpu := scanGPUFromRowWithTenant(h.DB.QueryRow(
 		`SELECT id, node_id, vendor, index_num, name, uuid, pci_bus_id, driver_version,
 		memory_total_bytes, memory_used_bytes, memory_free_bytes,
 		gpu_utilization_percent, memory_utilization_percent,
 		temperature_celsius, power_draw_watts,
-		health, status, collected_at, created_at, updated_at
+		health, status, tenant_id, collected_at, created_at, updated_at
 		FROM gpu_devices WHERE id = ?`, gpuID,
-	))
+	), &tid)
 	if gpu == nil {
 		http.Error(w, `{"error":"gpu not found"}`, http.StatusNotFound)
+		return
+	}
+
+	// Tenant scope check: platform admin bypasses, others must match.
+	info := auth.SessionInfoFromContext(r.Context())
+	if info != nil && !info.IsPlatformAdmin && info.TenantID != "" && tid != info.TenantID {
+		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 		return
 	}
 
@@ -609,6 +619,66 @@ func scanGPUFromRow(row *sql.Row) map[string]interface{} {
 		&health, &status, &collectedAt, &createdAt, &updatedAt)
 	if err != nil {
 		return nil
+	}
+
+	gpu := map[string]interface{}{
+		"id":                 id,
+		"node_id":            nodeID,
+		"vendor":             vendor,
+		"index":              indexNum,
+		"name":               name,
+		"uuid":               uuid,
+		"pci_bus_id":         pciBusID,
+		"driver_version":     driverVersion,
+		"memory_total_bytes": memTotal,
+		"memory_used_bytes":  memUsed,
+		"memory_free_bytes":  memFree,
+		"health":             health,
+		"status":             status,
+	}
+	if gpuUtil.Valid {
+		gpu["gpu_utilization_percent"] = gpuUtil.Float64
+	}
+	if memUtil.Valid {
+		gpu["memory_utilization_percent"] = memUtil.Float64
+	}
+	if temp.Valid {
+		gpu["temperature_celsius"] = temp.Float64
+	}
+	if power.Valid {
+		gpu["power_draw_watts"] = power.Float64
+	}
+	if collectedAt.Valid {
+		gpu["collected_at"] = collectedAt.String
+	}
+	if createdAt.Valid {
+		gpu["created_at"] = createdAt.String
+	}
+	if updatedAt.Valid {
+		gpu["updated_at"] = updatedAt.String
+	}
+	return gpu
+}
+
+// scanGPUFromRowWithTenant is like scanGPUFromRow but also captures tenant_id
+// into the provided *string for tenant scope checks (REVIEW-002).
+func scanGPUFromRowWithTenant(row *sql.Row, tid *string) map[string]interface{} {
+	var id, nodeID, vendor, name, uuid, pciBusID, driverVersion, health, status, tenantID string
+	var indexNum int
+	var memTotal, memUsed, memFree uint64
+	var gpuUtil, memUtil, temp, power sql.NullFloat64
+	var collectedAt, createdAt, updatedAt sql.NullString
+
+	err := row.Scan(&id, &nodeID, &vendor, &indexNum, &name, &uuid, &pciBusID, &driverVersion,
+		&memTotal, &memUsed, &memFree,
+		&gpuUtil, &memUtil, &temp, &power,
+		&health, &status, &tenantID, &collectedAt, &createdAt, &updatedAt)
+	if err != nil {
+		return nil
+	}
+
+	if tid != nil {
+		*tid = tenantID
 	}
 
 	gpu := map[string]interface{}{

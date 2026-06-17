@@ -824,6 +824,14 @@ func (h *AgentHandler) HandlePatchNodeTenant(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// REVIEW-008: Transfer GPU tenant ownership in same transaction.
+	if _, err := tx.Exec(`UPDATE gpu_devices SET tenant_id = ?, updated_at = ? WHERE node_id = ?`,
+		req.TenantID, now, nodeID); err != nil {
+		log.Error("transfer: update gpu tenant_id failed", "node_id", nodeID, "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+
 	// Audit log — if this fails, the whole transfer rolls back.
 	auditID := uuid.NewString()
 	detail := fmt.Sprintf(`{"from_tenant_id":"%s","to_tenant_id":"%s","reason":"%s"}`,

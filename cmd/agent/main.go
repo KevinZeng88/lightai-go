@@ -113,13 +113,12 @@ func main() {
 	archName := runtime.GOARCH
 	kernelVer := detectKernelVersion()
 
-	// P0-011: Warn about default agent token in production.
-	// AUD-002: Use RedactValue to avoid writing the token value to log files.
+	// REVIEW-001: Refuse startup with default/empty agent token.
 	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
-		log.Warn("using default agent token -- NOT safe for production",
-			"agent_token", log.RedactValue("agent_token", cfg.AgentToken),
-			"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
-		)
+		fmt.Fprintf(os.Stderr, "ERROR: Default or empty agent token detected.\n")
+		fmt.Fprintf(os.Stderr, "Set LIGHTAI_AGENT_TOKEN to a secure random value.\n")
+		fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(openssl rand -hex 32)\n")
+		os.Exit(1)
 	}
 	log.Info("agent starting",
 		"version", version.String(),
