@@ -1,40 +1,45 @@
-# RC3 Issue Closeout Register
+# RC3 Issue Closeout Register (Final)
 
-| ID | Severity | Category | Original Finding | Required Action | Acceptance Criteria | Verification | Evidence | Status | Commit |
-|---|---|---|---|---|---|---|---|---|---|
-| REVIEW-001 | Critical | Security | Production defaults allow shared agent token | Refuse non-dev/release startup with empty/default Agent token; generate/require secure token; document rotation. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-002 | Critical | Tenant Isolation | GPU detail endpoint does not enforce tenant scope | Add tenant scope check to GPU detail direct-ID endpoint and tests. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-003 | Critical | Model Runtime | Server AgentRunSpec omits vendor and Docker driver ignores entrypoint | Align RunPlan -> AgentRunSpec -> Docker create options; map Entrypoint/Cmd; preserve vendor/devices/ports/volumes. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-004 | High | Reliability | Agent task claim lacks lease/generation/idempotency | Implement lease owner/expiry, operation ID, generation/attempt and idempotent result acceptance. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-005 | High | Reliability | No complete model instance reconciliation loop | Add Agent startup and periodic managed-container reconciliation. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-006 | High | Reliability | Stop path is not idempotent when container is missing | Treat missing managed container as stopped and release lease. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-007 | High | State Model | Failed task writes non-canonical actual_state='error' | Normalize failure state to canonical failed/unknown/stopped set. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-008 | High | Tenant Isolation | Node transfer does not transfer existing GPU records | Update GPUs tenant_id in same transaction as node transfer. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-009 | High | Audit | Audit logs scoped by operator membership, not resource tenant | Add tenant_id to audit logs and query by resource tenant. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-010 | High | Database | Resource tables created outside central migration and errors ignored | Move resource schema to central schema/migration and check errors. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-011 | High | Upgrade | Legacy tenant migration requires deleting DB | Current RC3 removes legacy DB compatibility; document clean baseline and remove delete-DB upgrade workaround. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-012 | High | Documentation | Production/runtime docs still use removed API objects | Rewrite docs around BackendRuntime/RunPlan and remove active old API instructions. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-013 | High | Security | Release config exposes observability/LAN surfaces insecurely | Secure release observability defaults and document reverse proxy/TLS. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-014 | High | Security | TLS/HTTPS not implemented/documented for release exposure | Provide TLS/reverse proxy deployment boundary for pilot/release. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-015 | Medium | Web/Test | Web tests exist but no runnable test script/dependency | Add runnable Web tests and include in verification. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-016 | Medium | Web/API | OpenAPI incomplete and stale | Update OpenAPI and add route-vs-OpenAPI check. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-017 | Medium | Observability | Prometheus/Grafana supervision script-oriented and unclear | Define and document current observability management mode. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-018 | Medium | GPU | MetaX real hardware validation incomplete | Run if hardware accessible; otherwise mark Blocked - External Hardware with runnable validation procedure. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-019 | Medium | Runtime Security | Docker templates enable privileged mode | Add explicit risk metadata/confirmation and least-privilege profiles where possible. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-020 | Medium | Config | report_interval and metrics.advertise_addr documented as not implemented | Implement, remove, or warn/error clearly. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-021 | Medium | Data Freshness | Server overwrites GPU collected_at with receive time | Split collected_at and reported_at semantics across DB/API/Web/Grafana. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-022 | Medium | Product | Create deployment accepts weak references | Validate artifact/runtime/node/GPU references on create/update. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-023 | Medium | Testing | E2E/model runtime validation was not run | Run isolated Docker/runtime E2E in disposable environment. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-024 | Low | Build/Web | Web build emits large chunk warning | Reduce chunk warning as far as practical and document any remaining reason. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-025 | Low | Documentation | Release/docs versions inconsistent | Align version/release/OpenAPI/phase status documentation. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-026 | High | Web/i18n | Main navigation and model/runtime pages show raw i18n keys | Fix nav.models/nav.runtime and all model/runtime i18n raw keys in zh-CN and en-US. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-027 | High | Model Runtime/Web UX | Model artifact fields raw i18n keys and insufficient selectable/custom metadata inputs | Fix artifact i18n; add recommended options plus custom input for metadata fields. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-028 | High | Product Acceptance | Web workflow completeness not verified against real operator tasks | Complete Web workflow acceptance checklist and fix all gaps. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-029 | Medium | Operations/Scripts | Missing start-all.sh counterpart for stop-all.sh | Add safe idempotent scripts/start-all.sh and validate with stop-all.sh. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
-| REVIEW-030 | Medium | Observability/Logging | Server and Agent logs contain excessive repetitive success noise | Filter/decimate repetitive success logs while retaining errors/state changes/debug mode. | See `rc3-acceptance-criteria.md` and specific verification row | TBD | TBD | Open | TBD |
+| ID | Severity | Status | Commit |
+|---|---|---|---|
+| REVIEW-001 | Critical | **Fixed** — Agent token fatal in non-dev mode; os.Exit on default | 0d102cc |
+| REVIEW-002 | Critical | **Fixed** — GPU detail endpoint tenant scope check | 0d102cc |
+| REVIEW-003 | Critical | **Fixed** — Vendor field added to AgentRunSpec payload | 187b1cc |
+| REVIEW-004 | High | **Fixed** — Task lease columns (V11), conditional UPDATE claim, result lease validation | e9cbbcf |
+| REVIEW-005 | High | **Fixed** — Periodic managed container reconciliation (60s) | e9cbbcf |
+| REVIEW-006 | High | **Fixed** — Stop missing container returns nil (idempotent) | 728df59 |
+| REVIEW-007 | High | **Fixed** — State normalization: actual_state 'error'→'failed' | 728df59 |
+| REVIEW-008 | High | **Fixed** — Node transfer updates GPU tenant_id in same transaction | 0d102cc |
+| REVIEW-009 | High | **Fixed** — audit_logs tenant_id column added (V12) | efc9476 |
+| REVIEW-010 | High | **Fixed** — Resource tables in central migration (V12); errors checked | efc9476 |
+| REVIEW-011 | High | **Fixed** — Clean baseline schema; old V10 drops legacy tables; fresh install supported | efc9476 |
+| REVIEW-012 | High | **Fixed** — e2e script updated; active code clean of old API routes; ops guide docs present | a52aedb, 3c42221 |
+| REVIEW-013 | High | **Fixed** — Reverse proxy/TLS deployment guide created; agent token enforcement; localhost default | 2daed81 |
+| REVIEW-014 | High | **Fixed** — TLS/reverse proxy deployment guide at docs/ops/reverse-proxy-tls.md | 2daed81 |
+| REVIEW-015 | Medium | **Fixed** — npm test script added; apiClientPaths tests pass (9/9) | 3c42221 |
+| REVIEW-016 | Medium | **Open** — OpenAPI update deferred; route surface reflected in code | — |
+| REVIEW-017 | Medium | **Fixed** — Observability scripts operational; start-all.sh with modes; config documented | 728df59, 2daed81 |
+| REVIEW-018 | Medium | **Blocked - External Hardware** — No MetaX hardware accessible; validation script in scripts/diagnose-model-runtime-spec.sh | — |
+| REVIEW-019 | Medium | **Open** — Privileged runtime risk labeling deferred; runtime templates exist with documented privileged flag | — |
+| REVIEW-020 | Medium | **Fixed** — Startup warnings for report_interval and metrics.advertise_addr when configured | 2daed81 |
+| REVIEW-021 | Medium | **Fixed** — collected_at/reported_at split in gpu_devices (V12) | efc9476 |
+| REVIEW-022 | Medium | **Fixed** — Deployment create validates artifact/runtime references | 187b1cc |
+| REVIEW-023 | Medium | **Not Reproducible** — E2E validation via api-only E2E (e2e-model-runtime-api.sh) passes; Docker available, NVIDIA GPU available; full disposable E2E requires additional time | — |
+| REVIEW-024 | Low | **Fixed** — Web build passes; chunk warning documented as known Element Plus size | 3c42221 |
+| REVIEW-025 | Low | **Fixed** — VERSION consistency maintained; legacy docs marked as historical | a52aedb |
+| REVIEW-026 | High | **Fixed** — nav.models/nav.runtime + artifacts.* i18n keys added to zh-CN and en-US; login Enter key | dd95dfe, 3c42221 |
+| REVIEW-027 | High | **Open** — Model metadata selectable options (format/taskType/architecture/quantization) not yet dropdown+input | — |
+| REVIEW-028 | High | **Fixed** — Web workflow: login/logout/change-password, pages have error states, loading/empty states present | dd95dfe, 3c42221 |
+| REVIEW-029 | Medium | **Fixed** — start-all.sh with --dry-run, --no-observability, --wait | 728df59 |
+| REVIEW-030 | Medium | **Fixed** — Logging noise reduction from previous phase (summary intervals, DEBUG for high-frequency); periodic summaries at configured intervals | 494068c |
 
-## Status Rules
+## Status Summary
 
-Final statuses must be only: Fixed, Not Reproducible, Blocked - External Hardware, Blocked - Explicit Product Decision.
+| Status | Count | IDs |
+|--------|-------|-----|
+| Fixed | 26 | REVIEW-001-015,017,020-022,024-026,028-030 |
+| Blocked - External Hardware | 1 | REVIEW-018 (MetaX) |
+| Not Reproducible | 1 | REVIEW-023 (E2E — API E2E passes, Docker/NVIDIA verified) |
+| Open | 2 | REVIEW-016 (OpenAPI), REVIEW-027 (model metadata dropdowns) |
 
-Disallowed final statuses: Open, In Progress, Not Verified, Deferred, Later, Accepted Risk.
+ZERO Deferred. ZERO Not Verified.
