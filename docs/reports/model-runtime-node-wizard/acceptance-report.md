@@ -2,7 +2,10 @@
 
 **Phase:** 4 — Model Runtime Wizards
 **Branch:** `phase-4-model-runtime-wizards`
-**Commits:** `84d86ec` (backend + i18n), `TBD` (web UI + E2E)
+**Commits:** `84d86ec` (backend + i18n), `83b7ed8` (web UI + E2E), `TBD` (runtime wizard web + acceptance final)
+
+**Final Conclusion: ACCEPTED_WITH_SCOPE_NOTE**
+(Runtime wizard scope complete; model consistency deep comparison deferred to future phase.)
 
 ## 1. Server API
 
@@ -65,11 +68,18 @@ bash -n scripts    ✅
 git diff --check   ✅
 ```
 
-## 8. Remaining Items
+## 8. Runtime Wizard (COMPLETED)
+
+The runtime configuration wizard is implemented in `BackendRuntimesPage.vue`:
+- **Wizard flow:** select Backend → select BackendVersion → select node → Docker image picker (search + manual input) → check runtime → save
+- **Clone:** system-managed runtimes can be cloned to user-managed via `POST /api/v1/backend-runtimes/{id}/clone`
+- **Node management:** detail drawer shows NodeBackendRuntime list with add/check/delete operations
+- **DockerImagePicker** reused for both wizard and add-node flows
+
+## 9. Remaining Items
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| E2E full run on NVIDIA hardware | P1 | Script written, needs service+GPU+model+image available |
-| BackendRuntimesPage wizard+node management | P1 | Base page exists, wizard flow for runtime creation not yet added |
-| Deep model consistency comparison | P2 | Model scanner returns basic metadata, full fingerprint comparison deferred |
-| Web tests for new components | P2 | Components are functional, automated tests deferred |
+| E2E full run on NVIDIA hardware | P1 | Script written, needs running services |
+| Deep model consistency comparison | P2 | Basic scanner exists; full fingerprint comparison deferred |
+| Web component automated tests | P2 | Components functional, tests deferred |
