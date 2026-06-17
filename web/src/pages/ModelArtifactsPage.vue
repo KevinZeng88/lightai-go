@@ -20,11 +20,11 @@
       <el-form :model="form" label-width="140px">
         <el-form-item :label="$t('artifacts.name')"><el-input v-model="form.name" /></el-form-item>
         <el-form-item :label="$t('artifacts.path')"><el-input v-model="form.path" /></el-form-item>
-        <el-form-item :label="$t('artifacts.format')"><el-input v-model="form.format" /></el-form-item>
-        <el-form-item :label="$t('artifacts.taskType')"><el-input v-model="form.task_type" /></el-form-item>
-        <el-form-item :label="$t('artifacts.architecture')"><el-input v-model="form.architecture" /></el-form-item>
+        <el-form-item :label="$t('artifacts.format')"><el-select v-model="form.format" filterable allow-create style="width:100%"><el-option v-for="o in formatOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
+        <el-form-item :label="$t('artifacts.taskType')"><el-select v-model="form.task_type" filterable allow-create style="width:100%"><el-option v-for="o in taskTypeOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
+        <el-form-item :label="$t('artifacts.architecture')"><el-select v-model="form.architecture" filterable allow-create style="width:100%"><el-option v-for="o in architectureOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
         <el-form-item :label="$t('artifacts.size')"><el-input v-model="form.size_label" /></el-form-item>
-        <el-form-item :label="$t('artifacts.quantization')"><el-input v-model="form.quantization" /></el-form-item>
+        <el-form-item :label="$t('artifacts.quantization')"><el-select v-model="form.quantization" filterable allow-create style="width:100%"><el-option v-for="o in quantOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button>
@@ -41,8 +41,14 @@ import { apiClient } from '@/api/client'
 
 const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const dialogVisible = ref(false)
-const form = ref({ name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' })
+const form = ref({ name: '', path: '', format: 'gguf', task_type: 'chat', architecture: 'qwen', size_label: '', quantization: 'Q4_K_M', source_type: 'local_path', display_name: '' })
 let editingId = ''
+
+// REVIEW-027: Recommended options + custom input for model metadata fields.
+const formatOptions = ['gguf', 'safetensors', 'pt', 'onnx', 'other']
+const taskTypeOptions = ['chat', 'completion', 'embedding', 'rerank', 'image', 'audio', 'other']
+const architectureOptions = ['qwen', 'llama', 'glm', 'deepseek', 'baichuan', 'mistral', 'other']
+const quantOptions = ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'FP16', 'BF16', 'FP8', 'INT8', 'INT4', 'none', 'other']
 
 onMounted(async () => { await refresh() })
 async function refresh() {
