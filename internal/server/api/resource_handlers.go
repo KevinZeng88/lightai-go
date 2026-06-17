@@ -305,11 +305,12 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 				g.MemoryTotalBytes = g.MemoryUsedBytes + g.MemoryFreeBytes
 			}
 
-			// P2-001: Use server receive time for collected_at, not Agent payload time.
-			// Agent payload time can be stale when GPU collection fails and
-			// the Agent falls back to cached data with the original timestamp.
-			// Server now reflects when data was last successfully received.
-			collectedAt := now
+			// REVIEW-021: Split collected_at (agent snapshot time) and reported_at (server receive time).
+			collectedAt := g.CollectedAt
+			if collectedAt == "" {
+				collectedAt = now
+			}
+			reportedAt := now
 
 			var existingID string
 			err := tx.QueryRow(
@@ -330,14 +331,14 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 					 driver_version, memory_total_bytes, memory_used_bytes, memory_free_bytes,
 					 gpu_utilization_percent, memory_utilization_percent,
 					 temperature_celsius, power_draw_watts,
-					 health, status, tenant_id, collected_at, created_at, updated_at)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					 health, status, tenant_id, collected_at, reported_at, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					gpuID, nodeID, g.Vendor, g.Index, g.Name, g.UUID, g.PCIBusID,
 					g.DriverVersion,
 					g.MemoryTotalBytes, g.MemoryUsedBytes, g.MemoryFreeBytes,
 					g.GPUUtilization, g.MemUtilization,
 					g.Temperature, g.PowerDraw,
-					g.Health, g.Status, nodeTenantID, collectedAt, now, now,
+					g.Health, g.Status, nodeTenantID, collectedAt, reportedAt, now, now,
 				)
 				if err != nil {
 					log.Error("create gpu error", "error", err)
@@ -350,13 +351,13 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 					 memory_total_bytes = ?, memory_used_bytes = ?, memory_free_bytes = ?,
 					 gpu_utilization_percent = ?, memory_utilization_percent = ?,
 					 temperature_celsius = ?, power_draw_watts = ?,
-					 health = ?, status = ?, collected_at = ?, updated_at = ?
+					 health = ?, status = ?, collected_at = ?, reported_at = ?, updated_at = ?
 					 WHERE id = ?`,
 					g.Vendor, g.Index, g.Name, g.DriverVersion,
 					g.MemoryTotalBytes, g.MemoryUsedBytes, g.MemoryFreeBytes,
 					g.GPUUtilization, g.MemUtilization,
 					g.Temperature, g.PowerDraw,
-					g.Health, g.Status, collectedAt, now, existingID,
+					g.Health, g.Status, collectedAt, reportedAt, now, existingID,
 				)
 				if err != nil {
 					log.Error("update gpu error", "error", err)

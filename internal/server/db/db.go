@@ -126,6 +126,12 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if currentVersion < 12 {
+		if err := db.migrateV12(); err != nil {
+			return fmt.Errorf("migrate v12: %w", err)
+		}
+	}
+
 	log.Info("db migrate: completed", "duration_ms", time.Since(migrateStart).Milliseconds())
 	return nil
 }
@@ -917,6 +923,102 @@ func (db *DB) migrateV11() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (11, 'V11: task lease and idempotency columns on agent_tasks')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV12 adds audit_logs tenant_id, centralizes resource tables, and splits
+// collected_at/reported_at (REVIEW-009,010,021).
+func (db *DB) migrateV12() error {
+	// Add tenant_id to audit_logs (REVIEW-009).
+	if _, err := db.Exec(`ALTER TABLE audit_logs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''`); err != nil {
+		// Column may exist — non-fatal.
+	}
+
+	// Create resource tables in central migration (REVIEW-010).
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS gpu_devices (
+		id TEXT PRIMARY KEY,
+		node_id TEXT NOT NULL,
+		vendor TEXT NOT NULL,
+		index_num INTEGER NOT NULL,
+		name TEXT NOT NULL DEFAULT '',
+		uuid TEXT NOT NULL DEFAULT '',
+		pci_bus_id TEXT NOT NULL DEFAULT '',
+		driver_version TEXT NOT NULL DEFAULT '',
+		memory_total_bytes INTEGER NOT NULL DEFAULT 0,
+		memory_used_bytes INTEGER NOT NULL DEFAULT 0,
+		memory_free_bytes INTEGER NOT NULL DEFAULT 0,
+		gpu_utilization_percent REAL,
+		memory_utilization_percent REAL,
+		temperature_celsius REAL,
+		power_draw_watts REAL,
+		health TEXT NOT NULL DEFAULT 'unknown',
+		status TEXT NOT NULL DEFAULT 'available',
+		collected_at TEXT,
+		reported_at TEXT NOT NULL DEFAULT '',
+		tenant_id TEXT NOT NULL DEFAULT 'default',
+		owner_id TEXT,
+		created_by TEXT NOT NULL DEFAULT 'system',
+		updated_by TEXT NOT NULL DEFAULT 'system',
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return fmt.Errorf("create gpu_devices: %w", err)
+	}
+
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS node_system_snapshots (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		node_id TEXT NOT NULL,
+		cpu_utilization_percent TEXT NOT NULL DEFAULT '0',
+		memory_total_bytes INTEGER NOT NULL DEFAULT 0,
+		memory_used_bytes INTEGER NOT NULL DEFAULT 0,
+		swap_total_bytes INTEGER NOT NULL DEFAULT 0,
+		swap_used_bytes INTEGER NOT NULL DEFAULT 0,
+		uptime_seconds TEXT NOT NULL DEFAULT '0',
+		cpu_cores INTEGER NOT NULL DEFAULT 0,
+		load1 TEXT NOT NULL DEFAULT '0',
+		load5 TEXT NOT NULL DEFAULT '0',
+		load15 TEXT NOT NULL DEFAULT '0',
+		collected_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return fmt.Errorf("create node_system_snapshots: %w", err)
+	}
+
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS node_filesystem_snapshots (
+		node_id TEXT NOT NULL,
+		mount_point TEXT NOT NULL,
+		device TEXT NOT NULL DEFAULT '',
+		fs_type TEXT NOT NULL DEFAULT '',
+		total_bytes INTEGER NOT NULL DEFAULT 0,
+		used_bytes INTEGER NOT NULL DEFAULT 0,
+		free_bytes INTEGER NOT NULL DEFAULT 0,
+		used_percent TEXT NOT NULL DEFAULT '0',
+		collected_at TEXT NOT NULL DEFAULT (datetime('now')),
+		PRIMARY KEY (node_id, mount_point)
+	)`); err != nil {
+		return fmt.Errorf("create node_filesystem_snapshots: %w", err)
+	}
+
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS node_network_snapshots (
+		node_id TEXT NOT NULL,
+		interface_name TEXT NOT NULL,
+		up INTEGER NOT NULL DEFAULT 0,
+		bytes_recv INTEGER NOT NULL DEFAULT 0,
+		bytes_sent INTEGER NOT NULL DEFAULT 0,
+		collected_at TEXT NOT NULL DEFAULT (datetime('now')),
+		PRIMARY KEY (node_id, interface_name)
+	)`); err != nil {
+		return fmt.Errorf("create node_network_snapshots: %w", err)
+	}
+
+	// Add reported_at column to gpu_devices (REVIEW-021: split collected_at/reported_at).
+	if _, err := db.Exec(`ALTER TABLE gpu_devices ADD COLUMN reported_at TEXT NOT NULL DEFAULT ''`); err != nil {
+		// Column may exist — non-fatal.
+	}
+
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (12, 'V12: audit tenant_id, central resource schema, collected_at/reported_at split')`); err != nil {
 		return err
 	}
 	return nil
