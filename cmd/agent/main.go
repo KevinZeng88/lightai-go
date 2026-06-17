@@ -347,6 +347,15 @@ func main() {
 				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "model browser not enabled"})
 				return
 			}
+			// When no root is specified, return the list of allowed roots.
+			if root == "" {
+				var roots []map[string]interface{}
+				for _, ar := range cfg.ModelBrowser.AllowedRoots {
+					roots = append(roots, map[string]interface{}{"root": ar, "label": ar})
+				}
+				json.NewEncoder(w).Encode(map[string]interface{}{"allowed_roots": roots, "entries": []map[string]interface{}{}})
+				return
+			}
 			rootOK := false
 			for _, ar := range cfg.ModelBrowser.AllowedRoots {
 				if root == ar {
@@ -355,7 +364,7 @@ func main() {
 				}
 			}
 			if !rootOK {
-				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "root not allowed"})
+				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "root_not_allowed"})
 				return
 			}
 			absPath := filepath.Join(root, relPath)
