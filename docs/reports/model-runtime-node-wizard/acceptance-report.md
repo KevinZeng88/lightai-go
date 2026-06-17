@@ -2,7 +2,7 @@
 
 **Phase:** 4 — Model Runtime Wizards
 **Branch:** `phase-4-model-runtime-wizards`
-**Commits:** `84d86ec` (backend + i18n), `83b7ed8` (web UI + E2E), `TBD` (runtime wizard web + acceptance final)
+**Commits:** `84d86ec` (backend + i18n), `83b7ed8` (web UI + E2E), `8bdc7b8` (runtime wizard web), `7b205b0` (file browser root picker + i18n), `a392269` (dynamic root management)
 
 **Final Conclusion: ACCEPTED_WITH_SCOPE_NOTE**
 (Runtime wizard scope complete; model consistency deep comparison deferred to future phase.)

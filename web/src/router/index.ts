@@ -42,6 +42,13 @@ const router = createRouter({
           path: 'runtimes',
           name: 'BackendRuntimes',
           component: () => import('@/pages/BackendRuntimesPage.vue'),
+          meta: { title: 'runtimes.title' },
+        },
+        {
+          path: 'runner-configs',
+          name: 'RunnerConfigs',
+          component: () => import('@/pages/RunnerConfigsPage.vue'),
+          meta: { title: 'runnerConfigs.title' },
         },
         {
           path: 'models/artifacts',

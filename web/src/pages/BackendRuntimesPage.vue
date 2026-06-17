@@ -4,7 +4,6 @@
       <h2>{{ $t('runtimes.title') }}</h2>
       <div>
         <el-button type="primary" @click="showCreate">{{ $t('runtimes.createFromTemplate') }}</el-button>
-        <el-button type="primary" @click="startWizard">{{ $t('runtimeWizard.title') }}</el-button>
       </div>
     </div>
 
@@ -105,61 +104,6 @@
       </template>
     </el-drawer>
 
-    <!-- Wizard dialog -->
-    <el-dialog v-model="wizardVisible" :title="$t('runtimeWizard.title')" width="800px" :close-on-click-modal="false">
-      <el-steps :active="wizStep" finish-status="success" simple style="margin-bottom:20px">
-        <el-step :title="$t('runtimeWizard.selectBackend')" />
-        <el-step :title="$t('runtimeWizard.selectNode')" />
-        <el-step :title="$t('runtimeWizard.browseImage')" />
-        <el-step :title="$t('runtimeWizard.save')" />
-      </el-steps>
-
-      <div v-if="wizStep===0">
-        <el-select v-model="wizBackendId" :placeholder="$t('runtimeWizard.selectBackend')" style="width:100%" filterable @change="onBackendChange">
-          <el-option v-for="b in backends" :key="b.id" :label="`${b.name} (${b.display_name})`" :value="b.id" />
-        </el-select>
-        <el-select v-if="wizBackendId" v-model="wizVersionId" :placeholder="$t('runtimeWizard.selectVersion')" style="width:100%;margin-top:8px" filterable>
-          <el-option v-for="v in wizVersions" :key="v.id" :label="v.display_name || v.version" :value="v.id" />
-        </el-select>
-        <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizBackendId||!wizVersionId" @click="wizStep=1">{{ $t('common.next') }}</el-button></div>
-      </div>
-
-      <div v-if="wizStep===1">
-        <el-select v-model="wizNodeId" :placeholder="$t('runtimeWizard.selectNode')" style="width:100%" filterable>
-          <el-option v-for="n in nodes" :key="n.id" :label="n.id" :value="n.id" />
-        </el-select>
-        <div style="margin-top:12px;text-align:right">
-          <el-button @click="wizStep=0">{{ $t('common.prev') }}</el-button>
-          <el-button type="primary" :disabled="!wizNodeId" @click="wizStep=2">{{ $t('common.next') }}</el-button>
-        </div>
-      </div>
-
-      <div v-if="wizStep===2">
-        <DockerImagePicker v-if="wizNodeId" :node-id="wizNodeId" @select="onImageSelect" />
-        <div style="margin-top:12px;text-align:right">
-          <el-button @click="wizStep=1">{{ $t('common.prev') }}</el-button>
-          <el-button type="primary" :disabled="!wizImageRef" @click="wizStep=3">{{ $t('common.next') }}</el-button>
-        </div>
-      </div>
-
-      <div v-if="wizStep===3">
-        <el-descriptions :column="2" border size="small">
-          <el-descriptions-item :label="$t('runtimeWizard.selectBackend')">{{ wizBackendId }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runtimeWizard.selectVersion')">{{ wizVersionId }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runtimeWizard.selectNode')">{{ wizNodeId }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runtimeWizard.imageRef')">{{ wizImageRef }}</el-descriptions-item>
-        </el-descriptions>
-        <div v-if="wizCheckResult" style="margin-top:8px">
-          <el-alert :type="wizCheckResult.status==='ready'?'success':'warning'" :title="`Runtime status: ${wizCheckResult.status}`" :description="wizCheckResult.status_reason" show-icon :closable="false" />
-        </div>
-        <div style="margin-top:12px;text-align:right">
-          <el-button @click="wizStep=2">{{ $t('common.prev') }}</el-button>
-          <el-button @click="doCheckRuntime" :loading="wizChecking">{{ $t('runtimeWizard.checkRuntime') }}</el-button>
-          <el-button type="primary" :disabled="!wizCheckResult || wizCheckResult.status==='template_only'" @click="doWizardSave" :loading="wizSaving">{{ $t('runtimeWizard.save') }}</el-button>
-        </div>
-      </div>
-    </el-dialog>
-
     <!-- Add node dialog -->
     <el-dialog v-model="addNodeVisible" :title="$t('nodeRuntime.addNode')" width="700px">
       <el-select v-model="addNodeId" :placeholder="$t('runtimeWizard.selectNode')" style="width:100%;margin-bottom:8px" filterable>
@@ -178,7 +122,7 @@
 import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { ElCheckbox, ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { listRuntimes, createRuntimeFromTemplate, patchRuntime, deleteRuntime, type BackendRuntime } from '@/api/runtimes'
-import { listRuntimeTemplates, listBackends, listBackendVersions, type BackendRuntimeTemplate } from '@/api/backends'
+import { listRuntimeTemplates, type BackendRuntimeTemplate } from '@/api/backends'
 import { apiClient } from '@/api/client'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
 import { useI18n } from 'vue-i18n'
@@ -240,15 +184,10 @@ const nodeRuntimes = ref<any[]>([]); const nrLoading = ref(false)
 const addNodeVisible = ref(false); const addNodeId = ref(''); const addNodeImage = ref(''); const addNodeSaving = ref(false)
 
 // Wizard state
-const wizardVisible = ref(false); const wizStep = ref(0)
-const wizBackendId = ref(''); const wizVersionId = ref(''); const wizVersions = ref<any[]>([])
-const wizNodeId = ref(''); const wizImageRef = ref('')
-const wizChecking = ref(false); const wizSaving = ref(false); const wizCheckResult = ref<any>(null)
-
 onMounted(async () => { await refresh(); await loadRefs() })
 async function refresh() { loading.value = true; try { runtimes.value = await listRuntimes() } finally { loading.value = false } }
 async function loadRefs() {
-  try { templates.value = await listRuntimeTemplates(); backends.value = await listBackends(); nodes.value = await apiClient.get('/nodes') } catch { nodes.value = [] }
+  try { templates.value = await listRuntimeTemplates(); nodes.value = await apiClient.get('/nodes') } catch { nodes.value = [] }
 }
 
 function showCreate() { createVisible.value = true }
@@ -293,28 +232,6 @@ async function doDeleteNode(nr: any) {
 }
 
 // Wizard
-function startWizard() { wizardVisible.value = true; wizStep.value = 0; wizBackendId.value = ''; wizVersionId.value = ''; wizNodeId.value = ''; wizImageRef.value = ''; wizCheckResult.value = null; loadRefs() }
-async function onBackendChange(id: string) {
-  try { wizVersions.value = await apiClient.get(`/backends/${id}/versions`) } catch { wizVersions.value = [] }
-  wizVersionId.value = ''
-}
-function onImageSelect(img: any) { wizImageRef.value = img.image_ref || img.image || '' }
-async function doCheckRuntime() {
-  wizChecking.value = true
-  try {
-    wizCheckResult.value = await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/check`, { backend_runtime_id: 'runtime.vllm.nvidia-docker', image_ref: wizImageRef.value, image_present: !!wizImageRef.value, docker_available: true })
-  } catch (e: any) { wizCheckResult.value = { status: 'unknown', status_reason: e?.message || 'check failed' } }
-  wizChecking.value = false
-}
-async function doWizardSave() {
-  wizSaving.value = true
-  try {
-    await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: 'runtime.vllm.nvidia-docker', image_ref: wizImageRef.value, image_present: true, docker_available: true })
-    ElMessage.success('Runtime configured'); wizardVisible.value = false; await refresh()
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
-  wizSaving.value = false
-}
-
 // Ported from original (loadDockerJson, buildPayload, commandPreview, parseLines, etc.)
 function loadDockerJson(row: BackendRuntime) {
   const docker = row.docker_json || {}
