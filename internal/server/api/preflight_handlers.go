@@ -37,7 +37,7 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 	// Find nodes that have both a ModelLocation and a ready NodeBackendRuntime
 	rows, err := h.DB.Query(`SELECT DISTINCT ml.node_id FROM model_locations ml
 		JOIN node_backend_runtimes nbr ON nbr.node_id = ml.node_id
-		WHERE ml.model_artifact_id = ? AND ml.status != 'disabled'
+		WHERE ml.model_artifact_id = ?
 		AND ml.verification_status IN ('verified','warning','manually_accepted')
 		AND nbr.backend_runtime_id = ? AND nbr.status = 'ready'`,
 		req.ModelArtifactID, req.BackendRuntimeID)
