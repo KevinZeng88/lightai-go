@@ -47,6 +47,8 @@ export default {
     view: 'View',
     start: 'Start',
     stop: 'Stop',
+    next: 'Next',
+    prev: 'Previous',
   },
   nav: {
     overview: 'Overview',

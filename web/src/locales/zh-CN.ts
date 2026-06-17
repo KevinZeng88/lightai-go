@@ -47,6 +47,8 @@ export default {
     view: '查看',
     start: '启动',
     stop: '停止',
+    next: '下一步',
+    prev: '上一步',
   },
   nav: {
     overview: '概览',

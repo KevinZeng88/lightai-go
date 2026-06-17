@@ -605,22 +605,23 @@ func (h *AgentHandler) HandleGetNodeDockerImages(w http.ResponseWriter, r *http.
 		http.Error(w, `{"error":"node has no advertised address or metrics port"}`, http.StatusBadRequest)
 		return
 	}
-	agentURL := fmt.Sprintf("http://%s:%d/docker-images", addr, port)
+	query := r.URL.Query().Get("query")
+	limit := r.URL.Query().Get("limit")
+	agentURL := fmt.Sprintf("http://%s:%d/docker-images?query=%s&limit=%s", addr, port, query, limit)
 	resp, err := http.Get(agentURL)
 	if err != nil {
-		// AUD-008: Return 502 when agent is unreachable so caller can distinguish
-		// "no images" from "agent down".
 		log.Warn("failed to query agent docker images", "node_id", nodeID, "url", agentURL, "error", err)
 		writeError(w, http.StatusBadGateway, "agent unreachable")
 		return
 	}
 	defer resp.Body.Close()
-	var images []interface{}
-	json.NewDecoder(resp.Body).Decode(&images)
-	if images == nil {
-		images = []interface{}{}
+	// Agent returns {images: [...], count: N} or a flat array (legacy).
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		writeError(w, http.StatusBadGateway, "invalid agent response")
+		return
 	}
-	writeJSON(w, http.StatusOK, images)
+	writeJSON(w, http.StatusOK, result)
 }
 
 // MarkOfflineNodes marks nodes as offline if they haven't sent a heartbeat

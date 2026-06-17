@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# E2E test for Model/Runtime wizard APIs and preflight on NVIDIA hardware.
+
+SERVER_URL="${LIGHTAI_SERVER_URL:-http://127.0.0.1:18080}"
+USERNAME="${LIGHTAI_E2E_USERNAME:-admin}"
+PASSWORD="${LIGHTAI_E2E_PASSWORD:-}"
+PREFIX="e2e-wizard"
+RUN_ID="${LIGHTAI_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
+COOKIE_JAR="$(mktemp)"
+CSRF_TOKEN=""
+DEPLOYMENT_ID=""; INSTANCE_ID=""; ARTIFACT_ID=""; RUNTIME_CLONE_ID=""; NBR_ID=""
+EXIT_CODE=0; CURRENT_STAGE=""; STAGE_START_MS=""
+
+VLLM_IMAGE="${VLLM_IMAGE:-vllm/vllm-openai:latest}"
+VLLM_MODEL="${VLLM_MODEL:-/home/kzeng/models/Qwen3-0.6B-Instruct-2512}"
+VLLM_PORT="${VLLM_PORT:-8004}"
+
+log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
+skip() { log "SKIP: $*"; exit 0; }
+fail() { log "FAIL: $*"; EXIT_CODE=1; exit 1; }
+now_ms() { date +%s%3N; }
+stage_start() { CURRENT_STAGE="$1"; log "stage=$1 start"; STAGE_START_MS="$(now_ms)"; }
+stage_done() { local s="${1:-$CURRENT_STAGE}"; local d=$(($(now_ms) - STAGE_START_MS)); log "stage=$s done duration_ms=$d"; CURRENT_STAGE=""; }
+
+json_get() { python3 -c 'import json,sys; d=json.load(sys.stdin); p=sys.argv[1].split("."); [d:=d.get(x,"") if isinstance(d,dict) else (d[0] if d else {}) for x in p]; print(d if d is not None else "")' "$1"; }
+
+api() {
+  local m="$1" p="$2" d="${3:-}"
+  local a=(-sS -X "$m" "$SERVER_URL$p" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -H "Origin: $SERVER_URL" -H "Content-Type: application/json")
+  [ -n "$CSRF_TOKEN" ] && [ "$m" != "GET" ] && a+=(-H "X-CSRF-Token: $CSRF_TOKEN")
+  [ -n "$d" ] && a+=(-d "$d")
+  local r; r="$(curl "${a[@]}" -w $'\nHTTP:%{http_code}')" || return 1
+  local code; code="$(printf '%s\n' "$r" | awk -F: '/^HTTP:/ {print $2}' | tail -1)"
+  local body; body="$(printf '%s\n' "$r" | sed '/^HTTP:/d')"
+  [ "$code" = "200" ] || [ "$code" = "201" ] || { printf '%s\n' "$body" >&2; return 1; }
+  printf '%s\n' "$body"
+}
+
+on_exit() {
+  local rc=$?; [ "$rc" -ne 0 ] && [ "$EXIT_CODE" -eq 0 ] && EXIT_CODE=$rc
+  [ -n "$CURRENT_STAGE" ] && log "failed_stage=$CURRENT_STAGE"
+  if [ "${KEEP_E2E_RESOURCES:-0}" != "1" ]; then
+    [ -n "$DEPLOYMENT_ID" ] && { api POST "/api/v1/deployments/$DEPLOYMENT_ID/stop" '{}' >/dev/null 2>&1 || true; api DELETE "/api/v1/deployments/$DEPLOYMENT_ID" >/dev/null 2>&1 || true; }
+    [ -n "$ARTIFACT_ID" ] && api DELETE "/api/v1/model-artifacts/$ARTIFACT_ID" >/dev/null 2>&1 || true
+    [ -n "$INSTANCE_ID" ] && docker rm -f "lightai-${INSTANCE_ID:0:12}" >/dev/null 2>&1 || true
+  fi
+  rm -f "$COOKIE_JAR"
+  exit $EXIT_CODE
+}
+trap on_exit EXIT
+
+need() { command -v "$1" >/dev/null 2>&1 || skip "$1 not installed"; }
+need curl; need python3; need go; need docker
+docker image inspect "$VLLM_IMAGE" >/dev/null 2>&1 || skip "image missing: $VLLM_IMAGE"
+[ -e "$VLLM_MODEL" ] || skip "model path missing: $VLLM_MODEL"
+
+# Start services
+if ! curl -fsS "$SERVER_URL/healthz" >/dev/null 2>&1; then
+  mkdir -p bin
+  go build -o bin/lightai-server ./cmd/server && go build -o bin/lightai-agent ./cmd/agent
+  bash scripts/start-all.sh --no-observability --wait
+  curl -fsS "$SERVER_URL/healthz" >/dev/null 2>&1 || fail "Server failed to start"
+fi
+
+# Login
+[ -z "$PASSWORD" ] && [ -f runtime/initial-credentials.txt ] && PASSWORD="$(awk '/Password:/ {print $NF}' runtime/initial-credentials.txt | tail -1)"
+[ -n "$PASSWORD" ] || skip "password unavailable"
+
+stage_start login
+CSRF_TOKEN="$(curl -sS -X POST "$SERVER_URL/api/v1/auth/login" -H "Origin: $SERVER_URL" -H "Content-Type: application/json" -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" -c "$COOKIE_JAR" | json_get csrf_token)"
+[ -n "$CSRF_TOKEN" ] || fail "login failed"
+stage_done
+
+# Query node and GPU
+stage_start query_node
+node_json="$(api GET /api/v1/nodes)"; node_id="$(printf '%s' "$node_json" | json_get id)"
+[ -n "$node_id" ] || fail "no node"
+log "node_id=$node_id"
+stage_done
+
+stage_start query_gpu
+gpu_json="$(api GET /api/v1/gpus)"; gpu_id="$(printf '%s' "$gpu_json" | json_get id)"
+[ -n "$gpu_id" ] || skip "no GPU"
+log "gpu_id=$gpu_id"
+stage_done
+
+# Browse files
+stage_start browse_files
+files_json="$(api GET "/api/v1/nodes/$node_id/files?root=/home/kzeng/models&path=&limit=50")"
+printf '%s' "$files_json" | grep -q "Qwen3" || fail "Qwen3 model not found in /home/kzeng/models"
+stage_done
+
+# Scan model
+stage_start scan_model
+scan_json="$(api POST "/api/v1/nodes/$node_id/model-paths/scan" "{\"root\":\"$(dirname "$VLLM_MODEL")\",\"relative_path\":\"$(basename "$VLLM_MODEL")\"}")"
+log "scan result: $(printf '%s' "$scan_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("format","?"), d.get("discovered_name","?"))' 2>/dev/null || true)"
+stage_done
+
+# Create ModelArtifact + ModelLocation
+stage_start create_model_artifact
+artifact_json="$(api POST /api/v1/model-artifacts "{\"name\":\"$PREFIX-$RUN_ID-model\",\"display_name\":\"$PREFIX model\",\"path\":\"$VLLM_MODEL\",\"format\":\"huggingface\",\"task_type\":\"chat\"}")"
+ARTIFACT_ID="$(printf '%s' "$artifact_json" | json_get id)"
+[ -n "$ARTIFACT_ID" ] || fail "artifact create failed"
+api POST "/api/v1/model-artifacts/$ARTIFACT_ID/locations" "{\"node_id\":\"$node_id\",\"absolute_path\":\"$VLLM_MODEL\",\"path_type\":\"directory\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" >/dev/null
+stage_done
+
+# Query Docker images
+stage_start docker_images
+images_json="$(api GET "/api/v1/nodes/$node_id/docker-images?query=vllm&limit=5")"
+printf '%s' "$images_json" | grep -q "vllm" || fail "vllm image not found"
+stage_done
+
+# Enable runtime
+stage_start enable_runtime
+api POST "/api/v1/nodes/$node_id/backend-runtimes/enable" "{\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"image_ref\":\"$VLLM_IMAGE\",\"image_present\":true,\"docker_available\":true}" >/tmp/e2e-wiz-nbr.json
+grep -q '"status":"ready"' /tmp/e2e-wiz-nbr.json || fail "runtime not ready"
+stage_done
+
+# Clone runtime
+stage_start clone_runtime
+clone_json="$(api POST /api/v1/backend-runtimes/runtime.vllm.nvidia-docker/clone '{}')"
+RUNTIME_CLONE_ID="$(printf '%s' "$clone_json" | json_get id)"
+[ -n "$RUNTIME_CLONE_ID" ] && log "clone_id=$RUNTIME_CLONE_ID"
+stage_done
+
+# Preflight
+stage_start preflight
+pf_json="$(api POST /api/v1/deployments/preflight "{\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"host_port\":$VLLM_PORT}")"
+printf '%s' "$pf_json" | grep -q '"can_run":true' || fail "preflight can_run=false"
+log "candidate nodes: $(printf '%s' "$pf_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d.get("candidate_nodes",[])))' 2>/dev/null || echo 0)"
+stage_done
+
+# Create and start deployment
+stage_start start_deployment
+deploy_payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$VLLM_PORT},\"parameters_json\":{\"served_model_name\":\"$PREFIX-$RUN_ID\",\"max_model_len\":4096},\"env_overrides_json\":{}}"
+deploy_json="$(api POST /api/v1/deployments "$deploy_payload")"
+DEPLOYMENT_ID="$(printf '%s' "$deploy_json" | json_get id)"
+[ -n "$DEPLOYMENT_ID" ] || fail "deployment create failed"
+start_json="$(api POST "/api/v1/deployments/$DEPLOYMENT_ID/start" '{}')"
+INSTANCE_ID="$(printf '%s' "$start_json" | json_get instance_id)"
+[ -n "$INSTANCE_ID" ] || fail "start failed"
+log "instance_id=$INSTANCE_ID"
+stage_done
+
+# Health check
+stage_start health_check
+deadline=$((SECONDS + 300)); ok=false
+while [ "$SECONDS" -lt "$deadline" ]; do
+  if curl -fsS "http://127.0.0.1:$VLLM_PORT/v1/models" >/tmp/e2e-wiz-models.json 2>/dev/null; then
+    log "/v1/models PASS"; ok=true; break
+  fi
+  state="$(api GET "/api/v1/model-instances?deployment_id=$DEPLOYMENT_ID" 2>/dev/null | json_get actual_state || true)"
+  [ "$state" = "failed" ] && fail "instance failed"
+  sleep 5
+done
+[ "$ok" = true ] || fail "/v1/models timeout"
+stage_done
+
+# Docker logs
+stage_start logs_api
+api GET "/api/v1/node-run-plans/$(api GET "/api/v1/deployments/$DEPLOYMENT_ID/run-plan-groups" | json_get id)/logs?tail=50" >/tmp/e2e-wiz-logs.json 2>/dev/null || true
+stage_done
+
+# Stop
+stage_start stop_deployment
+api POST "/api/v1/deployments/$DEPLOYMENT_ID/stop" '{}' >/dev/null
+stage_done
+
+# Cleanup
+stage_start cleanup_resources
+api DELETE "/api/v1/deployments/$DEPLOYMENT_ID" >/dev/null
+api DELETE "/api/v1/model-artifacts/$ARTIFACT_ID" >/dev/null
+docker rm -f "lightai-${INSTANCE_ID:0:12}" >/dev/null 2>&1 || true
+stage_done
+
+log "PASS: model runtime wizard E2E completed"
