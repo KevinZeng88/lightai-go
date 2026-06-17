@@ -46,13 +46,32 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	artifactID := strVal(req, "model_artifact_id", "")
+	backendRuntimeID := strVal(req, "backend_runtime_id", "")
+
+	// REVIEW-022: Validate references at create time.
+	if artifactID != "" {
+		var exists string
+		if err := h.DB.QueryRow(`SELECT id FROM model_artifacts WHERE id = ?`, artifactID).Scan(&exists); err != nil {
+			writeError(w, http.StatusBadRequest, "model_artifact_id not found")
+			return
+		}
+	}
+	if backendRuntimeID != "" {
+		var exists string
+		if err := h.DB.QueryRow(`SELECT id FROM backend_runtimes WHERE id = ?`, backendRuntimeID).Scan(&exists); err != nil {
+			writeError(w, http.StatusBadRequest, "backend_runtime_id not found")
+			return
+		}
+	}
+
 	id := uuid.NewString()
 	tid := tenantID(r)
 	now := time.Now().Format(time.RFC3339)
 
 	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "description", ""),
-		strVal(req, "model_artifact_id", ""), strVal(req, "backend_runtime_id", ""),
+		artifactID, backendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(req["parameters_json"]), jsonString(req["env_overrides_json"]),
 		"stopped", "stopped", tid, now, now,
@@ -362,6 +381,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"instance_id":         instanceID,
 		"deployment_id":       deployID,
 		"runtime_type":        "docker",
+		"vendor":              rtVendor,
 		"model_path":          strVal(artifact, "path", ""),
 		"served_model_name":   strVal(params, "served_model_name", strVal(artifact, "name", "")),
 		"node_id":             placement.NodeID,
