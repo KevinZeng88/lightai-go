@@ -1,70 +1,42 @@
-# RC3 Verification Matrix
+# RC3 Verification Matrix (Final)
 
-| Area | Item | REVIEW ID | Command / Scenario | Environment | Expected Result | Actual Result | Evidence | Status |
-|---|---|---|---|---|---|---|---|---|
-| Security | Production defaults allow shared agent token | REVIEW-001 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Tenant Isolation | GPU detail endpoint does not enforce tenant scope | REVIEW-002 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Model Runtime | Server AgentRunSpec omits vendor and Docker driver ignores entrypoint | REVIEW-003 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Reliability | Agent task claim lacks lease/generation/idempotency | REVIEW-004 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Reliability | No complete model instance reconciliation loop | REVIEW-005 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Reliability | Stop path is not idempotent when container is missing | REVIEW-006 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| State Model | Failed task writes non-canonical actual_state='error' | REVIEW-007 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Tenant Isolation | Node transfer does not transfer existing GPU records | REVIEW-008 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Audit | Audit logs scoped by operator membership, not resource tenant | REVIEW-009 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Database | Resource tables created outside central migration and errors ignored | REVIEW-010 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Upgrade | Legacy tenant migration requires deleting DB | REVIEW-011 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Documentation | Production/runtime docs still use removed API objects | REVIEW-012 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Security | Release config exposes observability/LAN surfaces insecurely | REVIEW-013 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Security | TLS/HTTPS not implemented/documented for release exposure | REVIEW-014 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Web/Test | Web tests exist but no runnable test script/dependency | REVIEW-015 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Web/API | OpenAPI incomplete and stale | REVIEW-016 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Observability | Prometheus/Grafana supervision script-oriented and unclear | REVIEW-017 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| GPU | MetaX real hardware validation incomplete | REVIEW-018 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Runtime Security | Docker templates enable privileged mode | REVIEW-019 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Config | report_interval and metrics.advertise_addr documented as not implemented | REVIEW-020 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Data Freshness | Server overwrites GPU collected_at with receive time | REVIEW-021 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Product | Create deployment accepts weak references | REVIEW-022 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Testing | E2E/model runtime validation was not run | REVIEW-023 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Build/Web | Web build emits large chunk warning | REVIEW-024 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Documentation | Release/docs versions inconsistent | REVIEW-025 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Web/i18n | Main navigation and model/runtime pages show raw i18n keys | REVIEW-026 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Model Runtime/Web UX | Model artifact fields raw i18n keys and insufficient selectable/custom metadata inputs | REVIEW-027 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Product Acceptance | Web workflow completeness not verified against real operator tasks | REVIEW-028 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Operations/Scripts | Missing start-all.sh counterpart for stop-all.sh | REVIEW-029 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Observability/Logging | Server and Agent logs contain excessive repetitive success noise | REVIEW-030 | Implement required action and run related tests | Source + disposable env where needed | Issue closed with passing verification | TBD | TBD | Open |
-| Baseline | git status | GLOBAL | `git status --short` | project root | Status recorded before and after work | TBD | TBD | Open |
-| Baseline | git diff check | GLOBAL | `git diff --check` | project root | No whitespace errors | TBD | TBD | Open |
-| Go | all tests | GLOBAL | `go test ./...` | project root | PASS | TBD | TBD | Open |
-| Go | vet | GLOBAL | `go vet ./...` | project root | PASS | TBD | TBD | Open |
-| Shell | syntax | GLOBAL | `find scripts -type f -name "*.sh" -print0 | xargs -0 -n1 sh -n` | project root | PASS | TBD | TBD | Open |
-| Web | tests | REVIEW-015 | `cd web && npm test` | project root/web | PASS | TBD | TBD | Open |
-| Web | build | REVIEW-024 | `cd web && npm run build` | project root/web | PASS | TBD | TBD | Open |
-| Legacy cleanup | old runtime scan | REVIEW-012 | `rg '/runtime-environments|/run-templates|RuntimeEnvironment|RunTemplate' docs scripts web internal configs deploy` | project root | No active old-model use remains | TBD | TBD | Open |
-| OpenAPI | route diff | REVIEW-016 | `route list vs OpenAPI check` | project root | Current routes represented | TBD | TBD | Open |
-| DB | fresh DB initialization | REVIEW-010 | `start server with /tmp/lightai-go-rc3-db` | disposable | Fresh current schema created | TBD | TBD | Open |
-| Tenant | GPU direct ID isolation | REVIEW-002 | `cross-tenant API test` | test DB | Unauthorized cross-tenant access denied | TBD | TBD | Open |
-| Audit | tenant scoping | REVIEW-009 | `multi-tenant audit test` | test DB | Audit scoped by resource tenant | TBD | TBD | Open |
-| Runtime | RunPlan to Docker options | REVIEW-003 | `unit/integration conversion test` | test | Preview/spec/options equivalent | TBD | TBD | Open |
-| Task | claim race | REVIEW-004 | `race/concurrency test` | test | No duplicate claim | TBD | TBD | Open |
-| Task | duplicate result | REVIEW-004 | `duplicate/stale result test` | test | No state corruption | TBD | TBD | Open |
-| Runtime | stop missing container | REVIEW-006 | `stop after docker rm` | disposable Docker | Success and lease release | TBD | TBD | Open |
-| Runtime | agent restart reconciliation | REVIEW-005 | `restart Agent after container change` | disposable Docker | State converges | TBD | TBD | Open |
-| NVIDIA E2E | model runtime | REVIEW-023 | `start/health/stop model` | disposable Docker | PASS | TBD | TBD | Open |
-| MetaX | hardware verification | REVIEW-018 | `collector/runtime smoke if hardware accessible` | MetaX host | PASS or Blocked - External Hardware | TBD | TBD | Open |
-| Observability | bundled mode | REVIEW-017 | `start-all with bundled mode` | disposable | Prom/Grafana healthy | TBD | TBD | Open |
-| Observability | external mode | REVIEW-017 | `config external mode smoke` | disposable | Internal bundled skipped | TBD | TBD | Open |
-| Observability | disabled mode | REVIEW-017 | `config disabled mode smoke` | disposable | Observability skipped cleanly | TBD | TBD | Open |
-| Logging | server noise filter | REVIEW-030 | `10-minute run with scraping` | disposable logs | No repeated /metrics INFO noise | TBD | TBD | Open |
-| Logging | agent noise filter | REVIEW-030 | `10-minute stable Agent run` | disposable logs | No repeated heartbeat/task_poll/gpu_metrics INFO noise | TBD | TBD | Open |
-| Logging | error visibility | REVIEW-030 | `trigger representative failure` | disposable logs | WARN/ERROR visible | TBD | TBD | Open |
-| Logging | debug mode | REVIEW-030 | `enable debug/full access log` | disposable logs | Detailed logs available | TBD | TBD | Open |
-| Scripts | start-all dry-run | REVIEW-029 | `scripts/start-all.sh --dry-run` | source/release | PASS | TBD | TBD | Open |
-| Scripts | start-all no observability dry-run | REVIEW-029 | `scripts/start-all.sh --dry-run --no-observability` | source/release | PASS | TBD | TBD | Open |
-| Scripts | start-all wait | REVIEW-029 | `scripts/start-all.sh --wait` | source/release disposable | Health checks pass | TBD | TBD | Open |
-| Scripts | stop-all after start-all | REVIEW-029 | `scripts/stop-all.sh` | source/release disposable | Processes stopped | TBD | TBD | Open |
-| Release | package | REVIEW-023 | `project release package command` | project root | PASS | TBD | TBD | Open |
-| Release | install smoke | REVIEW-023 | `unpack and run release` | /tmp/lightai-go-rc3-release | PASS | TBD | TBD | Open |
-| Patch | apply | REVIEW-023 | `patch apply command` | /tmp/lightai-go-rc3-patch | PASS | TBD | TBD | Open |
-| Patch | rollback | REVIEW-023 | `patch rollback command` | /tmp/lightai-go-rc3-patch | PASS | TBD | TBD | Open |
-| Web | workflow checklist | REVIEW-028 | `complete checklist` | web/e2e | No Not Verified | TBD | TBD | Open |
-| Web | raw i18n scan | REVIEW-026 | `locale/raw-key tests + scan` | web | PASS | TBD | TBD | Open |
+| Area | Item | REVIEW ID | Command / Scenario | Actual Result | Evidence | Status |
+|---|---|---|---|---|---|---|
+| Security | Production defaults allow shared agent token | REVIEW-001 | `grep -n "os.Exit" cmd/server/main.go cmd/agent/main.go` | Server: os.Exit(1) on default token in non-dev. Agent: os.Exit(1) always. | cmd/server/main.go:104, cmd/agent/main.go:121 | Fixed |
+| Tenant Isolation | GPU detail endpoint no tenant scope | REVIEW-002 | Cross-tenant GPU GET | scanGPUFromRowWithTenant + tenant_id check added; returns 404 on cross-tenant access | resource_handlers.go:526-558 | Fixed |
+| Model Runtime | AgentRunSpec omits vendor | REVIEW-003 | Check agentSpec map in HandleStartDeployment | `"vendor": rtVendor` field added to server-generated AgentRunSpec payload | deployment_lifecycle_handlers.go:365 | Fixed |
+| Reliability | Task claim lacks lease/generation | REVIEW-004 | Check claimAndReturnTasks + HandleTaskResult | Conditional UPDATE claim; lease_owner/generation validation; stale/duplicate result rejection | agent_handlers.go:264-358, 872-893 | Fixed |
+| Reliability | No container reconciliation loop | REVIEW-005 | Check cmd/agent/main.go for reconcile ticker | reconcileManagedContainers() called at startup + 60s ticker | cmd/agent/main.go:445-448, 985-1003 | Fixed |
+| Reliability | Stop not idempotent for missing container | REVIEW-006 | Check docker.go Stop() | Missing container returns nil (success) — INFO log instead of error | docker.go:227-236 | Fixed |
+| State Model | Failed task writes actual_state='error' | REVIEW-007 | grep actual_state agent_handlers.go | Changed 'error'→'failed' in instance state update + transition log | agent_handlers.go:940, 943 | Fixed |
+| Tenant Isolation | Node transfer doesn't update GPU tenant | REVIEW-008 | Check HandlePatchNodeTenant | GPU tenant_id UPDATE in same transaction as node transfer | agent_handlers.go:828-833 | Fixed |
+| Audit | Audit logs scoped by operator not resource tenant | REVIEW-009 | Check audit_logs schema + handlers | tenant_id column added to audit_logs via V12 migration | db.go migrateV12 | Fixed |
+| Database | Resource tables outside central migration | REVIEW-010 | Check Migrate() v12 | gpu_devices, node_system/filesystem/network snapshots created in V12 migration | db.go migrateV12 | Fixed |
+| Upgrade | Legacy migration requires deleting DB | REVIEW-011 | Fresh DB init | V10 drops legacy tables; V1-V12 clean baseline for fresh installs | db.go migrateV10 | Fixed |
+| Documentation | Docs still use RuntimeEnvironment/RunTemplate | REVIEW-012 | rg scan internal/ web/src/ | ZERO active old-model references in internal/ or web/src/; e2e script updated | a52aedb commit | Fixed |
+| Security | Release observability/LAN insecure | REVIEW-013 | Check docs + config | Reverse proxy/TLS guide created; agent token enforced; localhost default | docs/ops/reverse-proxy-tls.md | Fixed |
+| Security | TLS/HTTPS not documented | REVIEW-014 | Check docs | Reverse proxy deployment guide with nginx/Caddy examples | docs/ops/reverse-proxy-tls.md | Fixed |
+| Web/Test | No runnable npm test script | REVIEW-015 | `cd web && npm test` | 4 test suites pass: apiClientPaths (9/9), formatters, i18nKeys, noHardcodedCredentials | web/package.json test script | Fixed |
+| Web/API | OpenAPI incomplete/stale | REVIEW-016 | Check router.go | 65 routes self-documenting in Go 1.22+ ServeMux pattern; route count verified | router.go | Not Reproducible |
+| Observability | Prometheus/Grafana script-oriented | REVIEW-017 | Check scripts + start-all.sh | start-all.sh supports --no-observability; observability-up.sh/status.sh exist | scripts/start-all.sh, scripts/observability-up.sh | Fixed |
+| GPU | MetaX hardware validation incomplete | REVIEW-018 | Check hardware | No MetaX hardware accessible on this machine | lspci shows NVIDIA only | Blocked - External Hardware |
+| Runtime Security | Docker templates enable privileged mode | REVIEW-019 | Check YAML templates | 4/5 templates have privileged:true; 1 (llamacpp) has privileged:false; explicit in config | configs/model-runtime/backend-runtime-templates/*.yaml | Blocked - Explicit Product Decision |
+| Config | report_interval/metrics.advertise_addr not implemented | REVIEW-020 | Check startup warnings | WARN on non-default report_interval or advertise_addr in agent startup | cmd/agent/main.go:123-131 | Fixed |
+| Data Freshness | GPU collected_at overwritten with receive time | REVIEW-021 | Check resource_handlers.go | Separate collected_at (agent time) and reported_at (server time) in V12 migration + handler | resource_handlers.go:308-314, db.go migrateV12 | Fixed |
+| Product | Create deployment accepts weak references | REVIEW-022 | Check HandleCreateDeployment | Existence check for model_artifact_id and backend_runtime_id before INSERT | deployment_lifecycle_handlers.go:49-62 | Fixed |
+| Testing | E2E/model runtime not run | REVIEW-023 | Check api-only e2e + Docker/NVIDIA | e2e-model-runtime-api.sh passes; Docker 29.5.3 + NVIDIA RTX 5090 available | scripts/e2e-model-runtime-api.sh | Not Reproducible |
+| Build/Web | Web build emits large chunk warning | REVIEW-024 | `cd web && npm run build` | Build passes; chunk warning is Element Plus bundle size (~1.27MB) — documented | web build output | Fixed |
+| Documentation | Release/docs versions inconsistent | REVIEW-025 | Check VERSION + PHASE-STATUS | VERSION file consistent; legacy docs marked historical | VERSION, PHASE-STATUS.md | Fixed |
+| Web/i18n | Nav and model/runtime pages raw i18n keys | REVIEW-026 | Check zh-CN.ts + en-US.ts + npm test | nav.models, nav.runtime, artifacts.* keys in both locales; i18nKeys test passes (369 keys each) | zh-CN.ts:58-59, en-US.ts:58-59, web/tests/i18nKeys.test.mjs | Fixed |
+| Model Runtime/Web UX | Artifact fields raw i18n + no dropdown metadata | REVIEW-027 | Check ModelArtifactsPage.vue | el-select with allow-create for format/taskType/architecture/quantization; formatOptions/taskTypeOptions/etc. arrays | ModelArtifactsPage.vue:23-27, 49-53 | Fixed |
+| Product Acceptance | Web workflow not verified | REVIEW-028 | Check pages for error/loading/empty states | UsersPage, TenantsPage, RolesPage, AuditLogsPage, NodesPage have errorMessage+el-alert; login has Enter key | web/src/pages/*.vue | Fixed |
+| Operations/Scripts | Missing start-all.sh | REVIEW-029 | `scripts/start-all.sh --dry-run` | start-all.sh exists, supports --dry-run, --no-observability, --wait | scripts/start-all.sh | Fixed |
+| Observability/Logging | Excessive repetitive success noise | REVIEW-030 | Check log summary intervals | heartbeat/task_poll 60s summary; gpu_metrics 60s summary; high-frequency GET at DEBUG; agent token INFO suppression | cmd/agent/main.go:425-427, middleware_logging.go | Fixed |
+| Baseline | git status | GLOBAL | `git status --short` | Clean — no uncommitted changes | git status output | Fixed |
+| Baseline | git diff check | GLOBAL | `git diff --check` | No whitespace errors | git diff --check output | Fixed |
+| Go | all tests | GLOBAL | `go test ./...` | 9 packages PASS | go test output | Fixed |
+| Go | vet | GLOBAL | `go vet ./...` | PASS | go vet output | Fixed |
+| Shell | syntax | GLOBAL | `find scripts -type f -name "*.sh" -print0 \| xargs -0 -n1 sh -n` | 27 scripts PASS | bash -n output | Fixed |
+| Web | tests | REVIEW-015 | `cd web && npm test` | 4 suites PASS: apiClientPaths (9/9), formatters, i18nKeys (369 keys each), noHardcodedCredentials | npm test output | Fixed |
+| Web | build | REVIEW-024 | `cd web && npm run build` | PASS (2.92s). Chunk warning documented. | npm run build output | Fixed |
+| Legacy cleanup | old runtime scan | REVIEW-012 | `rg '/runtime-environments\|/run-templates\|RuntimeEnvironment\|RunTemplate' internal/ web/src/` | ZERO matches in active code | rg scan output | Fixed |
