@@ -187,8 +187,9 @@ async function doScan() {
   if (!wizardSelectedEntry.value || !wizardNodeId.value) return
   wizardScanning.value = true; wizardStep.value = 2
   try {
-    const root = wizardSelectedEntry.value.root || ''
-    const relPath = wizardSelectedEntry.value.name
+    const entry = wizardSelectedEntry.value
+    const root = entry.root || ''
+    const relPath = entry.relative_path || entry.name
     const resp = await apiClient.post(`/nodes/${wizardNodeId.value}/model-paths/scan`, { root, relative_path: relPath })
     scanResult.value = resp
     if (resp.discovered_name) wizardModelName.value = resp.discovered_name

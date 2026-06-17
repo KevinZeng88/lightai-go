@@ -54,7 +54,7 @@
         <el-table-column prop="mod_time" :label="$t('fileBrowser.modTime')" width="180" />
         <el-table-column :label="$t('fileBrowser.select')" width="130">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="$emit('select', { ...row, root: currentRoot, absolute_path: currentRoot + '/' + currentPath + (currentPath?'/':'') + row.name })">
+            <el-button size="small" type="primary" @click="$emit('select', { ...row, root: currentRoot, relative_path: currentPath ? currentPath + '/' + row.name : row.name, absolute_path: currentRoot + '/' + currentPath + (currentPath?'/':'') + row.name })">
               {{ row.is_dir ? $t('fileBrowser.selectDirectory') : $t('fileBrowser.selectFile') }}
             </el-button>
           </template>
