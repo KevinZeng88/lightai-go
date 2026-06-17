@@ -211,9 +211,10 @@ func TestDockerRuntimeDriverStopNotFound(t *testing.T) {
 	driver, _ := newTestDriver()
 	ctx := context.Background()
 
+	// REVIEW-006: Stop is now idempotent — missing container returns nil (success).
 	err := driver.Stop(ctx, "nonexistent-instance")
-	if err == nil {
-		t.Fatal("expected error for nonexistent container, got nil")
+	if err != nil {
+		t.Fatalf("expected nil (idempotent stop) for nonexistent container, got: %v", err)
 	}
 }
 
