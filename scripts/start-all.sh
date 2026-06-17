@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # start-all.sh — LightAI Go unified launcher
 # Start Server, optional bundled observability, and Agent in correct order.
+# Idempotent: detects already-running services and skips them.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -32,71 +33,78 @@ done
 # Detect source tree vs release directory.
 if [ -f "$PROJECT_DIR/cmd/server/main.go" ]; then
   MODE="source"
-  SERVER_BIN="go run ./cmd/server"
 else
   MODE="release"
-  if [ -x "$PROJECT_DIR/lightai-server" ]; then
-    SERVER_BIN="$PROJECT_DIR/lightai-server"
-  elif [ -x "$PROJECT_DIR/bin/lightai-server" ]; then
-    SERVER_BIN="$PROJECT_DIR/bin/lightai-server"
-  else
-    echo "ERROR: Cannot find lightai-server binary. Run from source tree or release directory." >&2
-    exit 1
-  fi
 fi
 
 log()  { echo "[start-all] $*"; }
 dryn() { if $DRY_RUN; then echo "[DRY-RUN] $*"; fi }
 
-# ── Check prerequisites ──
-check_script() {
-  local s="$SCRIPT_DIR/$1"
-  if [ ! -f "$s" ]; then
-    echo "ERROR: Required script not found: $s" >&2
-    exit 1
-  fi
+# Health check helper — returns 0 if endpoint responds.
+is_healthy() {
+  local url="$1"
+  curl -sf -o /dev/null "$url" 2>/dev/null
 }
 
-check_script start-server.sh
-check_script start-agent.sh
+SERVER_PORT=${LIGHTAI_SERVER_PORT:-18080}
+AGENT_METRICS_PORT=${LIGHTAI_AGENT_METRICS_PORT:-19091}
+PROM_PORT=${LIGHTAI_PROMETHEUS_PORT:-19090}
+GRAFANA_PORT=${LIGHTAI_GRAFANA_PORT:-13000}
 
 log "Mode: $MODE"
 log "Observability: $($NO_OBSERVABILITY && echo 'skipped' || echo 'enabled')"
 
-# ── Start Server ──
-log "Starting server..."
-dryn "$SCRIPT_DIR/start-server.sh"
-if ! $DRY_RUN; then
-  bash "$SCRIPT_DIR/start-server.sh"
+# ── Start Server (idempotent) ──
+if is_healthy "http://127.0.0.1:${SERVER_PORT}/healthz"; then
+  log "Server: already running (health check OK on port $SERVER_PORT) — skipping"
+elif $DRY_RUN; then
+  dryn "$SCRIPT_DIR/start-server.sh"
+else
+  log "Starting server..."
+  bash "$SCRIPT_DIR/start-server.sh" || {
+    log "ERROR: Server failed to start"
+    exit 1
+  }
 fi
 
-# ── Start observability (if enabled) ──
+# ── Start observability (idempotent) ──
 if ! $NO_OBSERVABILITY; then
-  if [ -f "$SCRIPT_DIR/observability-up.sh" ]; then
-    log "Starting bundled observability..."
-    dryn "$SCRIPT_DIR/observability-up.sh"
-    if ! $DRY_RUN; then
-      bash "$SCRIPT_DIR/observability-up.sh" || log "WARNING: observability startup may have issues — continuing"
-    fi
-  elif [ -f "$SCRIPT_DIR/start-observability.sh" ]; then
-    log "Starting bundled observability..."
-    dryn "$SCRIPT_DIR/start-observability.sh"
-    if ! $DRY_RUN; then
-      bash "$SCRIPT_DIR/start-observability.sh" || log "WARNING: observability startup may have issues — continuing"
+  OBS_HEALTHY=false
+  if is_healthy "http://127.0.0.1:${PROM_PORT}/-/healthy" 2>/dev/null; then
+    OBS_HEALTHY=true
+  fi
+  if $OBS_HEALTHY; then
+    log "Observability: already running (Prometheus health OK on port $PROM_PORT) — skipping"
+  elif $DRY_RUN; then
+    if [ -f "$SCRIPT_DIR/observability-up.sh" ]; then
+      dryn "$SCRIPT_DIR/observability-up.sh"
     fi
   else
-    log "WARNING: observability scripts not found — skipping"
+    log "Starting bundled observability..."
+    if [ -f "$SCRIPT_DIR/observability-up.sh" ]; then
+      bash "$SCRIPT_DIR/observability-up.sh" || log "WARNING: observability startup may have issues — continuing"
+    elif [ -f "$SCRIPT_DIR/start-observability.sh" ]; then
+      bash "$SCRIPT_DIR/start-observability.sh" || log "WARNING: observability startup may have issues — continuing"
+    else
+      log "WARNING: observability scripts not found — skipping"
+    fi
   fi
 fi
 
-# ── Start Agent ──
-log "Starting agent..."
-dryn "$SCRIPT_DIR/start-agent.sh"
-if ! $DRY_RUN; then
-  bash "$SCRIPT_DIR/start-agent.sh"
+# ── Start Agent (idempotent) ──
+if is_healthy "http://127.0.0.1:${AGENT_METRICS_PORT}/healthz"; then
+  log "Agent: already running (health check OK on port $AGENT_METRICS_PORT) — skipping"
+elif $DRY_RUN; then
+  dryn "$SCRIPT_DIR/start-agent.sh"
+else
+  log "Starting agent..."
+  bash "$SCRIPT_DIR/start-agent.sh" || {
+    log "ERROR: Agent failed to start"
+    exit 1
+  }
 fi
 
-# ── Health checks ──
+# ── Health checks (--wait) ──
 health_check() {
   local url="$1"
   local label="$2"
@@ -113,15 +121,10 @@ health_check() {
 }
 
 if $WAIT && ! $DRY_RUN; then
-  SERVER_PORT=${LIGHTAI_SERVER_PORT:-18080}
-  AGENT_METRICS_PORT=${LIGHTAI_AGENT_METRICS_PORT:-19091}
-
   health_check "http://127.0.0.1:${SERVER_PORT}/healthz" "Server"
   health_check "http://127.0.0.1:${AGENT_METRICS_PORT}/healthz" "Agent"
 
   if ! $NO_OBSERVABILITY; then
-    PROM_PORT=${LIGHTAI_PROMETHEUS_PORT:-19090}
-    GRAFANA_PORT=${LIGHTAI_GRAFANA_PORT:-13000}
     curl -sf -o /dev/null "http://127.0.0.1:${PROM_PORT}/-/healthy" 2>/dev/null && log "  Prometheus: OK" || log "  Prometheus: not responding"
     curl -sf -o /dev/null "http://127.0.0.1:${GRAFANA_PORT}/api/health" 2>/dev/null && log "  Grafana: OK" || log "  Grafana: not responding"
   fi
