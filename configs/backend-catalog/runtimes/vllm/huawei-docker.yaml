@@ -1,0 +1,27 @@
+id: runtime.vllm.huawei-docker
+backend_id: backend.vllm
+backend_version_id: backend-version.vllm.openai-latest
+slug: vllm-huawei-docker
+managed_by: system
+runner_type: docker
+vendor: huawei
+image_ref: template-only
+mount_policy:
+  model:
+    container_mount_dir: /models
+    readonly: true
+docker_options:
+  devices:
+    - /dev/davinci_manager
+    - /dev/devmm_svm
+    - /dev/hisi_hdc
+    - /dev/davinci{{index}}
+    - /usr/local/dcmi
+    - /usr/local/bin/npu-smi
+    - /usr/local/Ascend/driver/lib64
+    - /usr/local/Ascend/driver/version.info
+    - /etc/ascend_install.info
+env:
+  ASCEND_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+verification:
+  status: template_only

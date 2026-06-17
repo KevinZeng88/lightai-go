@@ -1,0 +1,10 @@
+id: runtime.sglang.cpu-docker
+backend_id: backend.sglang
+backend_version_id: backend-version.sglang.openai-latest
+slug: sglang-cpu-docker
+managed_by: system
+runner_type: docker
+vendor: cpu
+image_ref: lmsysorg/sglang:latest
+verification:
+  status: template_only

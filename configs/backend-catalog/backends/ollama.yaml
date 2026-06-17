@@ -1,0 +1,9 @@
+id: backend.ollama
+slug: ollama
+name: Ollama
+managed_by: system
+supported_model_formats: [ollama]
+protocols: [ollama]
+default_health_check:
+  type: http
+  path: /api/tags

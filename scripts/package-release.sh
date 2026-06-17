@@ -222,14 +222,21 @@ cp configs/observability/prometheus.yml "$BUILD_DIR/configs/observability/" 2>/d
 cp configs/observability/grafana.ini "$BUILD_DIR/configs/observability/" 2>/dev/null || true
 # Copy grafana.env as a template (no default password that works in production).
 cp configs/observability/grafana.env "$BUILD_DIR/configs/observability/" 2>/dev/null || true
+cp -r configs/templates "$BUILD_DIR/configs/" 2>/dev/null || true
 cp -r deploy/collectors "$BUILD_DIR/deploy/" 2>/dev/null || true
 cp -r deploy/observability "$BUILD_DIR/deploy/" 2>/dev/null || true
 cp scripts/start-server.sh scripts/start-agent.sh "$BUILD_DIR/scripts/"
 cp scripts/stop-server.sh scripts/stop-agent.sh "$BUILD_DIR/scripts/"
-cp scripts/start-observability.sh scripts/stop-observability.sh scripts/stop-all.sh "$BUILD_DIR/scripts/"
+cp scripts/start-all.sh scripts/stop-all.sh "$BUILD_DIR/scripts/"
+cp scripts/start-observability.sh scripts/stop-observability.sh "$BUILD_DIR/scripts/"
 cp scripts/reset-password.sh scripts/reset-grafana-password.sh scripts/reset-agent-identity.sh "$BUILD_DIR/scripts/"
 cp scripts/status.sh scripts/verify-local.sh "$BUILD_DIR/scripts/"
-cp scripts/collect-logs.sh "$BUILD_DIR/scripts/"
+cp scripts/collect-logs.sh scripts/collect-debug-bundle.sh "$BUILD_DIR/scripts/"
+cp scripts/apply-patch.sh scripts/diagnose-model-runtime-spec.sh "$BUILD_DIR/scripts/"
+cp scripts/smoke-model-backends.sh "$BUILD_DIR/scripts/"
+# Copy model-runtime configs (backend templates, versions, profiles).
+mkdir -p "$BUILD_DIR/configs/model-runtime"
+cp -r configs/model-runtime/* "$BUILD_DIR/configs/model-runtime/" 2>/dev/null || true
 chmod +x "$BUILD_DIR"/scripts/*.sh
 echo "  OK"
 

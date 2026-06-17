@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -239,39 +240,52 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 			if fs.MountPoint == "" {
 				continue
 			}
-			tx.Exec(
+			if _, ferr := tx.Exec(
 				`INSERT OR REPLACE INTO node_filesystem_snapshots
 				 (node_id, mount_point, device, fs_type, total_bytes, used_bytes, free_bytes, used_percent, collected_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				nodeID, fs.MountPoint, fs.Device, fs.FSType,
 				fs.TotalBytes, fs.UsedBytes, fs.FreeBytes,
 				fmt.Sprintf("%.1f", fs.UsedPercent), now,
-			)
+			); ferr != nil {
+				log.Error("save filesystem snapshot error", "node_id", nodeID, "mount_point", fs.MountPoint, "error", ferr)
+			}
 		}
 
 		// Save network interface snapshots.
 		for _, net := range sys.NetworkInterfaces {
-			tx.Exec(
+			if _, nerr := tx.Exec(
 				`INSERT OR REPLACE INTO node_network_snapshots
 				 (node_id, interface_name, up, bytes_recv, bytes_sent, collected_at)
 				 VALUES (?, ?, ?, ?, ?, ?)`,
 				nodeID, net.Name, boolToInt(net.Up), net.BytesRecv, net.BytesSent, now,
-			)
+			); nerr != nil {
+				// AUD-006: Log non-fatal network write error.
+				log.Error("save network snapshot error", "node_id", nodeID, "interface", net.Name, "error", nerr)
+			}
 		}
 
 		// Update node info (timestamp + enrich from system snapshot).
+		// P2-001: A successful resource report is also proof of Agent life.
+		// Update last_heartbeat_at and status so the node stays online even
+		// if heartbeat requests fail while resource reports succeed.
 		if sys.OS != "" || sys.KernelVersion != "" {
-			tx.Exec(`UPDATE nodes SET
+			if _, uerr := tx.Exec(`UPDATE nodes SET
 				os = CASE WHEN ? != '' THEN ? ELSE os END,
 				kernel = CASE WHEN ? != '' THEN ? ELSE kernel END,
-				updated_at = ?
+				last_heartbeat_at = ?, status = 'online', updated_at = ?
 				WHERE id = ?`,
 				sys.OS, sys.OS,
 				sys.KernelVersion, sys.KernelVersion,
-				now, nodeID,
-			)
+				now, now, nodeID,
+			); uerr != nil {
+				log.Error("update node info error", "node_id", nodeID, "error", uerr)
+			}
 		} else {
-			tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, now, nodeID)
+			if _, uerr := tx.Exec(`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ?`,
+				now, now, nodeID); uerr != nil {
+				log.Error("update node heartbeat error", "node_id", nodeID, "error", uerr)
+			}
 		}
 	}
 
@@ -291,10 +305,12 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 				g.MemoryTotalBytes = g.MemoryUsedBytes + g.MemoryFreeBytes
 			}
 
+			// REVIEW-021: Split collected_at (agent snapshot time) and reported_at (server receive time).
 			collectedAt := g.CollectedAt
 			if collectedAt == "" {
 				collectedAt = now
 			}
+			reportedAt := now
 
 			var existingID string
 			err := tx.QueryRow(
@@ -315,14 +331,14 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 					 driver_version, memory_total_bytes, memory_used_bytes, memory_free_bytes,
 					 gpu_utilization_percent, memory_utilization_percent,
 					 temperature_celsius, power_draw_watts,
-					 health, status, tenant_id, collected_at, created_at, updated_at)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					 health, status, tenant_id, collected_at, reported_at, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					gpuID, nodeID, g.Vendor, g.Index, g.Name, g.UUID, g.PCIBusID,
 					g.DriverVersion,
 					g.MemoryTotalBytes, g.MemoryUsedBytes, g.MemoryFreeBytes,
 					g.GPUUtilization, g.MemUtilization,
 					g.Temperature, g.PowerDraw,
-					g.Health, g.Status, nodeTenantID, collectedAt, now, now,
+					g.Health, g.Status, nodeTenantID, collectedAt, reportedAt, now, now,
 				)
 				if err != nil {
 					log.Error("create gpu error", "error", err)
@@ -335,13 +351,13 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 					 memory_total_bytes = ?, memory_used_bytes = ?, memory_free_bytes = ?,
 					 gpu_utilization_percent = ?, memory_utilization_percent = ?,
 					 temperature_celsius = ?, power_draw_watts = ?,
-					 health = ?, status = ?, collected_at = ?, updated_at = ?
+					 health = ?, status = ?, collected_at = ?, reported_at = ?, updated_at = ?
 					 WHERE id = ?`,
 					g.Vendor, g.Index, g.Name, g.DriverVersion,
 					g.MemoryTotalBytes, g.MemoryUsedBytes, g.MemoryFreeBytes,
 					g.GPUUtilization, g.MemUtilization,
 					g.Temperature, g.PowerDraw,
-					g.Health, g.Status, collectedAt, now, existingID,
+					g.Health, g.Status, collectedAt, reportedAt, now, existingID,
 				)
 				if err != nil {
 					log.Error("update gpu error", "error", err)
@@ -407,6 +423,25 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 // Called periodically by the node health checker.
 func (h *ResourceHandler) MarkStaleGPUs(nodeID string, threshold time.Duration) (int, error) {
 	cutoff := time.Now().Add(-threshold).Format(time.RFC3339)
+
+	// Query GPUs before update for state transition logging.
+	rows, err := h.DB.Query(
+		`SELECT id, gpu_index, vendor, health, status FROM gpu_devices
+		 WHERE node_id = ? AND status != 'unavailable' AND collected_at < ?`,
+		nodeID, cutoff,
+	)
+	if err != nil {
+		return 0, err
+	}
+	type gpuInfo struct{ id, gpuIndex, vendor, health, status string }
+	var gpus []gpuInfo
+	for rows.Next() {
+		var g gpuInfo
+		rows.Scan(&g.id, &g.gpuIndex, &g.vendor, &g.health, &g.status)
+		gpus = append(gpus, g)
+	}
+	rows.Close()
+
 	result, err := h.DB.Exec(
 		`UPDATE gpu_devices SET status = 'unavailable', updated_at = datetime('now')
 		 WHERE node_id = ? AND status != 'unavailable' AND collected_at < ?`,
@@ -416,6 +451,14 @@ func (h *ResourceHandler) MarkStaleGPUs(nodeID string, threshold time.Duration) 
 		return 0, err
 	}
 	n, _ := result.RowsAffected()
+
+	for _, g := range gpus {
+		log.StateTransition(context.Background(), "gpu.stale_check", "gpu", g.id, g.status, "unavailable",
+			"node_id", nodeID, "gpu_index", g.gpuIndex, "vendor", g.vendor, "health", g.health)
+	}
+	if n > 0 {
+		log.Info("gpu.stale.marked", "node_id", nodeID, "count", n, "threshold", threshold.String())
+	}
 	return int(n), nil
 }
 
@@ -481,18 +524,28 @@ func (h *ResourceHandler) HandleListGPUs(w http.ResponseWriter, r *http.Request)
 }
 
 // HandleGetGPU handles GET /api/gpus/{id}.
+// REVIEW-002: Tenant-scoped access — non-admin users can only access GPUs in their tenant.
 func (h *ResourceHandler) HandleGetGPU(w http.ResponseWriter, r *http.Request) {
 	gpuID := r.PathValue("id")
-	gpu := scanGPUFromRow(h.DB.QueryRow(
+	// Include tenant_id in the query for tenant scope check.
+	var tid string
+	gpu := scanGPUFromRowWithTenant(h.DB.QueryRow(
 		`SELECT id, node_id, vendor, index_num, name, uuid, pci_bus_id, driver_version,
 		memory_total_bytes, memory_used_bytes, memory_free_bytes,
 		gpu_utilization_percent, memory_utilization_percent,
 		temperature_celsius, power_draw_watts,
-		health, status, collected_at, created_at, updated_at
+		health, status, tenant_id, collected_at, created_at, updated_at
 		FROM gpu_devices WHERE id = ?`, gpuID,
-	))
+	), &tid)
 	if gpu == nil {
 		http.Error(w, `{"error":"gpu not found"}`, http.StatusNotFound)
+		return
+	}
+
+	// Tenant scope check: platform admin bypasses, others must match.
+	info := auth.SessionInfoFromContext(r.Context())
+	if info != nil && !info.IsPlatformAdmin && info.TenantID != "" && tid != info.TenantID {
+		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 		return
 	}
 
@@ -567,6 +620,66 @@ func scanGPUFromRow(row *sql.Row) map[string]interface{} {
 		&health, &status, &collectedAt, &createdAt, &updatedAt)
 	if err != nil {
 		return nil
+	}
+
+	gpu := map[string]interface{}{
+		"id":                 id,
+		"node_id":            nodeID,
+		"vendor":             vendor,
+		"index":              indexNum,
+		"name":               name,
+		"uuid":               uuid,
+		"pci_bus_id":         pciBusID,
+		"driver_version":     driverVersion,
+		"memory_total_bytes": memTotal,
+		"memory_used_bytes":  memUsed,
+		"memory_free_bytes":  memFree,
+		"health":             health,
+		"status":             status,
+	}
+	if gpuUtil.Valid {
+		gpu["gpu_utilization_percent"] = gpuUtil.Float64
+	}
+	if memUtil.Valid {
+		gpu["memory_utilization_percent"] = memUtil.Float64
+	}
+	if temp.Valid {
+		gpu["temperature_celsius"] = temp.Float64
+	}
+	if power.Valid {
+		gpu["power_draw_watts"] = power.Float64
+	}
+	if collectedAt.Valid {
+		gpu["collected_at"] = collectedAt.String
+	}
+	if createdAt.Valid {
+		gpu["created_at"] = createdAt.String
+	}
+	if updatedAt.Valid {
+		gpu["updated_at"] = updatedAt.String
+	}
+	return gpu
+}
+
+// scanGPUFromRowWithTenant is like scanGPUFromRow but also captures tenant_id
+// into the provided *string for tenant scope checks (REVIEW-002).
+func scanGPUFromRowWithTenant(row *sql.Row, tid *string) map[string]interface{} {
+	var id, nodeID, vendor, name, uuid, pciBusID, driverVersion, health, status, tenantID string
+	var indexNum int
+	var memTotal, memUsed, memFree uint64
+	var gpuUtil, memUtil, temp, power sql.NullFloat64
+	var collectedAt, createdAt, updatedAt sql.NullString
+
+	err := row.Scan(&id, &nodeID, &vendor, &indexNum, &name, &uuid, &pciBusID, &driverVersion,
+		&memTotal, &memUsed, &memFree,
+		&gpuUtil, &memUtil, &temp, &power,
+		&health, &status, &tenantID, &collectedAt, &createdAt, &updatedAt)
+	if err != nil {
+		return nil
+	}
+
+	if tid != nil {
+		*tid = tenantID
 	}
 
 	gpu := map[string]interface{}{

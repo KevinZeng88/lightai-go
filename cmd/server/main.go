@@ -18,6 +18,7 @@ import (
 
 	"lightai-go/internal/common/config"
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/common/token"
 	"lightai-go/internal/common/types"
 	"lightai-go/internal/common/version"
 	"lightai-go/internal/server/api"
@@ -82,43 +83,59 @@ func main() {
 		RetentionDays: cfg.Logging.RetentionDays,
 	})
 
-	// P0-011: Check for default agent token in production.
-	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
-		if cfg.DevMode {
-			log.Warn("using default agent token in dev mode — NOT safe for production",
-				"agent_token", cfg.AgentToken,
-			)
-		} else {
-			log.Error("DEFAULT AGENT TOKEN DETECTED",
-				"agent_token", cfg.AgentToken,
-				"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
-			)
-			fmt.Fprintf(os.Stderr, "\n=== SECURITY WARNING ===\n")
-			fmt.Fprintf(os.Stderr, "Default agent token detected: %s\n", cfg.AgentToken)
-			fmt.Fprintf(os.Stderr, "This is NOT safe for production.\n")
-			fmt.Fprintf(os.Stderr, "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.\n")
-			fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(openssl rand -hex 32)\n")
-			fmt.Fprintf(os.Stderr, "=========================\n\n")
+	// Bootstrap Agent Token: auto-generate on first startup, reuse on subsequent.
+	// LIGHTAI_AGENT_TOKEN env var and non-default config values always take precedence.
+	if token.IsDefault(cfg.AgentToken) {
+		resolved, autoGen, err := token.BootstrapServer(cfg.AgentToken)
+		if err != nil {
+			log.Fatal("failed to bootstrap agent token", "error", err)
 		}
+		cfg.AgentToken = resolved
+		if autoGen {
+			log.Info("agent token auto-generated and saved",
+				"file", token.TokenFile,
+				"agent_token", "<redacted>",
+			)
+			fmt.Fprintf(os.Stderr, "[lightai] Auto-generated Agent Token → %s\n", token.TokenFile)
+			fmt.Fprintf(os.Stderr, "[lightai] Set LIGHTAI_AGENT_TOKEN to override, or copy this file to Agent nodes.\n")
+		} else {
+			log.Info("agent token loaded from existing file",
+				"file", token.TokenFile,
+				"agent_token", "<redacted>",
+			)
+		}
+	} else {
+		log.Info("agent token loaded from config/environment",
+			"agent_token", "<redacted>",
+		)
 	}
 
 	log.Info("server starting",
 		"version", version.String(),
 		"listen", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		"log_level", cfg.LogLevel,
+		"log_level", logLevel,
 		"db_path", cfg.DBPath,
+		"dev_mode", cfg.DevMode,
 	)
 
+	// --- DB open ---
+	dbOpenStart := time.Now()
 	database, err := db.Open(cfg.DBPath)
 	if err != nil {
 		log.Fatal("failed to open database", "error", err)
 	}
 	defer database.Close()
+	log.Info("db.open completed", "path", cfg.DBPath, "duration_ms", time.Since(dbOpenStart).Milliseconds())
 
+	// --- DB migrate ---
+	migrateStart := time.Now()
 	if err := database.Migrate(); err != nil {
 		log.Fatal("failed to run migrations", "error", err)
 	}
+	log.Info("db.migrate completed", "duration_ms", time.Since(migrateStart).Milliseconds())
 
+	// --- Auth bootstrap ---
+	bootstrapStart := time.Now()
 	bootstrapCfg := auth.BootstrapConfig{
 		Username:            "admin",
 		Password:            "",
@@ -128,6 +145,7 @@ func main() {
 	if err := auth.InitBootstrap(database, bootstrapCfg); err != nil {
 		log.Fatal("failed to initialize bootstrap", "error", err)
 	}
+	log.Info("auth.bootstrap completed", "duration_ms", time.Since(bootstrapStart).Milliseconds())
 
 	sessionCfg := auth.DefaultSessionConfig()
 	sessionStore := auth.NewSessionStore(database, sessionCfg)
@@ -148,7 +166,6 @@ func main() {
 
 	agentHandler := api.NewAgentHandler(database, serverMetrics)
 	resourceHandler := api.NewResourceHandler(database, serverMetrics)
-	modelHandler := api.NewModelHandler(database)
 
 	mux := http.NewServeMux()
 
@@ -178,7 +195,6 @@ func main() {
 		RBACHandler:     rbacHandler,
 		AgentHandler:    agentHandler,
 		ResourceHandler: resourceHandler,
-		ModelHandler:    modelHandler,
 	})
 
 	// Return JSON 404 for unregistered /api/* paths — never fall back to SPA index.html.
@@ -192,9 +208,15 @@ func main() {
 	serveWeb(mux)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+
+	// Wrap mux with request logging (outermost) → metrics → mux.
+	var handler http.Handler = mux
+	handler = metricsWrapper(handler, serverMetrics)
+	handler = api.RequestLoggingMiddleware(handler)
+
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      metricsWrapper(mux, serverMetrics),
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -205,8 +227,7 @@ func main() {
 	go runNodeHealthChecker(agentHandler, resourceHandler, cfg, nodeHealthStop)
 
 	// Start task/lease sweep loop for periodic timeout cleanup.
-	sweepStop := make(chan struct{})
-	go api.RunSweepLoop(database, 30*time.Second, sweepStop)
+	// [Phase1] sweep loop removed — to be reimplemented with new tables
 
 	go func() {
 		log.Info("server listening", "addr", addr)
@@ -219,7 +240,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
 	close(nodeHealthStop)
-	close(sweepStop)
+	// close(sweepStop) // [Phase1] sweep loop removed
 	log.Info("server shutting down", "signal", sig.String())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -294,13 +315,13 @@ func serveWeb(mux *http.ServeMux) {
 	})
 }
 
-// metricsWrapper wraps the mux with API request metrics recording.
+// metricsWrapper wraps the next handler with API request metrics recording.
 // Only /api/* paths are tracked; /metrics, /healthz, and static assets are excluded.
-func metricsWrapper(mux *http.ServeMux, m *srvmetrics.ServerMetrics) http.Handler {
+func metricsWrapper(next http.Handler, m *srvmetrics.ServerMetrics) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		wr := &respWriter{ResponseWriter: w, statusCode: http.StatusOK}
-		mux.ServeHTTP(wr, r)
+		next.ServeHTTP(wr, r)
 		duration := time.Since(start).Seconds()
 
 		// Only record API paths to avoid polluting counters with

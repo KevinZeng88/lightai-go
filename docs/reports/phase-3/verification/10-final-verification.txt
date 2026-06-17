@@ -1,0 +1,35 @@
+=== go test ./... ===
+ok  	lightai-go/internal/agent/collector	0.011s
+ok  	lightai-go/internal/agent/metrics	0.004s
+ok  	lightai-go/internal/agent/register	0.009s
+ok  	lightai-go/internal/agent/runtime	0.004s
+ok  	lightai-go/internal/agent/state	0.005s
+ok  	lightai-go/internal/common/errors	0.002s
+ok  	lightai-go/internal/common/version	0.001s
+ok  	lightai-go/internal/server/api	0.576s
+ok  	lightai-go/internal/server/runplan	0.002s
+=== go build server ===
+OK
+=== go build agent ===
+OK
+=== npm build ===
+✓ built in 3.18s
+=== smoke all ===
+[01:08:20] PASS: Environment check
+[01:10:02] PASS: vLLM smoke test
+[01:10:59] PASS: SGLang smoke test
+[01:11:04] PASS: llama.cpp smoke test
+--- PASS: TestLlamaCppNvidiaRunPlan (0.00s)
+--- PASS: TestLlamaCppRunPlanNoGPU (0.00s)
+--- PASS: TestResolveBasic (0.00s)
+--- PASS: TestResolveImagePriority (0.00s)
+--- PASS: TestResolveArgs (0.00s)
+--- PASS: TestResolveEnv (0.00s)
+--- PASS: TestResolveEnvOverride (0.00s)
+--- PASS: TestResolveNodeOverride (0.00s)
+--- PASS: TestResolveNoGPU (0.00s)
+--- PASS: TestResolveVLLMNVIDIA (0.00s)
+--- PASS: TestResolveSGLangNVIDIA (0.00s)
+PASS
+[01:11:05] PASS: RunPlan tests
+=== E2E safety ===

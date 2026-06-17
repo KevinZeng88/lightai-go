@@ -1,0 +1,19 @@
+id: runtime.vllm.nvidia-docker
+backend_id: backend.vllm
+backend_version_id: backend-version.vllm.openai-latest
+slug: vllm-nvidia-docker
+managed_by: system
+runner_type: docker
+vendor: nvidia
+image_ref: vllm/vllm-openai:latest
+mount_policy:
+  model:
+    container_mount_dir: /models
+    readonly: true
+docker_options:
+  ipc_mode: host
+  shm_size: 16gb
+env:
+  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+verification:
+  status: verified

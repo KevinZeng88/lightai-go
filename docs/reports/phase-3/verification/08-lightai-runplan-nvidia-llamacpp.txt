@@ -1,0 +1,32 @@
+=== RUN   TestLlamaCppNvidiaRunPlan
+    llamacpp_nvidia_test.go:175: docker_preview:
+          docker run -d --name lightai-inst-llamacp --gpus "device=0" -v /home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf:/models/Qwen3.5-9B-Q4_K_M.gguf:ro -e CUDA_VISIBLE_DEVICES=0 -p 8002:8080/tcp ghcr.io/ggml-org/llama.cpp:server-cuda13 llama-server -m /models/Qwen3.5-9B-Q4_K_M.gguf --host 0.0.0.0 --port 8080 -ngl 1 --ctx-size 4096 --n-gpu-layers 999 --ctx-size 4096 --n-gpu-layers 999 --model Qwen3.5-9B-Q4_K_M.gguf
+    llamacpp_nvidia_test.go:176: input_hash: sha256:7b9579a17e2af66d
+    llamacpp_nvidia_test.go:177: plan_hash: sha256:764a50dc3455f678
+--- PASS: TestLlamaCppNvidiaRunPlan (0.00s)
+=== RUN   TestLlamaCppRunPlanNoGPU
+--- PASS: TestLlamaCppRunPlanNoGPU (0.00s)
+=== RUN   TestResolveBasic
+--- PASS: TestResolveBasic (0.00s)
+=== RUN   TestResolveImagePriority
+--- PASS: TestResolveImagePriority (0.00s)
+=== RUN   TestResolveArgs
+--- PASS: TestResolveArgs (0.00s)
+=== RUN   TestResolveEnv
+--- PASS: TestResolveEnv (0.00s)
+=== RUN   TestResolveEnvOverride
+--- PASS: TestResolveEnvOverride (0.00s)
+=== RUN   TestResolveNodeOverride
+--- PASS: TestResolveNodeOverride (0.00s)
+=== RUN   TestResolveNoGPU
+--- PASS: TestResolveNoGPU (0.00s)
+=== RUN   TestResolveVLLMNVIDIA
+    vllm_sglang_nvidia_test.go:71: vLLM preview:
+          docker run -d --name lightai-inst-vllm-00 --privileged --ipc host --shm-size 10g --gpus "device=0" -v /home/kzeng/models/Qwen3-0.6B-Instruct-2512:/models/Qwen3-0.6B-Instruct-2512:ro -e CUDA_VISIBLE_DEVICES=0 -p 8004:8000/tcp vllm/vllm-openai:latest vllm serve /models/Qwen3-0.6B-Instruct-2512 --host 0.0.0.0 --port 8000 --served-model-name Qwen3-0.6B-Instruct-2512 --max-model-len 4096 --gpu-memory-utilization 0.6 --enforce-eager --max-model-len 4096 --gpu-memory-utilization 0.6 --served-model-name Qwen3-0.6B-Instruct-2512
+--- PASS: TestResolveVLLMNVIDIA (0.00s)
+=== RUN   TestResolveSGLangNVIDIA
+    vllm_sglang_nvidia_test.go:122: SGLang preview:
+          docker run -d --name lightai-inst-sglang- --privileged --ipc host --shm-size 32g --gpus "device=0" -v /home/kzeng/models/Qwen3-0.6B-Instruct-2512:/models/Qwen3-0.6B-Instruct-2512:ro -e CUDA_VISIBLE_DEVICES=0 -p 30000:30000/tcp lmsysorg/sglang:latest python3 -m sglang.launch_server --model-path /models/Qwen3-0.6B-Instruct-2512 --host 0.0.0.0 --port 30000
+--- PASS: TestResolveSGLangNVIDIA (0.00s)
+PASS
+ok  	lightai-go/internal/server/runplan	0.002s

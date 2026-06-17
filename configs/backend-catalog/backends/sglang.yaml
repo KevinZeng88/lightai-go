@@ -1,0 +1,9 @@
+id: backend.sglang
+slug: sglang
+name: SGLang
+managed_by: system
+supported_model_formats: [huggingface, safetensors]
+protocols: [openai-compatible]
+default_health_check:
+  type: http
+  path: /v1/models

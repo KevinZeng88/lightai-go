@@ -1,0 +1,11 @@
+## docker ps lightai containers
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+
+## docker ps e2e containers
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+
+## grep e2e-nvidia in logs
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/e2e-output.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/cleanup-evidence.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-this-run.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-e2e-filtered.log

@@ -1,0 +1,27 @@
+id: runtime.vllm.metax-docker
+backend_id: backend.vllm
+backend_version_id: backend-version.vllm.openai-latest
+slug: vllm-metax-docker
+managed_by: system
+runner_type: docker
+vendor: metax
+image_ref: "0d307f1665d3"
+mount_policy:
+  model:
+    container_mount_dir: /models
+    readonly: true
+docker_options:
+  devices: [/dev/dri, /dev/mxcd, /dev/infiniband]
+  optional_devices: [/dev/mem]
+  group_add: [video]
+  uts_mode: host
+  ipc_mode: host
+  privileged: true
+  security_opt: [seccomp=unconfined, apparmor=unconfined]
+  shm_size: 100gb
+  ulimits:
+    memlock: "-1"
+env:
+  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+verification:
+  status: requires_hardware_validation

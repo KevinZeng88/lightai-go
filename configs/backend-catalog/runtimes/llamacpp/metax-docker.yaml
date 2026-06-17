@@ -1,0 +1,22 @@
+id: runtime.llamacpp.metax-docker
+backend_id: backend.llamacpp
+backend_version_id: backend-version.llamacpp.server-metax
+slug: llamacpp-metax-docker
+managed_by: system
+runner_type: docker
+vendor: metax
+image_ref: llamacpp-metax:latest
+docker_options:
+  devices: [/dev/dri, /dev/mxcd, /dev/infiniband]
+  group_add: [video]
+  uts_mode: host
+  ipc_mode: host
+  privileged: true
+  security_opt: [seccomp=unconfined, apparmor=unconfined]
+  shm_size: 100gb
+  ulimits:
+    memlock: "-1"
+env:
+  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+verification:
+  status: requires_hardware_validation

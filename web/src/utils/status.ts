@@ -7,10 +7,17 @@ export function getStatusType(status: string): StatusType {
     case 'available':
     case 'ready':
     case 'running':
+    case 'success':
+    case 'active':
       return 'success'
     case 'warning':
     case 'pending':
     case 'degraded':
+    case 'starting':
+    case 'stopping':
+    case 'reserved':
+    case 'leased':
+    case 'syncing':
       return 'warning'
     case 'error':
     case 'failed':
@@ -20,10 +27,11 @@ export function getStatusType(status: string): StatusType {
     case 'unavailable':
     case 'unknown':
     case 'disabled':
+    case 'inactive':
+    case 'stopped':
+    case 'deleted':
+    case 'released':
       return 'info'
-    case 'starting':
-    case 'syncing':
-      return ''
     default:
       return 'info'
   }

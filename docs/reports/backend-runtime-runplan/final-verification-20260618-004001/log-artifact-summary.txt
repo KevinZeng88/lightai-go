@@ -1,0 +1,24 @@
+## verification files
+-rw-r--r-- 1 kzeng kzeng 1.3K Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/start-all-retry.log
+-rw-r--r-- 1 kzeng kzeng 159K Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-backup-before-clear/logs-before-clear.tar.gz
+-rw-r--r-- 1 kzeng kzeng 15K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-e2e-filtered.log
+-rw-r--r-- 1 kzeng kzeng 18K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/e2e-output.log
+-rw-r--r-- 1 kzeng kzeng 19K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/agent-this-run.log
+-rw-r--r-- 1 kzeng kzeng 19K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-this-run.log
+-rw-r--r-- 1 kzeng kzeng 2 Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/e2e-exit-code.txt
+-rw-r--r-- 1 kzeng kzeng 22 Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt
+-rw-r--r-- 1 kzeng kzeng 240 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-files-after-clear.txt
+-rw-r--r-- 1 kzeng kzeng 333 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/stop-all.log
+-rw-r--r-- 1 kzeng kzeng 4.0K Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-tail-after-restart.log
+-rw-r--r-- 1 kzeng kzeng 476 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-files-before-clear.txt
+-rw-r--r-- 1 kzeng kzeng 530 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/start-all.log
+-rw-r--r-- 1 kzeng kzeng 604 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/scripts-list.txt
+-rw-r--r-- 1 kzeng kzeng 7.6K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/agent-e2e-filtered.log
+-rw-r--r-- 1 kzeng kzeng 72 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/verify-dir.txt
+-rw-r--r-- 1 kzeng kzeng 92 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-files-cleared.txt
+
+## current log files
+-rw-r--r-- 1 kzeng kzeng 0 Jun 18 00:40 logs/agent-stdout.log
+-rw-r--r-- 1 kzeng kzeng 0 Jun 18 00:40 logs/server-stdout.log
+-rw-r--r-- 1 kzeng kzeng 19K Jun 18 00:43 logs/lightai-agent.log
+-rw-r--r-- 1 kzeng kzeng 19K Jun 18 00:43 logs/lightai-server.log

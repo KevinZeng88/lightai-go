@@ -96,12 +96,14 @@ func RequirePermission(permission string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := SessionInfoFromContext(r.Context())
 			if info == nil {
+				log.Warn("permission.denied", "reason", "no_session", "required", permission, "path", r.URL.Path)
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
 
 			perms := PermissionsFromContext(r.Context())
 			if !hasPermission(perms, permission) {
+				log.Warn("permission.denied", "reason", "insufficient_permissions", "required", permission, "user_id", info.UserID, "tenant_id", info.TenantID, "path", r.URL.Path)
 				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 				return
 			}
@@ -170,11 +172,13 @@ func AgentAuthMiddleware(agentToken string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				log.Warn("agent.auth.failed", "reason", "missing_or_malformed_auth_header", "path", r.URL.Path)
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 			if token != agentToken {
+				log.Warn("agent.auth.failed", "reason", "invalid_token", "path", r.URL.Path)
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}

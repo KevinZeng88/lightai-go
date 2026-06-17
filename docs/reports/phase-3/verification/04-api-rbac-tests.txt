@@ -1,0 +1,20 @@
+=== RUN   TestBackendListReadOnly
+--- PASS: TestBackendListReadOnly (0.00s)
+=== RUN   TestBackendVersionList
+--- PASS: TestBackendVersionList (0.00s)
+=== RUN   TestBackendRuntimeCRUD
+--- PASS: TestBackendRuntimeCRUD (0.00s)
+=== RUN   TestBackendRuntimeTenantIsolation
+--- PASS: TestBackendRuntimeTenantIsolation (0.00s)
+=== RUN   TestDefaultEnvJSONRedaction
+--- PASS: TestDefaultEnvJSONRedaction (0.00s)
+=== RUN   TestCreateFromTemplate
+    phase3_rbac_test.go:166: code=404 body={"error":"template not found: vllm-nvidia-docker"}
+--- FAIL: TestCreateFromTemplate (0.00s)
+FAIL
+FAIL	lightai-go/internal/server/api	0.029s
+FAIL
+=== RUN   TestCreateFromTemplate
+--- PASS: TestCreateFromTemplate (0.01s)
+PASS
+ok  	lightai-go/internal/server/api	0.008s

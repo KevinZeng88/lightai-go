@@ -1,0 +1,15 @@
+=== LightAI Go - 停止所有服务 ===
+
+[1/3] 停止 Observability...
+=== LightAI Observability - Stop ===
+  Grafana: not running (no PID file).
+  Prometheus: not running (no PID file).
+Done.
+
+[2/3] 停止 Agent...
+Agent not running (no PID file).
+
+[3/3] 停止 Server...
+Server not running (no PID file).
+
+所有服务已停止。

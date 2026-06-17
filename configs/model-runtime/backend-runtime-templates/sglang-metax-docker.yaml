@@ -1,0 +1,22 @@
+apiVersion: lightai/v1
+kind: BackendRuntimeTemplate
+metadata:
+  name: sglang-metax-docker
+spec:
+  displayName: "sglang 0.4.6 metax Docker"
+  backendName: "sglang"
+  backendVersion: "0.4.6"
+  vendor: "metax"
+  runtimeType: docker
+  imageName: "registry.local/sglang:v0.4.6-metax"
+  imagePullPolicy: if_not_present
+  entrypoint: []
+  argsOverride: []
+  defaultEnv: {}
+  docker:
+    privileged: true
+    ipcMode: "host"
+    shmSize: "10g"
+    devices: [{"host_path":"/dev/mxcd","container_path":"/dev/mxcd"},{"host_path":"/dev/dri","container_path":"/dev/dri"}]
+  modelMount: {}
+  healthCheckOverride: {}

@@ -67,7 +67,7 @@
           <span>{{ t('nodes.lastHeartbeat') }}</span>
           <span class="resize-handle" @mousedown.prevent="startResize('lastHeartbeat', $event)"></span>
         </template>
-        <template #default="{ row }">{{ formatRelativeTime(row.last_heartbeat_at, locale) }}</template>
+        <template #default="{ row }"><span :title="formatDateTime(row.last_heartbeat_at)">{{ formatRelativeTime(row.last_heartbeat_at, locale) }}</span></template>
       </el-table-column>
       <el-table-column :label="t('nodes.createdAt')" :width="colWidth('createdAt')">
         <template #header>
@@ -105,6 +105,7 @@
         </el-descriptions>
 
         <h4 style="margin-top: 16px">{{ t('nodes.gpusOnNode') }} ({{ nodeGpus.length }})</h4>
+        <el-alert v-if="gpuError" type="error" :title="gpuError" show-icon closable @close="gpuError=''" style="margin-bottom:8px" />
         <el-table :data="nodeGpus" size="small" v-loading="gpuLoading">
           <el-table-column prop="index" :label="t('gpus.index')" width="50" />
           <el-table-column prop="vendor" :label="t('gpus.vendor')" width="80" />
@@ -142,6 +143,18 @@
           </el-descriptions>
         </div>
         <div v-else style="color: var(--el-text-color-secondary); font-size: 13px; padding: 8px">{{ t('nodes.noSystemData') }}</div>
+
+        <h4 style="margin-top: 16px">{{ t('nodes.dockerImages') }}
+          <el-button size="small" text @click="fetchNodeDockerImages" :loading="dockerImagesLoading" style="margin-left: 8px">
+            {{ dockerImagesLoaded ? t('common.refresh') : t('nodes.queryImages') }}
+          </el-button>
+        </h4>
+        <el-table v-if="dockerImagesLoaded && dockerImages.length" :data="dockerImages" size="small" max-height="200">
+          <el-table-column prop="image" label="Image" show-overflow-tooltip />
+          <el-table-column prop="size" label="Size" width="100" />
+        </el-table>
+        <div v-else-if="dockerImagesLoaded && !dockerImages.length" style="color: var(--el-text-color-secondary); font-size: 13px; padding: 8px">{{ t('nodes.noDockerImages') }}</div>
+        <div v-else-if="dockerImagesError" style="color: var(--el-color-danger); font-size: 13px; padding: 8px">{{ t('nodes.dockerImagesError') }}</div>
       </template>
     </el-drawer>
   </div>
@@ -152,6 +165,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { fetchNodes, fetchNodeSystem, type Node, type NodeSystemInfo } from '@/api/nodes'
+import { apiClient } from '@/api/client'
 import { fetchGPUs, type GPU } from '@/api/gpus'
 import StatusTag from '@/components/StatusTag.vue'
 import CopyButton from '@/components/CopyButton.vue'
@@ -176,6 +190,12 @@ const nodeGpus = ref<GPU[]>([])
 const gpuLoading = ref(false)
 const sysLoading = ref(false)
 const nodeSystem = ref<NodeSystemInfo | null>(null)
+const dockerImages = ref<{ image: string; size: string }[]>([])
+const dockerImagesLoading = ref(false)
+const dockerImagesLoaded = ref(false)
+const dockerImagesError = ref(false)
+const gpuError = ref('')
+const listError = ref('')
 
 const { loading, refresh } = useAutoRefresh(async () => {
   const [n, g] = await Promise.all([fetchNodes(), fetchGPUs()])
@@ -222,10 +242,27 @@ async function openDetail(row: Node) {
   gpuLoading.value = true
   sysLoading.value = true
   nodeSystem.value = null
-  try { nodeGpus.value = (await fetchGPUs({ node_id: row.id })) || [] } catch { nodeGpus.value = [] }
+  dockerImages.value = []
+  dockerImagesLoaded.value = false
+  dockerImagesError.value = false
+  try { nodeGpus.value = (await fetchGPUs({ node_id: row.id })) || [] } catch (e: any) { nodeGpus.value = []; gpuError.value = e?.message || String(e) }
   gpuLoading.value = false
   try { nodeSystem.value = await fetchNodeSystem(row.id) } catch { /* */ }
   sysLoading.value = false
+}
+
+async function fetchNodeDockerImages() {
+  if (!selectedNode.value) return
+  dockerImagesLoading.value = true
+  dockerImagesError.value = false
+  try {
+    const data = await apiClient.get(`/nodes/${selectedNode.value.id}/docker-images`)
+    dockerImages.value = Array.isArray(data) ? data : []
+    dockerImagesLoaded.value = true
+  } catch {
+    dockerImagesError.value = true
+  }
+  dockerImagesLoading.value = false
 }
 
 function formatUptime(seconds: number): string {

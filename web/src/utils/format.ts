@@ -40,18 +40,45 @@ export function shortId(id: string | undefined | null, prefix = 8, suffix = 6): 
 }
 
 export function formatRelativeTime(iso: string | undefined | null, locale?: string): string {
-  if (!iso) return 'N/A'
-  const diff = Date.now() - new Date(iso).getTime()
+  if (!iso) return '-'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '-'
+
+  const diff = Date.now() - d.getTime()
   const s = Math.floor(diff / 1000)
   const isZh = locale === 'zh-CN'
 
-  if (s < 60) return isZh ? '刚刚' : 'just now'
+  // Future time (slight clock skew — treat as just now).
+  if (s < 0) {
+    if (s > -5) return isZh ? '<1秒前' : '<1s ago'
+    return isZh ? '时间异常' : 'time anomaly'
+  }
+
+  // < 1 second
+  if (s < 1) return isZh ? '<1秒前' : '<1s ago'
+
+  // 1-59 seconds
+  if (s < 60) return isZh ? `${s}秒前` : `${s}s ago`
+
+  // 1-59 minutes
   const m = Math.floor(s / 60)
-  if (m < 60) return isZh ? `${m} 分钟前` : `${m}m ago`
+  if (m < 60) return isZh ? `${m}分钟前` : `${m}m ago`
+
+  // 1-24 hours
   const h = Math.floor(m / 60)
-  if (h < 24) return isZh ? `${h} 小时前` : `${h}h ago`
-  const d = Math.floor(h / 24)
-  return isZh ? `${d} 天前` : `${d}d ago`
+  if (h < 24) return isZh ? `${h}小时前` : `${h}h ago`
+
+  // > 24 hours: show absolute date/time.
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const now = new Date()
+
+  // Different year → YYYY-MM-DD HH:mm:ss
+  if (d.getFullYear() !== now.getFullYear()) {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  }
+
+  // Same year → MM-DD HH:mm:ss
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 export function formatGB(bytes: number | undefined | null): string {

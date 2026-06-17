@@ -1,0 +1,12 @@
+id: backend-version.sglang.openai-latest
+backend_id: backend.sglang
+slug: sglang-openai-latest
+version: openai-latest
+managed_by: system
+default_entrypoint: ["python3", "-m", "sglang.launch_server"]
+default_container_port: 30000
+default_args: ["--model-path", "{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}"]
+default_images:
+  nvidia: lmsysorg/sglang:latest
+  metax: sglang-metax:latest
+  huawei: template-only

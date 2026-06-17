@@ -1,0 +1,11 @@
+id: backend-version.ollama.latest
+backend_id: backend.ollama
+slug: ollama-latest
+version: latest
+managed_by: system
+default_entrypoint: ["ollama", "serve"]
+default_container_port: 11434
+default_args: []
+default_images:
+  nvidia: ollama/ollama:latest
+  cpu: ollama/ollama:latest

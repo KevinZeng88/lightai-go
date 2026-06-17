@@ -1,0 +1,60 @@
+=== 3a. sqlite_master tables ===
+agent_tasks                nodes                    
+audit_logs                 permissions              
+backend_runtimes           resolved_run_plans       
+backend_versions           resource_pool_gpus       
+gpu_devices                resource_pool_nodes      
+gpu_leases                 resource_pools           
+inference_backends         role_permissions         
+model_artifacts            roles                    
+model_deployments          schema_version           
+model_instances            sessions                 
+node_filesystem_snapshots  tenant_membership_roles  
+node_network_snapshots     tenant_memberships       
+node_runtime_overrides     tenants                  
+node_system_snapshots      users                    
+
+=== 3b. V10 created tables (inference/backend/model/runtime/runplan/lease/task) ===
+agent_tasks
+backend_runtimes
+backend_versions
+gpu_leases
+inference_backends
+model_artifacts
+model_deployments
+model_instances
+node_runtime_overrides
+resolved_run_plans
+
+=== 3c. backend_runtime_templates table (expect none) ===
+(no rows = table does not exist)
+
+=== 3d. Schema version ===
+1|RC1 schema: tenants(slug), users, memberships, roles, permissions, sessions, nodes, audit_logs
+2|V2: add node detail fields (primary_ip, os, arch, kernel, agent_version)
+3|V3: model runtime serving Phase 1 tables
+4|V4: add gpu_leases lifecycle timestamps (reserved_at, activated_at, released_at)
+5|V5: agent tasks for Phase 2B task dispatch
+6|V6: task lifecycle, instance tenant_id, claim support
+7|V7: tenant type, resource pools, ownership model
+8|V8: partial unique index on gpu_leases(gpu_id) for reserved/active
+9|V9: extra_args on run_templates, volumes+extra_args on docker_specs
+10|V10: Phase 3 backend/runplan/runtime new tables (replaces old Phase 1 model runtime)
+
+=== 3e. Seed counts ===
+inference_backends: 3
+backend_versions: 5
+permissions (new): 20
+
+=== 3f. New tables count (exact list) ===
+New tables created by V10: 10 (expected: 10)
+agent_tasks
+backend_runtimes
+backend_versions
+gpu_leases
+inference_backends
+model_artifacts
+model_deployments
+model_instances
+node_runtime_overrides
+resolved_run_plans

@@ -1,0 +1,10 @@
+id: backend-version.llamacpp.server
+backend_id: backend.llamacpp
+slug: llama-cpp-server
+version: server
+managed_by: system
+default_container_port: 8080
+default_args: ["-m", "{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}", "-ngl", "99"]
+default_images:
+  nvidia: ghcr.io/ggml-org/llama.cpp:server-cuda13
+  cpu: ghcr.io/ggml-org/llama.cpp:server

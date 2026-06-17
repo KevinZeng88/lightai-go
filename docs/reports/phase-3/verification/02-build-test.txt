@@ -1,0 +1,35 @@
+=== 2a. go test ./... -count=1 ===
+?   	lightai-go/cmd/agent	[no test files]
+?   	lightai-go/cmd/server	[no test files]
+ok  	lightai-go/internal/agent/collector	0.012s
+ok  	lightai-go/internal/agent/metrics	0.004s
+ok  	lightai-go/internal/agent/register	0.025s
+ok  	lightai-go/internal/agent/runtime	0.003s
+ok  	lightai-go/internal/agent/state	0.005s
+?   	lightai-go/internal/common/config	[no test files]
+ok  	lightai-go/internal/common/errors	0.002s
+?   	lightai-go/internal/common/log	[no test files]
+?   	lightai-go/internal/common/types	[no test files]
+ok  	lightai-go/internal/common/version	0.001s
+ok  	lightai-go/internal/server/api	0.506s
+?   	lightai-go/internal/server/auth	[no test files]
+?   	lightai-go/internal/server/db	[no test files]
+?   	lightai-go/internal/server/metrics	[no test files]
+?   	lightai-go/internal/server/models	[no test files]
+?   	lightai-go/internal/server/rbac	[no test files]
+ok  	lightai-go/internal/server/runplan	0.002s
+?   	lightai-go/web	[no test files]
+
+=== 2b. go build ./cmd/server/ ===
+exit: 0
+
+=== 2c. go build ./cmd/agent/ ===
+exit: 0
+
+=== 2d. npm --prefix web run build ===
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2.98s
+exit: 0

@@ -1,0 +1,31 @@
+# MetaX GPU vendor profile
+# Differs from NVIDIA in: devices, privileged, ipc, uts, shm, security_opts, ulimits.
+# Structural verification only — no MetaX hardware available for real smoke testing.
+apiVersion: lightai/v1
+kind: VendorProfile
+metadata:
+  name: metax
+spec:
+  vendor: metax
+  gpu_mode: devices
+  docker:
+    gpus: ""
+    devices:
+      - /dev/dri
+      - /dev/mxcd
+      - /dev/infiniband
+    group_add:
+      - video
+    privileged: true
+    uts_mode: host
+    ipc_mode: host
+    shm_size: 100gb
+    security_opts:
+      - seccomp=unconfined
+      - apparmor=unconfined
+    ulimits:
+      - name: memlock
+        soft: -1
+        hard: -1
+    env:
+      gpu_visible_env_key: CUDA_VISIBLE_DEVICES

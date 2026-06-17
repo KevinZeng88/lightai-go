@@ -3,8 +3,6 @@ import { useAuthStore } from '@/stores/auth'
 /** Base path prefix for all LightAI management API calls. */
 export const API_BASE = '/api/v1'
 
-const BASE = ''
-
 export class ApiError extends Error {
   status: number
   data: any
@@ -35,7 +33,7 @@ class ApiClient {
       headers['X-CSRF-Token'] = authStore.csrfToken
     }
 
-    const resp = await fetch(BASE + url, {
+    const resp = await fetch(fullUrl, {
       method,
       headers,
       credentials: 'include',
@@ -43,11 +41,17 @@ class ApiClient {
     })
 
     // P0-007: Parse JSON, but handle non-JSON responses gracefully.
+    // AUD-013: Capture text body on JSON parse failure for better error messages.
     let data: any
     try {
       data = await resp.json()
     } catch {
-      data = {}
+      try {
+        const text = await resp.text()
+        data = { error: text || `HTTP ${resp.status}` }
+      } catch {
+        data = { error: `HTTP ${resp.status}` }
+      }
     }
 
     // P0-007: Throw structured error on non-2xx responses.

@@ -1,0 +1,14 @@
+## logs directory
+total 3.5M
+drwxr-xr-x  2 kzeng kzeng 4.0K Jun 17 23:38 .
+drwxr-xr-x 22 kzeng kzeng 4.0K Jun 17 20:38 ..
+-rw-r--r--  1 kzeng kzeng    0 Jun 17 23:58 agent-stdout.log
+-rw-r--r--  1 kzeng kzeng 3.1M Jun 17 23:59 lightai-agent.log
+-rw-r--r--  1 kzeng kzeng 450K Jun 17 23:59 lightai-server.log
+-rw-r--r--  1 kzeng kzeng    0 Jun 17 23:58 server-stdout.log
+
+## log files
+logs/agent-stdout.log
+logs/lightai-agent.log
+logs/lightai-server.log
+logs/server-stdout.log

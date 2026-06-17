@@ -104,7 +104,7 @@
           <span>{{ t('gpus.collectedAt') }}</span>
           <span class="resize-handle" @mousedown.prevent="startResize('collectedAt', $event)"></span>
         </template>
-        <template #default="{ row }">{{ formatRelativeTime(row.collected_at, locale) }}</template>
+        <template #default="{ row }"><span :title="formatDateTime(row.collected_at)">{{ formatRelativeTime(row.collected_at, locale) }}</span></template>
       </el-table-column>
       <template #empty>{{ t('gpus.noGpus') }}</template>
     </el-table>

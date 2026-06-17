@@ -1,0 +1,21 @@
+?   	lightai-go/cmd/agent	[no test files]
+?   	lightai-go/cmd/server	[no test files]
+ok  	lightai-go/internal/agent/collector	(cached)
+ok  	lightai-go/internal/agent/metrics	(cached)
+ok  	lightai-go/internal/agent/register	(cached)
+ok  	lightai-go/internal/agent/runtime	(cached)
+ok  	lightai-go/internal/agent/state	(cached)
+?   	lightai-go/internal/common/config	[no test files]
+ok  	lightai-go/internal/common/errors	(cached)
+?   	lightai-go/internal/common/log	[no test files]
+ok  	lightai-go/internal/common/token	(cached)
+?   	lightai-go/internal/common/types	[no test files]
+ok  	lightai-go/internal/common/version	(cached)
+ok  	lightai-go/internal/server/api	(cached)
+?   	lightai-go/internal/server/auth	[no test files]
+?   	lightai-go/internal/server/db	[no test files]
+?   	lightai-go/internal/server/metrics	[no test files]
+?   	lightai-go/internal/server/models	[no test files]
+?   	lightai-go/internal/server/rbac	[no test files]
+ok  	lightai-go/internal/server/runplan	(cached)
+?   	lightai-go/web	[no test files]

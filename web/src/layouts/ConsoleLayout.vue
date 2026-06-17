@@ -29,9 +29,9 @@
             <el-icon><Box /></el-icon>
             <span>{{ t('nav.models') }}</span>
           </template>
-          <el-menu-item index="/models/artifacts">{{ t('nav.modelArtifacts') }}</el-menu-item>
-          <el-menu-item index="/models/deployments">{{ t('nav.deployments') }}</el-menu-item>
-          <el-menu-item index="/models/instances">{{ t('nav.instances') }}</el-menu-item>
+          <el-menu-item index="/models/artifacts">{{ t('artifacts.title') }}</el-menu-item>
+          <el-menu-item index="/models/deployments">{{ t('deployments.title') }}</el-menu-item>
+          <el-menu-item index="/models/instances">{{ t('instances.title') }}</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="runtime">
@@ -39,8 +39,8 @@
             <el-icon><Setting /></el-icon>
             <span>{{ t('nav.runtime') }}</span>
           </template>
-          <el-menu-item index="/runtime/environments">{{ t('nav.runtimeEnvironments') }}</el-menu-item>
-          <el-menu-item index="/runtime/templates">{{ t('nav.runTemplates') }}</el-menu-item>
+          <el-menu-item index="/backends">{{ t('backends.title') }}</el-menu-item>
+          <el-menu-item index="/runtimes">{{ t('runtimes.title') }}</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="system">
@@ -58,8 +58,8 @@
           </template>
           <el-menu-item index="/observability/overview">{{ t('nav.overview') }}</el-menu-item>
           <el-menu-item index="/observability/targets">{{ t('nav.metricsTargets') }}</el-menu-item>
-          <el-menu-item index="/observability/prometheus">Prometheus</el-menu-item>
-          <el-menu-item index="/observability/grafana">Grafana</el-menu-item>
+          <el-menu-item index="/observability/prometheus">{{ t('observability.prometheusTitle') }}</el-menu-item>
+          <el-menu-item index="/observability/grafana">{{ t('observability.grafanaTitle') }}</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>

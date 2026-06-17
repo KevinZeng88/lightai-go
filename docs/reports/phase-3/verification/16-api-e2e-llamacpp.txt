@@ -1,0 +1,53 @@
+[16:34:12] === SINGLE: llamacpp ===
+[16:34:12] PASS: env OK
+[16:34:12] Starting server...
+[16:34:16] PASS: server PID=263131
+[16:34:16] Starting agent...
+[16:34:22] PASS: agent PID=263241
+[16:34:22] Login...
+[16:34:22] PASS: login OK
+[16:34:22] Seed llamacpp...
+[16:34:22] PASS: seed-llamacpp
+[16:34:22] Start llamacpp (full)...
+[16:34:22]   Instance: 3779f287-8ac0-423e-9465-771a312a474d
+[16:34:22] [TIMING] start-llamacpp.instance_created ts=1781685262
+[16:34:22] Waiting for instance running...
+[16:34:24] [WAIT] wait_progress elapsed_ms=2000 state=pending
+[16:34:26] [WAIT] wait_progress elapsed_ms=4000 state=pending
+[16:34:28] [WAIT] wait_progress elapsed_ms=6000 state=pending
+[16:34:30] [WAIT] wait_progress elapsed_ms=8000 state=pending
+[16:34:32] [WAIT] wait_progress elapsed_ms=10000 state=pending
+[16:34:36] [WAIT] wait_progress elapsed_ms=12000 state=pending
+[16:34:38] [WAIT] wait_progress elapsed_ms=14000 state=pending
+[16:34:40] [WAIT] wait_progress elapsed_ms=16000 state=pending
+[16:34:42] [WAIT] wait_progress elapsed_ms=18000 state=pending
+[16:34:44] [WAIT] wait_progress elapsed_ms=20000 state=pending
+[16:34:46] [WAIT] wait_progress elapsed_ms=22000 state=pending
+[16:34:48] [WAIT] wait_progress elapsed_ms=24000 state=pending
+[16:34:50] [WAIT] wait_progress elapsed_ms=26000 state=pending
+[16:34:52] [WAIT] wait_progress elapsed_ms=28000 state=pending
+[16:34:54]   llamacpp: pending (30s)...
+[16:34:54] [WAIT] wait_progress elapsed_ms=30000 state=pending
+[16:34:56] FAIL: start-llamacpp: failed error=
+[16:34:56] Stop llamacpp...
+[16:34:56]   Stop response: status=stopped
+[16:34:58]   Instance state after stop: stopped
+[16:34:58] PASS: stop-llamacpp
+[16:34:58] Cleanup...
+[16:34:58] Stop vllm...
+[16:34:58] stop-vllm returned error: {"error":"not found"}
+[16:34:58]   Stop response: status=
+[16:35:01]   Instance state after stop:
+[16:35:01] PASS: stop-vllm
+[16:35:01] Stop sglang...
+[16:35:01] stop-sglang returned error: {"error":"not found"}
+[16:35:01]   Stop response: status=
+[16:35:03]   Instance state after stop:
+[16:35:03] PASS: stop-sglang
+[16:35:03] Stop llamacpp...
+[16:35:03]   Stop response: status=stopped
+[16:35:05]   Instance state after stop: stopped
+[16:35:05] PASS: stop-llamacpp
+[16:35:05] Stopped server (pid=263131)
+[16:35:05] Stopped agent (pid=263241)
+[16:35:05] PASS: cleanup done

@@ -276,3 +276,87 @@ func Fatal(msg string, args ...any) {
 func With(args ...any) *slog.Logger {
 	return slog.With(args...)
 }
+
+// --- Context-aware logging: reads request_id / operation_id from ctx ---
+
+// ContextKey is the type for context keys used by the log package.
+type ContextKey string
+
+const (
+	// CtxKeyRequestID is the context key for request_id.
+	CtxKeyRequestID ContextKey = "request_id"
+	// CtxKeyOperationID is the context key for operation_id.
+	CtxKeyOperationID ContextKey = "operation_id"
+)
+
+// DebugContext logs a debug message, injecting request_id / operation_id from ctx.
+func DebugContext(ctx context.Context, msg string, args ...any) {
+	slog.DebugContext(ctx, msg, injectContextIDs(ctx, args)...)
+}
+
+// InfoContext logs an info message, injecting request_id / operation_id from ctx.
+func InfoContext(ctx context.Context, msg string, args ...any) {
+	slog.InfoContext(ctx, msg, injectContextIDs(ctx, args)...)
+}
+
+// WarnContext logs a warning message, injecting request_id / operation_id from ctx.
+func WarnContext(ctx context.Context, msg string, args ...any) {
+	slog.WarnContext(ctx, msg, injectContextIDs(ctx, args)...)
+}
+
+// ErrorContext logs an error message, injecting request_id / operation_id from ctx.
+func ErrorContext(ctx context.Context, msg string, args ...any) {
+	slog.ErrorContext(ctx, msg, injectContextIDs(ctx, args)...)
+}
+
+// injectContextIDs prepends request_id and operation_id from the context if present.
+func injectContextIDs(ctx context.Context, args []any) []any {
+	if ctx == nil {
+		return args
+	}
+	var extra []any
+	if rid := ctx.Value(CtxKeyRequestID); rid != nil {
+		if s, ok := rid.(string); ok && s != "" {
+			extra = append(extra, "request_id", s)
+		}
+	}
+	if oid := ctx.Value(CtxKeyOperationID); oid != nil {
+		if s, ok := oid.(string); ok && s != "" {
+			extra = append(extra, "operation_id", s)
+		}
+	}
+	if len(extra) == 0 {
+		return args
+	}
+	return append(extra, args...)
+}
+
+// WithRequestID returns a context with the given request_id.
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, CtxKeyRequestID, requestID)
+}
+
+// RequestIDFromContext extracts the request_id from context.
+func RequestIDFromContext(ctx context.Context) string {
+	if v := ctx.Value(CtxKeyRequestID); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// WithOperationID returns a context with the given operation_id.
+func WithOperationID(ctx context.Context, operationID string) context.Context {
+	return context.WithValue(ctx, CtxKeyOperationID, operationID)
+}
+
+// OperationIDFromContext extracts the operation_id from context.
+func OperationIDFromContext(ctx context.Context) string {
+	if v := ctx.Value(CtxKeyOperationID); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}

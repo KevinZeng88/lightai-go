@@ -1,149 +1,83 @@
 <template>
-  <div class="ma-page">
-    <div class="page-header">
-      <h2>{{ t('modelArtifacts.title') }} ({{ items.length }})</h2>
-      <div class="header-actions">
-        <el-button type="primary" size="small" @click="openCreate">{{ t('modelArtifacts.create') }}</el-button>
-        <el-button size="small" @click="refresh" :icon="RefreshRight">{{ t('common.refresh') }}</el-button>
-      </div>
-    </div>
-    <el-table :data="items" v-loading="loading" size="small" @row-click="openDetail" highlight-current-row>
-      <el-table-column :label="t('modelArtifacts.name')" min-width="140" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.display_name || row.name }}</template>
-      </el-table-column>
-      <el-table-column prop="source_type" :label="t('modelArtifacts.sourceType')" width="100" />
-      <el-table-column prop="path" :label="t('modelArtifacts.path')" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="format" :label="t('modelArtifacts.format')" width="90" />
-      <el-table-column prop="architecture" :label="t('modelArtifacts.architecture')" width="100" />
-      <el-table-column prop="size_label" :label="t('modelArtifacts.sizeLabel')" width="80" />
-      <el-table-column :label="t('modelArtifacts.createdAt')" width="160">
-        <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
-      </el-table-column>
-      <el-table-column :label="t('common.actions')" width="120" fixed="right">
+  <div class="page-container">
+    <h2>{{ $t('artifacts.title') }}</h2>
+    <el-button type="primary" @click="showCreate">{{ $t('common.create') }}</el-button>
+    <el-table :data="items" v-loading="loading" stripe style="margin-top:12px">
+      <el-table-column prop="name" :label="$t('artifacts.name')" width="150" />
+      <el-table-column prop="format" :label="$t('artifacts.format')" width="100" />
+      <el-table-column prop="task_type" :label="$t('artifacts.taskType')" width="100" />
+      <el-table-column prop="size_label" :label="$t('artifacts.size')" width="80" />
+      <el-table-column prop="path" :label="$t('artifacts.path')" min-width="200" />
+      <el-table-column :label="$t('common.actions')" width="200">
         <template #default="{ row }">
-          <el-button size="small" text @click.stop="openEdit(row)">{{ t('common.edit') }}</el-button>
-          <el-button size="small" text type="danger" @click.stop="confirmDelete(row)">{{ t('common.delete') }}</el-button>
+          <el-button size="small" @click="showEdit(row)">{{ $t('common.edit') }}</el-button>
+          <el-button size="small" type="danger" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
         </template>
       </el-table-column>
-      <template #empty><el-empty :description="t('modelArtifacts.noData')" /></template>
     </el-table>
 
-    <!-- Form Dialog -->
-    <el-dialog v-model="dialogVisible" :title="editingId ? t('modelArtifacts.edit') : t('modelArtifacts.create')" width="560px" @close="resetForm">
-      <el-form :model="form" label-width="120px" size="small">
-        <el-form-item :label="t('modelArtifacts.name')" required>
-          <el-input v-model="form.name" />
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.displayName')">
-          <el-input v-model="form.display_name" />
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.path')">
-          <el-input v-model="form.path" placeholder="/data/models/..." />
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.sourceType')">
-          <el-select v-model="form.source_type" style="width:100%">
-            <el-option label="local_path" value="local_path" />
-            <el-option label="mounted_path" value="mounted_path" />
-            <el-option label="remote_repo" value="remote_repo" />
-            <el-option label="object_storage" value="object_storage" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.format')">
-          <el-select v-model="form.format" style="width:100%">
-            <el-option label="hf" value="hf" /><el-option label="gguf" value="gguf" /><el-option label="safetensors" value="safetensors" />
-            <el-option label="onnx" value="onnx" /><el-option label="custom" value="custom" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.taskType')">
-          <el-select v-model="form.task_type" style="width:100%">
-            <el-option label="chat" value="chat" /><el-option label="completion" value="completion" /><el-option label="embedding" value="embedding" />
-            <el-option label="vision" value="vision" /><el-option label="custom" value="custom" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.architecture')">
-          <el-input v-model="form.architecture" placeholder="qwen / llama / deepseek / custom" />
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.sizeLabel')">
-          <el-input v-model="form.size_label" placeholder="7B / 14B / 32B" />
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.quantization')">
-          <el-select v-model="form.quantization" style="width:100%">
-            <el-option label="fp16" value="fp16" /><el-option label="bf16" value="bf16" /><el-option label="fp8" value="fp8" />
-            <el-option label="int8" value="int8" /><el-option label="int4" value="int4" /><el-option label="unknown" value="unknown" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.contextLength')">
-          <el-input-number v-model="form.default_context_length" :min="0" style="width:100%" />
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.estimatedVram')">
-          <el-input-number v-model="form.estimated_vram_bytes" :min="0" :step="1073741824" style="width:100%" />
-        </el-form-item>
-        <el-form-item :label="t('modelArtifacts.requiredGpuCount')">
-          <el-input-number v-model="form.required_gpu_count" :min="1" :max="8" style="width:100%" />
-        </el-form-item>
+    <el-dialog v-model="dialogVisible" :title="editingId ? $t('common.edit') : $t('common.create')" width="500px">
+      <el-form :model="form" label-width="140px">
+        <el-form-item :label="$t('artifacts.name')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="$t('artifacts.path')"><el-input v-model="form.path" /></el-form-item>
+        <el-form-item :label="$t('artifacts.format')"><el-select v-model="form.format" filterable allow-create style="width:100%"><el-option v-for="o in formatOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
+        <el-form-item :label="$t('artifacts.taskType')"><el-select v-model="form.task_type" filterable allow-create style="width:100%"><el-option v-for="o in taskTypeOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
+        <el-form-item :label="$t('artifacts.architecture')"><el-select v-model="form.architecture" filterable allow-create style="width:100%"><el-option v-for="o in architectureOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
+        <el-form-item :label="$t('artifacts.size')"><el-input v-model="form.size_label" /></el-form-item>
+        <el-form-item :label="$t('artifacts.quantization')"><el-select v-model="form.quantization" filterable allow-create style="width:100%"><el-option v-for="o in quantOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="save" :loading="saving">{{ t('common.save') }}</el-button>
+        <el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="doSave" :loading="saving">{{ $t('common.save') }}</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { RefreshRight } from '@element-plus/icons-vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { fetchModelArtifacts, createModelArtifact, updateModelArtifact, deleteModelArtifact, type ModelArtifact } from '@/api/modelArtifacts'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
-import { formatDateTime } from '@/utils/format'
+import { apiClient } from '@/api/client'
 
-const { t } = useI18n()
-const items = ref<ModelArtifact[]>([])
-const { loading, refresh } = useAutoRefresh(async () => { items.value = await fetchModelArtifacts() })
-const dialogVisible = ref(false)
-const editingId = ref('')
-const saving = ref(false)
+const loading = ref(false); const saving = ref(false)
+const items = ref<any[]>([]); const dialogVisible = ref(false)
+const form = ref({ name: '', path: '', format: 'gguf', task_type: 'chat', architecture: 'qwen', size_label: '', quantization: 'Q4_K_M', source_type: 'local_path', display_name: '' })
+let editingId = ''
 
-const defaultForm = () => ({
-  name: '', display_name: '', path: '', source_type: 'local_path', format: 'custom',
-  task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown',
-  default_context_length: 0, estimated_vram_bytes: 0, required_gpu_count: 1
-})
-const form = ref(defaultForm())
+// REVIEW-027: Recommended options + custom input for model metadata fields.
+const formatOptions = ['gguf', 'safetensors', 'pt', 'onnx', 'other']
+const taskTypeOptions = ['chat', 'completion', 'embedding', 'rerank', 'image', 'audio', 'other']
+const architectureOptions = ['qwen', 'llama', 'glm', 'deepseek', 'baichuan', 'mistral', 'other']
+const quantOptions = ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'FP16', 'BF16', 'FP8', 'INT8', 'INT4', 'none', 'other']
 
-function resetForm() { editingId.value = ''; form.value = defaultForm() }
-function openCreate() { resetForm(); dialogVisible.value = true }
-function openEdit(row: ModelArtifact) {
-  editingId.value = row.id
-  form.value = { ...defaultForm(), ...row }
-  dialogVisible.value = true
+onMounted(async () => { await refresh() })
+async function refresh() {
+  loading.value = true
+  try { items.value = await apiClient.get('/api/v1/model-artifacts') } catch (e: any) { console.error(e) }
+  loading.value = false
 }
-function openDetail(row: ModelArtifact) { openEdit(row) }
 
-async function save() {
+function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; dialogVisible.value = true }
+function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); dialogVisible.value = true }
+
+async function doSave() {
   saving.value = true
   try {
-    if (editingId.value) {
-      await updateModelArtifact(editingId.value, form.value)
-      ElMessage.success(t('modelArtifacts.updateSuccess'))
+    if (editingId) {
+      await apiClient.patch(`/api/v1/model-artifacts/${editingId}`, form.value)
     } else {
-      await createModelArtifact(form.value)
-      ElMessage.success(t('modelArtifacts.createSuccess'))
+      await apiClient.post('/api/v1/model-artifacts', form.value)
     }
-    dialogVisible.value = false
-    refresh()
-  } catch (e: any) { ElMessage.error(e?.message || t('common.error')) }
-  finally { saving.value = false }
+    ElMessage.success('Saved'); dialogVisible.value = false; await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+  saving.value = false
 }
 
-async function confirmDelete(row: ModelArtifact) {
+async function handleDelete(row: any) {
   try {
-    await ElMessageBox.confirm(t('modelArtifacts.deleteConfirm'), t('common.confirm'), { type: 'warning' })
-    await deleteModelArtifact(row.id)
-    ElMessage.success(t('modelArtifacts.deleteSuccess'))
-    refresh()
-  } catch { /* cancelled */ }
+    await ElMessageBox.confirm(`Delete ${row.name}?`, 'Confirm', { type: 'warning' })
+    await apiClient.delete(`/api/v1/model-artifacts/${row.id}`)
+    ElMessage.success('Deleted'); await refresh()
+  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || 'Failed') }
 }
 </script>

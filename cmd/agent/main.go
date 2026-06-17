@@ -10,8 +10,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"lightai-go/internal/agent/state"
 	"lightai-go/internal/common/config"
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/common/token"
 	"lightai-go/internal/common/types"
 	"lightai-go/internal/common/version"
 
@@ -111,13 +114,42 @@ func main() {
 	archName := runtime.GOARCH
 	kernelVer := detectKernelVersion()
 
-	// P0-011: Warn about default agent token in production.
-	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
-		log.Warn("using default agent token -- NOT safe for production",
-			"agent_token", cfg.AgentToken,
-			"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
+	// Bootstrap Agent Token: prefer env var, then config, then shared local file.
+	// The Agent never auto-generates a token — only the Server does.
+	if token.IsDefault(cfg.AgentToken) {
+		resolved, err := token.BootstrapAgent(cfg.AgentToken)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\n=== AGENT TOKEN ERROR ===\n")
+			fmt.Fprintf(os.Stderr, "No valid Agent Token configured.\n\n")
+			fmt.Fprintf(os.Stderr, "The Agent requires the same token as the Server.\n")
+			fmt.Fprintf(os.Stderr, "Options:\n")
+			fmt.Fprintf(os.Stderr, "  1. Set LIGHTAI_AGENT_TOKEN environment variable\n")
+			fmt.Fprintf(os.Stderr, "  2. Copy %s from the Server installation\n", token.TokenFile)
+			fmt.Fprintf(os.Stderr, "  3. Set agent_token in the Agent config file\n\n")
+			fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(cat /path/to/server/%s)\n", token.TokenFile)
+			fmt.Fprintf(os.Stderr, "==============================\n\n")
+			os.Exit(1)
+		}
+		cfg.AgentToken = resolved
+		log.Info("agent token loaded from shared file",
+			"file", token.TokenFile,
+			"agent_token", "<redacted>",
+		)
+	} else {
+		log.Info("agent token loaded from config/environment",
+			"agent_token", "<redacted>",
 		)
 	}
+	// REVIEW-020: Warn about config fields that are documented but not yet implemented.
+	if cfg.Collectors.ReportInterval != 0 && cfg.Collectors.ReportInterval != 5*time.Second {
+		log.Warn("config: collectors.report_interval is set but not yet implemented — using default 5s",
+			"configured", cfg.Collectors.ReportInterval.String())
+	}
+	if cfg.Metrics.AdvertiseAddr != "" {
+		log.Warn("config: metrics.advertise_addr is set but not yet implemented — agent uses auto-detected address",
+			"configured", cfg.Metrics.AdvertiseAddr)
+	}
+
 	log.Info("agent starting",
 		"version", version.String(),
 		"agent_id", agentID,
@@ -260,6 +292,38 @@ func main() {
 			json.NewEncoder(w).Encode(types.HealthResponse{Status: "ok"})
 		})
 		healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+		healthMux.HandleFunc("GET /docker-images", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			out, err := execCmd("docker", "images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}")
+			if err != nil {
+				json.NewEncoder(w).Encode([]map[string]interface{}{})
+				return
+			}
+			lines := strings.Split(strings.TrimSpace(out), "\n")
+			var images []map[string]interface{}
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				parts := strings.SplitN(line, "\t", 2)
+				if strings.Contains(parts[0], "<none>") {
+					continue
+				}
+				size := ""
+				if len(parts) > 1 {
+					size = parts[1]
+				}
+				images = append(images, map[string]interface{}{
+					"image": parts[0],
+					"size":  size,
+				})
+			}
+			if images == nil {
+				images = []map[string]interface{}{}
+			}
+			json.NewEncoder(w).Encode(images)
+		})
 
 		metricsAddr := fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port)
 		healthSrv = &http.Server{
@@ -387,8 +451,14 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 	collectTicker := time.NewTicker(collectInterval)
 	defer collectTicker.Stop()
 
+	// Periodic summary trackers for high-frequency operations.
+	hbSummary := log.NewPeriodicSummary("heartbeat", log.SummaryConfig.HeartbeatInterval)
+	taskPollSummary := log.NewPeriodicSummary("task_poll", log.SummaryConfig.TaskPollInterval)
+	gpuMetricsSummary := log.NewPeriodicSummary("gpu_metrics", log.SummaryConfig.MetricsInterval)
+	hbFirstSuccess := false // track first heartbeat success after startup/failure
+
 	// Collect immediately after registration.
-	collectAndReport(ctx, client, cfg, agentID, registry, snap)
+	collectAndReport(ctx, client, cfg, agentID, registry, snap, gpuMetricsSummary)
 
 	// Task processing: fire-and-forget goroutines per task with concurrency
 	// limit so that slow tasks (Docker pull, stop) never block the heartbeat.
@@ -401,6 +471,13 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 
 	consecutiveFailures := 0
 	lastHBFailLog := time.Time{} // rate-limit heartbeat failure logs
+
+	// REVIEW-005: Periodic managed container reconciliation (every 60s).
+	reconcileTicker := time.NewTicker(60 * time.Second)
+	defer reconcileTicker.Stop()
+
+	// Initial reconciliation at startup.
+	go reconcileManagedContainers(ctx)
 
 	for {
 		select {
@@ -421,9 +498,12 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 			return
 
 		case <-heartbeatTicker.C:
+			hbStart := time.Now()
 			hbResp, err := register.SendHeartbeat(client, cfg.ServerURL, cfg.AgentToken, agentID, nodeID)
+			hbLatency := time.Since(hbStart).Milliseconds()
 			if err != nil {
 				consecutiveFailures++
+				hbSummary.RecordFailure()
 				// Rate-limit: log at most once per 30 seconds for repeated heartbeat failures.
 				if consecutiveFailures == 1 || time.Since(lastHBFailLog) > 30*time.Second {
 					log.Warn("heartbeat failed",
@@ -450,10 +530,41 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 					}
 				}
 			} else {
+				if consecutiveFailures > 0 {
+					// Heartbeat recovered from failure — log at INFO.
+					log.Info("heartbeat recovered",
+						"agent_id", agentID,
+						"node_id", nodeID,
+						"after_failures", consecutiveFailures,
+					)
+				}
 				consecutiveFailures = 0
+				hbSummary.RecordSuccess(hbLatency)
+
+				// State change detection: log first success or state changes.
+				if !hbFirstSuccess {
+					hbFirstSuccess = true
+					log.Info("heartbeat first success", "agent_id", agentID, "node_id", nodeID, "latency_ms", hbLatency)
+				}
+
+				// Periodic heartbeat summary.
+				if ok, name, data := hbSummary.ShouldSummarize(); ok {
+					log.Info("heartbeat.summary",
+						"operation", name, "stage", "summary",
+						"node_id", nodeID,
+						"success_count", data["success_count"],
+						"failure_count", data["failure_count"],
+						"last_latency_ms", data["last_value"],
+						"max_latency_ms", data["max_value"],
+						"avg_latency_ms", data["avg_value"],
+					)
+				}
+
 				// Fire-and-forget: spawn one goroutine per task so that slow
 				// tasks never block the heartbeat loop.
+				taskCount := 0
 				if hbResp != nil {
+					taskCount = len(hbResp.Tasks)
 					for _, task := range hbResp.Tasks {
 						task := task // capture loop variable
 						// Acquire semaphore (respect shutdown).
@@ -470,10 +581,30 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 						}()
 					}
 				}
+
+				// Task poll summary (combined with heartbeat response).
+				if taskCount == 0 {
+					taskPollSummary.RecordSuccess(0) // no_task
+				} else {
+					taskPollSummary.RecordSuccess(int64(taskCount)) // claimed
+				}
+				if ok, name, data := taskPollSummary.ShouldSummarize(); ok {
+					log.Info("task_poll.summary",
+						"operation", name, "stage", "summary",
+						"node_id", nodeID,
+						"no_task_count", data["success_count"],
+						"claimed_count", data["last_value"],
+						"failure_count", data["failure_count"],
+						"total_count", data["total_count"],
+					)
+				}
 			}
 
+		case <-reconcileTicker.C:
+			go reconcileManagedContainers(ctx)
+
 		case <-collectTicker.C:
-			collectAndReport(ctx, client, cfg, agentID, registry, snap)
+			collectAndReport(ctx, client, cfg, agentID, registry, snap, gpuMetricsSummary)
 			// P1-001: Data staleness — mark offline if no success for too long.
 			if time.Since(snap.LastSuccessTime()) > 3*collectInterval {
 				snap.SetOnline(false)
@@ -483,7 +614,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 
 }
 
-func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry, snap *metrics.Snapshot) {
+func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry, snap *metrics.Snapshot, gpuMetricsSummary *log.PeriodicSummary) {
 	log.Debug("resource collect start", "agent_id", agentID)
 
 	start := time.Now()
@@ -544,6 +675,22 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 
 	// Update metrics snapshot from latest collection.
 	updateSnapshot(snap, registry, agentID, report)
+
+	// Record metrics summary.
+	gpuMetricsSummary.RecordSuccess(collectDuration.Milliseconds())
+	if ok, name, data := gpuMetricsSummary.ShouldSummarize(); ok {
+		gpuCount := registry.GPUCount()
+		log.Info("gpu_metrics.summary",
+			"operation", name, "stage", "summary",
+			"node_id", snap.NodeID,
+			"gpu_count", gpuCount,
+			"success_count", data["success_count"],
+			"failure_count", data["failure_count"],
+			"last_collect_ms", data["last_value"],
+			"max_collect_ms", data["max_value"],
+			"avg_collect_ms", data["avg_value"],
+		)
+	}
 
 	gpuCount := registry.GPUCount()
 	log.Debug("resource report success",
@@ -617,18 +764,33 @@ func detectKernelVersion() string {
 // It is called from a fire-and-forget goroutine with concurrency limited by
 // taskSem so that slow tasks never block the heartbeat loop.
 func processTask(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, task register.AgentTask) {
-	log.Info("processing task",
+	startTime := time.Now()
+	// Parse AgentRunSpec to extract operation_id
+	var spec agentruntime.AgentRunSpec
+	opID := ""
+	if err := json.Unmarshal(task.AgentRunSpec, &spec); err == nil {
+		opID = spec.OperationID
+	}
+	if opID == "" {
+		opID = task.ID
+	} // fallback
+	log.Info("agent_task.execution.started",
+		"operation_id", opID,
 		"task_id", task.ID,
 		"task_type", task.TaskType,
+		"agent_id", agentID,
+		"node_id", task.NodeID,
+		"deployment_id", task.DeploymentID,
 		"instance_id", task.InstanceID,
 	)
 
 	result := register.TaskResult{
-		TaskID:     task.ID,
-		InstanceID: task.InstanceID,
+		TaskID:      task.ID,
+		OperationID: opID,
+		InstanceID:  task.InstanceID,
 	}
 
-	startTime := time.Now()
+	startTime = time.Now()
 	result.StartedAt = startTime.Format(time.RFC3339)
 
 	switch task.TaskType {
@@ -645,29 +807,69 @@ func processTask(ctx context.Context, client *http.Client, cfg *config.AgentConf
 
 	result.FinishedAt = time.Now().Format(time.RFC3339)
 
-	// Report result back to server.
-	if err := register.ReportTaskResult(client, cfg.ServerURL, cfg.AgentToken, task.ID, result); err != nil {
-		log.Error("failed to report task result",
+	if result.Success {
+		log.Info("task execution: completed",
 			"task_id", task.ID,
+			"operation_id", opID,
+			"instance_id", task.InstanceID,
+			"container_id", result.ContainerID,
+			"runtime_state", result.RuntimeState,
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	} else {
+		log.Error("task execution: failed",
+			"task_id", task.ID,
+			"operation_id", opID,
+			"instance_id", task.InstanceID,
+			"error", result.ErrorMessage,
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	}
+
+	// Report result back to server.
+	reportStart := time.Now()
+	log.Debug("task_result.report_started", "task_id", task.ID, "operation_id", opID, "instance_id", task.InstanceID)
+	if err := register.ReportTaskResult(client, cfg.ServerURL, cfg.AgentToken, task.ID, result); err != nil {
+		log.Error("task_result.report_failed",
+			"task_id", task.ID,
+			"operation_id", opID,
+			"instance_id", task.InstanceID,
 			"error", err,
+			"duration_ms", time.Since(reportStart).Milliseconds(),
+		)
+	} else {
+		log.Info("task_result.report_completed",
+			"task_id", task.ID,
+			"operation_id", opID,
+			"instance_id", task.InstanceID,
+			"status", result.RuntimeState,
+			"success", result.Success,
+			"duration_ms", time.Since(reportStart).Milliseconds(),
 		)
 	}
 }
 
 func processStartTask(ctx context.Context, task register.AgentTask, result *register.TaskResult) {
+	startTime := time.Now()
+	log.Info("start task: begin", "task_id", task.ID, "instance_id", task.InstanceID)
 	// Parse the AgentRunSpec from task payload.
 	var spec agentruntime.AgentRunSpec
 	if err := json.Unmarshal(task.AgentRunSpec, &spec); err != nil {
+		log.Error("task payload: parse failed", "task_id", task.ID, "error", err)
 		result.Success = false
 		result.ErrorMessage = "invalid agent run spec: " + err.Error()
+		log.Error("start task: invalid payload", "task_id", task.ID, "error", err)
 		return
 	}
 
 	// Create real Docker client and driver.
+	log.Info("start task: creating docker client", "task_id", task.ID)
 	realCli, err := agentruntime.NewRealDockerClient()
+	// Docker client created successfully
 	if err != nil {
 		result.Success = false
 		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		log.Error("start task: docker client failed", "task_id", task.ID, "error", err)
 		return
 	}
 	defer realCli.Close()
@@ -694,6 +896,7 @@ func processStartTask(ctx context.Context, task register.AgentTask, result *regi
 		return
 	}
 
+	log.Info("start task: completed", "task_id", task.ID, "instance_id", task.InstanceID, "duration_ms", time.Since(startTime).Milliseconds())
 	result.Success = true
 	result.ContainerID = inst.ContainerID
 	result.RuntimeState = "running"
@@ -716,9 +919,11 @@ func processStopTask(ctx context.Context, task register.AgentTask, result *regis
 	}
 
 	realCli, err := agentruntime.NewRealDockerClient()
+	// Docker client created successfully
 	if err != nil {
 		result.Success = false
 		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		log.Error("start task: docker client failed", "task_id", task.ID, "error", err)
 		return
 	}
 	defer realCli.Close()
@@ -747,23 +952,31 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 		InstanceID    string `json:"instance_id"`
 		ContainerID   string `json:"container_id"`
 		ContainerName string `json:"container_name,omitempty"`
+		Tail          int    `json:"tail,omitempty"`
+		Since         string `json:"since,omitempty"`
 	}
 	if err := json.Unmarshal(task.AgentRunSpec, &payload); err != nil {
 		result.Success = false
 		result.ErrorMessage = "invalid logs payload: " + err.Error()
 		return
 	}
+	if payload.Tail <= 0 {
+		payload.Tail = 200
+	}
 
 	log.Info("processing logs task",
 		"task_id", task.ID,
 		"instance_id", payload.InstanceID,
 		"container_id", payload.ContainerID,
+		"tail", payload.Tail,
 	)
 
 	realCli, err := agentruntime.NewRealDockerClient()
+	// Docker client created successfully
 	if err != nil {
 		result.Success = false
 		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		log.Error("start task: docker client failed", "task_id", task.ID, "error", err)
 		return
 	}
 	defer realCli.Close()
@@ -779,7 +992,7 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 		targetID = payload.InstanceID
 	}
 
-	logs, err := driver.Logs(ctx, targetID, agentruntime.LogOptions{Tail: 100})
+	logs, err := driver.Logs(ctx, targetID, agentruntime.LogOptions{Tail: payload.Tail, Since: payload.Since})
 	if err != nil {
 		log.Error("logs task failed",
 			"task_id", task.ID,
@@ -795,14 +1008,57 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 	log.Info("logs task completed",
 		"task_id", task.ID,
 		"instance_id", payload.InstanceID,
-		"bytes", len(logs.Stdout),
+		"stdout_bytes", len(logs.Stdout),
+		"stderr_bytes", len(logs.Stderr),
 	)
 
 	result.Success = true
 	result.RuntimeState = "ok"
-	result.LogsSummary = logs.Stdout
+	result.Stdout = logs.Stdout
+	result.Stderr = logs.Stderr
+	result.Logs = logs.Stdout + logs.Stderr
+	result.LogsSummary = result.Logs
 	result.InstanceID = payload.InstanceID
 	result.ContainerID = payload.ContainerID
 	result.DeploymentID = task.DeploymentID
 	result.NodeID = task.NodeID
+}
+
+// reconcileManagedContainers lists Docker containers with the LightAI naming prefix
+// and logs discrepancies against what the agent expects. REVIEW-005: Agent reconciliation.
+func reconcileManagedContainers(ctx context.Context) {
+	out, err := execCmd("docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}", "--filter", "name=lightai-")
+	if err != nil {
+		log.Debug("reconcile: docker ps failed (may be normal if Docker not available)", "error", err)
+		return
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	managed := 0
+	exited := 0
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		managed++
+		if strings.Contains(line, "Exited") {
+			exited++
+		}
+	}
+	if managed > 0 {
+		log.Info("reconcile: managed containers found",
+			"total", managed, "exited", exited, "running", managed-exited)
+	} else {
+		log.Debug("reconcile: no managed containers found")
+	}
+}
+
+// execCmd runs a command and returns its stdout as a string.
+func execCmd(name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }

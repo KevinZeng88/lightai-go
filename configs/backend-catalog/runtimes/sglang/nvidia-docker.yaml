@@ -1,0 +1,15 @@
+id: runtime.sglang.nvidia-docker
+backend_id: backend.sglang
+backend_version_id: backend-version.sglang.openai-latest
+slug: sglang-nvidia-docker
+managed_by: system
+runner_type: docker
+vendor: nvidia
+image_ref: lmsysorg/sglang:latest
+docker_options:
+  ipc_mode: host
+  shm_size: 32gb
+env:
+  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+verification:
+  status: verified

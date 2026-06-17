@@ -19,6 +19,7 @@
         <el-option label="tenant" value="tenant" /><el-option label="user" value="user" /><el-option label="node" value="node" />
       </el-select>
     </div>
+    <el-alert v-if="errorMessage" type="error" :title="errorMessage" show-icon closable @close="errorMessage=''" style="margin-bottom:12px" />
     <el-table :data="entries" v-loading="loading" size="small" highlight-current-row>
       <el-table-column :label="t('audit.time')" width="160">
         <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
@@ -49,6 +50,7 @@ const { t } = useI18n()
 const entries = ref<AuditLogEntry[]>([])
 const loading = ref(false)
 const total = ref(0)
+const errorMessage = ref('')
 const page = ref(1)
 const pageSize = 50
 const filterAction = ref('')
@@ -65,7 +67,7 @@ async function loadData() {
     })
     entries.value = resp.entries || []
     total.value = resp.total || 0
-  } catch { entries.value = [] }
+  } catch (e: any) { entries.value = []; errorMessage.value = e?.message || String(e) }
   finally { loading.value = false }
 }
 const refresh = loadData

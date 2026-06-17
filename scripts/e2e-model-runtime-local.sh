@@ -170,20 +170,13 @@ A=$(curl -sf -b "$COOKIES" -X POST "$API/model-artifacts" \
 AID=$(echo "$A" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 pass "Artifact: $AID"
 
-# RuntimeEnvironment
-R=$(curl -sf -b "$COOKIES" -X POST "$API/runtime-environments" \
+# BackendRuntime (current API: /backend-runtimes replaces old /runtime-environments)
+R=$(curl -sf -b "$COOKIES" -X POST "$API/backend-runtimes" \
   -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF" -H "Origin: http://127.0.0.1:18080" \
-  -d '{"name":"llama-cpp-cuda13","runtime_type":"docker","backend_type":"llama_cpp","vendor":"nvidia","default_port":8000,"docker":{"image":"ghcr.io/ggml-org/llama.cpp:server-cuda13","ipc_mode":{"enabled":true,"value":"host"},"shm_size":{"enabled":true,"value":"8gb"}}}')
+  -d '{"name":"llama-cpp-cuda13","vendor":"nvidia","image_name":"ghcr.io/ggml-org/llama.cpp:server-cuda13","backend_id":"BACKEND_ID_PLACEHOLDER","backend_version_id":"VERSION_ID_PLACEHOLDER"}')
 RID=$(echo "$R" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-pass "Runtime: $RID"
-
-# RunTemplate
-MODEL_DIR=$(dirname "$MODEL_PATH")
-T=$(curl -sf -b "$COOKIES" -X POST "$API/run-templates" \
-  -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF" -H "Origin: http://127.0.0.1:18080" \
-  -d "{\"name\":\"llama-cpp-server\",\"runtime_type\":\"docker\",\"vendor\":\"nvidia\",\"backend_type\":\"llama_cpp\",\"required_variables\":[\"MODEL_PATH\",\"CONTAINER_PORT\"],\"args_template\":[\"-m\",\"\${MODEL_PATH}\",\"--host\",\"0.0.0.0\",\"--port\",\"\${CONTAINER_PORT}\"],\"volume_mappings\":{\"enabled\":true,\"value\":[{\"host_path\":\"$MODEL_DIR\",\"container_path\":\"/models\",\"readonly\":true}]}}")
-TID=$(echo "$T" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-pass "Template: $TID"
+pass "BackendRuntime: $RID"
+# Note: RunTemplate concept removed in current baseline; deployment references backend_runtime_id directly.
 
 # ── Step 6: Get Node and GPU ────────────────────────────────────────────
 
@@ -201,7 +194,7 @@ echo ""
 echo "=== Deployment ==="
 D=$(curl -sf -b "$COOKIES" -X POST "$API/model-deployments" \
   -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF" -H "Origin: http://127.0.0.1:18080" \
-  -d "{\"name\":\"e2e-llama-cpp\",\"model_artifact_id\":\"$AID\",\"runtime_environment_id\":\"$RID\",\"run_template_id\":\"$TID\",\"node_id\":\"$NODE_ID\",\"gpu_ids\":[\"$GPU_ID\"],\"host_port\":$PORT}")
+  -d "{\"name\":\"e2e-llama-cpp\",\"model_artifact_id\":\"$AID\",\"backend_runtime_id\":\"$RID\",\"node_id\":\"$NODE_ID\",\"gpu_ids\":[\"$GPU_ID\"],\"host_port\":$PORT}")
 DID=$(echo "$D" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 pass "Deployment: $DID"
 

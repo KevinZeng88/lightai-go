@@ -1,0 +1,23 @@
+apiVersion: lightai/v1
+kind: InferenceBackend
+metadata:
+  name: vllm
+spec:
+  displayName: vLLM
+  description: "vLLM inference backend"
+  protocol:
+    type: openai-compatible
+    modelsPath: /v1/models
+    chatCompletionsPath: /v1/chat/completions
+    completionsPath: /v1/completions
+  defaultVersion: "0.8.5"
+  parameterFormat: space
+  commonParameters:
+    - "--tensor-parallel-size"
+    - "--max-model-len"
+    - "--gpu-memory-utilization"
+    - "--served-model-name"
+  defaultEnv:
+    VLLM_USE_MODELSCOPE: "false"
+  isBuiltIn: true
+  isEnabled: true

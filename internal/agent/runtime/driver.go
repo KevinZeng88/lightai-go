@@ -40,25 +40,38 @@ type RuntimeDriver interface {
 // It is JSON-compatible with the server's ResolvedRunSpec so that the
 // Agent can deserialize it directly without importing server packages.
 type AgentRunSpec struct {
-	InstanceID       string            `json:"instance_id"`
-	DeploymentID     string            `json:"deployment_id"`
-	RuntimeType      string            `json:"runtime_type"`
-	BackendType      string            `json:"backend_type"`
-	Vendor           string            `json:"vendor"`
-	ModelPath        string            `json:"model_path"`
-	ServedModelName  string            `json:"served_model_name"`
-	NodeID           string            `json:"node_id"`
-	AgentID          string            `json:"agent_id"`
-	GPUDeviceIDs     []string          `json:"gpu_device_ids"`
-	GPUVisibleEnvKey string            `json:"gpu_visible_env_key,omitempty"`
-	Env              map[string]string `json:"env"`
-	Args             []string          `json:"args"`
-	HostPort         int               `json:"host_port"`
-	ContainerPort    int               `json:"container_port"`
-	Volumes          []VolumeSpec      `json:"volumes,omitempty"`
-	Devices          []DeviceSpec      `json:"devices,omitempty"`
-	Ports            []PortSpec        `json:"ports,omitempty"`
-	Docker           DockerSpec        `json:"docker,omitempty"`
+	OperationID      string             `json:"operation_id,omitempty"`
+	InstanceID       string             `json:"instance_id"`
+	DeploymentID     string             `json:"deployment_id"`
+	RuntimeType      string             `json:"runtime_type"`
+	BackendType      string             `json:"backend_type"`
+	Vendor           string             `json:"vendor"`
+	ModelPath        string             `json:"model_path"`
+	ServedModelName  string             `json:"served_model_name"`
+	NodeID           string             `json:"node_id"`
+	AgentID          string             `json:"agent_id"`
+	GPUDeviceIDs     []string           `json:"gpu_device_ids"`
+	GPUVisibleEnvKey string             `json:"gpu_visible_env_key,omitempty"`
+	Env              map[string]string  `json:"env"`
+	Args             []string           `json:"args"`
+	HostPort         int                `json:"host_port"`
+	ContainerPort    int                `json:"container_port"`
+	Volumes          []VolumeSpec       `json:"volumes,omitempty"`
+	Devices          []DeviceSpec       `json:"devices,omitempty"`
+	Ports            []PortSpec         `json:"ports,omitempty"`
+	Docker           DockerSpec         `json:"docker,omitempty"`
+	HealthCheck      *HealthCheckConfig `json:"health_check,omitempty"`
+}
+
+// HealthCheckConfig is the health check configuration for endpoint readiness.
+type HealthCheckConfig struct {
+	Enabled         bool   `json:"enabled"`
+	Path            string `json:"path"`
+	Port            int    `json:"port"`
+	Scheme          string `json:"scheme"`
+	ExpectedStatus  int    `json:"expected_status"`
+	TimeoutSeconds  int    `json:"timeout_seconds"`
+	IntervalSeconds int    `json:"interval_seconds"`
 }
 
 // DockerSpec holds Docker-specific runtime configuration.
@@ -106,22 +119,22 @@ type PortSpec struct {
 
 // RuntimeInstance is returned by Start on success.
 type RuntimeInstance struct {
-	InstanceID   string `json:"instance_id"`
-	ContainerID  string `json:"container_id"`
+	InstanceID    string `json:"instance_id"`
+	ContainerID   string `json:"container_id"`
 	ContainerName string `json:"container_name"`
-	EndpointURL  string `json:"endpoint_url,omitempty"`
-	HostPort     int    `json:"host_port"`
+	EndpointURL   string `json:"endpoint_url,omitempty"`
+	HostPort      int    `json:"host_port"`
 }
 
 // RuntimeInstanceStatus is returned by Inspect.
 type RuntimeInstanceStatus struct {
-	InstanceID    string `json:"instance_id"`
-	ContainerID   string `json:"container_id"`
-	State         string `json:"state"`
-	ExitCode      int    `json:"exit_code"`
-	Error         string `json:"error,omitempty"`
-	StartedAt     string `json:"started_at,omitempty"`
-	FinishedAt    string `json:"finished_at,omitempty"`
+	InstanceID  string `json:"instance_id"`
+	ContainerID string `json:"container_id"`
+	State       string `json:"state"`
+	ExitCode    int    `json:"exit_code"`
+	Error       string `json:"error,omitempty"`
+	StartedAt   string `json:"started_at,omitempty"`
+	FinishedAt  string `json:"finished_at,omitempty"`
 }
 
 // RuntimeLogs holds log output from a container.
@@ -132,8 +145,8 @@ type RuntimeLogs struct {
 
 // LogOptions controls log retrieval behaviour.
 type LogOptions struct {
-	Tail       int  // number of lines from end (0 = all)
-	Timestamps bool // include timestamps
+	Tail       int    // number of lines from end (0 = all)
+	Timestamps bool   // include timestamps
 	Since      string // RFC3339 or relative (e.g. "10m")
 	Until      string // RFC3339 or relative
 }
