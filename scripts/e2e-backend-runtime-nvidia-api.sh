@@ -12,6 +12,8 @@ DEPLOYMENT_ID=""
 INSTANCE_ID=""
 RUN_PLAN_ID=""
 ARTIFACT_ID=""
+EXIT_CODE=0
+CURRENT_STAGE=""
 
 VLLM_IMAGE="${VLLM_IMAGE:-vllm/vllm-openai:latest}"
 VLLM_MODEL="${VLLM_MODEL:-/home/kzeng/models/Qwen3-0.6B-Instruct-2512}"
@@ -19,7 +21,22 @@ VLLM_PORT="${VLLM_PORT:-8004}"
 
 log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 skip() { log "SKIP: $*"; exit 0; }
-fail() { log "FAIL: $*"; exit 1; }
+fail() { log "FAIL: $*"; EXIT_CODE=1; exit 1; }
+
+# BRR-OBS-001 + BRR-RV-003: Stage timing helpers.
+now_ms() { date +%s%3N; }
+stage_start() {
+  CURRENT_STAGE="$1"
+  log "stage=$1 start"
+  STAGE_START_MS="$(now_ms)"
+}
+stage_done() {
+  local stage="${1:-$CURRENT_STAGE}"
+  local end_ms="$(now_ms)"
+  local duration=$(( end_ms - STAGE_START_MS ))
+  log "stage=$stage done duration_ms=$duration"
+  CURRENT_STAGE=""
+}
 
 need() {
   command -v "$1" >/dev/null 2>&1 || skip "$1 is not installed"
@@ -88,10 +105,26 @@ api() {
   printf '%s\n' "$body"
 }
 
-cleanup() {
-  rm -f "$COOKIE_JAR"
+# BRR-RV-003: Robust cleanup trap. Always runs on EXIT regardless of how the
+# script terminates (happy path, fail(), or unexpected error). Set
+# KEEP_E2E_RESOURCES=1 to preserve resources for debugging.
+on_exit() {
+    local raw_exit_code=$?
+    if [ "$raw_exit_code" -ne 0 ] && [ "$EXIT_CODE" -eq 0 ]; then
+        EXIT_CODE=$raw_exit_code
+    fi
+    if [ -n "$CURRENT_STAGE" ]; then
+        log "failed_stage=$CURRENT_STAGE"
+    fi
+    if [ "${KEEP_E2E_RESOURCES:-0}" != "1" ]; then
+        cleanup_e2e_resources
+    else
+        log "KEEP_E2E_RESOURCES=1: resources preserved for debugging"
+    fi
+    rm -f "$COOKIE_JAR"
+    exit $EXIT_CODE
 }
-trap cleanup EXIT
+trap on_exit EXIT
 
 cleanup_e2e_resources() {
   if [ -n "$DEPLOYMENT_ID" ]; then
@@ -137,35 +170,51 @@ if [ -z "$PASSWORD" ] && [ -f runtime/initial-credentials.txt ]; then
 fi
 [ -n "$PASSWORD" ] || skip "admin password unavailable; set LIGHTAI_E2E_PASSWORD"
 
+stage_start login
 login_resp="$(curl -sS -X POST "$SERVER_URL/api/v1/auth/login" -H "Origin: $SERVER_URL" -H "Content-Type: application/json" -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" -c "$COOKIE_JAR")"
 CSRF_TOKEN="$(printf '%s' "$login_resp" | json_get csrf_token)"
 [ -n "$CSRF_TOKEN" ] || fail "login failed"
+stage_done
 
+stage_start query_node
 node_json="$(api GET /api/v1/nodes)"
 node_id="$(printf '%s' "$node_json" | json_get id)"
 [ -n "$node_id" ] || skip "no registered node found"
 log "node_id=$node_id"
+stage_done
 
+stage_start query_gpu
 gpu_json="$(api GET /api/v1/gpus)"
 gpu_id="$(printf '%s' "$gpu_json" | json_get id)"
 [ -n "$gpu_id" ] || skip "no GPU found"
 log "gpu_id=$gpu_id"
+stage_done
 
+stage_start verify_catalog
 backend_json="$(api GET /api/v1/backends)"
 printf '%s' "$backend_json" | grep -q 'backend.vllm' || fail "backend catalog missing backend.vllm"
 version_json="$(api GET '/api/v1/backend-versions?backend_id=backend.vllm')"
 printf '%s' "$version_json" | grep -q 'backend-version.vllm.openai-latest' || fail "backend version missing vLLM latest"
+stage_done
 
+stage_start enable_runtime
 runtime_id="runtime.vllm.nvidia-docker"
 api POST "/api/v1/nodes/$node_id/backend-runtimes/enable" "{\"backend_runtime_id\":\"$runtime_id\",\"image_ref\":\"$VLLM_IMAGE\",\"image_present\":true,\"docker_available\":true}" >/tmp/lightai-e2e-node-runtime.json
 grep -q '"status":"ready"' /tmp/lightai-e2e-node-runtime.json || fail "node runtime is not ready: $(cat /tmp/lightai-e2e-node-runtime.json)"
+stage_done
 
+stage_start create_model_artifact
 artifact_json="$(api POST /api/v1/model-artifacts "{\"name\":\"$PREFIX-$RUN_ID-vllm-model\",\"display_name\":\"$PREFIX $RUN_ID vLLM model\",\"path\":\"$VLLM_MODEL\",\"format\":\"huggingface\",\"task_type\":\"chat\"}")"
 artifact_id="$(printf '%s' "$artifact_json" | json_get id)"
 [ -n "$artifact_id" ] || fail "artifact create failed"
 ARTIFACT_ID="$artifact_id"
-api POST "/api/v1/model-artifacts/$artifact_id/locations" "{\"node_id\":\"$node_id\",\"absolute_path\":\"$VLLM_MODEL\",\"path_type\":\"directory\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" >/dev/null
+stage_done
 
+stage_start create_model_location
+api POST "/api/v1/model-artifacts/$artifact_id/locations" "{\"node_id\":\"$node_id\",\"absolute_path\":\"$VLLM_MODEL\",\"path_type\":\"directory\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" >/dev/null
+stage_done
+
+stage_start create_deployment
 deployment_payload="$(python3 - <<PY
 import json
 print(json.dumps({
@@ -183,7 +232,9 @@ deployment_json="$(api POST /api/v1/deployments "$deployment_payload")"
 deployment_id="$(printf '%s' "$deployment_json" | json_get id)"
 [ -n "$deployment_id" ] || fail "deployment create failed"
 DEPLOYMENT_ID="$deployment_id"
+stage_done
 
+stage_start start_deployment
 start_json="$(api POST "/api/v1/deployments/$deployment_id/start" '{}')"
 run_plan_id="$(printf '%s' "$start_json" | json_get run_plan_id)"
 instance_id="$(printf '%s' "$start_json" | json_get instance_id)"
@@ -191,12 +242,16 @@ instance_id="$(printf '%s' "$start_json" | json_get instance_id)"
 RUN_PLAN_ID="$run_plan_id"
 INSTANCE_ID="$instance_id"
 log "instance_id=$instance_id run_plan_id=$run_plan_id"
+stage_done
 
+stage_start query_run_plan
 api GET "/api/v1/deployments/$deployment_id/run-plan-groups" >/tmp/lightai-e2e-run-plan-groups.json
 api GET "/api/v1/node-run-plans/$run_plan_id" >/tmp/lightai-e2e-node-run-plan.json
 api GET "/api/v1/node-run-plans/$run_plan_id/command-preview" >/tmp/lightai-e2e-command-preview.json
 grep -q 'vllm/vllm-openai' /tmp/lightai-e2e-command-preview.json || fail "command preview missing image"
+stage_done
 
+stage_start health_check
 deadline=$((SECONDS + 240))
 models_ok=false
 while [ "$SECONDS" -lt "$deadline" ]; do
@@ -213,11 +268,20 @@ while [ "$SECONDS" -lt "$deadline" ]; do
   sleep 5
 done
 [ "$models_ok" = true ] || fail_with_diagnostics "/v1/models did not become healthy before timeout"
+stage_done
 
+stage_start logs_api
 api GET "/api/v1/node-run-plans/$run_plan_id/logs?tail=200" >/tmp/lightai-e2e-node-run-plan-logs.json || fail_with_diagnostics "logs API failed"
+stage_done
+
+stage_start stop_deployment
 api POST "/api/v1/deployments/$deployment_id/stop" '{}' >/tmp/lightai-e2e-stop.json
+stage_done
+
+stage_start cleanup_resources
 api DELETE "/api/v1/deployments/$deployment_id" >/tmp/lightai-e2e-delete.json || fail_with_diagnostics "deployment cleanup failed"
 api DELETE "/api/v1/model-artifacts/$ARTIFACT_ID" >/tmp/lightai-e2e-delete-artifact.json || fail_with_diagnostics "model artifact cleanup failed"
 docker rm -f "lightai-${INSTANCE_ID:0:12}" >/dev/null 2>&1 || true
+stage_done
 
 log "PASS: backend runtime NVIDIA API E2E completed"

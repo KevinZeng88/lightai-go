@@ -48,7 +48,12 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 		return
 	}
 	// Read template from config file.
-	path := "configs/model-runtime/backend-runtime-templates/" + templateName + ".yaml"
+	// BRR-RV-004: Try new catalog path first, fall back to old path for
+	// backward compatibility. Template names like "vllm-nvidia-docker" map
+	// to "configs/backend-catalog/runtimes/vllm/nvidia-docker.yaml" in the
+	// new layout, or "configs/model-runtime/backend-runtime-templates/vllm-nvidia-docker.yaml"
+	// in the old flat layout.
+	path := resolveTemplatePath(templateName)
 	_, err := osReadFile(path)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "template not found: "+templateName)
@@ -357,6 +362,24 @@ func joinSets(sets []string) string {
 		s += set
 	}
 	return s
+}
+
+// resolveTemplatePath returns the config file path for a template name.
+// It tries the new catalog layout first (configs/backend-catalog/runtimes/{backend}/{vendor}-docker.yaml),
+// then falls back to the old flat layout (configs/model-runtime/backend-runtime-templates/{name}.yaml).
+func resolveTemplatePath(templateName string) string {
+	// New path: extract backend from "vllm-nvidia-docker" -> "vllm"/"nvidia-docker.yaml"
+	// Template names follow the pattern {backend}-{vendor}-docker
+	if idx := strings.Index(templateName, "-"); idx > 0 {
+		backend := templateName[:idx]
+		rest := templateName[idx+1:]
+		newPath := "configs/backend-catalog/runtimes/" + backend + "/" + rest + ".yaml"
+		if _, err := osReadFile(newPath); err == nil {
+			return newPath
+		}
+	}
+	// Old path: flat layout for backward compatibility
+	return "configs/model-runtime/backend-runtime-templates/" + templateName + ".yaml"
 }
 
 // osReadFile is a wrapper for testing.

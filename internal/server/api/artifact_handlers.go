@@ -232,7 +232,18 @@ func (h *AgentHandler) HandleDiscoverArtifact(w http.ResponseWriter, r *http.Req
 	tid := tenantID(r)
 	now := time.Now().Format(time.RFC3339)
 	absolutePath := strVal(req, "path", "")
-	_, err := h.DB.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+
+	// BRR-RV-005: Wrap artifact + location inserts in a transaction so a
+	// partial failure does not leave an orphan model_artifact row.
+	tx, txErr := h.DB.Begin()
+	if txErr != nil {
+		log.Error("discover_artifact.tx_begin_failed", "error", txErr)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer tx.Rollback()
+
+	_, err := tx.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "source_type", "local_path"),
 		absolutePath, strVal(req, "format", "custom"), strVal(req, "task_type", "chat"),
 		strVal(req, "architecture", "custom"), strVal(req, "size_label", ""),
@@ -240,6 +251,7 @@ func (h *AgentHandler) HandleDiscoverArtifact(w http.ResponseWriter, r *http.Req
 		int64Val(req, "estimated_vram_bytes", 0), intVal(req, "required_gpu_count", 1),
 		tid, now, now)
 	if err != nil {
+		log.Error("discover_artifact.insert_artifact_failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -249,8 +261,18 @@ func (h *AgentHandler) HandleDiscoverArtifact(w http.ResponseWriter, r *http.Req
 		"path_type":     strVal(req, "path_type", "directory"),
 	}
 	locationID := uuid.NewString()
-	_, _ = h.DB.Exec(`INSERT INTO model_locations (id, model_artifact_id, node_id, path_type, model_root, relative_path, absolute_path, verification_status, match_status, tenant_id, last_scanned_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		locationID, id, locReq["node_id"], locReq["path_type"], filepath.Dir(absolutePath), filepath.Base(absolutePath), absolutePath, "verified", "exact_match", tid, now, now, now)
+	if _, err := tx.Exec(`INSERT INTO model_locations (id, model_artifact_id, node_id, path_type, model_root, relative_path, absolute_path, verification_status, match_status, tenant_id, last_scanned_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		locationID, id, locReq["node_id"], locReq["path_type"], filepath.Dir(absolutePath), filepath.Base(absolutePath), absolutePath, "verified", "exact_match", tid, now, now, now); err != nil {
+		log.Error("discover_artifact.insert_location_failed", "artifact_id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("discover_artifact.tx_commit_failed", "artifact_id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	writeJSON(w, http.StatusCreated, h.getArtifactJSON(id))
 }
 

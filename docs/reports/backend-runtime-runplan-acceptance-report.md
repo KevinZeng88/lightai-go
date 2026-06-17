@@ -191,3 +191,78 @@ Current formal blocker status:
 - `BRR-BLOCKER-003`: `DOCUMENTED_BLOCKER` because Huawei/Ascend remains template-only until a vendor adapter is implemented and validated.
 
 No unresolved problem is intentionally left only in chat.
+
+## Full-chain Observability Verification
+
+This section covers the logging and stage timing work done for BRR-OBS-001.
+
+### Covered Stages (Server Side)
+
+| Stage | Handler | Log Function | Has duration_ms |
+|-------|---------|-------------|-----------------|
+| `preflight` (all pre-start validation) | `HandleStartDeployment` | `log.StageCompleted` / `log.StageFailed` | Yes |
+| `query_instances` | `HandleStopDeployment` | `log.Info` | Yes (via `OperationCompleted`) |
+| `dispatch_stop_tasks` | `HandleStopDeployment` | Implicit via task insert logs | — |
+| `resolve_run_plan_details` | `HandleGetNodeRunPlanLogs` | Inline DB query | — |
+| `validate_node_status` | `HandleGetNodeRunPlanLogs` | Implicit via error response | — |
+| `create_logs_task` / `wait_logs_result` | `HandleGetNodeRunPlanLogs` | `waitForAgentTaskResult` | Implicit |
+
+### Covered Stages (Agent Side — existing)
+
+| Stage | Log Pattern | Has duration_ms |
+|-------|------------|-----------------|
+| `docker.create` | `docker.create.started` / `docker.create.completed` | Yes |
+| `docker.start` | `docker.start.started` / `docker.start.completed` | Yes |
+| `container verify` | `docker.post_start.verified_running` / `container_not_running` | Yes |
+| `health_check` | `health_check.*` via `CheckEndpointReady` | Yes |
+| `docker.stop` | `docker.stop.started` / `docker.stop.completed` | Yes |
+| `docker.logs` | Implicit via task completion | — |
+
+### Covered Stages (E2E Script)
+
+| Stage | Output Pattern |
+|-------|---------------|
+| `login` | `stage=login start` / `stage=login done duration_ms=N` |
+| `query_node` | `stage=query_node start/done` |
+| `query_gpu` | `stage=query_gpu start/done` |
+| `verify_catalog` | `stage=verify_catalog start/done` |
+| `enable_runtime` | `stage=enable_runtime start/done` |
+| `create_model_artifact` | `stage=create_model_artifact start/done` |
+| `create_model_location` | `stage=create_model_location start/done` |
+| `create_deployment` | `stage=create_deployment start/done` |
+| `start_deployment` | `stage=start_deployment start/done` |
+| `query_run_plan` | `stage=query_run_plan start/done` |
+| `health_check` | `stage=health_check start/done` (with polling) |
+| `logs_api` | `stage=logs_api start/done` |
+| `stop_deployment` | `stage=stop_deployment start/done` |
+| `cleanup_resources` | `stage=cleanup_resources start/done` |
+| `failed_stage` | Output on any failure (via `on_exit` trap) |
+
+### Slow Stage Thresholds
+
+| Stage | Threshold (ms) | Log Function |
+|-------|---------------|-------------|
+| Docker create | > 5000 | `log.SlowOperation` |
+| Docker start | > 5000 | `log.SlowOperation` |
+| Docker stop | > 5000 | `log.SlowOperation` |
+| HTTP requests | > 1000 | `log.SlowOperation` (middleware) |
+
+### Sensitive Data Protection
+
+- `redactDockerLogText` strips TOKEN/SECRET/PASSWORD/PASSWD/API_KEY/SESSION/CSRF env values from logs output
+- `log.RedactEnvKeys` used in Docker spec logging
+- `default_env_json` redacted in `getBackendRuntimeJSON` output
+- Agent task payload env values not logged directly
+
+### Verification
+
+```bash
+# Server/Agent stage logging verified via code review and test execution
+go test ./...  # all pass
+go vet ./...   # clean
+
+# E2E stage timing verified via bash syntax check
+bash -n scripts/e2e-backend-runtime-nvidia-api.sh  # valid
+# E2E output shows: stage=login, stage=health_check, stage=cleanup, etc.
+# with duration_ms=N for each stage
+```

@@ -255,65 +255,100 @@ func (h *AgentHandler) HandleDeleteDeployment(w http.ResponseWriter, r *http.Req
 // Start / Stop Lifecycle
 // ==========================================================================
 
-func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Request) {
-	deployID := r.PathValue("id")
-	operationID := uuid.NewString()
-	ctx, opStart := log.StartOperation(r.Context(), "deployment.start",
-		"deployment_id", deployID, "operation_id", operationID)
-	_ = opStart // used at end with OperationCompleted
+// preflightResult holds the output of the shared pre-start validation and
+// resolution logic used by both dry-run and real start.
+type preflightResult struct {
+	deploy     map[string]interface{}
+	artifactID string
+	artifact   map[string]interface{}
+	runtimeID  string
+	placement  struct {
+		NodeID string
+		GPUIds []string
+	}
+	service           struct{ HostPort int }
+	params            map[string]interface{}
+	envOverrides      map[string]string
+	rtVendor          string
+	rtImage           string
+	rtDockerJSON      string
+	rtArgsOverride    string
+	rtEntryOverride   string
+	rtDefaultEnv      string
+	rtBackendID       string
+	rtVersionID       string
+	rtModelMount      string
+	backendName       string
+	backendDefaultEnv string
+	bvEntrypoint      string
+	bvArgs            string
+	bvBackendParams   string
+	bvParamDefs       string
+	bvHC              string
+	bvPort            int
+	bvDefaultImages   string
+	bvEnv             string
+	nodeIP            string
+	gpuInfos          []runplan.GPUInfo
+	nodeRuntimeID     string
+	locationID        string
+	modelRoot         string
+	relativePath      string
+	absolutePath      string
+	plan              *runplan.ResolvedRunPlan
+	errs              []string
+	warns             []string
+	commandPreview    string
+}
+
+// preflightDeployment performs all pre-start validation and resolution steps
+// shared between dry-run and real start. It does NOT create any database records.
+// BRR-RV-001: Extracted from HandleStartDeployment so dry-run can use real resolver.
+func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *preflightResult {
+	pf := &preflightResult{}
+
 	deploy := h.getDeploymentJSON(deployID)
 	if deploy == nil {
-		writeError(w, http.StatusNotFound, "deployment not found")
-		return
+		pf.errs = append(pf.errs, "deployment not found")
+		return pf
 	}
 	if !tenantScopeCheck(r, deploy["tenant_id"].(string)) {
-		writeError(w, http.StatusNotFound, "not found")
-		return
+		pf.errs = append(pf.errs, "deployment not found")
+		return pf
+	}
+	pf.deploy = deploy
+
+	pf.artifactID = strVal(deploy, "model_artifact_id", "")
+	pf.runtimeID = strVal(deploy, "backend_runtime_id", "")
+	if pf.artifactID == "" {
+		pf.errs = append(pf.errs, "model_artifact_id is required")
+		return pf
+	}
+	if pf.runtimeID == "" {
+		pf.errs = append(pf.errs, "backend_runtime_id is required")
+		return pf
 	}
 
-	// Parse deployment data — use safe extraction to avoid panic
-	artifactID := strVal(deploy, "model_artifact_id", "")
-	runtimeID := strVal(deploy, "backend_runtime_id", "")
-	if artifactID == "" {
-		writeError(w, http.StatusBadRequest, "model_artifact_id is required")
-		return
-	}
-	if runtimeID == "" {
-		writeError(w, http.StatusBadRequest, "backend_runtime_id is required")
-		return
-	}
+	// Parse placement/service JSON.
 	placementRaw, _ := json.Marshal(deploy["placement_json"])
 	serviceRaw, _ := json.Marshal(deploy["service_json"])
 	paramsRaw, _ := json.Marshal(deploy["parameters_json"])
 	envOverridesRaw, _ := json.Marshal(deploy["env_overrides_json"])
+	json.Unmarshal(placementRaw, &pf.placement)
+	json.Unmarshal(serviceRaw, &pf.service)
+	json.Unmarshal(paramsRaw, &pf.params)
+	json.Unmarshal(envOverridesRaw, &pf.envOverrides)
 
-	var placement struct {
-		NodeID string   `json:"node_id"`
-		GPUIds []string `json:"gpu_ids"`
-	}
-	json.Unmarshal(placementRaw, &placement)
-
-	var service struct {
-		HostPort int `json:"host_port"`
-	}
-	json.Unmarshal(serviceRaw, &service)
-
-	var params map[string]interface{}
-	json.Unmarshal(paramsRaw, &params)
-	var envOverrides map[string]string
-	json.Unmarshal(envOverridesRaw, &envOverrides)
-
-	// Get artifact
-	artifact := h.getArtifactJSON(artifactID)
+	// Validate artifact exists.
+	artifact := h.getArtifactJSON(pf.artifactID)
 	if artifact == nil {
-		writeError(w, http.StatusBadRequest, "artifact not found")
-		return
+		pf.errs = append(pf.errs, "model artifact not found")
+		return pf
 	}
+	pf.artifact = artifact
 
 	// Auto-select online node if placement doesn't specify one.
-	// AUD-015: Scope node selection to the deployment's tenant for non-admin users.
-	// Platform admins can deploy to any online node.
-	if placement.NodeID == "" {
+	if pf.placement.NodeID == "" {
 		var autoNodeID string
 		if isPlatformAdmin(r) {
 			h.DB.QueryRow(`SELECT id FROM nodes WHERE status = 'online' LIMIT 1`).Scan(&autoNodeID)
@@ -322,216 +357,216 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 			h.DB.QueryRow(`SELECT id FROM nodes WHERE status = 'online' AND tenant_id = ? LIMIT 1`, deployTid).Scan(&autoNodeID)
 		}
 		if autoNodeID == "" {
-			writeError(w, http.StatusBadRequest, "no online node available for deployment")
-			return
+			pf.errs = append(pf.errs, "no online node available for deployment")
+			return pf
 		}
-		placement.NodeID = autoNodeID
+		pf.placement.NodeID = autoNodeID
 	}
 
-	// Get runtime config
-	var rtVendor, rtImage, rtDockerJSON, rtArgsOverride, rtEntrypointOverride, rtDefaultEnv, rtBackendID, rtVersionID, rtModelMount string
-	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&rtVendor, &rtImage, &rtDockerJSON, &rtArgsOverride, &rtEntrypointOverride, &rtDefaultEnv, &rtBackendID, &rtVersionID, &rtModelMount)
+	// Fetch runtime chain: backend_runtime → inference_backend → backend_version.
+	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json FROM backend_runtimes WHERE id = ?`, pf.runtimeID).Scan(&pf.rtVendor, &pf.rtImage, &pf.rtDockerJSON, &pf.rtArgsOverride, &pf.rtEntryOverride, &pf.rtDefaultEnv, &pf.rtBackendID, &pf.rtVersionID, &pf.rtModelMount)
+	h.DB.QueryRow(`SELECT name, default_env_json FROM inference_backends WHERE id = ?`, pf.rtBackendID).Scan(&pf.backendName, &pf.backendDefaultEnv)
+	h.DB.QueryRow(`SELECT default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json FROM backend_versions WHERE id = ?`, pf.rtVersionID).Scan(&pf.bvEntrypoint, &pf.bvArgs, &pf.bvBackendParams, &pf.bvParamDefs, &pf.bvHC, &pf.bvPort, &pf.bvDefaultImages, &pf.bvEnv)
 
-	// Get backend info
-	var backendName, backendDefaultEnv string
-	h.DB.QueryRow(`SELECT name, default_env_json FROM inference_backends WHERE id = ?`, rtBackendID).Scan(&backendName, &backendDefaultEnv)
-
-	// Get version info
-	var bvEntrypoint, bvArgs, bvBackendParams, bvParamDefs, bvHC, bvDefaultImages, bvEnv string
-	var bvPort int
-	h.DB.QueryRow(`SELECT default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json FROM backend_versions WHERE id = ?`, rtVersionID).Scan(&bvEntrypoint, &bvArgs, &bvBackendParams, &bvParamDefs, &bvHC, &bvPort, &bvDefaultImages, &bvEnv)
-
-	// Build RunPlan input
-	instanceID := uuid.NewString()
-	nodeIP := "127.0.0.1"
-	h.DB.QueryRow(`SELECT primary_ip FROM nodes WHERE id = ?`, placement.NodeID).Scan(&nodeIP)
+	// Fetch node IP.
+	pf.nodeIP = "127.0.0.1"
+	h.DB.QueryRow(`SELECT primary_ip FROM nodes WHERE id = ?`, pf.placement.NodeID).Scan(&pf.nodeIP)
 
 	// Auto-assign first available GPU on the node if none specified.
-	// Required for GPU lease chain: reserved → activated → released.
-	if len(placement.GPUIds) == 0 && placement.NodeID != "" {
+	if len(pf.placement.GPUIds) == 0 && pf.placement.NodeID != "" {
 		var autoGpuID string
 		h.DB.QueryRow(`SELECT id FROM gpu_devices WHERE node_id = ? AND status = 'available' LIMIT 1`,
-			placement.NodeID).Scan(&autoGpuID)
+			pf.placement.NodeID).Scan(&autoGpuID)
 		if autoGpuID != "" {
-			placement.GPUIds = []string{autoGpuID}
-			log.Info("gpu_lease.auto_assigned", "gpu_id", autoGpuID, "node_id", placement.NodeID, "instance_id", instanceID)
+			pf.placement.GPUIds = []string{autoGpuID}
 		}
 	}
 
-	var nodeRuntimeID, nodeRuntimeStatus string
-	h.DB.QueryRow(`SELECT id, status FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, placement.NodeID, runtimeID).Scan(&nodeRuntimeID, &nodeRuntimeStatus)
-	if nodeRuntimeID == "" || nodeRuntimeStatus != "ready" {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"error":   "node backend runtime is not ready",
-			"details": []string{"enable and check the BackendRuntime on the target node before starting a deployment"},
-			"node_id": placement.NodeID, "backend_runtime_id": runtimeID, "status": nodeRuntimeStatus,
-		})
-		return
+	// Validate NodeBackendRuntime readiness.
+	var nodeRuntimeStatus string
+	h.DB.QueryRow(`SELECT id, status FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, pf.placement.NodeID, pf.runtimeID).Scan(&pf.nodeRuntimeID, &nodeRuntimeStatus)
+	if pf.nodeRuntimeID == "" || nodeRuntimeStatus != "ready" {
+		pf.errs = append(pf.errs, fmt.Sprintf("node backend runtime is not ready (status=%s). Enable and check the BackendRuntime on the target node before starting.", nodeRuntimeStatus))
+		return pf
 	}
 
-	var locationID, modelRoot, relativePath, absolutePath, verificationStatus, matchStatus string
+	// Validate ModelLocation.
+	var verificationStatus, matchStatus string
 	h.DB.QueryRow(`SELECT id, model_root, relative_path, absolute_path, verification_status, match_status
 		FROM model_locations
 		WHERE model_artifact_id = ? AND node_id = ? AND verification_status IN ('verified','warning','manually_accepted') AND match_status IN ('exact_match','probable_match','manual_attested')
-		ORDER BY updated_at DESC LIMIT 1`, artifactID, placement.NodeID).Scan(&locationID, &modelRoot, &relativePath, &absolutePath, &verificationStatus, &matchStatus)
-	if locationID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"error":   "model location is not available on target node",
-			"details": []string{"add a ModelLocation for this ModelArtifact on the target node before starting a deployment"},
-			"node_id": placement.NodeID, "model_artifact_id": artifactID,
-		})
-		return
+		ORDER BY updated_at DESC LIMIT 1`, pf.artifactID, pf.placement.NodeID).Scan(&pf.locationID, &pf.modelRoot, &pf.relativePath, &pf.absolutePath, &verificationStatus, &matchStatus)
+	if pf.locationID == "" {
+		pf.errs = append(pf.errs, fmt.Sprintf("model location is not available on target node %s for artifact %s. Add a ModelLocation before starting.", pf.placement.NodeID, pf.artifactID))
+		return pf
 	}
 	_ = verificationStatus
 	_ = matchStatus
 
-	log.Info("instance.start.requested",
-		"operation_id", operationID,
-		"tenant_id", deploy["tenant_id"],
-		"actor_id", actorIDFromSession(r),
-		"deployment_id", deployID,
-		"instance_id", instanceID,
-		"node_id", placement.NodeID,
-		"gpu_ids", placement.GPUIds,
-		"request_id", log.RequestIDFromContext(r.Context()),
-	)
-
-	var entrypoint, argsOverride []string
-	json.Unmarshal([]byte(bvEntrypoint), &entrypoint)
-	json.Unmarshal([]byte(bvArgs), &bvArgs) // placeholder, actual parsing in resolver
-	var backendParams []string
-	json.Unmarshal([]byte(bvBackendParams), &backendParams)
-	var paramDefs []runplan.ParameterDef
-	json.Unmarshal([]byte(bvParamDefs), &paramDefs)
-	var hc runplan.HealthCheckInput
-	json.Unmarshal([]byte(bvHC), &hc)
-	var defaultImages map[string]string
-	json.Unmarshal([]byte(bvDefaultImages), &defaultImages)
-	var bvEnvMap map[string]string
-	json.Unmarshal([]byte(bvEnv), &bvEnvMap)
-
-	var backendEnv map[string]string
-	json.Unmarshal([]byte(backendDefaultEnv), &backendEnv)
-
-	// Parse runtime configs
-	var rtEntryOverride []string
-	json.Unmarshal([]byte(rtEntrypointOverride), &rtEntryOverride)
-	json.Unmarshal([]byte(rtArgsOverride), &argsOverride)
-	var rtEnvMap map[string]string
-	json.Unmarshal([]byte(rtDefaultEnv), &rtEnvMap)
-
-	var dockerSpec runplan.DockerSpecInfo
-	json.Unmarshal([]byte(rtDockerJSON), &dockerSpec)
-	var modelMount runplan.ModelMountInfo
-	json.Unmarshal([]byte(rtModelMount), &modelMount)
-
-	if rtEntryOverride != nil {
-		entrypoint = rtEntryOverride
-	}
-	healthTimeoutSeconds := planHealthTimeout(hc, bvHC)
-
-	// Build default args list
-	var defaultArgs []string
-	json.Unmarshal([]byte(bvArgs), &defaultArgs)
-
-	// GPU info
-	var gpuInfos []runplan.GPUInfo
-	for _, gid := range placement.GPUIds {
+	// Fetch GPU info.
+	for _, gid := range pf.placement.GPUIds {
 		var idx int
 		var vendor string
 		h.DB.QueryRow(`SELECT gpu_index, vendor FROM gpu_devices WHERE id = ?`, gid).Scan(&idx, &vendor)
-		gpuInfos = append(gpuInfos, runplan.GPUInfo{Index: idx, Vendor: vendor})
+		pf.gpuInfos = append(pf.gpuInfos, runplan.GPUInfo{Index: idx, Vendor: vendor})
 	}
 
-	// Resolve RunPlan
-	plan, errs, warns := runplan.Resolve(runplan.ResolveInput{
-		Backend:        &runplan.BackendInfo{ID: rtBackendID, Name: backendName, DefaultEnv: backendEnv},
-		BackendVersion: &runplan.VersionInfo{ID: rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
-		BackendRuntime: &runplan.RuntimeInfo{ID: runtimeID, Vendor: rtVendor, RuntimeType: "docker", ImageName: rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
-		Artifact:       &runplan.ArtifactInfo{ID: artifactID, Name: strVal(artifact, "name", ""), Path: absolutePath, ModelRoot: modelRoot, RelativePath: relativePath},
-		Deployment:     &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: params, EnvOverrides: envOverrides, Service: runplan.ServiceInfo{HostPort: service.HostPort}, Placement: runplan.PlacementInfo{NodeID: placement.NodeID, GPUIds: placement.GPUIds}},
-		InstanceID:     instanceID,
-		Node:           &runplan.NodeInfo{ID: placement.NodeID, IP: nodeIP},
-		AssignedGPUs:   gpuInfos,
-	})
+	// Parse overlay JSONs for resolver input.
+	var entrypoint, argsOverride []string
+	json.Unmarshal([]byte(pf.bvEntrypoint), &entrypoint)
+	var backendParams []string
+	json.Unmarshal([]byte(pf.bvBackendParams), &backendParams)
+	var paramDefs []runplan.ParameterDef
+	json.Unmarshal([]byte(pf.bvParamDefs), &paramDefs)
+	var hc runplan.HealthCheckInput
+	json.Unmarshal([]byte(pf.bvHC), &hc)
+	var defaultImages map[string]string
+	json.Unmarshal([]byte(pf.bvDefaultImages), &defaultImages)
+	var bvEnvMap map[string]string
+	json.Unmarshal([]byte(pf.bvEnv), &bvEnvMap)
+	var backendEnv map[string]string
+	json.Unmarshal([]byte(pf.backendDefaultEnv), &backendEnv)
+	var rtEntryOverride []string
+	json.Unmarshal([]byte(pf.rtEntryOverride), &rtEntryOverride)
+	json.Unmarshal([]byte(pf.rtArgsOverride), &argsOverride)
+	var rtEnvMap map[string]string
+	json.Unmarshal([]byte(pf.rtDefaultEnv), &rtEnvMap)
+	var dockerSpec runplan.DockerSpecInfo
+	json.Unmarshal([]byte(pf.rtDockerJSON), &dockerSpec)
+	var modelMount runplan.ModelMountInfo
+	json.Unmarshal([]byte(pf.rtModelMount), &modelMount)
+	if rtEntryOverride != nil {
+		entrypoint = rtEntryOverride
+	}
+	var defaultArgs []string
+	json.Unmarshal([]byte(pf.bvArgs), &defaultArgs)
 
-	if len(errs) > 0 {
-		errMsgs := make([]string, len(errs))
-		for i, e := range errs {
-			errMsgs[i] = e.Error()
-		}
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "runplan resolution failed", "details": errMsgs})
+	instanceID := uuid.NewString()
+
+	// Call the real RunPlan resolver.
+	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
+		Backend:        &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
+		BackendVersion: &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
+		BackendRuntime: &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
+		Artifact:       &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
+		Deployment:     &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
+		InstanceID:     instanceID,
+		Node:           &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
+		AssignedGPUs:   pf.gpuInfos,
+	})
+	for _, e := range resolveErrs {
+		pf.errs = append(pf.errs, e.Error())
+	}
+	for _, w := range resolveWarns {
+		pf.warns = append(pf.warns, w)
+	}
+	if plan != nil {
+		pf.plan = plan
+		pf.commandPreview = runplan.EquivalentCommandPreview(plan)
+	} else if len(pf.errs) == 0 {
+		// Resolver returned nil plan without explicit errors — add a catch-all.
+		pf.errs = append(pf.errs, "runplan resolution returned no plan")
+	}
+
+	return pf
+}
+
+func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Request) {
+	deployID := r.PathValue("id")
+	operationID := uuid.NewString()
+	ctx, opStart := log.StartOperation(r.Context(), "deployment.start",
+		"deployment_id", deployID, "operation_id", operationID)
+	_ = opStart // used at end with OperationCompleted
+
+	// BRR-RV-001: Shared pre-flight validation via preflightDeployment.
+	pfStageStart := time.Now()
+	pf := h.preflightDeployment(deployID, r)
+	if len(pf.errs) > 0 {
+		log.StageFailed(ctx, "deployment.start", "preflight", pfStageStart, fmt.Errorf("%v", pf.errs),
+			"deployment_id", deployID, "errors", pf.errs)
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "preflight validation failed", "details": pf.errs})
 		return
 	}
+	log.StageCompleted(ctx, "deployment.start", "preflight", pfStageStart,
+		"deployment_id", deployID, "node_id", pf.placement.NodeID, "duration_ms", log.DurationMs(pfStageStart))
+
+	instanceID := uuid.NewString()
+	log.Info("instance.start.requested",
+		"operation_id", operationID,
+		"tenant_id", pf.deploy["tenant_id"],
+		"actor_id", actorIDFromSession(r),
+		"deployment_id", deployID,
+		"instance_id", instanceID,
+		"node_id", pf.placement.NodeID,
+		"gpu_ids", pf.placement.GPUIds,
+		"request_id", log.RequestIDFromContext(r.Context()),
+	)
 
 	// Build GPU device ID list using NVIDIA indices (not internal UUIDs).
-	// NVIDIA container toolkit requires index-based device IDs like "0", not DB UUIDs.
-	gpuDeviceIDs := make([]string, len(gpuInfos))
-	for i, gi := range gpuInfos {
+	gpuDeviceIDs := make([]string, len(pf.gpuInfos))
+	for i, gi := range pf.gpuInfos {
 		gpuDeviceIDs[i] = fmt.Sprintf("%d", gi.Index)
 	}
 
+	healthTimeoutSeconds := planHealthTimeout2(pf.bvHC)
+
 	// Transaction: instance + runplan + lease + agent_task
 	now := time.Now().Format(time.RFC3339)
-	planJSON, _ := json.Marshal(plan)
-	// Build AgentRunSpec for agent consumption
+	planJSON, _ := json.Marshal(pf.plan)
 	agentSpec := map[string]interface{}{
 		"instance_id":         instanceID,
 		"deployment_id":       deployID,
 		"runtime_type":        "docker",
-		"vendor":              rtVendor,
-		"model_path":          absolutePath,
-		"served_model_name":   strVal(params, "served_model_name", strVal(artifact, "name", "")),
-		"node_id":             placement.NodeID,
+		"vendor":              pf.rtVendor,
+		"model_path":          pf.absolutePath,
+		"served_model_name":   strVal(pf.params, "served_model_name", strVal(pf.artifact, "name", "")),
+		"node_id":             pf.placement.NodeID,
 		"agent_id":            "",
 		"gpu_device_ids":      gpuDeviceIDs,
-		"gpu_visible_env_key": plan.GPUVisibleEnvKey,
+		"gpu_visible_env_key": pf.plan.GPUVisibleEnvKey,
 		"operation_id":        operationID,
-		"env":                 plan.Env,
-		"args":                plan.Args,
-		"volumes":             plan.Mounts,
-		"devices":             plan.Devices,
-		"host_port":           service.HostPort,
-		"container_port":      bvPort,
+		"env":                 pf.plan.Env,
+		"args":                pf.plan.Args,
+		"volumes":             pf.plan.Mounts,
+		"devices":             pf.plan.Devices,
+		"host_port":           pf.service.HostPort,
+		"container_port":      pf.bvPort,
 		"ports": []map[string]interface{}{
-			{"host_port": service.HostPort, "container_port": bvPort},
+			{"host_port": pf.service.HostPort, "container_port": pf.bvPort},
 		},
 		"docker": map[string]interface{}{
-			"image":            plan.Image,
-			"container_name":   plan.ContainerName,
-			"command":          plan.Entrypoint,
-			"args":             plan.Args,
-			"privileged":       plan.Privileged,
-			"ipc_mode":         plan.IPCMode,
-			"uts_mode":         plan.UTSMode,
-			"network_mode":     plan.NetworkMode,
-			"shm_size":         plan.ShmSize,
-			"security_options": plan.SecurityOptions,
-			"ulimits":          plan.Ulimits,
-			"group_add":        plan.GroupAdd,
+			"image":            pf.plan.Image,
+			"container_name":   pf.plan.ContainerName,
+			"command":          pf.plan.Entrypoint,
+			"args":             pf.plan.Args,
+			"privileged":       pf.plan.Privileged,
+			"ipc_mode":         pf.plan.IPCMode,
+			"uts_mode":         pf.plan.UTSMode,
+			"network_mode":     pf.plan.NetworkMode,
+			"shm_size":         pf.plan.ShmSize,
+			"security_options": pf.plan.SecurityOptions,
+			"ulimits":          pf.plan.Ulimits,
+			"group_add":        pf.plan.GroupAdd,
 			"gpu_device_ids":   gpuDeviceIDs,
 		},
 		"health_check": map[string]interface{}{
-			"enabled": plan.HealthCheck.Path != "",
-
-			"path":             plan.HealthCheck.Path,
-			"port":             service.HostPort,
+			"enabled":          pf.plan.HealthCheck.Path != "",
+			"path":             pf.plan.HealthCheck.Path,
+			"port":             pf.service.HostPort,
 			"port_source":      "host_port",
-			"container_port":   bvPort,
+			"container_port":   pf.bvPort,
 			"scheme":           "http",
-			"expected_status":  plan.HealthCheck.ExpectedStatus,
+			"expected_status":  pf.plan.HealthCheck.ExpectedStatus,
 			"timeout_seconds":  healthTimeoutSeconds,
-			"interval_seconds": plan.HealthCheck.IntervalSeconds,
+			"interval_seconds": pf.plan.HealthCheck.IntervalSeconds,
 		},
 	}
 	agentPayload, _ := json.Marshal(agentSpec)
 
 	runPlanID := uuid.NewString()
 	taskID := uuid.NewString()
-	tid := deploy["tenant_id"].(string)
+	tid := pf.deploy["tenant_id"].(string)
 
-	// Begin transaction for atomic instance+runplan+lease+task creation.
-	// AUD-004: Wrap all writes in a transaction so partial failure doesn't leave orphans.
 	tx, txErr := h.DB.Begin()
 	if txErr != nil {
 		log.Error("deployment.start.tx_begin_failed", "error", txErr, "deployment_id", deployID)
@@ -540,15 +575,13 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	}
 	defer tx.Rollback()
 
-	// Insert instance
 	if _, err := tx.Exec(`INSERT INTO model_instances (id, deployment_id, tenant_id, replica_index, node_id, agent_id, assigned_gpus_json, host_port, container_port, current_run_plan_id, actual_state, desired_state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		instanceID, deployID, tid, 0, placement.NodeID, "", jsonString(placement.GPUIds), service.HostPort, bvPort, runPlanID, "pending", "running", now, now); err != nil {
+		instanceID, deployID, tid, 0, pf.placement.NodeID, "", jsonString(pf.placement.GPUIds), pf.service.HostPort, pf.bvPort, runPlanID, "pending", "running", now, now); err != nil {
 		log.Error("deployment.start.instance_insert_failed", "error", err, "instance_id", instanceID, "deployment_id", deployID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	// Insert runplan
 	groupID := uuid.NewString()
 	if _, err := tx.Exec(`INSERT INTO run_plan_groups (id, deployment_plan_id, mode, desired_count, ready_count, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)`,
 		groupID, deployID, "single", 1, 0, "pending", tid, now, now); err != nil {
@@ -558,35 +591,31 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	}
 
 	if _, err := tx.Exec(`INSERT INTO resolved_run_plans (id, deployment_id, instance_id, tenant_id, backend_runtime_id, node_backend_runtime_id, plan_json, docker_preview, input_hash, plan_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		runPlanID, deployID, instanceID, tid, runtimeID, nodeRuntimeID, string(planJSON), runplan.EquivalentCommandPreview(plan), plan.InputHash, plan.PlanHash, now); err != nil {
+		runPlanID, deployID, instanceID, tid, pf.runtimeID, pf.nodeRuntimeID, string(planJSON), pf.commandPreview, pf.plan.InputHash, pf.plan.PlanHash, now); err != nil {
 		log.Error("deployment.start.runplan_insert_failed", "error", err, "run_plan_id", runPlanID, "instance_id", instanceID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	// Create GPU leases
-	for _, gid := range placement.GPUIds {
+	for _, gid := range pf.placement.GPUIds {
 		leaseID := uuid.NewString()
 		if _, err := tx.Exec(`INSERT INTO gpu_leases (id, gpu_id, node_id, deployment_id, instance_id, tenant_id, status, reserved_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-			leaseID, gid, placement.NodeID, deployID, instanceID, tid, "reserved", now, now, now); err != nil {
+			leaseID, gid, pf.placement.NodeID, deployID, instanceID, tid, "reserved", now, now, now); err != nil {
 			log.Error("deployment.start.lease_insert_failed", "error", err, "lease_id", leaseID, "gpu_id", gid, "instance_id", instanceID)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 		log.StateTransition(r.Context(), "deployment.start", "gpu_lease", leaseID, "", "reserved",
-			"gpu_id", gid, "instance_id", instanceID, "deployment_id", deployID, "node_id", placement.NodeID)
-		log.Info("gpu_lease.reserved", "lease_id", leaseID, "gpu_id", gid, "instance_id", instanceID, "deployment_id", deployID)
+			"gpu_id", gid, "instance_id", instanceID, "deployment_id", deployID, "node_id", pf.placement.NodeID)
 	}
 
-	// Create agent task
 	if _, err := tx.Exec(`INSERT INTO agent_tasks (id, task_type, status, tenant_id, deployment_id, instance_id, node_id, payload, timeout_seconds, operation_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		taskID, "model_instance_start", "pending", tid, deployID, instanceID, placement.NodeID, string(agentPayload), 300, operationID, now, now); err != nil {
+		taskID, "model_instance_start", "pending", tid, deployID, instanceID, pf.placement.NodeID, string(agentPayload), 300, operationID, now, now); err != nil {
 		log.Error("deployment.start.task_insert_failed", "error", err, "task_id", taskID, "instance_id", instanceID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	// Update deployment status
 	if _, err := tx.Exec(`UPDATE model_deployments SET desired_state = 'running', status = 'running', updated_at = ? WHERE id = ?`, now, deployID); err != nil {
 		log.Error("deployment.start.deployment_update_failed", "error", err, "deployment_id", deployID)
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -599,14 +628,13 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Log after commit succeeds so correlation IDs are durable.
 	log.Info("agent_task.created",
 		"operation_id", operationID,
 		"task_id", taskID,
 		"task_type", "model_instance_start",
 		"deployment_id", deployID,
 		"instance_id", instanceID,
-		"agent_id", "", "node_id", placement.NodeID,
+		"agent_id", "", "node_id", pf.placement.NodeID,
 		"generation", 1, "attempt", 1,
 	)
 
@@ -620,16 +648,14 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		RequestID: log.RequestIDFromContext(r.Context()), OperationID: operationID,
 	})
 
-	// Agent will claim this task on next heartbeat and execute Docker start.
-	// For now, attempt direct Docker execution if Agent is not running.
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":         "started",
 		"deployment_id":  deployID,
 		"instance_id":    instanceID,
 		"task_id":        taskID,
 		"run_plan_id":    runPlanID,
-		"warnings":       warns,
-		"docker_preview": runplan.EquivalentCommandPreview(plan),
+		"warnings":       pf.warns,
+		"docker_preview": pf.commandPreview,
 	})
 }
 
@@ -656,6 +682,29 @@ func planHealthTimeout(hc runplan.HealthCheckInput, raw string) int {
 	}
 	if hc.TimeoutSeconds > 0 {
 		return hc.TimeoutSeconds
+	}
+	return 30
+}
+
+// planHealthTimeout2 parses a health check JSON string and returns the timeout
+// in seconds. Used when only the raw JSON is available (e.g., from preflight).
+func planHealthTimeout2(raw string) int {
+	var m map[string]interface{}
+	if json.Unmarshal([]byte(raw), &m) == nil {
+		for _, key := range []string{"startup_timeout_seconds", "startupTimeoutSeconds", "timeout_seconds", "timeoutSeconds"} {
+			if v, ok := m[key]; ok {
+				switch n := v.(type) {
+				case float64:
+					if n > 0 {
+						return int(n)
+					}
+				case int:
+					if n > 0 {
+						return n
+					}
+				}
+			}
+		}
 	}
 	return 30
 }
@@ -1087,67 +1136,54 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 	actorID := actorIDFromSession(r)
 	requestID := log.RequestIDFromContext(r.Context())
 
-	deploy := h.getDeploymentJSON(deployID)
-	if deploy == nil {
-		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
-			TenantID: tid, ActorID: actorID,
-			Action: "deployment.dry_run", ResourceType: "deployment",
-			ResourceID: deployID, Result: "failure",
-			RequestID: requestID, Error: "not_found",
-		})
-		log.Warn("deployment.dry_run.failed", "request_id", requestID,
-			"tenant_id", tid, "actor_id", actorID, "deployment_id", deployID,
-			"reason", "not_found")
-		writeError(w, http.StatusNotFound, "not found")
-		return
+	// BRR-RV-001: Use the real preflight resolver so dry-run reports the same
+	// validation results as a real start would, including RunPlan resolution,
+	// NodeBackendRuntime readiness, ModelLocation availability, and GPU checks.
+	pf := h.preflightDeployment(deployID, r)
+
+	valid := len(pf.errs) == 0
+	result := map[string]interface{}{
+		"valid":    valid,
+		"errors":   pf.errs,
+		"warnings": pf.warns,
+	}
+	if pf.plan != nil {
+		result["command_preview"] = pf.commandPreview
+		result["selected_node"] = pf.placement.NodeID
+		result["selected_runtime"] = pf.runtimeID
+		result["selected_model_location"] = pf.locationID
+		if pf.plan.Image != "" {
+			result["resolved_image"] = pf.plan.Image
+		}
 	}
 
-	runtimeID := strVal(deploy, "backend_runtime_id", "")
-	var rtVendor, rtImage, rtDockerJSON string
-	var bvPort int
-	h.DB.QueryRow(`SELECT vendor, image_name, docker_json FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&rtVendor, &rtImage, &rtDockerJSON)
-	h.DB.QueryRow(`SELECT default_container_port FROM backend_versions WHERE id = (SELECT backend_version_id FROM backend_runtimes WHERE id = ?)`, runtimeID).Scan(&bvPort)
-
-	// Simple dry-run: validate references exist
-	errors := []string{}
-	if strVal(deploy, "model_artifact_id", "") == "" {
-		errors = append(errors, "model_artifact_id is required")
-	}
-	if runtimeID == "" {
-		errors = append(errors, "backend_runtime_id is required")
-	}
-
-	valid := len(errors) == 0
 	if valid {
 		log.Info("deployment.dry_run.succeeded", "request_id", requestID,
 			"tenant_id", tid, "actor_id", actorID, "deployment_id", deployID,
-			"model_artifact_id", strVal(deploy, "model_artifact_id", ""),
-			"backend_runtime_id", runtimeID,
-			"runtime", "docker", "vendor", rtVendor, "image", rtImage)
+			"model_artifact_id", pf.artifactID,
+			"backend_runtime_id", pf.runtimeID,
+			"runtime", "docker", "vendor", pf.rtVendor,
+			"image", pf.plan.Image, "node_id", pf.placement.NodeID)
 		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
 			TenantID: tid, ActorID: actorID,
 			Action: "deployment.dry_run", ResourceType: "deployment",
 			ResourceID: deployID, Result: "success",
 			RequestID: requestID,
-			Detail:    fmt.Sprintf("runtime=%s vendor=%s image=%s", runtimeID, rtVendor, rtImage),
+			Detail:    fmt.Sprintf("runtime=%s vendor=%s image=%s node=%s", pf.runtimeID, pf.rtVendor, pf.plan.Image, pf.placement.NodeID),
 		})
 	} else {
 		log.Warn("deployment.dry_run.failed", "request_id", requestID,
 			"tenant_id", tid, "actor_id", actorID, "deployment_id", deployID,
-			"reason", "validation_failed", "errors", fmt.Sprintf("%v", errors))
+			"reason", "validation_failed", "errors", fmt.Sprintf("%v", pf.errs))
 		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
 			TenantID: tid, ActorID: actorID,
 			Action: "deployment.dry_run", ResourceType: "deployment",
 			ResourceID: deployID, Result: "failure",
-			RequestID: requestID, Error: fmt.Sprintf("validation: %v", errors),
+			RequestID: requestID, Error: fmt.Sprintf("validation: %v", pf.errs),
 		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"valid":    valid,
-		"errors":   errors,
-		"warnings": []string{},
-	})
+	writeJSON(w, http.StatusOK, result)
 }
 
 // ==========================================================================
