@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -260,18 +261,22 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 		}
 
 		// Update node info (timestamp + enrich from system snapshot).
+		// P2-001: A successful resource report is also proof of Agent life.
+		// Update last_heartbeat_at and status so the node stays online even
+		// if heartbeat requests fail while resource reports succeed.
 		if sys.OS != "" || sys.KernelVersion != "" {
 			tx.Exec(`UPDATE nodes SET
 				os = CASE WHEN ? != '' THEN ? ELSE os END,
 				kernel = CASE WHEN ? != '' THEN ? ELSE kernel END,
-				updated_at = ?
+				last_heartbeat_at = ?, status = 'online', updated_at = ?
 				WHERE id = ?`,
 				sys.OS, sys.OS,
 				sys.KernelVersion, sys.KernelVersion,
-				now, nodeID,
+				now, now, nodeID,
 			)
 		} else {
-			tx.Exec(`UPDATE nodes SET updated_at = ? WHERE id = ?`, now, nodeID)
+			tx.Exec(`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ?`,
+				now, now, nodeID)
 		}
 	}
 
@@ -291,10 +296,11 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 				g.MemoryTotalBytes = g.MemoryUsedBytes + g.MemoryFreeBytes
 			}
 
-			collectedAt := g.CollectedAt
-			if collectedAt == "" {
-				collectedAt = now
-			}
+			// P2-001: Use server receive time for collected_at, not Agent payload time.
+			// Agent payload time can be stale when GPU collection fails and
+			// the Agent falls back to cached data with the original timestamp.
+			// Server now reflects when data was last successfully received.
+			collectedAt := now
 
 			var existingID string
 			err := tx.QueryRow(
@@ -407,6 +413,25 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 // Called periodically by the node health checker.
 func (h *ResourceHandler) MarkStaleGPUs(nodeID string, threshold time.Duration) (int, error) {
 	cutoff := time.Now().Add(-threshold).Format(time.RFC3339)
+
+	// Query GPUs before update for state transition logging.
+	rows, err := h.DB.Query(
+		`SELECT id, gpu_index, vendor, health, status FROM gpu_devices
+		 WHERE node_id = ? AND status != 'unavailable' AND collected_at < ?`,
+		nodeID, cutoff,
+	)
+	if err != nil {
+		return 0, err
+	}
+	type gpuInfo struct{ id, gpuIndex, vendor, health, status string }
+	var gpus []gpuInfo
+	for rows.Next() {
+		var g gpuInfo
+		rows.Scan(&g.id, &g.gpuIndex, &g.vendor, &g.health, &g.status)
+		gpus = append(gpus, g)
+	}
+	rows.Close()
+
 	result, err := h.DB.Exec(
 		`UPDATE gpu_devices SET status = 'unavailable', updated_at = datetime('now')
 		 WHERE node_id = ? AND status != 'unavailable' AND collected_at < ?`,
@@ -416,6 +441,14 @@ func (h *ResourceHandler) MarkStaleGPUs(nodeID string, threshold time.Duration) 
 		return 0, err
 	}
 	n, _ := result.RowsAffected()
+
+	for _, g := range gpus {
+		log.StateTransition(context.Background(), "gpu.stale_check", "gpu", g.id, g.status, "unavailable",
+			"node_id", nodeID, "gpu_index", g.gpuIndex, "vendor", g.vendor, "health", g.health)
+	}
+	if n > 0 {
+		log.Info("gpu.stale.marked", "node_id", nodeID, "count", n, "threshold", threshold.String())
+	}
 	return int(n), nil
 }
 

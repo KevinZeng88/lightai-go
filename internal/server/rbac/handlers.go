@@ -68,6 +68,7 @@ func (h *Handler) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 
 // HandleCreateUser handles POST /api/users.
 func (h *Handler) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	var req struct {
 		Username        string `json:"username"`
 		Password        string `json:"password"`
@@ -134,7 +135,7 @@ func (h *Handler) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		"status":            "active",
 	})
 
-	log.Info("user created", "user_id", userID, "username", req.Username)
+	log.Info("user.created", "operation", "rbac.user.create", "user_id", userID, "username", req.Username, "duration_ms", time.Since(startTime).Milliseconds())
 }
 
 // HandleGetUser handles GET /api/users/{id}.
@@ -340,6 +341,7 @@ func (h *Handler) HandleListTenants(w http.ResponseWriter, r *http.Request) {
 
 // HandleCreateTenant handles POST /api/tenants.
 func (h *Handler) HandleCreateTenant(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	var req struct {
 		Name          string `json:"name"`
 		AdminUsername string `json:"admin_username"`
@@ -422,6 +424,9 @@ func (h *Handler) HandleCreateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	log.Info("tenant.created", "operation", "rbac.tenant.create", "tenant_id", tenantID, "name", req.Name, "duration_ms", time.Since(startTime).Milliseconds())
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -539,6 +544,7 @@ func (h *Handler) HandleListMemberships(w http.ResponseWriter, r *http.Request) 
 
 // HandleCreateMembership handles POST /api/tenant-memberships.
 func (h *Handler) HandleCreateMembership(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	info := auth.SessionInfoFromContext(r.Context())
 	if info == nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
@@ -637,6 +643,7 @@ func (h *Handler) HandleCreateMembership(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	log.Info("membership.created", "operation", "rbac.membership.create", "membership_id", membershipID, "tenant_id", info.TenantID, "user_id", userID, "duration_ms", time.Since(startTime).Milliseconds())
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{

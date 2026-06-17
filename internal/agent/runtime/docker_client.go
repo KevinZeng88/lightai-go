@@ -75,12 +75,12 @@ type PortBinding struct {
 
 // InspectResult summarises container state.
 type InspectResult struct {
-	ID      string
-	Name    string
-	State   string // running, exited, created, etc.
-	ExitCode int
-	Error   string
-	StartedAt string
+	ID         string
+	Name       string
+	State      string // running, exited, created, etc.
+	ExitCode   int
+	Error      string
+	StartedAt  string
 	FinishedAt string
 }
 

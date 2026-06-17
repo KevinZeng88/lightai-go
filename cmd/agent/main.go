@@ -10,8 +10,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -260,6 +262,38 @@ func main() {
 			json.NewEncoder(w).Encode(types.HealthResponse{Status: "ok"})
 		})
 		healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+		healthMux.HandleFunc("GET /docker-images", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			out, err := execCmd("docker", "images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}")
+			if err != nil {
+				json.NewEncoder(w).Encode([]map[string]interface{}{})
+				return
+			}
+			lines := strings.Split(strings.TrimSpace(out), "\n")
+			var images []map[string]interface{}
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				parts := strings.SplitN(line, "\t", 2)
+				if strings.Contains(parts[0], "<none>") {
+					continue
+				}
+				size := ""
+				if len(parts) > 1 {
+					size = parts[1]
+				}
+				images = append(images, map[string]interface{}{
+					"image": parts[0],
+					"size":  size,
+				})
+			}
+			if images == nil {
+				images = []map[string]interface{}{}
+			}
+			json.NewEncoder(w).Encode(images)
+		})
 
 		metricsAddr := fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port)
 		healthSrv = &http.Server{
@@ -387,8 +421,14 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 	collectTicker := time.NewTicker(collectInterval)
 	defer collectTicker.Stop()
 
+	// Periodic summary trackers for high-frequency operations.
+	hbSummary := log.NewPeriodicSummary("heartbeat", log.SummaryConfig.HeartbeatInterval)
+	taskPollSummary := log.NewPeriodicSummary("task_poll", log.SummaryConfig.TaskPollInterval)
+	gpuMetricsSummary := log.NewPeriodicSummary("gpu_metrics", log.SummaryConfig.MetricsInterval)
+	hbFirstSuccess := false // track first heartbeat success after startup/failure
+
 	// Collect immediately after registration.
-	collectAndReport(ctx, client, cfg, agentID, registry, snap)
+	collectAndReport(ctx, client, cfg, agentID, registry, snap, gpuMetricsSummary)
 
 	// Task processing: fire-and-forget goroutines per task with concurrency
 	// limit so that slow tasks (Docker pull, stop) never block the heartbeat.
@@ -421,9 +461,12 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 			return
 
 		case <-heartbeatTicker.C:
+			hbStart := time.Now()
 			hbResp, err := register.SendHeartbeat(client, cfg.ServerURL, cfg.AgentToken, agentID, nodeID)
+			hbLatency := time.Since(hbStart).Milliseconds()
 			if err != nil {
 				consecutiveFailures++
+				hbSummary.RecordFailure()
 				// Rate-limit: log at most once per 30 seconds for repeated heartbeat failures.
 				if consecutiveFailures == 1 || time.Since(lastHBFailLog) > 30*time.Second {
 					log.Warn("heartbeat failed",
@@ -450,10 +493,41 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 					}
 				}
 			} else {
+				if consecutiveFailures > 0 {
+					// Heartbeat recovered from failure — log at INFO.
+					log.Info("heartbeat recovered",
+						"agent_id", agentID,
+						"node_id", nodeID,
+						"after_failures", consecutiveFailures,
+					)
+				}
 				consecutiveFailures = 0
+				hbSummary.RecordSuccess(hbLatency)
+
+				// State change detection: log first success or state changes.
+				if !hbFirstSuccess {
+					hbFirstSuccess = true
+					log.Info("heartbeat first success", "agent_id", agentID, "node_id", nodeID, "latency_ms", hbLatency)
+				}
+
+				// Periodic heartbeat summary.
+				if ok, name, data := hbSummary.ShouldSummarize(); ok {
+					log.Info("heartbeat.summary",
+						"operation", name, "stage", "summary",
+						"node_id", nodeID,
+						"success_count", data["success_count"],
+						"failure_count", data["failure_count"],
+						"last_latency_ms", data["last_value"],
+						"max_latency_ms", data["max_value"],
+						"avg_latency_ms", data["avg_value"],
+					)
+				}
+
 				// Fire-and-forget: spawn one goroutine per task so that slow
 				// tasks never block the heartbeat loop.
+				taskCount := 0
 				if hbResp != nil {
+					taskCount = len(hbResp.Tasks)
 					for _, task := range hbResp.Tasks {
 						task := task // capture loop variable
 						// Acquire semaphore (respect shutdown).
@@ -470,10 +544,27 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 						}()
 					}
 				}
+
+				// Task poll summary (combined with heartbeat response).
+				if taskCount == 0 {
+					taskPollSummary.RecordSuccess(0) // no_task
+				} else {
+					taskPollSummary.RecordSuccess(int64(taskCount)) // claimed
+				}
+				if ok, name, data := taskPollSummary.ShouldSummarize(); ok {
+					log.Info("task_poll.summary",
+						"operation", name, "stage", "summary",
+						"node_id", nodeID,
+						"no_task_count", data["success_count"],
+						"claimed_count", data["last_value"],
+						"failure_count", data["failure_count"],
+						"total_count", data["total_count"],
+					)
+				}
 			}
 
 		case <-collectTicker.C:
-			collectAndReport(ctx, client, cfg, agentID, registry, snap)
+			collectAndReport(ctx, client, cfg, agentID, registry, snap, gpuMetricsSummary)
 			// P1-001: Data staleness — mark offline if no success for too long.
 			if time.Since(snap.LastSuccessTime()) > 3*collectInterval {
 				snap.SetOnline(false)
@@ -483,7 +574,7 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 
 }
 
-func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry, snap *metrics.Snapshot) {
+func collectAndReport(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, registry *collector.Registry, snap *metrics.Snapshot, gpuMetricsSummary *log.PeriodicSummary) {
 	log.Debug("resource collect start", "agent_id", agentID)
 
 	start := time.Now()
@@ -544,6 +635,22 @@ func collectAndReport(ctx context.Context, client *http.Client, cfg *config.Agen
 
 	// Update metrics snapshot from latest collection.
 	updateSnapshot(snap, registry, agentID, report)
+
+	// Record metrics summary.
+	gpuMetricsSummary.RecordSuccess(collectDuration.Milliseconds())
+	if ok, name, data := gpuMetricsSummary.ShouldSummarize(); ok {
+		gpuCount := registry.GPUCount()
+		log.Info("gpu_metrics.summary",
+			"operation", name, "stage", "summary",
+			"node_id", snap.NodeID,
+			"gpu_count", gpuCount,
+			"success_count", data["success_count"],
+			"failure_count", data["failure_count"],
+			"last_collect_ms", data["last_value"],
+			"max_collect_ms", data["max_value"],
+			"avg_collect_ms", data["avg_value"],
+		)
+	}
 
 	gpuCount := registry.GPUCount()
 	log.Debug("resource report success",
@@ -617,18 +724,30 @@ func detectKernelVersion() string {
 // It is called from a fire-and-forget goroutine with concurrency limited by
 // taskSem so that slow tasks never block the heartbeat loop.
 func processTask(ctx context.Context, client *http.Client, cfg *config.AgentConfig, agentID string, task register.AgentTask) {
-	log.Info("processing task",
+	startTime := time.Now()
+	// Parse AgentRunSpec to extract operation_id
+	var spec agentruntime.AgentRunSpec
+	opID := ""
+	if err := json.Unmarshal(task.AgentRunSpec, &spec); err == nil {
+		opID = spec.OperationID
+	}
+	if opID == "" {
+		opID = task.ID
+	} // fallback
+	log.Info("task execution: begin",
 		"task_id", task.ID,
 		"task_type", task.TaskType,
 		"instance_id", task.InstanceID,
+		"operation_id", opID,
 	)
 
 	result := register.TaskResult{
-		TaskID:     task.ID,
-		InstanceID: task.InstanceID,
+		TaskID:      task.ID,
+		OperationID: opID,
+		InstanceID:  task.InstanceID,
 	}
 
-	startTime := time.Now()
+	startTime = time.Now()
 	result.StartedAt = startTime.Format(time.RFC3339)
 
 	switch task.TaskType {
@@ -645,29 +764,69 @@ func processTask(ctx context.Context, client *http.Client, cfg *config.AgentConf
 
 	result.FinishedAt = time.Now().Format(time.RFC3339)
 
-	// Report result back to server.
-	if err := register.ReportTaskResult(client, cfg.ServerURL, cfg.AgentToken, task.ID, result); err != nil {
-		log.Error("failed to report task result",
+	if result.Success {
+		log.Info("task execution: completed",
 			"task_id", task.ID,
+			"operation_id", opID,
+			"instance_id", task.InstanceID,
+			"container_id", result.ContainerID,
+			"runtime_state", result.RuntimeState,
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	} else {
+		log.Error("task execution: failed",
+			"task_id", task.ID,
+			"operation_id", opID,
+			"instance_id", task.InstanceID,
+			"error", result.ErrorMessage,
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	}
+
+	// Report result back to server.
+	reportStart := time.Now()
+	log.Debug("task_result.report_started", "task_id", task.ID, "operation_id", opID, "instance_id", task.InstanceID)
+	if err := register.ReportTaskResult(client, cfg.ServerURL, cfg.AgentToken, task.ID, result); err != nil {
+		log.Error("task_result.report_failed",
+			"task_id", task.ID,
+			"operation_id", opID,
+			"instance_id", task.InstanceID,
 			"error", err,
+			"duration_ms", time.Since(reportStart).Milliseconds(),
+		)
+	} else {
+		log.Info("task_result.report_completed",
+			"task_id", task.ID,
+			"operation_id", opID,
+			"instance_id", task.InstanceID,
+			"status", result.RuntimeState,
+			"success", result.Success,
+			"duration_ms", time.Since(reportStart).Milliseconds(),
 		)
 	}
 }
 
 func processStartTask(ctx context.Context, task register.AgentTask, result *register.TaskResult) {
+	startTime := time.Now()
+	log.Info("start task: begin", "task_id", task.ID, "instance_id", task.InstanceID)
 	// Parse the AgentRunSpec from task payload.
 	var spec agentruntime.AgentRunSpec
 	if err := json.Unmarshal(task.AgentRunSpec, &spec); err != nil {
+		log.Error("task payload: parse failed", "task_id", task.ID, "error", err)
 		result.Success = false
 		result.ErrorMessage = "invalid agent run spec: " + err.Error()
+		log.Error("start task: invalid payload", "task_id", task.ID, "error", err)
 		return
 	}
 
 	// Create real Docker client and driver.
+	log.Info("start task: creating docker client", "task_id", task.ID)
 	realCli, err := agentruntime.NewRealDockerClient()
+	// Docker client created successfully
 	if err != nil {
 		result.Success = false
 		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		log.Error("start task: docker client failed", "task_id", task.ID, "error", err)
 		return
 	}
 	defer realCli.Close()
@@ -694,6 +853,7 @@ func processStartTask(ctx context.Context, task register.AgentTask, result *regi
 		return
 	}
 
+	log.Info("start task: completed", "task_id", task.ID, "instance_id", task.InstanceID, "duration_ms", time.Since(startTime).Milliseconds())
 	result.Success = true
 	result.ContainerID = inst.ContainerID
 	result.RuntimeState = "running"
@@ -716,9 +876,11 @@ func processStopTask(ctx context.Context, task register.AgentTask, result *regis
 	}
 
 	realCli, err := agentruntime.NewRealDockerClient()
+	// Docker client created successfully
 	if err != nil {
 		result.Success = false
 		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		log.Error("start task: docker client failed", "task_id", task.ID, "error", err)
 		return
 	}
 	defer realCli.Close()
@@ -761,9 +923,11 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 	)
 
 	realCli, err := agentruntime.NewRealDockerClient()
+	// Docker client created successfully
 	if err != nil {
 		result.Success = false
 		result.ErrorMessage = "cannot create docker client: " + err.Error()
+		log.Error("start task: docker client failed", "task_id", task.ID, "error", err)
 		return
 	}
 	defer realCli.Close()
@@ -805,4 +969,14 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 	result.ContainerID = payload.ContainerID
 	result.DeploymentID = task.DeploymentID
 	result.NodeID = task.NodeID
+}
+
+// execCmd runs a command and returns its stdout as a string.
+func execCmd(name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }

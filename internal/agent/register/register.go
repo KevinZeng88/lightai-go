@@ -21,7 +21,6 @@ type RegisterResponse struct {
 	ServerTime string `json:"server_time"`
 }
 
-
 // AgentTask is a task dispatched by the server via heartbeat.
 type AgentTask struct {
 	ID             string          `json:"id"`
@@ -256,6 +255,7 @@ func truncate(s string, maxLen int) string {
 // TaskResult is the payload sent when reporting task completion.
 type TaskResult struct {
 	TaskID       string `json:"task_id"`
+	OperationID  string `json:"operation_id,omitempty"`
 	NodeID       string `json:"node_id"`
 	Success      bool   `json:"success"`
 	InstanceID   string `json:"instance_id"`

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -52,22 +53,23 @@ type RegisterResponse struct {
 	ServerTime string `json:"server_time"`
 }
 
-	// AgentTaskBrief is a lightweight task description sent in the heartbeat response.
-	type AgentTaskBrief struct {
-		ID             string          `json:"id"`
-		TaskType       string          `json:"task_type"`
-		TenantID       string          `json:"tenant_id"`
-		DeploymentID   string          `json:"deployment_id"`
-		InstanceID     string          `json:"instance_id"`
-		NodeID         string          `json:"node_id"`
-		TimeoutSeconds int             `json:"timeout_seconds"`
-		AgentRunSpec   json.RawMessage `json:"agent_run_spec,omitempty"`
-	}
+// AgentTaskBrief is a lightweight task description sent in the heartbeat response.
+type AgentTaskBrief struct {
+	ID             string          `json:"id"`
+	TaskType       string          `json:"task_type"`
+	TenantID       string          `json:"tenant_id"`
+	DeploymentID   string          `json:"deployment_id"`
+	InstanceID     string          `json:"instance_id"`
+	NodeID         string          `json:"node_id"`
+	TimeoutSeconds int             `json:"timeout_seconds"`
+	AgentRunSpec   json.RawMessage `json:"agent_run_spec,omitempty"`
+}
+
 // HeartbeatResponse is the heartbeat response.
 type HeartbeatResponse struct {
-	Status       string `json:"status"`
-	ServerTime   string `json:"server_time"`
-	NeedRegister bool   `json:"need_register,omitempty"`
+	Status       string           `json:"status"`
+	ServerTime   string           `json:"server_time"`
+	NeedRegister bool             `json:"need_register,omitempty"`
 	Tasks        []AgentTaskBrief `json:"tasks,omitempty"`
 }
 
@@ -208,6 +210,10 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check previous state for transition logging.
+	var prevStatus string
+	h.DB.QueryRow(`SELECT status FROM nodes WHERE id = ?`, req.NodeID).Scan(&prevStatus)
+
 	// Update heartbeat.
 	result, err := h.DB.Exec(
 		`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ?`,
@@ -229,6 +235,11 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 		return
+	}
+
+	// State transition: log if node was offline and is now online.
+	if prevStatus == "offline" {
+		log.StateTransition(r.Context(), "agent.heartbeat", "node", req.NodeID, "offline", "online")
 	}
 
 	if h.Metrics != nil {
@@ -267,7 +278,7 @@ func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBri
 	var taskIDs []string
 	type rawTask struct {
 		id, taskType, tenantID, deploymentID, instanceID, taskNodeID, taskPayload string
-		timeoutSeconds int
+		timeoutSeconds                                                            int
 	}
 	var rawTasks []rawTask
 
@@ -283,7 +294,12 @@ func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBri
 		pendingCount++
 	}
 	rows.Close()
-	log.Info("claim: pending tasks for node", "node_id", nodeID, "count", pendingCount)
+	// DEBUG: no-task case is high-frequency. INFO only when tasks found.
+	if pendingCount > 0 {
+		log.Info("claim: pending tasks for node", "node_id", nodeID, "count", pendingCount)
+	} else {
+		log.Debug("claim: no pending tasks", "node_id", nodeID)
+	}
 
 	// Re-query after count.
 	rows, err = tx.Query(
@@ -311,11 +327,17 @@ func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBri
 			TaskStatusClaimed, now, agentID, now, id,
 		)
 	}
-	log.Info("claim: claimed tasks", "node_id", nodeID, "task_ids", taskIDs, "task_types", func() []string {
-		types := make([]string, len(rawTasks))
-		for i, rt := range rawTasks { types[i] = rt.taskType }
-		return types
-	}())
+	if len(taskIDs) > 0 {
+		log.Info("claim: claimed tasks", "node_id", nodeID, "claimed_count", len(taskIDs), "task_types", func() []string {
+			types := make([]string, len(rawTasks))
+			for i, rt := range rawTasks {
+				types[i] = rt.taskType
+			}
+			return types
+		}())
+	} else {
+		log.Debug("claim: no tasks claimed", "node_id", nodeID)
+	}
 
 	if err := tx.Commit(); err != nil {
 		log.Error("claim tasks: commit failed", "error", err)
@@ -358,11 +380,34 @@ func sweepExpiredTasks(tx *sql.Tx, nodeID string, now string) {
 
 	// Leases past expires_at → failed (reserved leases only).
 	// Active leases are only failed by the server-side sweep when the node is offline.
+	// Query before UPDATE for per-lease cleanup logging.
+	leaseRows, _ := tx.Query(
+		`SELECT id, gpu_id, instance_id, deployment_id, node_id FROM gpu_leases
+		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status = ?`,
+		now, LeaseReserved,
+	)
+	type leaseRec struct{ id, gpuID, instanceID, deploymentID, leaseNodeID string }
+	var expiredLeases []leaseRec
+	for leaseRows.Next() {
+		var lr leaseRec
+		leaseRows.Scan(&lr.id, &lr.gpuID, &lr.instanceID, &lr.deploymentID, &lr.leaseNodeID)
+		expiredLeases = append(expiredLeases, lr)
+	}
+	leaseRows.Close()
+
 	tx.Exec(
 		`UPDATE gpu_leases SET status = ?, updated_at = ?
 		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status = ?`,
-		LeaseFailed, now, LeaseReserved,
+		LeaseFailed, now, now, LeaseReserved,
 	)
+
+	for _, lr := range expiredLeases {
+		log.StateTransition(context.Background(), "lease.sweep", "gpu_lease", lr.id, LeaseReserved, LeaseFailed,
+			"gpu_id", lr.gpuID, "instance_id", lr.instanceID, "deployment_id", lr.deploymentID, "node_id", lr.leaseNodeID)
+	}
+	if len(expiredLeases) > 0 {
+		log.Info("gpu_lease.sweep.expired", "count", len(expiredLeases), "node_id", nodeID)
+	}
 
 	// Deployments for failed instances → failed.
 	tx.Exec(
@@ -525,11 +570,58 @@ func (h *AgentHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(node)
 }
 
+// HandleGetNodeDockerImages proxies to the Agent's /docker-images endpoint.
+func (h *AgentHandler) HandleGetNodeDockerImages(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	var addr string
+	var port int
+	err := h.DB.QueryRow(
+		`SELECT advertised_address, metrics_port FROM nodes WHERE id = ?`, nodeID,
+	).Scan(&addr, &port)
+	if err != nil {
+		http.Error(w, `{"error":"node not found"}`, http.StatusNotFound)
+		return
+	}
+	if addr == "" || port == 0 {
+		http.Error(w, `{"error":"node has no advertised address or metrics port"}`, http.StatusBadRequest)
+		return
+	}
+	agentURL := fmt.Sprintf("http://%s:%d/docker-images", addr, port)
+	resp, err := http.Get(agentURL)
+	if err != nil {
+		log.Warn("failed to query agent docker images", "node_id", nodeID, "url", agentURL, "error", err)
+		writeJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+	defer resp.Body.Close()
+	var images []interface{}
+	json.NewDecoder(resp.Body).Decode(&images)
+	if images == nil {
+		images = []interface{}{}
+	}
+	writeJSON(w, http.StatusOK, images)
+}
+
 // MarkOfflineNodes marks nodes as offline if they haven't sent a heartbeat
 // within the given threshold. Returns the count of nodes marked offline.
 // P0-009: Node auto-offline implementation.
 func (h *AgentHandler) MarkOfflineNodes(threshold time.Duration) (int, error) {
 	cutoff := time.Now().Add(-threshold).Format(time.RFC3339)
+
+	// Query nodes that will be marked offline for transition logging.
+	rows, err := h.DB.Query(`SELECT id FROM nodes WHERE status = 'online' AND last_heartbeat_at < ?`, cutoff)
+	if err != nil {
+		log.Error("mark offline: query nodes error", "error", err)
+		return 0, err
+	}
+	var offlineIDs []string
+	for rows.Next() {
+		var nid string
+		rows.Scan(&nid)
+		offlineIDs = append(offlineIDs, nid)
+	}
+	rows.Close()
+
 	result, err := h.DB.Exec(
 		`UPDATE nodes SET status = 'offline', updated_at = datetime('now')
 		 WHERE status = 'online' AND last_heartbeat_at < ?`,
@@ -540,8 +632,12 @@ func (h *AgentHandler) MarkOfflineNodes(threshold time.Duration) (int, error) {
 		return 0, err
 	}
 	n, _ := result.RowsAffected()
+	for _, nid := range offlineIDs {
+		log.StateTransition(context.Background(), "node.health_check", "node", nid, "online", "offline",
+			"reason", "heartbeat_timeout", "threshold", threshold.String())
+	}
 	if n > 0 {
-		log.Info("nodes marked offline", "count", n)
+		log.Info("nodes marked offline", "count", n, "threshold", threshold.String())
 	}
 	return int(n), nil
 }
@@ -740,4 +836,102 @@ func (h *AgentHandler) HandlePatchNodeTenant(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "tenant_id": req.TenantID})
+}
+
+// HandleTaskResult processes task completion reports from agents.
+func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	taskID := r.PathValue("id")
+
+	// Read operation_id from agent's report for cross-component correlation.
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	status := strVal(req, "status", "completed")
+	opID := strVal(req, "operation_id", "")
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// Resolve instance_id and deployment_id from the task.
+	var taskInstanceID, taskDeploymentID, taskNodeID string
+	h.DB.QueryRow(`SELECT COALESCE(instance_id,''), COALESCE(deployment_id,''), COALESCE(node_id,'') FROM agent_tasks WHERE id = ?`, taskID).Scan(&taskInstanceID, &taskDeploymentID, &taskNodeID)
+	if taskInstanceID == "" {
+		taskInstanceID = strVal(req, "instance_id", "")
+	}
+
+	switch status {
+	case "completed", "success":
+		h.DB.Exec(`UPDATE agent_tasks SET status = 'completed', finished_at = ? WHERE id = ?`, now, taskID)
+
+		if taskInstanceID != "" {
+			containerID := strVal(req, "container_id", "")
+			errorMsg := strVal(req, "error_message", strVal(req, "error", ""))
+			success := boolVal(req, "success", true) && errorMsg == ""
+			actualState := "running"
+			prevActualState := "pending"
+			if !success {
+				actualState = "failed"
+			}
+			// Get previous instance state for transition logging.
+			h.DB.QueryRow(`SELECT COALESCE(actual_state,'pending') FROM model_instances WHERE id = ?`, taskInstanceID).Scan(&prevActualState)
+
+			// Build endpoint_url from instance host_port.
+			var hostPort int
+			h.DB.QueryRow(`SELECT host_port FROM model_instances WHERE id = ?`, taskInstanceID).Scan(&hostPort)
+			endpointURL := ""
+			if hostPort > 0 {
+				endpointURL = fmt.Sprintf("http://127.0.0.1:%d", hostPort)
+			}
+
+			h.DB.Exec(`UPDATE model_instances SET actual_state = ?, container_id = ?, endpoint_url = ?, started_at = ? WHERE id = ?`,
+				actualState, containerID, endpointURL, now, taskInstanceID)
+
+			// Activate leases.
+			lr, lerr := h.DB.Exec(`UPDATE gpu_leases SET status = 'active', activated_at = ? WHERE instance_id = ? AND status = 'reserved'`, now, taskInstanceID)
+			if lerr != nil {
+				log.Error("gpu_lease.activate.failed", "instance_id", taskInstanceID, "error", lerr)
+			} else if ln, _ := lr.RowsAffected(); ln > 0 {
+				log.StateTransition(r.Context(), "task.result", "gpu_lease", taskInstanceID, "reserved", "active",
+					"instance_id", taskInstanceID, "count", ln)
+				log.Info("gpu_lease.activated", "instance_id", taskInstanceID, "count", ln)
+			}
+
+			// State transition logging.
+			log.StateTransition(r.Context(), "task.result", "instance", taskInstanceID, prevActualState, actualState,
+				"task_id", taskID, "deployment_id", taskDeploymentID, "node_id", taskNodeID,
+				"container_id", containerID, "duration_ms", log.DurationMs(startTime))
+			if opID != "" {
+				log.Info("task.result.processed",
+					"operation_id", opID, "task_id", taskID, "instance_id", taskInstanceID,
+					"state", actualState, "container_id", containerID, "endpoint_url", endpointURL,
+					"duration_ms", log.DurationMs(startTime))
+			}
+		}
+	case "failed", "error":
+		h.DB.Exec(`UPDATE agent_tasks SET status = 'failed', finished_at = ? WHERE id = ?`, now, taskID)
+		errorMsg := strVal(req, "error_message", strVal(req, "error", "unknown"))
+		if taskInstanceID != "" {
+			var prevActualState string
+			h.DB.QueryRow(`SELECT COALESCE(actual_state,'pending') FROM model_instances WHERE id = ?`, taskInstanceID).Scan(&prevActualState)
+			h.DB.Exec(`UPDATE model_instances SET actual_state = 'error', last_error = ? WHERE id = ?`, errorMsg, taskInstanceID)
+			h.DB.Exec(`UPDATE gpu_leases SET status = 'failed' WHERE instance_id = ? AND status = 'reserved'`, taskInstanceID)
+
+			log.StateTransition(r.Context(), "task.result", "instance", taskInstanceID, prevActualState, "error",
+				"task_id", taskID, "deployment_id", taskDeploymentID, "node_id", taskNodeID,
+				"error", errorMsg, "duration_ms", log.DurationMs(startTime))
+			if opID != "" {
+				log.Error("task.result.failed",
+					"operation_id", opID, "task_id", taskID, "instance_id", taskInstanceID,
+					"error", errorMsg, "duration_ms", log.DurationMs(startTime))
+			} else {
+				log.Error("task.result.failed",
+					"task_id", taskID, "instance_id", taskInstanceID,
+					"error", errorMsg, "duration_ms", log.DurationMs(startTime))
+			}
+		} else {
+			log.Error("task.result.failed", "task_id", taskID, "error", errorMsg)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -18,16 +18,16 @@ import (
 func makeTestSpec(runtimeType string) AgentRunSpec {
 	instanceID := uuid.NewString()
 	return AgentRunSpec{
-		InstanceID:      instanceID,
-		DeploymentID:    uuid.NewString(),
-		RuntimeType:     runtimeType,
-		BackendType:     "vllm",
-		Vendor:          "nvidia",
-		ModelPath:       "/data/models/Qwen3-32B",
-		ServedModelName: "qwen3-32b",
-		NodeID:          uuid.NewString(),
-		AgentID:         uuid.NewString(),
-		GPUDeviceIDs:    []string{"0", "1"},
+		InstanceID:       instanceID,
+		DeploymentID:     uuid.NewString(),
+		RuntimeType:      runtimeType,
+		BackendType:      "vllm",
+		Vendor:           "nvidia",
+		ModelPath:        "/data/models/Qwen3-32B",
+		ServedModelName:  "qwen3-32b",
+		NodeID:           uuid.NewString(),
+		AgentID:          uuid.NewString(),
+		GPUDeviceIDs:     []string{"0", "1"},
 		GPUVisibleEnvKey: "CUDA_VISIBLE_DEVICES",
 		Env: map[string]string{
 			"CUDA_VISIBLE_DEVICES": "0,1",
@@ -46,16 +46,16 @@ func makeTestSpec(runtimeType string) AgentRunSpec {
 			{HostPort: 8001, ContainerPort: 8000, Protocol: "tcp"},
 		},
 		Docker: DockerSpec{
-			Image:         "vllm/vllm-openai:latest",
-			ContainerName: containerNameFromInstance(instanceID),
-			Args:          []string{"--model", "/data/models/Qwen3-32B", "--port", "8000"},
-			Privileged:    false,
-			IPCMode:       "host",
-			ShmSize:       "8gb",
-			NetworkMode:   "host",
-			GroupAdd:      []string{"video"},
+			Image:           "vllm/vllm-openai:latest",
+			ContainerName:   containerNameFromInstance(instanceID),
+			Args:            []string{"--model", "/data/models/Qwen3-32B", "--port", "8000"},
+			Privileged:      false,
+			IPCMode:         "host",
+			ShmSize:         "8gb",
+			NetworkMode:     "host",
+			GroupAdd:        []string{"video"},
 			SecurityOptions: []string{"no-new-privileges:true"},
-			RestartPolicy: "unless-stopped",
+			RestartPolicy:   "unless-stopped",
 		},
 	}
 }
@@ -667,14 +667,14 @@ func TestRealDockerRuntimeDriver(t *testing.T) {
 	instanceID := "test-" + uuid.NewString()[:8]
 
 	spec := AgentRunSpec{
-		InstanceID:     instanceID,
-		DeploymentID:   uuid.NewString(),
-		RuntimeType:    "docker",
-		BackendType:    "custom",
-		Vendor:         "cpu",
-		ModelPath:      "/tmp",
+		InstanceID:      instanceID,
+		DeploymentID:    uuid.NewString(),
+		RuntimeType:     "docker",
+		BackendType:     "custom",
+		Vendor:          "cpu",
+		ModelPath:       "/tmp",
 		ServedModelName: "test-model",
-		Args:           []string{"echo", "hello from lightai integration test"},
+		Args:            []string{"echo", "hello from lightai integration test"},
 		Docker: DockerSpec{
 			Image:         testImage,
 			ContainerName: containerNameFromInstance(instanceID),
@@ -771,4 +771,3 @@ func realDockerSkipReason() string {
 	}
 	return ""
 }
-

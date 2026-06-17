@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"lightai-go/internal/common/log"
 )
@@ -35,39 +36,155 @@ func NewDockerRuntimeDriver(client DockerClient) *DockerRuntimeDriver {
 //  4. Starts the container
 //  5. Returns a RuntimeInstance descriptor
 func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*RuntimeInstance, error) {
+	startTime := time.Now()
+	opID := spec.OperationID
+	if opID == "" {
+		opID = spec.InstanceID
+	} // fallback
+	ctx = log.WithOperationID(ctx, opID)
+
 	if spec.RuntimeType != "docker" {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedRuntimeType, spec.RuntimeType)
 	}
 
 	opts := d.buildCreateOptions(spec)
 
-	log.Info("docker runtime: creating container",
+	// DEBUG: log full Docker spec (image, name, env keys only, ports, volumes, devices).
+	log.DebugContext(ctx, "docker.spec.dump",
+		"operation_id", opID,
+		"instance_id", spec.InstanceID,
 		"image", opts.Image,
-		"name", opts.ContainerName,
-		"env", redactEnvForLog(spec.Env),
+		"container_name", opts.ContainerName,
+		"env_keys", log.RedactEnvKeys(spec.Env),
+		"ports", fmt.Sprintf("%v", spec.Ports),
+		"volumes_count", len(spec.Volumes),
+		"devices_count", len(spec.Devices),
+		"privileged", opts.Privileged,
+		"network_mode", opts.NetworkMode,
+		"shm_size", opts.ShmSize,
+		"ipc_mode", opts.IPCMode,
+		"gpu_device_ids", spec.GPUDeviceIDs,
+	)
+
+	// --- Docker create ---
+	createStart := time.Now()
+	log.Info("docker.create.started",
+		"operation_id", opID,
+		"instance_id", spec.InstanceID,
+		"image", opts.Image,
+		"container_name", opts.ContainerName,
+		"env_keys", log.RedactEnvKeys(spec.Env),
 	)
 
 	containerID, err := d.client.ContainerCreate(ctx, opts)
+	createDuration := time.Since(createStart).Milliseconds()
 	if err != nil {
-		log.Error("docker runtime: container create failed",
-			"name", opts.ContainerName,
+		log.Error("docker.create.failed",
+			"operation_id", opID,
+			"instance_id", spec.InstanceID,
+			"container_name", opts.ContainerName,
+			"image", opts.Image,
+			"duration_ms", createDuration,
 			"error", err,
 		)
 		return nil, fmt.Errorf("docker create: %w", err)
 	}
 
-	log.Info("docker runtime: starting container",
-		"id", containerID,
-		"name", opts.ContainerName,
+	log.Info("docker.create.completed",
+		"operation_id", opID,
+		"container_id", containerID,
+		"container_name", opts.ContainerName,
+		"duration_ms", createDuration,
+	)
+	if createDuration > log.SummaryConfig.SlowDockerThresholdMs {
+		log.SlowOperation(ctx, "docker.create", "container_create", createDuration, log.SummaryConfig.SlowDockerThresholdMs,
+			"operation_id", opID, "container_id", containerID, "image", opts.Image)
+	}
+
+	// --- Docker start ---
+	startStart := time.Now()
+	log.Info("docker.start.started",
+		"operation_id", opID,
+		"container_id", containerID,
+		"container_name", opts.ContainerName,
 	)
 
 	if err := d.client.ContainerStart(ctx, containerID); err != nil {
-		log.Error("docker runtime: container start failed",
-			"id", containerID,
-			"name", opts.ContainerName,
+		startDuration := time.Since(startStart).Milliseconds()
+		log.Error("docker.start.failed",
+			"operation_id", opID,
+			"container_id", containerID,
+			"container_name", opts.ContainerName,
+			"duration_ms", startDuration,
 			"error", err,
 		)
+		// Try to get container logs on failure.
+		d.logContainerFailure(ctx, containerID, opts.ContainerName)
 		return nil, fmt.Errorf("docker start: %w", err)
+	}
+
+	startDuration := time.Since(startStart).Milliseconds()
+	log.Info("docker.start.completed",
+		"operation_id", opID,
+		"container_id", containerID,
+		"duration_ms", startDuration,
+	)
+	if startDuration > log.SummaryConfig.SlowDockerThresholdMs {
+		log.SlowOperation(ctx, "docker.start", "container_start", startDuration, log.SummaryConfig.SlowDockerThresholdMs,
+			"operation_id", opID, "container_id", containerID)
+	}
+
+	// Minimal post-start verification: inspect container state to detect exited(1).
+	verifyStart := time.Now()
+	info, verr := d.client.ContainerInspect(ctx, containerID)
+	if verr != nil {
+		log.WarnContext(ctx, "docker.post_start.inspect_failed",
+			"container_id", containerID,
+			"error", verr,
+			"duration_ms", time.Since(verifyStart).Milliseconds())
+	} else if info.State != "running" {
+		log.ErrorContext(ctx, "docker.post_start.container_not_running",
+			"container_id", containerID,
+			"container_name", opts.ContainerName,
+			"container_state", info.State,
+			"exit_code", info.ExitCode,
+			"container_error", info.Error,
+			"inspect_duration_ms", time.Since(verifyStart).Milliseconds())
+		d.logContainerFailure(ctx, containerID, opts.ContainerName)
+		return nil, fmt.Errorf("container %s is %s (exit_code=%d): %s", containerID[:12], info.State, info.ExitCode, info.Error)
+	}
+	log.DebugContext(ctx, "docker.post_start.verified_running",
+		"container_id", containerID,
+		"container_state", info.State,
+		"inspect_duration_ms", time.Since(verifyStart).Milliseconds())
+
+	// Endpoint health check (if configured).
+	if spec.HealthCheck != nil && spec.HealthCheck.Enabled {
+		resolvedCfg := resolveHealthCheckConfig(spec.HealthCheck, spec.HostPort)
+		// Pass container inspect function for re-inspect on health check failure.
+		inspectFn := func(ctx context.Context) (string, int, error) {
+			info, err := d.client.ContainerInspect(ctx, containerID)
+			if err != nil {
+				return "", 0, err
+			}
+			return info.State, info.ExitCode, nil
+		}
+		if err := CheckEndpointReady(ctx, resolvedCfg, spec.InstanceID, containerID, opts.ContainerName, inspectFn); err != nil {
+			log.ErrorContext(ctx, "health_check.failed",
+				"container_id", containerID,
+				"instance_id", spec.InstanceID,
+				"error", err,
+				"duration_ms", time.Since(startTime).Milliseconds(),
+			)
+			d.logContainerFailure(ctx, containerID, opts.ContainerName)
+			return nil, fmt.Errorf("health check failed: %w", err)
+		}
+	} else {
+		log.InfoContext(ctx, "health_check.skipped",
+			"reason", "no_health_config",
+			"instance_id", spec.InstanceID,
+			"container_id", containerID,
+		)
 	}
 
 	endpointURL := ""
@@ -75,10 +192,13 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 		endpointURL = fmt.Sprintf("http://localhost:%d", spec.HostPort)
 	}
 
-	log.Info("docker runtime: container started",
-		"id", containerID,
+	totalDuration := time.Since(startTime).Milliseconds()
+	log.Info("docker.start.operation_completed",
+		"operation_id", opID,
 		"instance_id", spec.InstanceID,
+		"container_id", containerID,
 		"endpoint", endpointURL,
+		"total_duration_ms", totalDuration,
 	)
 
 	return &RuntimeInstance{
@@ -94,38 +214,100 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 //
 // The container is looked up by name: lightai-{instanceID}.
 func (d *DockerRuntimeDriver) Stop(ctx context.Context, instanceID string) error {
+	startTime := time.Now()
 	containerName := containerNameFromInstance(instanceID)
 
-	log.Info("docker runtime: stopping container",
+	log.Info("docker.stop.started",
 		"instance_id", instanceID,
-		"container", containerName,
+		"container_name", containerName,
 	)
 
 	// Find container ID by name using inspect.
 	info, err := d.client.ContainerInspect(ctx, containerName)
 	if err != nil {
-		log.Error("docker runtime: container not found for stop",
+		log.Error("docker.stop.inspect_failed",
 			"instance_id", instanceID,
-			"container", containerName,
+			"container_name", containerName,
+			"duration_ms", time.Since(startTime).Milliseconds(),
 			"error", err,
 		)
 		return fmt.Errorf("stop: container not found: %w", err)
 	}
 
+	stopStart := time.Now()
 	if err := d.client.ContainerStop(ctx, info.ID, 30); err != nil {
-		log.Error("docker runtime: container stop failed",
-			"id", info.ID,
+		log.Error("docker.stop.failed",
+			"container_id", info.ID,
 			"instance_id", instanceID,
+			"duration_ms", time.Since(stopStart).Milliseconds(),
 			"error", err,
 		)
 		return fmt.Errorf("docker stop: %w", err)
 	}
 
-	log.Info("docker runtime: container stopped",
-		"id", info.ID,
+	stopDuration := time.Since(stopStart).Milliseconds()
+	log.Info("docker.stop.completed",
+		"container_id", info.ID,
 		"instance_id", instanceID,
+		"stop_duration_ms", stopDuration,
+		"total_duration_ms", time.Since(startTime).Milliseconds(),
 	)
+	if stopDuration > log.SummaryConfig.SlowDockerThresholdMs {
+		log.SlowOperation(ctx, "docker.stop", "container_stop", stopDuration, log.SummaryConfig.SlowDockerThresholdMs,
+			"container_id", info.ID, "instance_id", instanceID)
+	}
+
 	return nil
+}
+
+// logContainerFailure attempts to retrieve container state and logs on failure.
+// It does not block the caller — failures in this diagnostic helper are silent.
+// operation_id is read from ctx.
+func (d *DockerRuntimeDriver) logContainerFailure(ctx context.Context, containerID, containerName string) {
+	// Best-effort inspect.
+	info, err := d.client.ContainerInspect(ctx, containerName)
+	if err != nil {
+		log.WarnContext(ctx, "docker.diagnose.inspect_failed",
+			"container_id", containerID,
+			"container_name", containerName,
+			"error", err,
+		)
+		return
+	}
+
+	log.ErrorContext(ctx, "docker.container.exited",
+		"container_id", info.ID,
+		"container_name", containerName,
+		"state", info.State,
+		"exit_code", info.ExitCode,
+		"error_message", info.Error,
+		"started_at", info.StartedAt,
+		"finished_at", info.FinishedAt,
+	)
+
+	// Try to tail logs (with a short timeout to avoid blocking).
+	logCtx, logCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer logCancel()
+	stdout, stderr, err := d.client.ContainerLogs(logCtx, containerID, LogFetchOptions{Tail: 50})
+	if err != nil {
+		log.WarnContext(ctx, "docker.diagnose.logs_failed",
+			"container_id", containerID,
+			"error", err,
+		)
+		return
+	}
+	if stderr != "" {
+		log.ErrorContext(ctx, "docker.container.stderr",
+			"container_id", containerID,
+			"stderr_tail", strings.TrimSpace(stderr),
+		)
+	}
+	if stdout != "" {
+		log.InfoContext(ctx, "docker.container.stdout_tail",
+			"container_id", containerID,
+			"stdout_tail", strings.TrimSpace(stdout),
+		)
+	}
 }
 
 // Inspect returns the current status of the instance's container.
