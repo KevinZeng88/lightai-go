@@ -1,0 +1,32 @@
+[start-all] Mode: source
+[start-all] Observability: skipped
+[start-all] Starting server...
+WARNING: LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD not set.
+A random password will be generated and printed ONCE to stderr.
+Set it via: export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='...'
+=== LightAI Go Server ===
+Config: /home/kzeng/projects/ai-platform-study/lightai-go/configs/server.release.yaml
+Root:   /home/kzeng/projects/ai-platform-study/lightai-go
+
+Server started (PID 97110).
+  Health:  http://127.0.0.1:18080/healthz
+  Web:     http://127.0.0.1:18080/
+
+  Server stdout log: logs/server-stdout.log
+  Server main log:   logs/lightai-server.log
+  Initial credentials: runtime/initial-credentials.txt
+[start-all] Starting agent...
+=== LightAI Go Agent ===
+Config: /home/kzeng/projects/ai-platform-study/lightai-go/configs/agent.yaml
+Root:   /home/kzeng/projects/ai-platform-study/lightai-go
+
+Agent started (PID 97128).
+  Metrics: http://127.0.0.1:19091/metrics
+
+  Agent stdout log: logs/agent-stdout.log
+  Agent main log:   logs/lightai-agent.log
+[start-all] Health check: Server (http://127.0.0.1:18080/healthz)...
+[start-all]   Server: OK
+[start-all] Health check: Agent (http://127.0.0.1:19091/healthz)...
+[start-all]   Agent: OK
+[start-all] Done.

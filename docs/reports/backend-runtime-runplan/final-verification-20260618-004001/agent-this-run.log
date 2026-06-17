@@ -1,0 +1,99 @@
+2026-06-18 00:40:35.973 INFO  loaded persistent node identity node_id=node-70894186-093c-403d-87d1-08f17a690521 agent_id=agent-01 created_at=2026-06-17T00:38:24+08:00
+2026-06-18 00:40:35.973 INFO  agent token loaded from shared file file=runtime/security/agent-token.env agent_token=<redacted>
+2026-06-18 00:40:35.973 INFO  agent starting version=lightai-go 0.1.0 (commit: unknown, built: unknown, go: go1.26.4, linux/amd64) agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 server_url=http://127.0.0.1:18080 hostname=KZ-LAPTOP advertise_address=KZ-LAPTOP metrics_listen=0.0.0.0:19091 identity_file=runtime/agent-identity.json gpu_profile=production log_level=info
+2026-06-18 00:40:36.098 INFO  auto-detect probe found GPUs vendor=nvidia device_count=1 duration_ms=124
+2026-06-18 00:40:36.131 INFO  auto-detect probe: vendor not available vendor=metax reason=not_available:  duration_ms=33
+2026-06-18 00:40:36.131 INFO  auto-detect GPU collectors complete mode=auto enabled_vendors=[nvidia]
+2026-06-18 00:40:36.131 INFO  collectors configured system_enabled=true external_gpu_enabled=true mock_enabled=false gpu_profile=production heartbeat_interval_s=2 collect_interval_s=5 report_interval_s=5 request_timeout_s=5
+2026-06-18 00:40:36.131 INFO  agent started agent_id=agent-01
+2026-06-18 00:40:36.131 INFO  metrics server listening addr=0.0.0.0:19091
+2026-06-18 00:40:36.132 INFO  register success agent_id=agent-01 server_returned_node_id=node-70894186-093c-403d-87d1-08f17a690521 cached_node_id=node-70894186-093c-403d-87d1-08f17a690521 latency_ms=0
+2026-06-18 00:40:36.132 INFO  node_id reused agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521
+2026-06-18 00:40:36.132 INFO  agent registered with server node_id=node-70894186-093c-403d-87d1-08f17a690521 agent_id=agent-01
+2026-06-18 00:40:36.246 INFO  gpu_metrics.summary operation=gpu_metrics stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 gpu_count=1 success_count=1 failure_count=0 last_collect_ms=112 max_collect_ms=112 avg_collect_ms=112
+2026-06-18 00:40:38.134 INFO  heartbeat first success agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 latency_ms=1
+2026-06-18 00:40:38.134 INFO  heartbeat.summary operation=heartbeat stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 success_count=1 failure_count=0 last_latency_ms=1 max_latency_ms=1 avg_latency_ms=1
+2026-06-18 00:40:38.134 INFO  task_poll.summary operation=task_poll stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 no_task_count=1 claimed_count=0 failure_count=0 total_count=1
+2026-06-18 00:40:46.134 INFO  agent_task.execution.started operation_id=b0611c21-79a9-4f97-8313-c7376531891c task_id=ed2e5a4f-d623-4b00-bbd2-b902a380b4b8 task_type=model_instance_start agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641
+2026-06-18 00:40:46.134 INFO  start task: begin task_id=ed2e5a4f-d623-4b00-bbd2-b902a380b4b8 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641
+2026-06-18 00:40:46.134 INFO  start task: creating docker client task_id=ed2e5a4f-d623-4b00-bbd2-b902a380b4b8
+2026-06-18 00:40:46.135 INFO  docker.create.started operation_id=b0611c21-79a9-4f97-8313-c7376531891c instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5 image=vllm/vllm-openai:latest container_name=lightai-2fbb7c63-f59 env_keys=CUDA_VISIBLE_DEVICES VLLM_USE_MODELSCOPE
+2026-06-18 00:40:46.170 INFO  docker.create.completed operation_id=b0611c21-79a9-4f97-8313-c7376531891c container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b container_name=lightai-2fbb7c63-f59 deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5 duration_ms=35
+2026-06-18 00:40:46.170 INFO  docker.start.started operation_id=b0611c21-79a9-4f97-8313-c7376531891c container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b container_name=lightai-2fbb7c63-f59 deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5
+2026-06-18 00:40:46.537 INFO  docker.start.completed operation_id=b0611c21-79a9-4f97-8313-c7376531891c container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5 duration_ms=367
+2026-06-18 00:40:46.538 INFO  health_check.started operation_id=b0611c21-79a9-4f97-8313-c7376531891c instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b container_name=lightai-2fbb7c63-f59 endpoint_url=http://127.0.0.1:8080/v1/models expected_status=200 timeout_sec=120
+2026-06-18 00:40:46.538 INFO  wait_started operation_id=b0611c21-79a9-4f97-8313-c7376531891c operation=health_check stage=wait_started wait_condition=endpoint_ready timeout_sec=120 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b endpoint_url=http://127.0.0.1:8080/v1/models
+2026-06-18 00:41:39.673 INFO  reconcile: managed containers found total=1 exited=0 running=1
+2026-06-18 00:41:43.498 INFO  heartbeat.summary operation=heartbeat stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 success_count=31 failure_count=0 last_latency_ms=0 max_latency_ms=1 avg_latency_ms=0
+2026-06-18 00:41:43.498 INFO  task_poll.summary operation=task_poll stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 no_task_count=31 claimed_count=0 failure_count=0 total_count=31
+2026-06-18 00:41:44.575 INFO  gpu_metrics.summary operation=gpu_metrics stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 gpu_count=1 success_count=13 failure_count=0 last_collect_ms=77 max_collect_ms=1072 avg_collect_ms=226
+2026-06-18 00:42:43.045 INFO  reconcile: managed containers found total=1 exited=0 running=1
+2026-06-18 00:42:46.875 INFO  heartbeat.summary operation=heartbeat stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 success_count=30 failure_count=0 last_latency_ms=0 max_latency_ms=1 avg_latency_ms=0
+2026-06-18 00:42:46.875 INFO  task_poll.summary operation=task_poll stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 no_task_count=30 claimed_count=0 failure_count=0 total_count=30
+2026-06-18 00:42:52.947 INFO  gpu_metrics.summary operation=gpu_metrics stage=summary node_id=node-70894186-093c-403d-87d1-08f17a690521 gpu_count=1 success_count=13 failure_count=0 last_collect_ms=72 max_collect_ms=94 avg_collect_ms=74
+2026-06-18 00:42:53.352 ERROR operation_timeout operation_id=b0611c21-79a9-4f97-8313-c7376531891c operation=health_check stage=timeout wait_condition=endpoint_ready timeout_ms=120000 elapsed_ms=120073 last_state=attempt=61 last_http_status=0 last_error=Get "http://127.0.0.1:8080/v1/models": dial tcp 127.0.0.1:8080: connect: connection refused instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b endpoint_url=http://127.0.0.1:8080/v1/models
+2026-06-18 00:42:53.352 ERROR health_check.timeout operation_id=b0611c21-79a9-4f97-8313-c7376531891c instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b endpoint_url=http://127.0.0.1:8080/v1/models attempts=61 elapsed_ms=120072 last_http_status=0 last_body= last_error=Get "http://127.0.0.1:8080/v1/models": dial tcp 127.0.0.1:8080: connect: connection refused
+2026-06-18 00:42:53.352 ERROR health_check.failed operation_id=b0611c21-79a9-4f97-8313-c7376531891c container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 error=health check timeout after 61 attempts: last status=0, error=Get "http://127.0.0.1:8080/v1/models": dial tcp 127.0.0.1:8080: connect: connection refused duration_ms=120476
+2026-06-18 00:42:53.352 ERROR docker.container.exited operation_id=b0611c21-79a9-4f97-8313-c7376531891c container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b container_name=lightai-2fbb7c63-f59 state=running exit_code=0 error_message= started_at=2026-06-17T16:40:46.177630175Z finished_at=0001-01-01T00:00:00Z
+2026-06-18 00:42:53.353 ERROR docker.container.stderr operation_id=b0611c21-79a9-4f97-8313-c7376531891c container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b stderr_tail=(EngineCore pid=112) 2026-06-17 16:42:04,743 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(EngineCore pid=112) 2026-06-17 16:42:04,753 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(EngineCore pid=112) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/51 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   8%|▊         | 4/51 [00:00<00:01, 39.46it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  18%|█▊        | 9/51 [00:00<00:01, 41.92it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  27%|██▋       | 14/51 [00:00<00:00, 44.08it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  37%|███▋      | 19/51 [00:00<00:00, 44.56it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  47%|████▋     | 24/51 [00:00<00:00, 44.62it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  57%|█████▋    | 29/51 [00:00<00:00, 43.34it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  67%|██████▋   | 34/51 [00:00<00:00, 43.34it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  76%|███████▋  | 39/51 [00:00<00:00, 43.27it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  86%|████████▋ | 44/51 [00:01<00:00, 43.98it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  96%|█████████▌| 49/51 [00:01<00:00, 42.56it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 51/51 [00:01<00:00, 42.75it/s]
+(EngineCore pid=112) Capturing CUDA graphs (decode, FULL):   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  14%|█▍        | 5/35 [00:00<00:00, 49.18it/s]Capturing CUDA graphs (decode, FULL):  31%|███▏      | 11/35 [00:00<00:00, 49.89it/s]Capturing CUDA graphs (decode, FULL):  49%|████▊     | 17/35 [00:00<00:00, 50.28it/s]Capturing CUDA graphs (decode, FULL):  66%|██████▌   | 23/35 [00:00<00:00, 43.68it/s]Capturing CUDA graphs (decode, FULL):  80%|████████  | 28/35 [00:00<00:00, 45.44it/s]Capturing CUDA graphs (decode, FULL):  97%|█████████▋| 34/35 [00:00<00:00, 48.69it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 35/35 [00:00<00:00, 48.03it/s]
+(APIServer pid=1) INFO:     Started server process [1]
+(APIServer pid=1) INFO:     Waiting for application startup.
+(APIServer pid=1) INFO:     Application startup complete.
+2026-06-18 00:42:53.353 INFO  docker.container.stdout_tail operation_id=b0611c21-79a9-4f97-8313-c7376531891c container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b stdout_tail=(EngineCore pid=112) INFO 06-17 16:42:04 [gpu_model_runner.py:6042] Estimated CUDA graph memory: 0.31 GiB total
+(EngineCore pid=112) INFO 06-17 16:42:04 [gpu_worker.py:440] Available KV cache memory: 18.21 GiB
+(EngineCore pid=112) INFO 06-17 16:42:04 [gpu_worker.py:455] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.8500 is equivalent to --gpu-memory-utilization=0.8370 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.8630. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(EngineCore pid=112) INFO 06-17 16:42:04 [kv_cache_utils.py:1708] GPU KV cache size: 170,480 tokens
+(EngineCore pid=112) INFO 06-17 16:42:04 [kv_cache_utils.py:1709] Maximum concurrency for 4,096 tokens per request: 41.62x
+(EngineCore pid=112) INFO 06-17 16:42:07 [gpu_model_runner.py:6133] Graph capturing finished in 3 secs, took 0.25 GiB
+(EngineCore pid=112) INFO 06-17 16:42:07 [gpu_worker.py:599] CUDA graph pool memory: 0.25 GiB (actual), 0.31 GiB (estimated), difference: 0.06 GiB (25.2%).
+(EngineCore pid=112) INFO 06-17 16:42:07 [core.py:299] init engine (profile, create kv cache, warmup model) took 57.31 s (compilation: 12.28 s)
+(EngineCore pid=112) INFO 06-17 16:42:07 [vllm.py:840] Asynchronous scheduling is enabled.
+(EngineCore pid=112) INFO 06-17 16:42:07 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+(APIServer pid=1) INFO 06-17 16:42:07 [api_server.py:598] Supported tasks: ['generate']
+(APIServer pid=1) WARNING 06-17 16:42:08 [model.py:1437] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 0.6, 'top_k': 20, 'top_p': 0.95}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=1) INFO 06-17 16:42:08 [hf.py:314] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+(APIServer pid=1) INFO 06-17 16:42:08 [api_server.py:602] Starting vLLM server on http://0.0.0.0:8000
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:37] Available routes are:
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /openapi.json, Methods: HEAD, GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /docs, Methods: HEAD, GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: HEAD, GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /redoc, Methods: HEAD, GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /tokenize, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /detokenize, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /load, Methods: GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /version, Methods: GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /health, Methods: GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /metrics, Methods: GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/models, Methods: GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /ping, Methods: GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /ping, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /invocations, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/chat/completions, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/chat/completions/batch, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/responses, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/responses/{response_id}, Methods: GET
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/responses/{response_id}/cancel, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/completions, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/messages, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/messages/count_tokens, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /inference/v1/generate, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /scale_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /is_scaling_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /generative_scoring, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/chat/completions/render, Methods: POST
+(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /v1/completions/render, Methods: POST
+2026-06-18 00:42:53.353 ERROR task execution: failed task_id=ed2e5a4f-d623-4b00-bbd2-b902a380b4b8 operation_id=b0611c21-79a9-4f97-8313-c7376531891c instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 error=health check failed: health check timeout after 61 attempts: last status=0, error=Get "http://127.0.0.1:8080/v1/models": dial tcp 127.0.0.1:8080: connect: connection refused duration_ms=120478
+2026-06-18 00:42:53.353 INFO  task_result.report_completed task_id=ed2e5a4f-d623-4b00-bbd2-b902a380b4b8 operation_id=b0611c21-79a9-4f97-8313-c7376531891c instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 status= success=false duration_ms=0
+2026-06-18 00:42:58.874 INFO  agent_task.execution.started operation_id=a7b39683-883e-4dd2-aea4-471a0dabe011 task_id=a7b39683-883e-4dd2-aea4-471a0dabe011 task_type=model_instance_logs agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641
+2026-06-18 00:42:58.874 INFO  processing logs task task_id=a7b39683-883e-4dd2-aea4-471a0dabe011 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 container_id= tail=200
+2026-06-18 00:42:58.876 INFO  logs task completed task_id=a7b39683-883e-4dd2-aea4-471a0dabe011 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 stdout_bytes=12787 stderr_bytes=2960
+2026-06-18 00:42:58.876 INFO  task execution: completed task_id=a7b39683-883e-4dd2-aea4-471a0dabe011 operation_id=a7b39683-883e-4dd2-aea4-471a0dabe011 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 container_id= runtime_state=ok duration_ms=1
+2026-06-18 00:42:58.876 INFO  task_result.report_completed task_id=a7b39683-883e-4dd2-aea4-471a0dabe011 operation_id=a7b39683-883e-4dd2-aea4-471a0dabe011 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 status=ok success=true duration_ms=0
+2026-06-18 00:43:00.874 INFO  agent_task.execution.started operation_id=e3891623-cb35-4a30-8103-8c485f47cf81 task_id=e3891623-cb35-4a30-8103-8c485f47cf81 task_type=model_instance_stop agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641
+2026-06-18 00:43:00.874 INFO  docker.stop.started instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 container_name=lightai-2fbb7c63-f59
+2026-06-18 00:43:02.714 INFO  docker.stop.completed container_id=c590a4dda73da57910843563913d7e11e34a80259cddfed571d9601e70ab419b instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 stop_duration_ms=1839 total_duration_ms=1840
+2026-06-18 00:43:02.714 INFO  task execution: completed task_id=e3891623-cb35-4a30-8103-8c485f47cf81 operation_id=e3891623-cb35-4a30-8103-8c485f47cf81 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 container_id= runtime_state=stopped duration_ms=1840
+2026-06-18 00:43:02.715 INFO  task_result.report_completed task_id=e3891623-cb35-4a30-8103-8c485f47cf81 operation_id=e3891623-cb35-4a30-8103-8c485f47cf81 instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 status=stopped success=true duration_ms=0

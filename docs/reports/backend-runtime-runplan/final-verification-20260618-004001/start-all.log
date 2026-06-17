@@ -1,0 +1,12 @@
+[start-all] Mode: source
+[start-all] Observability: skipped
+[start-all] Starting server...
+WARNING: LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD not set.
+A random password will be generated and printed ONCE to stderr.
+Set it via: export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='...'
+=== LightAI Go Server ===
+Config: /home/kzeng/projects/ai-platform-study/lightai-go/configs/server.release.yaml
+Root:   /home/kzeng/projects/ai-platform-study/lightai-go
+
+Server failed to start. Check logs/server-stdout.log
+[start-all] ERROR: Server failed to start
