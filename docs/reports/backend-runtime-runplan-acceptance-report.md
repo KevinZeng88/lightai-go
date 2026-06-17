@@ -325,4 +325,27 @@ All 14 stages visible in E2E output with `duration_ms`:
 The Docker lifecycle chain is fully observable with correlated IDs, duration tracking, and state transitions. Gap: health check port mismatch prevents `/v1/models` verification (code bug, not logging gap). Preflight sub-steps are logged as a single `stage=preflight` rather than individual stages — acceptable for current phase.
 
 See `final-verification-.../log-observability-review.md` for detailed stage-by-stage coverage matrix.
+
+## BRR-E2E-001 Fix Verification (2026-06-18)
+
+**Root cause:** `preflightResult.service` struct introduced in commit `2fb2836` (BRR-RV-001 refactoring) lacked `json:"host_port"` tag. Go's `json.Unmarshal` used field name `HostPort` for matching; `host_port` in the deployment JSON didn't match, leaving port as 0. Health check then fell through to hardcoded 8080 default.
+
+**Fix:** Added `json:"host_port"` to `preflightResult.service.HostPort` and `json:"node_id"`/`json:"gpu_ids"` to `preflightResult.placement` fields. Added `deployment.start.agent_spec.ports` log with host_port/container_port. Added `health_check_port`/`health_check_path` to Agent health_check.started log.
+
+**Verification Dir:** `final-verification-20260618-005313/`
+
+### Results
+
+| Check | Result |
+|-------|--------|
+| E2E exit code | 0 (PASS) |
+| `/v1/models` | PASS (200 after 85.6s vLLM startup) |
+| Health check URL | `http://127.0.0.1:8004/v1/models` ✅ (was 8080) |
+| Agent log port | `health_check_port=8004` ✅ |
+| Server log port | `host_port=8004 container_port=8000` ✅ |
+| Docker logs API | PASS |
+| Stop deployment | PASS (3810ms) |
+| Cleanup | PASS — no residual containers |
+| All 14 stages timed | PASS with `duration_ms` |
+| Basic verification | go test/go vet/npm build/npm test: ALL PASS |
 ```

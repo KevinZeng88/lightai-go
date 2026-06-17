@@ -266,7 +266,9 @@ type preflightResult struct {
 		NodeID string
 		GPUIds []string
 	}
-	service           struct{ HostPort int }
+	service struct {
+		HostPort int `json:"host_port"`
+	}
 	params            map[string]interface{}
 	envOverrides      map[string]string
 	rtVendor          string
@@ -562,6 +564,16 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		},
 	}
 	agentPayload, _ := json.Marshal(agentSpec)
+
+	// BRR-E2E-001: Log host/container port mapping so health check URL can be traced.
+	log.Info("deployment.start.agent_spec.ports",
+		"deployment_id", deployID,
+		"instance_id", instanceID,
+		"host_port", pf.service.HostPort,
+		"container_port", pf.bvPort,
+		"health_check_path", pf.plan.HealthCheck.Path,
+		"health_check_port_source", "host_port",
+	)
 
 	runPlanID := uuid.NewString()
 	taskID := uuid.NewString()

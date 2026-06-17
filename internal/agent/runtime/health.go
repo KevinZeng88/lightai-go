@@ -77,6 +77,8 @@ func CheckEndpointReady(ctx context.Context, cfg *HealthCheckConfig, instanceID,
 		"container_id", containerID,
 		"container_name", containerName,
 		"endpoint_url", url,
+		"health_check_port", cfg.Port,
+		"health_check_path", cfg.Path,
 		"expected_status", cfg.ExpectedStatus,
 		"timeout_sec", cfg.TimeoutSeconds,
 	)
