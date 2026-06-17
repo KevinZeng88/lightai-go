@@ -20,7 +20,6 @@ type RouterConfig struct {
 	RBACHandler     *rbac.Handler
 	AgentHandler    *AgentHandler
 	ResourceHandler *ResourceHandler
-	ModelHandler    *ModelHandler
 	ServerMetrics   *srvmetrics.ServerMetrics
 }
 
@@ -77,8 +76,6 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("POST /api/v1/agent/register", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleRegister)))
 	mux.Handle("POST /api/v1/agent/heartbeat", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleHeartbeat)))
 	mux.Handle("POST /api/v1/agent/resources/report", agentMW(http.HandlerFunc(cfg.ResourceHandler.HandleResourceReport)))
-		th := NewTaskHandler(cfg.DB)
-		mux.Handle("POST /api/v1/agent/tasks/{id}/result", agentMW(http.HandlerFunc(th.HandleTaskResult)))
 
 	// Resource routes (node:read permission).
 	resourceChain := chain(
@@ -89,8 +86,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("GET /api/v1/nodes/{id}", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNode)))
 	// PATCH /api/v1/nodes/{id}/tenant — platform admin only.
 	mux.Handle("PATCH /api/v1/nodes/{id}/tenant", platformChain(cfg, cfg.AgentHandler.HandlePatchNodeTenant))
-	// P1-004: Host system snapshot endpoint.
 	mux.Handle("GET /api/v1/nodes/{id}/system", resourceChain(http.HandlerFunc(cfg.ResourceHandler.HandleGetNodeSystem)))
+	mux.Handle("GET /api/v1/nodes/{id}/docker-images", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeDockerImages)))
 
 	// GPU routes (gpu:read permission).
 	gpuChain := chain(
@@ -100,88 +97,74 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("GET /api/v1/gpus", gpuChain(http.HandlerFunc(cfg.ResourceHandler.HandleListGPUs)))
 	mux.Handle("GET /api/v1/gpus/{id}", gpuChain(http.HandlerFunc(cfg.ResourceHandler.HandleGetGPU)))
 
-	// Phase 1: Model runtime serving APIs.
-	mh := cfg.ModelHandler
+	// Phase 4: Model runtime serving APIs.
+	// Backend / BackendVersion (read-only).
+	backendReadChain := chain(
+		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
+		auth.RequirePermission("backend:read"),
+	)
+	mux.Handle("GET /api/v1/inference-backends", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListBackends)))
+	mux.Handle("GET /api/v1/inference-backends/{id}", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetBackend)))
+	mux.Handle("GET /api/v1/inference-backends/{id}/versions", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListBackendVersions)))
 
-	// ModelArtifact CRUD (model:read / model:write).
-	modelReadChain := chain(
-		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
-		auth.RequirePermission("model:read"),
-	)
-	modelWriteChain := chain(
-		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
-		auth.CSRFMiddleware(cfg.SessionCfg),
-		auth.RequirePermission("model:write"),
-	)
-	mux.Handle("GET /api/v1/model-artifacts", modelReadChain(http.HandlerFunc(mh.HandleListModelArtifacts)))
-	mux.Handle("POST /api/v1/model-artifacts", modelWriteChain(http.HandlerFunc(mh.HandleCreateModelArtifact)))
-	mux.Handle("GET /api/v1/model-artifacts/{id}", modelReadChain(http.HandlerFunc(mh.HandleGetModelArtifact)))
-	mux.Handle("PATCH /api/v1/model-artifacts/{id}", modelWriteChain(http.HandlerFunc(mh.HandlePatchModelArtifact)))
-	mux.Handle("DELETE /api/v1/model-artifacts/{id}", modelWriteChain(http.HandlerFunc(mh.HandleDeleteModelArtifact)))
+	// BackendRuntimeTemplate (read-only from config files).
+	mux.Handle("GET /api/v1/backend-runtime-templates", backendReadChain(http.HandlerFunc(HandleListRuntimeTemplates)))
+	mux.Handle("GET /api/v1/backend-runtime-templates/{name}", backendReadChain(http.HandlerFunc(HandleGetRuntimeTemplate)))
 
-	// RuntimeEnvironment CRUD (runtime:read / runtime:write).
-	runtimeReadChain := chain(
+	// BackendRuntime CRUD (backend_runtime:read / backend_runtime:write).
+	brReadChain := chain(
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
-		auth.RequirePermission("runtime:read"),
+		auth.RequirePermission("backend_runtime:read"),
 	)
-	runtimeWriteChain := chain(
+	brWriteChain := chain(
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
 		auth.CSRFMiddleware(cfg.SessionCfg),
-		auth.RequirePermission("runtime:write"),
+		auth.RequirePermission("backend_runtime:write"),
 	)
-	mux.Handle("GET /api/v1/runtime-environments", runtimeReadChain(http.HandlerFunc(mh.HandleListRuntimeEnvironments)))
-	mux.Handle("POST /api/v1/runtime-environments", runtimeWriteChain(http.HandlerFunc(mh.HandleCreateRuntimeEnvironment)))
-	mux.Handle("GET /api/v1/runtime-environments/{id}", runtimeReadChain(http.HandlerFunc(mh.HandleGetRuntimeEnvironment)))
-	mux.Handle("PATCH /api/v1/runtime-environments/{id}", runtimeWriteChain(http.HandlerFunc(mh.HandlePatchRuntimeEnvironment)))
-	mux.Handle("DELETE /api/v1/runtime-environments/{id}", runtimeWriteChain(http.HandlerFunc(mh.HandleDeleteRuntimeEnvironment)))
+	mux.Handle("GET /api/v1/backend-runtimes", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListBackendRuntimes)))
+	mux.Handle("POST /api/v1/backend-runtimes/from-template", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCreateBackendRuntimeFromTemplate)))
+	mux.Handle("GET /api/v1/backend-runtimes/{id}", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetBackendRuntime)))
+	mux.Handle("PATCH /api/v1/backend-runtimes/{id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchBackendRuntime)))
+	mux.Handle("DELETE /api/v1/backend-runtimes/{id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteBackendRuntime)))
 
-	// RunTemplate CRUD (runtime:read / runtime:write).
-	mux.Handle("GET /api/v1/run-templates", runtimeReadChain(http.HandlerFunc(mh.HandleListRunTemplates)))
-	mux.Handle("POST /api/v1/run-templates", runtimeWriteChain(http.HandlerFunc(mh.HandleCreateRunTemplate)))
-	mux.Handle("GET /api/v1/run-templates/{id}", runtimeReadChain(http.HandlerFunc(mh.HandleGetRunTemplate)))
-	mux.Handle("PATCH /api/v1/run-templates/{id}", runtimeWriteChain(http.HandlerFunc(mh.HandlePatchRunTemplate)))
-	mux.Handle("DELETE /api/v1/run-templates/{id}", runtimeWriteChain(http.HandlerFunc(mh.HandleDeleteRunTemplate)))
-	mux.Handle("POST /api/v1/run-templates/{id}/render-preview", runtimeReadChain(http.HandlerFunc(mh.HandleRenderPreview)))
+	// ModelArtifact CRUD.
+	maReadChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.RequirePermission("model_artifact:read"))
+	maWriteChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.CSRFMiddleware(cfg.SessionCfg), auth.RequirePermission("model_artifact:write"))
+	mux.Handle("GET /api/v1/model-artifacts", maReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListArtifacts)))
+	mux.Handle("POST /api/v1/model-artifacts", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCreateArtifact)))
+	mux.Handle("GET /api/v1/model-artifacts/{id}", maReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetArtifact)))
+	mux.Handle("PATCH /api/v1/model-artifacts/{id}", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchArtifact)))
+	mux.Handle("DELETE /api/v1/model-artifacts/{id}", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteArtifact)))
 
-	// ModelDeployment CRUD (deployment:read / deployment:write).
-	deployReadChain := chain(
+	// ModelDeployment CRUD + lifecycle.
+	mdReadChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.RequirePermission("model_deployment:read"))
+	mdWriteChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.CSRFMiddleware(cfg.SessionCfg), auth.RequirePermission("model_deployment:write"))
+	mdStartChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.CSRFMiddleware(cfg.SessionCfg), auth.RequirePermission("model_deployment:start"))
+	mdStopChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.CSRFMiddleware(cfg.SessionCfg), auth.RequirePermission("model_deployment:stop"))
+	mux.Handle("GET /api/v1/model-deployments", mdReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListDeployments)))
+	mux.Handle("POST /api/v1/model-deployments", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCreateDeployment)))
+	mux.Handle("GET /api/v1/model-deployments/{id}", mdReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetDeployment)))
+	mux.Handle("PATCH /api/v1/model-deployments/{id}", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchDeployment)))
+	mux.Handle("DELETE /api/v1/model-deployments/{id}", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteDeployment)))
+	mux.Handle("POST /api/v1/model-deployments/{id}/dry-run", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeploymentDryRun)))
+	mux.Handle("POST /api/v1/model-deployments/{id}/start", mdStartChain(http.HandlerFunc(cfg.AgentHandler.HandleStartDeployment)))
+	mux.Handle("POST /api/v1/model-deployments/{id}/stop", mdStopChain(http.HandlerFunc(cfg.AgentHandler.HandleStopDeployment)))
+
+	// ModelInstance read.
+	miReadChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.RequirePermission("model_instance:read"))
+	mux.Handle("GET /api/v1/model-instances", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListInstances)))
+	mux.Handle("GET /api/v1/model-instances/{id}", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetInstance)))
+
+	// Agent task result.
+	mux.Handle("POST /api/v1/agent/tasks/{id}/result", agentMW(http.HandlerFunc(cfg.AgentHandler.HandleTaskResult)))
+
+	// Audit logs (platform_admin or audit:read).
+	auditChain := chain(
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
-		auth.RequirePermission("deployment:read"),
+		auth.RequirePermission("audit:read"),
 	)
-	deployWriteChain := chain(
-		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
-		auth.CSRFMiddleware(cfg.SessionCfg),
-		auth.RequirePermission("deployment:write"),
-	)
-	mux.Handle("GET /api/v1/model-deployments", deployReadChain(http.HandlerFunc(mh.HandleListModelDeployments)))
-	mux.Handle("POST /api/v1/model-deployments", deployWriteChain(http.HandlerFunc(mh.HandleCreateModelDeployment)))
-	mux.Handle("GET /api/v1/model-deployments/{id}", deployReadChain(http.HandlerFunc(mh.HandleGetModelDeployment)))
-	mux.Handle("PATCH /api/v1/model-deployments/{id}", deployWriteChain(http.HandlerFunc(mh.HandlePatchModelDeployment)))
-	mux.Handle("DELETE /api/v1/model-deployments/{id}", deployWriteChain(http.HandlerFunc(mh.HandleDeleteModelDeployment)))
-	mux.Handle("POST /api/v1/model-deployments/{id}/dry-run", deployWriteChain(http.HandlerFunc(mh.HandleDryRun)))
-		mux.Handle("POST /api/v1/model-deployments/{id}/start", deployWriteChain(http.HandlerFunc(mh.HandleStartDeployment)))
-		mux.Handle("POST /api/v1/model-deployments/{id}/stop", deployWriteChain(http.HandlerFunc(mh.HandleStopDeployment)))
-
-	// ModelInstance read-only (instance:read).
-	instanceReadChain := chain(
-		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
-		auth.RequirePermission("instance:read"),
-	)
-	mux.Handle("GET /api/v1/model-instances", instanceReadChain(http.HandlerFunc(mh.HandleListModelInstances)))
-	mux.Handle("GET /api/v1/model-instances/{id}", instanceReadChain(http.HandlerFunc(mh.HandleGetModelInstance)))
-		mux.Handle("GET /api/v1/model-instances/{id}/logs", instanceReadChain(http.HandlerFunc(mh.HandleGetInstanceLogs)))
-
-	// GpuLease read-only (gpu:read).
-	mux.Handle("GET /api/v1/gpu-leases", gpuChain(http.HandlerFunc(mh.HandleListGpuLeases)))
-	mux.Handle("GET /api/v1/gpu-leases/{id}", gpuChain(http.HandlerFunc(mh.HandleGetGpuLease)))
-
-		// Audit logs (platform_admin or audit:read).
-		auditChain := chain(
-			auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
-			auth.RequirePermission("audit:read"),
-		)
-		ah := NewAuditHandler(cfg.DB)
-		mux.Handle("GET /api/v1/audit-logs", auditChain(http.HandlerFunc(ah.HandleListAuditLogs)))
+	ah := NewAuditHandler(cfg.DB)
+	mux.Handle("GET /api/v1/audit-logs", auditChain(http.HandlerFunc(ah.HandleListAuditLogs)))
 }
 
 func sessionChain(cfg RouterConfig, h http.HandlerFunc) http.Handler {

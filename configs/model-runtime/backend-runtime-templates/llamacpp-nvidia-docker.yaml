@@ -1,0 +1,22 @@
+apiVersion: lightai/v1
+kind: BackendRuntimeTemplate
+metadata:
+  name: llamacpp-nvidia-docker
+spec:
+  displayName: "llamacpp b4817 nvidia Docker"
+  backendName: "llamacpp"
+  backendVersion: "b4817"
+  vendor: "nvidia"
+  runtimeType: docker
+  imageName: "ghcr.io/ggerganov/llama.cpp:server-b4817"
+  imagePullPolicy: if_not_present
+  entrypoint: []
+  argsOverride: []
+  defaultEnv: {}
+  docker:
+    privileged: false
+    ipcMode: ""
+    shmSize: ""
+    devices: []
+  modelMount: {}
+  healthCheckOverride: {}

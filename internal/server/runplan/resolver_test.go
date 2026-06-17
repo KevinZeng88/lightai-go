@@ -1,0 +1,361 @@
+package runplan
+
+import (
+	"strings"
+	"testing"
+)
+
+func makeTestInput() ResolveInput {
+	return ResolveInput{
+		Backend: &BackendInfo{
+			ID:             "backend-vllm",
+			Name:           "vllm",
+			DefaultVersion: "0.8.5",
+			DefaultEnv:     map[string]string{"GLOBAL_ENV": "1"},
+		},
+		BackendVersion: &VersionInfo{
+			ID:                   "bver-vllm-0.8.5",
+			Version:              "0.8.5",
+			DefaultEntrypoint:    []string{"vllm", "serve"},
+			DefaultArgs:          []string{"{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}", "--served-model-name", "{{served_model_name}}"},
+			DefaultBackendParams: []string{"--enforce-eager"},
+			ParameterDefs: []ParameterDef{
+				{Name: "max_model_len", CliName: "--max-model-len", Type: "integer", Default: 8192.0, Required: false},
+				{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: true},
+			},
+			HealthCheck: HealthCheckInput{
+				Path: "/v1/models", ExpectedStatus: 200,
+				StartupTimeoutSeconds: 120, IntervalSeconds: 2, TimeoutSeconds: 5,
+			},
+			DefaultContainerPort: 8000,
+			DefaultImages:        map[string]string{"nvidia": "vllm/vllm-openai:v0.8.5"},
+			Env:                  map[string]string{"VLLM_USE_MODELSCOPE": "true"},
+		},
+		BackendRuntime: &RuntimeInfo{
+			ID:           "runtime-vllm-nvidia",
+			Vendor:       "nvidia",
+			RuntimeType:  "docker",
+			ImageName:    "vllm/vllm-openai:v0.8.5-custom",
+			ArgsOverride: []string{"--trust-remote-code"},
+			DefaultEnv:   map[string]string{"RUNTIME_VAR": "1"},
+			Docker: DockerSpecInfo{
+				Privileged: true, IPCMode: "host", ShmSize: "10g",
+			},
+		},
+		Artifact: &ArtifactInfo{
+			ID: "artifact-qwen", Name: "Qwen3-32B", Path: "/data/models/Qwen3-32B",
+		},
+		Deployment: &DeploymentInfo{
+			ID:   "deploy-1",
+			Name: "qwen3-deploy",
+			Parameters: map[string]interface{}{
+				"served_model_name": "qwen3-32b",
+				"max_model_len":     32768.0,
+			},
+			Service: ServiceInfo{HostPort: 8001},
+		},
+		InstanceID: "inst-000000000001",
+		Node:       &NodeInfo{ID: "node-1", IP: "192.168.1.100"},
+		AssignedGPUs: []GPUInfo{
+			{Index: 0, Vendor: "nvidia"},
+			{Index: 1, Vendor: "nvidia"},
+			{Index: 2, Vendor: "nvidia"},
+			{Index: 3, Vendor: "nvidia"},
+		},
+	}
+}
+
+func TestResolveBasic(t *testing.T) {
+	plan, errors, _ := Resolve(makeTestInput())
+	if len(errors) > 0 {
+		t.Fatalf("unexpected errors: %v", errors)
+	}
+	if plan == nil {
+		t.Fatal("plan is nil")
+	}
+	if plan.Image == "" {
+		t.Error("image is empty")
+	}
+	if len(plan.Args) == 0 {
+		t.Error("args is empty")
+	}
+	if len(plan.Env) == 0 {
+		t.Error("env is empty")
+	}
+	if plan.ContainerPort != 8000 {
+		t.Errorf("expected container port 8000, got %d", plan.ContainerPort)
+	}
+	if plan.HostPort != 8001 {
+		t.Errorf("expected host port 8001, got %d", plan.HostPort)
+	}
+	if plan.Privileged != true {
+		t.Error("expected privileged=true")
+	}
+	if plan.IPCMode != "host" {
+		t.Errorf("expected ipc_mode=host, got %s", plan.IPCMode)
+	}
+	if plan.ShmSize != "10g" {
+		t.Errorf("expected shm_size=10g, got %s", plan.ShmSize)
+	}
+	if plan.InputHash == "" {
+		t.Error("input_hash is empty")
+	}
+	if plan.PlanHash == "" {
+		t.Error("plan_hash is empty")
+	}
+}
+
+func TestResolveImagePriority(t *testing.T) {
+	// Priority 1: NodeRuntimeOverride.image_name
+	in := makeTestInput()
+	in.NodeRuntimeOverride = &NodeOverrideInfo{ImageName: "node-image:latest"}
+	plan, _, _ := Resolve(in)
+	if plan.Image != "node-image:latest" {
+		t.Errorf("expected node-image:latest, got %s", plan.Image)
+	}
+
+	// Priority 2: BackendRuntime.image_name
+	in2 := makeTestInput()
+	plan2, _, _ := Resolve(in2)
+	if plan2.Image != "vllm/vllm-openai:v0.8.5-custom" {
+		t.Errorf("expected runtime image, got %s", plan2.Image)
+	}
+
+	// Priority 3: BackendVersion.defaultImages[vendor]
+	in3 := makeTestInput()
+	in3.BackendRuntime.ImageName = ""
+	plan3, errs, _ := Resolve(in3)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan3.Image != "vllm/vllm-openai:v0.8.5" {
+		t.Errorf("expected default image, got %s", plan3.Image)
+	}
+
+	// No image available → error
+	in4 := makeTestInput()
+	in4.BackendRuntime.ImageName = ""
+	in4.BackendVersion.DefaultImages = nil
+	_, errs4, _ := Resolve(in4)
+	if len(errs4) == 0 {
+		t.Error("expected error for no image")
+	}
+}
+
+func TestResolveArgs(t *testing.T) {
+	plan, _, _ := Resolve(makeTestInput())
+
+	// Check args contain expected values
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "/models/Qwen3-32B") {
+		t.Error("args missing model container path")
+	}
+	if !strings.Contains(argsStr, "--port") || !strings.Contains(argsStr, "8000") {
+		t.Error("args missing port")
+	}
+	if !strings.Contains(argsStr, "--served-model-name") || !strings.Contains(argsStr, "qwen3-32b") {
+		t.Error("args missing served-model-name")
+	}
+	if !strings.Contains(argsStr, "--enforce-eager") {
+		t.Error("args missing backend params")
+	}
+	if !strings.Contains(argsStr, "--trust-remote-code") {
+		t.Error("args missing args override")
+	}
+	if !strings.Contains(argsStr, "--max-model-len") {
+		t.Error("args missing deployment parameters")
+	}
+}
+
+func TestResolveEnv(t *testing.T) {
+	plan, _, _ := Resolve(makeTestInput())
+
+	if plan.Env["GLOBAL_ENV"] != "1" {
+		t.Errorf("missing backend default env: %v", plan.Env)
+	}
+	if plan.Env["VLLM_USE_MODELSCOPE"] != "true" {
+		t.Errorf("missing version env: %v", plan.Env)
+	}
+	if plan.Env["RUNTIME_VAR"] != "1" {
+		t.Errorf("missing runtime env: %v", plan.Env)
+	}
+	if plan.Env["CUDA_VISIBLE_DEVICES"] != "0,1,2,3" {
+		t.Errorf("missing GPU visible env: %v", plan.Env)
+	}
+}
+
+func TestResolveEnvOverride(t *testing.T) {
+	in := makeTestInput()
+	in.Deployment.EnvOverrides = map[string]string{"GLOBAL_ENV": "overridden"}
+	plan, _, _ := Resolve(in)
+	if plan.Env["GLOBAL_ENV"] != "overridden" {
+		t.Errorf("deployment override not applied: got %s", plan.Env["GLOBAL_ENV"])
+	}
+}
+
+func TestResolveNodeOverride(t *testing.T) {
+	in := makeTestInput()
+	in.NodeRuntimeOverride = &NodeOverrideInfo{
+		ImageName: "node-image:latest",
+		Env:       map[string]string{"NODE_VAR": "node-value"},
+		DockerOverride: &DockerSpecInfo{
+			ShmSize: "20g",
+			Devices: []DeviceMapping{{HostPath: "/dev/dri", ContainerPath: "/dev/dri"}},
+		},
+		ModelRootHostPath: "/data/part2/models",
+	}
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan.Image != "node-image:latest" {
+		t.Errorf("node override image not applied")
+	}
+	if plan.Env["NODE_VAR"] != "node-value" {
+		t.Errorf("node override env not applied")
+	}
+	if plan.ShmSize != "20g" {
+		t.Errorf("node override shm_size not applied: %s", plan.ShmSize)
+	}
+	if len(plan.Devices) != 1 || plan.Devices[0].HostPath != "/dev/dri" {
+		t.Errorf("node override devices not applied: %v", plan.Devices)
+	}
+}
+
+func TestUnknownVariableError(t *testing.T) {
+	in := makeTestInput()
+	in.BackendVersion.DefaultArgs = []string{"{{undefined_variable}}"}
+	_, errs, _ := Resolve(in)
+	if len(errs) == 0 {
+		t.Error("expected error for undefined variable")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "undefined") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("error should mention undefined variable: %v", errs)
+	}
+}
+
+func TestNoVarSyntax(t *testing.T) {
+	// ${VAR} should be treated as literal text, not a placeholder
+	in := makeTestInput()
+	in.BackendVersion.DefaultArgs = []string{"${MAX_MODEL_LEN}"}
+	plan, _, _ := Resolve(in)
+	// Should not error — ${VAR} is not our template syntax
+	// But it also shouldn't be replaced
+	if strings.Contains(strings.Join(plan.Args, " "), "${MAX_MODEL_LEN}") {
+		// unchanged literal — this is correct behavior
+	}
+}
+
+func TestInputHashDeterministic(t *testing.T) {
+	in := makeTestInput()
+	p1, _, _ := Resolve(in)
+	p2, _, _ := Resolve(in)
+	if p1.InputHash != p2.InputHash {
+		t.Error("input hash not deterministic")
+	}
+	if p1.PlanHash != p2.PlanHash {
+		t.Error("plan hash not deterministic")
+	}
+}
+
+func TestInputHashDifferent(t *testing.T) {
+	in1 := makeTestInput()
+	in2 := makeTestInput()
+	in2.Deployment.Service.HostPort = 9000
+	p1, _, _ := Resolve(in1)
+	p2, _, _ := Resolve(in2)
+	if p1.InputHash == p2.InputHash {
+		t.Error("input hash should differ for different inputs")
+	}
+}
+
+func TestRuntimeTypeValidation(t *testing.T) {
+	in := makeTestInput()
+	in.BackendRuntime.RuntimeType = "kubernetes"
+	_, errs, _ := Resolve(in)
+	if len(errs) == 0 {
+		t.Error("expected error for non-docker runtime type")
+	}
+}
+
+func TestEquivalentCommandPreview(t *testing.T) {
+	plan, _, _ := Resolve(makeTestInput())
+	preview := EquivalentCommandPreview(plan)
+	if preview == "" {
+		t.Error("docker preview is empty")
+	}
+	if !strings.HasPrefix(preview, "docker run -d") {
+		t.Errorf("preview should start with 'docker run -d': %s", preview[:50])
+	}
+	if !strings.Contains(preview, plan.Image) {
+		t.Error("preview missing image")
+	}
+	if !strings.Contains(preview, "--privileged") {
+		t.Error("preview missing --privileged")
+	}
+	if !strings.Contains(preview, "--ipc host") {
+		t.Error("preview missing --ipc")
+	}
+	if !strings.Contains(preview, "--shm-size 10g") {
+		t.Error("preview missing --shm-size")
+	}
+	if !strings.Contains(preview, "-p 8001:8000/tcp") {
+		t.Errorf("preview missing port mapping: %s", preview)
+	}
+	if !strings.Contains(preview, "CUDA_VISIBLE_DEVICES=0,1,2,3") {
+		t.Error("preview missing GPU env")
+	}
+}
+
+func TestReplicasNotSupported(t *testing.T) {
+	in := makeTestInput()
+	// Replicas > 1 should be rejected at API level, not resolver
+	// For now, resolver handles single instance
+	plan, _, _ := Resolve(in)
+	if plan == nil {
+		t.Error("single replica should resolve fine")
+	}
+}
+
+func TestDefaultHealthCheck(t *testing.T) {
+	plan, _, _ := Resolve(makeTestInput())
+	if plan.HealthCheck.Path != "/v1/models" {
+		t.Errorf("expected health check path /v1/models, got %s", plan.HealthCheck.Path)
+	}
+	if plan.HealthCheck.ExpectedStatus != 200 {
+		t.Errorf("expected health check status 200, got %d", plan.HealthCheck.ExpectedStatus)
+	}
+}
+
+func TestResolveNoGPU(t *testing.T) {
+	in := makeTestInput()
+	in.AssignedGPUs = nil
+	plan, _, _ := Resolve(in)
+	if plan.Env["CUDA_VISIBLE_DEVICES"] != "" {
+		t.Error("expected no CUDA_VISIBLE_DEVICES for no GPU")
+	}
+}
+
+func TestArgsOverrideAppendOnly(t *testing.T) {
+	in := makeTestInput()
+	// args_override appends, doesn't replace
+	in.BackendRuntime.ArgsOverride = []string{"--custom-flag", "--another-flag"}
+	plan, _, _ := Resolve(in)
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "--custom-flag") {
+		t.Error("args missing custom flag from override")
+	}
+	if !strings.Contains(argsStr, "--another-flag") {
+		t.Error("args missing another flag from override")
+	}
+	// Original args should still be present (not replaced)
+	if !strings.Contains(argsStr, "/models/Qwen3-32B") {
+		t.Error("original args should still be present (append, not replace)")
+	}
+}

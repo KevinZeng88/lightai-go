@@ -98,4 +98,3 @@ func (h *AuditHandler) HandleListAuditLogs(w http.ResponseWriter, r *http.Reques
 		"total":   len(entries),
 	})
 }
-

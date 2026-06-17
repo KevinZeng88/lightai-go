@@ -49,25 +49,45 @@ func PermissionCatalog() []PermissionDef {
 		{Code: "monitoring:read", Scope: "tenant", Description: "View monitoring"},
 		{Code: "log:read", Scope: "tenant", Description: "View logs"},
 
-		// Runtime permissions.
-		{Code: "runtime:read", Scope: "tenant", Description: "View runtime environments"},
-		{Code: "runtime:write", Scope: "tenant", Description: "Manage runtime environments"},
+		// Backend permissions (read-only for v1).
+		{Code: "backend:read", Scope: "tenant", Description: "View inference backends and versions"},
+		{Code: "backend:write", Scope: "tenant", Description: "Manage inference backends (platform admin only in v1)"},
 
-		// Model permissions.
-		{Code: "model:read", Scope: "tenant", Description: "View models"},
-		{Code: "model:write", Scope: "tenant", Description: "Manage models"},
+		// BackendRuntime permissions.
+		{Code: "backend_runtime:read", Scope: "tenant", Description: "View backend runtimes and templates"},
+		{Code: "backend_runtime:write", Scope: "tenant", Description: "Manage backend runtimes"},
 
-		// Deployment permissions.
-		{Code: "deployment:read", Scope: "tenant", Description: "View model deployments"},
-		{Code: "deployment:write", Scope: "tenant", Description: "Manage model deployments"},
+		// NodeRuntimeOverride permissions.
+		{Code: "node_runtime_override:read", Scope: "tenant", Description: "View node runtime overrides"},
+		{Code: "node_runtime_override:write", Scope: "tenant", Description: "Manage node runtime overrides"},
 
-		// Instance permissions.
-		{Code: "instance:read", Scope: "tenant", Description: "View instances"},
-		{Code: "instance:write", Scope: "tenant", Description: "Manage instances"},
-		{Code: "instance:operate", Scope: "tenant", Description: "Start/stop/restart instances"},
+		// ModelArtifact permissions.
+		{Code: "model_artifact:read", Scope: "tenant", Description: "View model artifacts"},
+		{Code: "model_artifact:write", Scope: "tenant", Description: "Manage model artifacts"},
 
-		// Task permissions.
-		{Code: "task:read", Scope: "tenant", Description: "View tasks"},
+		// ModelDeployment permissions.
+		{Code: "model_deployment:read", Scope: "tenant", Description: "View model deployments"},
+		{Code: "model_deployment:write", Scope: "tenant", Description: "Manage model deployments"},
+		{Code: "model_deployment:start", Scope: "tenant", Description: "Start model deployments"},
+		{Code: "model_deployment:stop", Scope: "tenant", Description: "Stop model deployments"},
+
+		// ModelInstance permissions.
+		{Code: "model_instance:read", Scope: "tenant", Description: "View model instances"},
+		{Code: "model_instance:logs", Scope: "tenant", Description: "View model instance logs"},
+
+		// RunPlan permissions.
+		{Code: "run_plan:read", Scope: "tenant", Description: "View resolved run plans"},
+		{Code: "run_plan:preview", Scope: "tenant", Description: "Preview run plans (dry run)"},
+
+		// GPU lease permissions.
+		{Code: "gpu_lease:read", Scope: "tenant", Description: "View GPU leases"},
+		{Code: "gpu_lease:write", Scope: "tenant", Description: "Manage GPU leases"},
+
+		// Agent task permissions.
+		{Code: "agent_task:read", Scope: "tenant", Description: "View agent tasks"},
+		{Code: "agent_task:write", Scope: "tenant", Description: "Manage agent tasks"},
+
+		// Task and audit permissions.
 		{Code: "audit:read", Scope: "tenant", Description: "View audit logs"},
 
 		// Membership permissions.
@@ -98,12 +118,18 @@ func BuiltinRoles() []BuiltinRoleDef {
 			Permissions: []string{
 				// Viewer permissions.
 				"dashboard:read", "node:read", "gpu:read", "monitoring:read", "log:read",
-				"runtime:read", "model:read", "instance:read", "deployment:read", "task:read",
+				"backend:read", "backend_runtime:read", "node_runtime_override:read",
+				"model_artifact:read", "model_deployment:read", "model_instance:read",
+				"run_plan:read", "run_plan:preview", "gpu_lease:read", "agent_task:read",
 				// Operator permissions.
-				"runtime:write", "model:write", "instance:write", "instance:operate", "deployment:write",
+				"backend_runtime:write", "node_runtime_override:write",
+				"model_artifact:write", "model_deployment:write",
+				"model_deployment:start", "model_deployment:stop",
+				"model_instance:logs",
 				// Admin permissions.
 				"membership:read", "membership:write", "role:read", "role:write",
 				"node:transfer", "tenant:settings:write", "audit:read",
+				"gpu_lease:write", "agent_task:write", "backend:write",
 			},
 		},
 		{
@@ -113,9 +139,14 @@ func BuiltinRoles() []BuiltinRoleDef {
 			Permissions: []string{
 				// Viewer permissions.
 				"dashboard:read", "node:read", "gpu:read", "monitoring:read", "log:read",
-				"runtime:read", "model:read", "instance:read", "deployment:read", "task:read",
+				"backend:read", "backend_runtime:read", "node_runtime_override:read",
+				"model_artifact:read", "model_deployment:read", "model_instance:read",
+				"run_plan:read", "run_plan:preview", "gpu_lease:read", "agent_task:read",
 				// Operator permissions.
-				"runtime:write", "model:write", "instance:write", "instance:operate", "deployment:write",
+				"backend_runtime:write", "node_runtime_override:write",
+				"model_artifact:write", "model_deployment:write",
+				"model_deployment:start", "model_deployment:stop",
+				"model_instance:logs",
 			},
 		},
 		{
@@ -124,7 +155,9 @@ func BuiltinRoles() []BuiltinRoleDef {
 			Description: "Read-only tenant access",
 			Permissions: []string{
 				"dashboard:read", "node:read", "gpu:read", "monitoring:read", "log:read",
-				"runtime:read", "model:read", "instance:read", "deployment:read", "task:read",
+				"backend:read", "backend_runtime:read", "node_runtime_override:read",
+				"model_artifact:read", "model_deployment:read", "model_instance:read",
+				"run_plan:read", "run_plan:preview", "gpu_lease:read", "agent_task:read",
 			},
 		},
 	}

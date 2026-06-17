@@ -1,0 +1,22 @@
+# NVIDIA GPU vendor profile
+# Used as base Docker configuration for all NVIDIA deployments.
+# Differences from MetaX: no extra devices, no privileged, standard shm.
+apiVersion: lightai/v1
+kind: VendorProfile
+metadata:
+  name: nvidia
+spec:
+  vendor: nvidia
+  gpu_mode: docker_gpus
+  docker:
+    gpus: all
+    devices: []
+    privileged: false
+    ipc_mode: ""
+    uts_mode: ""
+    shm_size: ""
+    security_opts: []
+    group_add: []
+    ulimits: []
+    env:
+      gpu_visible_env_key: CUDA_VISIBLE_DEVICES

@@ -1,0 +1,220 @@
+package runplan
+
+import (
+	"strings"
+	"testing"
+)
+
+// TestLlamaCppNvidiaRunPlan validates that the LightAI RunPlan Resolver
+// generates a structurally correct plan matching the real Docker command
+// from docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md.
+func TestLlamaCppNvidiaRunPlan(t *testing.T) {
+	in := ResolveInput{
+		Backend: &BackendInfo{
+			ID:             "backend-llamacpp",
+			Name:           "llamacpp",
+			DefaultVersion: "b4817",
+			DefaultEnv:     map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			ID:                   "bver-llamacpp-b4817",
+			Version:              "b4817",
+			DefaultEntrypoint:    []string{},
+			DefaultArgs:          []string{"llama-server", "-m", "{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}", "-ngl", "{{assigned_gpu_count}}"},
+			DefaultBackendParams: []string{},
+			ParameterDefs: []ParameterDef{
+				{Name: "ctx_size", CliName: "--ctx-size", Type: "integer", Default: 4096.0, Required: false},
+				{Name: "n_gpu_layers", CliName: "--n-gpu-layers", Type: "integer", Default: 999.0, Required: false},
+				{Name: "served_model_name", CliName: "--model", Type: "string", Required: true},
+			},
+			HealthCheck: HealthCheckInput{
+				Path: "/health", ExpectedStatus: 200,
+				StartupTimeoutSeconds: 60, IntervalSeconds: 2, TimeoutSeconds: 5,
+			},
+			DefaultContainerPort: 8080,
+			DefaultImages:        map[string]string{"nvidia": "ghcr.io/ggml-org/llama.cpp:server-cuda13"},
+			Env:                  map[string]string{},
+		},
+		BackendRuntime: &RuntimeInfo{
+			ID:           "runtime-llamacpp-nvidia",
+			Vendor:       "nvidia",
+			RuntimeType:  "docker",
+			ImageName:    "", // leave empty to test defaultImages fallback
+			ArgsOverride: []string{"--ctx-size", "4096", "--n-gpu-layers", "999"},
+			DefaultEnv:   map[string]string{},
+			Docker:       DockerSpecInfo{},
+		},
+		Artifact: &ArtifactInfo{
+			ID:   "artifact-qwen35-9b-q4",
+			Name: "Qwen3.5-9B-Q4_K_M.gguf",
+			Path: "/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf",
+		},
+		Deployment: &DeploymentInfo{
+			ID:   "deploy-llamacpp",
+			Name: "qwen35-9b-llamacpp",
+			Parameters: map[string]interface{}{
+				"served_model_name": "Qwen3.5-9B-Q4_K_M.gguf",
+				"ctx_size":          4096.0,
+				"n_gpu_layers":      999.0,
+			},
+			Service: ServiceInfo{HostPort: 8002},
+		},
+		InstanceID: "inst-llamacpp-001",
+		Node:       &NodeInfo{ID: "KZ-LAPTOP", IP: "127.0.0.1"},
+		AssignedGPUs: []GPUInfo{
+			{Index: 0, Vendor: "nvidia"},
+		},
+	}
+
+	plan, errs, warns := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan == nil {
+		t.Fatal("plan is nil")
+	}
+
+	// --- Structural validation against real Docker command ---
+
+	// 1. Image: should resolve from BackendVersion.defaultImages[nvidia]
+	if plan.Image != "ghcr.io/ggml-org/llama.cpp:server-cuda13" {
+		t.Errorf("image: got %q, want ghcr.io/ggml-org/llama.cpp:server-cuda13", plan.Image)
+	}
+
+	// 2. Container port = 8080
+	if plan.ContainerPort != 8080 {
+		t.Errorf("container_port: got %d, want 8080", plan.ContainerPort)
+	}
+
+	// 3. Host port = 8002
+	if plan.HostPort != 8002 {
+		t.Errorf("host_port: got %d, want 8002", plan.HostPort)
+	}
+
+	// 4. Args must include key llama-server arguments
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "llama-server") {
+		t.Error("args missing llama-server command")
+	}
+	// model container path (after mount translation) should be /models/Qwen3.5-9B-Q4_K_M.gguf
+	if !strings.Contains(argsStr, "/models/Qwen3.5-9B-Q4_K_M.gguf") {
+		t.Errorf("args missing model container path: %s", argsStr)
+	}
+	if !strings.Contains(argsStr, "--host") || !strings.Contains(argsStr, "0.0.0.0") {
+		t.Error("args missing --host 0.0.0.0")
+	}
+	if !strings.Contains(argsStr, "--port") || !strings.Contains(argsStr, "8080") {
+		t.Error("args missing --port 8080")
+	}
+	if !strings.Contains(argsStr, "--ctx-size") {
+		t.Error("args missing --ctx-size")
+	}
+	if !strings.Contains(argsStr, "--n-gpu-layers") {
+		t.Error("args missing --n-gpu-layers")
+	}
+
+	// 5. GPU configuration
+	if len(plan.GPUDeviceIDs) != 1 || plan.GPUDeviceIDs[0] != "0" {
+		t.Errorf("GPUDeviceIDs: got %v, want [0]", plan.GPUDeviceIDs)
+	}
+	if plan.Env["CUDA_VISIBLE_DEVICES"] != "0" {
+		t.Errorf("CUDA_VISIBLE_DEVICES: got %q, want \"0\"", plan.Env["CUDA_VISIBLE_DEVICES"])
+	}
+
+	// 6. Mount: host model path → container /models/...
+	if len(plan.Mounts) == 0 {
+		t.Fatal("no mounts generated")
+	}
+	mount := plan.Mounts[0]
+	if mount.ContainerPath != "/models" {
+		t.Errorf("mount container_path: got %q, want /models", mount.ContainerPath)
+	}
+	if mount.HostPath != "/home/kzeng/models/Qwen3.5-9B-Q4" {
+		t.Errorf("mount host_path: got %q, want /home/kzeng/models/Qwen3.5-9B-Q4", mount.HostPath)
+	}
+	if !mount.Readonly {
+		t.Error("model mount should be readonly")
+	}
+
+	// 7. Health check
+	if plan.HealthCheck.Path != "/health" {
+		t.Errorf("health_check path: got %q, want /health", plan.HealthCheck.Path)
+	}
+	if plan.HealthCheck.ExpectedStatus != 200 {
+		t.Errorf("health_check expected_status: got %d, want 200", plan.HealthCheck.ExpectedStatus)
+	}
+
+	// 8. Docker preview should be non-empty
+	preview := EquivalentCommandPreview(plan)
+	if preview == "" {
+		t.Error("docker_preview is empty")
+	}
+	if !strings.Contains(preview, "ghcr.io/ggml-org/llama.cpp:server-cuda13") {
+		t.Error("docker_preview missing image")
+	}
+	if !strings.Contains(preview, "-p 8002:8080") {
+		t.Error("docker_preview missing port mapping")
+	}
+	if !strings.Contains(preview, "CUDA_VISIBLE_DEVICES=0") {
+		t.Error("docker_preview missing GPU env")
+	}
+
+	// 9. Input hash and plan hash should be non-empty
+	if plan.InputHash == "" {
+		t.Error("input_hash is empty")
+	}
+	if plan.PlanHash == "" {
+		t.Error("plan_hash is empty")
+	}
+
+	// 10. No warnings for valid input (except maybe template resolution notes)
+	if len(warns) > 0 {
+		t.Logf("warnings (non-fatal): %v", warns)
+	}
+
+	t.Logf("docker_preview:\n  %s", preview)
+	t.Logf("input_hash: %s", plan.InputHash)
+	t.Logf("plan_hash: %s", plan.PlanHash)
+}
+
+// TestLlamaCppRunPlanNoGPU verifies CPU-only mode.
+func TestLlamaCppRunPlanNoGPU(t *testing.T) {
+	in := ResolveInput{
+		Backend: &BackendInfo{
+			Name:       "llamacpp",
+			DefaultEnv: map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			Version:              "b4817",
+			DefaultEntrypoint:    []string{},
+			DefaultArgs:          []string{"llama-server", "-m", "{{model_container_path}}"},
+			DefaultBackendParams: []string{},
+			ParameterDefs:        []ParameterDef{},
+			HealthCheck:          HealthCheckInput{Path: "/health", ExpectedStatus: 200},
+			DefaultContainerPort: 8080,
+			DefaultImages:        map[string]string{"nvidia": "ghcr.io/ggml-org/llama.cpp:server-cuda13"},
+		},
+		BackendRuntime: &RuntimeInfo{
+			Vendor:      "cpu",
+			RuntimeType: "docker",
+			ImageName:   "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+		},
+		Artifact: &ArtifactInfo{
+			Path: "/tmp/test.gguf",
+		},
+		Deployment: &DeploymentInfo{
+			Parameters: map[string]interface{}{},
+		},
+		InstanceID:   "inst-test",
+		Node:         &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
+		AssignedGPUs: nil, // no GPUs
+	}
+
+	plan, _, _ := Resolve(in)
+	if plan == nil {
+		t.Fatal("plan is nil")
+	}
+	if plan.Env["CUDA_VISIBLE_DEVICES"] != "" {
+		t.Error("should not set CUDA_VISIBLE_DEVICES with no GPUs")
+	}
+}

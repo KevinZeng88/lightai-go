@@ -1,0 +1,53 @@
+apiVersion: lightai/v1
+kind: BackendVersion
+metadata:
+  backend: vllm
+  version: "0.10.0"
+spec:
+  isDefault: false
+  defaultEntrypoint:
+    - vllm
+    - serve
+  defaultArgs:
+    - "{{model_container_path}}"
+    - "--host"
+    - "0.0.0.0"
+    - "--port"
+    - "{{container_port}}"
+    - "--served-model-name"
+    - "{{served_model_name}}"
+    - "--max-model-len"
+    - "{{max_model_len}}"
+    - "--gpu-memory-utilization"
+    - "{{gpu_memory_utilization}}"
+  defaultBackendParams: []
+  parameters:
+    - name: max_model_len
+      cli_name: "--max-model-len"
+      type: integer
+      default: 8192
+      required: false
+    - name: gpu_memory_utilization
+      cli_name: "--gpu-memory-utilization"
+      type: number
+      default: 0.9
+      required: false
+    - name: served_model_name
+      cli_name: "--served-model-name"
+      type: string
+      required: true
+    - name: tensor_parallel_size
+      cli_name: "--tensor-parallel-size"
+      type: integer
+      default: 1
+      required: false
+  env: {}
+  healthCheck:
+    path: /v1/models
+    expectedStatus: 200
+    startupTimeoutSeconds: 120
+    intervalSeconds: 2
+    timeoutSeconds: 5
+  defaultContainerPort: 8000
+  defaultImages:
+    nvidia: "vllm/vllm-openai:v0.10.0"

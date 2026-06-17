@@ -523,7 +523,7 @@ func (h *AuthHandler) HandleCSRFToken(w http.ResponseWriter, r *http.Request) {
 	// Use GET /api/v1/auth/me to obtain a fresh CSRF token if needed.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"message":       "CSRF token was provided at login. Use GET /me for a fresh token if lost.",
-		"csrf_valid":    "true",
+		"message":    "CSRF token was provided at login. Use GET /me for a fresh token if lost.",
+		"csrf_valid": "true",
 	})
 }

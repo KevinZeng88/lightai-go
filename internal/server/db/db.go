@@ -4,6 +4,9 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"time"
+
+	"lightai-go/internal/common/log"
 	"os"
 	"path/filepath"
 
@@ -41,6 +44,8 @@ func Open(dbPath string) (*DB, error) {
 
 // Migrate creates all required tables if they don't exist.
 func (db *DB) Migrate() error {
+	migrateStart := time.Now()
+	log.Info("db migrate: begin")
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
 		version INTEGER PRIMARY KEY,
 		applied_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -103,6 +108,19 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if currentVersion < 9 {
+		if err := db.migrateV9(); err != nil {
+			return fmt.Errorf("migrate v9: %w", err)
+		}
+	}
+
+	if currentVersion < 10 {
+		if err := db.migrateV10(); err != nil {
+			return fmt.Errorf("migrate v10: %w", err)
+		}
+	}
+
+	log.Info("db migrate: completed", "duration_ms", time.Since(migrateStart).Milliseconds())
 	return nil
 }
 
@@ -202,6 +220,8 @@ func (db *DB) migrateV3() error {
 			ulimits TEXT NOT NULL DEFAULT '{"enabled":false}',
 			restart_policy TEXT NOT NULL DEFAULT '{"enabled":false}',
 			gpu_visible_env_key TEXT NOT NULL DEFAULT 'CUDA_VISIBLE_DEVICES',
+			volumes TEXT NOT NULL DEFAULT '{"enabled":false}',
+			extra_args TEXT NOT NULL DEFAULT '[]',
 			created_at TEXT NOT NULL DEFAULT (datetime('now')),
 			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
@@ -220,6 +240,7 @@ func (db *DB) migrateV3() error {
 			volume_mappings TEXT NOT NULL DEFAULT '{"enabled":false}',
 			port_mappings TEXT NOT NULL DEFAULT '{"enabled":false}',
 			backend_flags TEXT NOT NULL DEFAULT '{"enabled":false}',
+			extra_args TEXT NOT NULL DEFAULT '[]',
 			description TEXT NOT NULL DEFAULT '',
 			tenant_id TEXT,
 			owner_id TEXT,
@@ -605,4 +626,349 @@ func (db *DB) migrateV8() error {
 		return err
 	}
 	return nil
+}
+
+func (db *DB) migrateV9() error {
+	// Add extra_args column to run_templates.
+	if _, err := db.Exec("ALTER TABLE run_templates ADD COLUMN extra_args TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		// Column may already exist — ignore.
+	}
+	// Add volumes column to runtime_environment_docker_specs.
+	if _, err := db.Exec("ALTER TABLE runtime_environment_docker_specs ADD COLUMN volumes TEXT NOT NULL DEFAULT '{\"enabled\":false}'"); err != nil {
+	}
+	// Add extra_args column to runtime_environment_docker_specs.
+	if _, err := db.Exec("ALTER TABLE runtime_environment_docker_specs ADD COLUMN extra_args TEXT NOT NULL DEFAULT '[]'"); err != nil {
+	}
+	if _, err := db.Exec("INSERT OR IGNORE INTO schema_version (version, description) VALUES (9, 'V9: extra_args on run_templates, volumes+extra_args on docker_specs')"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV10 replaces the old Phase 1 model runtime chain with the new Backend/Runtime/RunPlan design.
+func (db *DB) migrateV10() error {
+	// 1. Drop old Phase 1 tables.
+	db.Exec(`DROP TABLE IF EXISTS runtime_environment_docker_specs`)
+	db.Exec(`DROP TABLE IF EXISTS runtime_environments`)
+	db.Exec(`DROP TABLE IF EXISTS run_templates`)
+	db.Exec(`DROP TABLE IF EXISTS model_deployments`)
+	db.Exec(`DROP TABLE IF EXISTS model_instances`)
+	db.Exec(`DROP TABLE IF EXISTS gpu_leases`)
+	db.Exec(`DROP TABLE IF EXISTS agent_tasks`)
+	// model_artifacts is preserved and restructured below.
+
+	// 2. Clean up any stray model_artifacts_new from previous migration attempts.
+	db.Exec(`DROP TABLE IF EXISTS model_artifacts_new`)
+	db.Exec(`DROP TABLE IF EXISTS model_artifacts_old`)
+	// model_artifacts from V3 is preserved as-is (with source_type column).
+
+	// 3. Create inference_backends.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS inference_backends (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL UNIQUE,
+		display_name TEXT NOT NULL DEFAULT '',
+		description TEXT NOT NULL DEFAULT '',
+		protocol_json TEXT NOT NULL DEFAULT '{}',
+		default_version TEXT NOT NULL DEFAULT '',
+		parameter_format TEXT NOT NULL DEFAULT 'space',
+		common_parameters_json TEXT NOT NULL DEFAULT '[]',
+		default_env_json TEXT NOT NULL DEFAULT '{}',
+		is_builtin INTEGER NOT NULL DEFAULT 0,
+		is_enabled INTEGER NOT NULL DEFAULT 1,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return err
+	}
+
+	// 4. Create backend_versions.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS backend_versions (
+		id TEXT PRIMARY KEY,
+		backend_id TEXT NOT NULL REFERENCES inference_backends(id),
+		version TEXT NOT NULL,
+		display_name TEXT NOT NULL DEFAULT '',
+		is_default INTEGER NOT NULL DEFAULT 0,
+		default_entrypoint_json TEXT NOT NULL DEFAULT '[]',
+		default_args_json TEXT NOT NULL DEFAULT '[]',
+		default_backend_params_json TEXT NOT NULL DEFAULT '[]',
+		parameter_defs_json TEXT NOT NULL DEFAULT '[]',
+		health_check_json TEXT NOT NULL DEFAULT '{}',
+		default_container_port INTEGER NOT NULL DEFAULT 8000,
+		default_images_json TEXT NOT NULL DEFAULT '{}',
+		env_json TEXT NOT NULL DEFAULT '{}',
+		is_deprecated INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(backend_id, version)
+	)`); err != nil {
+		return err
+	}
+
+	// 5. Create backend_runtimes.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS backend_runtimes (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		display_name TEXT NOT NULL DEFAULT '',
+		backend_id TEXT NOT NULL REFERENCES inference_backends(id),
+		backend_version_id TEXT NOT NULL REFERENCES backend_versions(id),
+		source_template_name TEXT NOT NULL DEFAULT '',
+		vendor TEXT NOT NULL DEFAULT 'custom',
+		runtime_type TEXT NOT NULL DEFAULT 'docker',
+		image_name TEXT NOT NULL DEFAULT '',
+		image_pull_policy TEXT NOT NULL DEFAULT 'if_not_present',
+		entrypoint_override_json TEXT NOT NULL DEFAULT '[]',
+		args_override_json TEXT NOT NULL DEFAULT '[]',
+		default_env_json TEXT NOT NULL DEFAULT '{}',
+		docker_json TEXT NOT NULL DEFAULT '{}',
+		model_mount_json TEXT NOT NULL DEFAULT '{}',
+		health_check_override_json TEXT NOT NULL DEFAULT '{}',
+		is_builtin INTEGER NOT NULL DEFAULT 0,
+		is_editable INTEGER NOT NULL DEFAULT 1,
+		tenant_id TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(tenant_id, name)
+	)`); err != nil {
+		return err
+	}
+
+	// 6. Create node_runtime_overrides.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS node_runtime_overrides (
+		id TEXT PRIMARY KEY,
+		node_id TEXT NOT NULL REFERENCES nodes(id),
+		tenant_id TEXT NOT NULL DEFAULT '',
+		backend_runtime_id TEXT NOT NULL REFERENCES backend_runtimes(id),
+		image_name TEXT NOT NULL DEFAULT '',
+		image_pull_policy TEXT NOT NULL DEFAULT '',
+		env_json TEXT NOT NULL DEFAULT '{}',
+		docker_override_json TEXT NOT NULL DEFAULT '{}',
+		model_root_host_path TEXT NOT NULL DEFAULT '',
+		is_enabled INTEGER NOT NULL DEFAULT 1,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(node_id, backend_runtime_id)
+	)`); err != nil {
+		return err
+	}
+
+	// 7. Create model_deployments.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS model_deployments (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		display_name TEXT NOT NULL DEFAULT '',
+		description TEXT NOT NULL DEFAULT '',
+		model_artifact_id TEXT NOT NULL REFERENCES model_artifacts(id),
+		backend_runtime_id TEXT NOT NULL REFERENCES backend_runtimes(id),
+		replicas INTEGER NOT NULL DEFAULT 1,
+		placement_json TEXT NOT NULL DEFAULT '{}',
+		service_json TEXT NOT NULL DEFAULT '{}',
+		parameters_json TEXT NOT NULL DEFAULT '{}',
+		env_overrides_json TEXT NOT NULL DEFAULT '{}',
+		desired_state TEXT NOT NULL DEFAULT 'stopped',
+		status TEXT NOT NULL DEFAULT 'stopped',
+		tenant_id TEXT NOT NULL,
+		owner_id TEXT,
+		created_by TEXT NOT NULL DEFAULT 'system',
+		updated_by TEXT NOT NULL DEFAULT 'system',
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return err
+	}
+
+	// 8. Create model_instances.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS model_instances (
+		id TEXT PRIMARY KEY,
+		deployment_id TEXT NOT NULL REFERENCES model_deployments(id),
+		tenant_id TEXT NOT NULL DEFAULT '',
+		replica_index INTEGER NOT NULL DEFAULT 0,
+		node_id TEXT NOT NULL DEFAULT '',
+		agent_id TEXT NOT NULL DEFAULT '',
+		assigned_gpus_json TEXT NOT NULL DEFAULT '[]',
+		gpu_lease_ids_json TEXT NOT NULL DEFAULT '[]',
+		host_port INTEGER NOT NULL DEFAULT 0,
+		container_port INTEGER NOT NULL DEFAULT 0,
+		current_run_plan_id TEXT,
+		actual_state TEXT NOT NULL DEFAULT 'pending',
+		desired_state TEXT NOT NULL DEFAULT 'running',
+		container_id TEXT NOT NULL DEFAULT '',
+		endpoint_url TEXT NOT NULL DEFAULT '',
+		restart_count INTEGER NOT NULL DEFAULT 0,
+		last_error TEXT NOT NULL DEFAULT '',
+		started_at TEXT,
+		stopped_at TEXT,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return err
+	}
+
+	// 9. Create resolved_run_plans.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS resolved_run_plans (
+		id TEXT PRIMARY KEY,
+		deployment_id TEXT NOT NULL REFERENCES model_deployments(id),
+		instance_id TEXT,
+		tenant_id TEXT NOT NULL DEFAULT '',
+		backend_runtime_id TEXT NOT NULL REFERENCES backend_runtimes(id),
+		node_runtime_override_id TEXT REFERENCES node_runtime_overrides(id),
+		plan_json TEXT NOT NULL DEFAULT '{}',
+		docker_preview TEXT NOT NULL DEFAULT '',
+		input_hash TEXT NOT NULL DEFAULT '',
+		plan_hash TEXT NOT NULL DEFAULT '',
+		created_by TEXT NOT NULL DEFAULT 'system',
+		created_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return err
+	}
+
+	// 10. Create gpu_leases.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS gpu_leases (
+		id TEXT PRIMARY KEY,
+		gpu_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		deployment_id TEXT NOT NULL,
+		instance_id TEXT NOT NULL,
+		tenant_id TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'reserved',
+		expires_at TEXT,
+		reserved_at TEXT NOT NULL DEFAULT (datetime('now')),
+		activated_at TEXT,
+		released_at TEXT,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return err
+	}
+
+	// 11. Create agent_tasks.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS agent_tasks (
+		id TEXT PRIMARY KEY,
+		task_type TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'pending',
+		tenant_id TEXT NOT NULL DEFAULT '',
+		deployment_id TEXT NOT NULL,
+		instance_id TEXT,
+		node_id TEXT NOT NULL,
+		agent_id TEXT,
+		requested_by TEXT NOT NULL DEFAULT 'system',
+		payload TEXT NOT NULL DEFAULT '{}',
+		result TEXT,
+		timeout_seconds INTEGER NOT NULL DEFAULT 300,
+		retry_count INTEGER NOT NULL DEFAULT 0,
+		claimed_at TEXT,
+		started_at TEXT,
+		finished_at TEXT,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return err
+	}
+
+	// 12. Create indexes.
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_model_artifacts_tenant ON model_artifacts(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_backend_runtimes_tenant ON backend_runtimes(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_node_runtime_overrides_node ON node_runtime_overrides(node_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_model_deployments_tenant ON model_deployments(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_model_deployments_status ON model_deployments(status)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_model_instances_deployment ON model_instances(deployment_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_model_instances_state ON model_instances(actual_state)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_model_instances_tenant ON model_instances(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_resolved_run_plans_deployment ON resolved_run_plans(deployment_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_resolved_run_plans_instance ON resolved_run_plans(instance_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_gpu_leases_gpu ON gpu_leases(gpu_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_gpu_leases_status ON gpu_leases(status)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_gpu_leases_tenant ON gpu_leases(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_tasks_node ON agent_tasks(node_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_tasks_tenant ON agent_tasks(tenant_id)`)
+
+	// 13. Seed built-in inference backends.
+	db.seedBuiltInBackends()
+
+	// 14. Record schema version.
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (10, 'V10: Phase 3 backend/runplan/runtime new tables (replaces old Phase 1 model runtime)')`); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// seedBuiltInBackends inserts the three built-in inference backends.
+func (db *DB) seedBuiltInBackends() {
+	// vLLM
+	db.Exec(`INSERT OR IGNORE INTO inference_backends (id, name, display_name, description, protocol_json, default_version, parameter_format, common_parameters_json, default_env_json, is_builtin, is_enabled)
+		VALUES ('backend-vllm', 'vllm', 'vLLM', 'vLLM inference backend',
+		'{"type":"openai-compatible","modelsPath":"/v1/models","chatCompletionsPath":"/v1/chat/completions","completionsPath":"/v1/completions"}',
+		'0.8.5', 'space', '["--tensor-parallel-size","--max-model-len","--gpu-memory-utilization","--served-model-name"]', '{"VLLM_USE_MODELSCOPE":"false"}', 1, 1)`)
+
+	// SGLang
+	db.Exec(`INSERT OR IGNORE INTO inference_backends (id, name, display_name, description, protocol_json, default_version, parameter_format, common_parameters_json, default_env_json, is_builtin, is_enabled)
+		VALUES ('backend-sglang', 'sglang', 'SGLang', 'SGLang inference backend',
+		'{"type":"openai-compatible","modelsPath":"/v1/models","chatCompletionsPath":"/v1/chat/completions","completionsPath":"/v1/completions"}',
+		'0.4.6', 'space', '["--tp","--context-length","--mem-fraction-static","--served-model-name"]', '{}', 1, 1)`)
+
+	// llama.cpp
+	db.Exec(`INSERT OR IGNORE INTO inference_backends (id, name, display_name, description, protocol_json, default_version, parameter_format, common_parameters_json, default_env_json, is_builtin, is_enabled)
+		VALUES ('backend-llamacpp', 'llamacpp', 'llama.cpp', 'llama.cpp inference backend',
+		'{"type":"openai-compatible","modelsPath":"/v1/models","chatCompletionsPath":"/v1/chat/completions","completionsPath":"/v1/completions"}',
+		'b4817', 'space', '["-ngl","--ctx-size","--batch-size","--model"]', '{}', 1, 1)`)
+
+	// Seed backend versions for vLLM
+	db.Exec(`INSERT OR IGNORE INTO backend_versions (id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated)
+		VALUES ('bver-vllm-0.8.5', 'backend-vllm', '0.8.5', 'vLLM 0.8.5', 1,
+		'["vllm","serve"]',
+		'["{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","--served-model-name","{{served_model_name}}","--max-model-len","{{max_model_len}}","--gpu-memory-utilization","{{gpu_memory_utilization}}"]',
+		'["--enforce-eager"]',
+		'[{"name":"max_model_len","cli_name":"--max-model-len","type":"integer","default":8192,"required":false},{"name":"gpu_memory_utilization","cli_name":"--gpu-memory-utilization","type":"number","default":0.9,"required":false},{"name":"served_model_name","cli_name":"--served-model-name","type":"string","required":true},{"name":"tensor_parallel_size","cli_name":"--tensor-parallel-size","type":"integer","default":1,"required":false}]',
+		'{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}',
+		8000,
+		'{"nvidia":"vllm/vllm-openai:v0.8.5"}',
+		'{"VLLM_USE_MODELSCOPE":"true"}', 0)`)
+
+	db.Exec(`INSERT OR IGNORE INTO backend_versions (id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated)
+		VALUES ('bver-vllm-0.10.0', 'backend-vllm', '0.10.0', 'vLLM 0.10.0', 0,
+		'["vllm","serve"]',
+		'["{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","--served-model-name","{{served_model_name}}","--max-model-len","{{max_model_len}}","--gpu-memory-utilization","{{gpu_memory_utilization}}"]',
+		'[]',
+		'[{"name":"max_model_len","cli_name":"--max-model-len","type":"integer","default":8192,"required":false},{"name":"gpu_memory_utilization","cli_name":"--gpu-memory-utilization","type":"number","default":0.9,"required":false},{"name":"served_model_name","cli_name":"--served-model-name","type":"string","required":true},{"name":"tensor_parallel_size","cli_name":"--tensor-parallel-size","type":"integer","default":1,"required":false}]',
+		'{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}',
+		8000,
+		'{"nvidia":"vllm/vllm-openai:v0.10.0"}',
+		'{}', 0)`)
+
+	// Seed backend versions for SGLang
+	db.Exec(`INSERT OR IGNORE INTO backend_versions (id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated)
+		VALUES ('bver-sglang-0.4.6', 'backend-sglang', '0.4.6', 'SGLang 0.4.6', 1,
+		'["python","-m","sglang.launch_server"]',
+		'["{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","--served-model-name","{{served_model_name}}"]',
+		'[]',
+		'[{"name":"served_model_name","cli_name":"--served-model-name","type":"string","required":true},{"name":"tp","cli_name":"--tp","type":"integer","default":1,"required":false}]',
+		'{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}',
+		30000,
+		'{"nvidia":"lmsysorg/sglang:v0.4.6"}',
+		'{}', 0)`)
+
+	db.Exec(`INSERT OR IGNORE INTO backend_versions (id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated)
+		VALUES ('bver-sglang-0.5.0', 'backend-sglang', '0.5.0', 'SGLang 0.5.0', 0,
+		'["python","-m","sglang.launch_server"]',
+		'["{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","--served-model-name","{{served_model_name}}"]',
+		'[]',
+		'[{"name":"served_model_name","cli_name":"--served-model-name","type":"string","required":true},{"name":"tp","cli_name":"--tp","type":"integer","default":1,"required":false}]',
+		'{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}',
+		30000,
+		'{"nvidia":"lmsysorg/sglang:v0.5.0"}',
+		'{}', 0)`)
+
+	// Seed backend versions for llama.cpp
+	db.Exec(`INSERT OR IGNORE INTO backend_versions (id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated)
+		VALUES ('bver-llamacpp-b4817', 'backend-llamacpp', 'b4817', 'llama.cpp b4817', 1,
+		'[]',
+		'["-m","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","-ngl","99"]',
+		'[]',
+		'[{"name":"ngl","cli_name":"-ngl","type":"integer","default":99,"required":false},{"name":"ctx_size","cli_name":"--ctx-size","type":"integer","default":4096,"required":false}]',
+		'{"path":"/health","expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}',
+		8080,
+		'{"nvidia":"ghcr.io/ggerganov/llama.cpp:server-b4817"}',
+		'{}', 0)`)
 }
