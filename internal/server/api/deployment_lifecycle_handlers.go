@@ -113,7 +113,11 @@ func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	args = append(args, id)
-	h.DB.Exec(`UPDATE model_deployments SET `+joinSets(sets)+` WHERE id = ?`, args...)
+	if _, err := h.DB.Exec(`UPDATE model_deployments SET `+joinSets(sets)+` WHERE id = ?`, args...); err != nil {
+		log.Error("deployment.update.failed", "error", err, "id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	writeJSON(w, http.StatusOK, h.getDeploymentJSON(id))
 }
 
@@ -133,16 +137,58 @@ func (h *AgentHandler) HandleDeleteDeployment(w http.ResponseWriter, r *http.Req
 
 	now := time.Now().Format(time.RFC3339)
 
-	// Cleanup: stop instances, release leases, cancel tasks
-	h.DB.Exec(`UPDATE model_instances SET actual_state = 'stopped', desired_state = 'stopped', stopped_at = ? WHERE deployment_id = ? AND actual_state NOT IN ('stopped')`, now, id)
-	h.DB.Exec(`UPDATE gpu_leases SET status = 'released', released_at = ? WHERE deployment_id = ? AND status IN ('reserved','active')`, now, id)
-	h.DB.Exec(`UPDATE agent_tasks SET status = 'failed', finished_at = ? WHERE deployment_id = ? AND status NOT IN ('completed','failed')`, now, id)
+	// Begin transaction for atomic cleanup — no orphaned records on partial failure.
+	// AUD-005: Wrap all writes in a transaction so partial cleanup doesn't leave orphans.
+	tx, txErr := h.DB.Begin()
+	if txErr != nil {
+		log.Error("deployment.delete.tx_begin_failed", "error", txErr, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer tx.Rollback()
+
+	// Cleanup: stop instances
+	if _, err := tx.Exec(`UPDATE model_instances SET actual_state = 'stopped', desired_state = 'stopped', stopped_at = ? WHERE deployment_id = ? AND actual_state NOT IN ('stopped')`, now, id); err != nil {
+		log.Error("deployment.delete.instance_stop_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	// Release leases
+	if _, err := tx.Exec(`UPDATE gpu_leases SET status = 'released', released_at = ? WHERE deployment_id = ? AND status IN ('reserved','active')`, now, id); err != nil {
+		log.Error("deployment.delete.lease_release_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	// Cancel tasks
+	if _, err := tx.Exec(`UPDATE agent_tasks SET status = 'failed', finished_at = ? WHERE deployment_id = ? AND status NOT IN ('completed','failed')`, now, id); err != nil {
+		log.Error("deployment.delete.task_cancel_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	// Delete resolved_run_plans for this deployment
-	h.DB.Exec(`DELETE FROM resolved_run_plans WHERE deployment_id = ?`, id)
+	if _, err := tx.Exec(`DELETE FROM resolved_run_plans WHERE deployment_id = ?`, id); err != nil {
+		log.Error("deployment.delete.runplan_delete_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	// Delete instances
-	h.DB.Exec(`DELETE FROM model_instances WHERE deployment_id = ?`, id)
+	if _, err := tx.Exec(`DELETE FROM model_instances WHERE deployment_id = ?`, id); err != nil {
+		log.Error("deployment.delete.instance_delete_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	// Delete deployment
-	h.DB.Exec(`DELETE FROM model_deployments WHERE id = ?`, id)
+	if _, err := tx.Exec(`DELETE FROM model_deployments WHERE id = ?`, id); err != nil {
+		log.Error("deployment.delete.deployment_delete_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("deployment.delete.tx_commit_failed", "error", err, "deployment_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 
 	log.OperationCompleted(ctx, "deployment.delete", opStart, "deployment_id", id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "cleanup": "instances, leases, tasks, runplans cleaned up"})
@@ -207,10 +253,17 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Auto-select online node if placement doesn't specify one
+	// Auto-select online node if placement doesn't specify one.
+	// AUD-015: Scope node selection to the deployment's tenant for non-admin users.
+	// Platform admins can deploy to any online node.
 	if placement.NodeID == "" {
 		var autoNodeID string
-		h.DB.QueryRow(`SELECT id FROM nodes WHERE status = 'online' LIMIT 1`).Scan(&autoNodeID)
+		if isPlatformAdmin(r) {
+			h.DB.QueryRow(`SELECT id FROM nodes WHERE status = 'online' LIMIT 1`).Scan(&autoNodeID)
+		} else {
+			deployTid := strVal(deploy, "tenant_id", "")
+			h.DB.QueryRow(`SELECT id FROM nodes WHERE status = 'online' AND tenant_id = ? LIMIT 1`, deployTid).Scan(&autoNodeID)
+		}
 		if autoNodeID == "" {
 			writeError(w, http.StatusBadRequest, "no online node available for deployment")
 			return
@@ -352,37 +405,66 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	taskID := uuid.NewString()
 	tid := deploy["tenant_id"].(string)
 
+	// Begin transaction for atomic instance+runplan+lease+task creation.
+	// AUD-004: Wrap all writes in a transaction so partial failure doesn't leave orphans.
+	tx, txErr := h.DB.Begin()
+	if txErr != nil {
+		log.Error("deployment.start.tx_begin_failed", "error", txErr, "deployment_id", deployID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer tx.Rollback()
+
 	// Insert instance
-	h.DB.Exec(`INSERT INTO model_instances (id, deployment_id, tenant_id, replica_index, node_id, agent_id, assigned_gpus_json, host_port, container_port, current_run_plan_id, actual_state, desired_state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		instanceID, deployID, tid, 0, placement.NodeID, "", jsonString(placement.GPUIds), service.HostPort, bvPort, runPlanID, "pending", "running", now, now)
+	if _, err := tx.Exec(`INSERT INTO model_instances (id, deployment_id, tenant_id, replica_index, node_id, agent_id, assigned_gpus_json, host_port, container_port, current_run_plan_id, actual_state, desired_state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		instanceID, deployID, tid, 0, placement.NodeID, "", jsonString(placement.GPUIds), service.HostPort, bvPort, runPlanID, "pending", "running", now, now); err != nil {
+		log.Error("deployment.start.instance_insert_failed", "error", err, "instance_id", instanceID, "deployment_id", deployID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 
 	// Insert runplan
-	h.DB.Exec(`INSERT INTO resolved_run_plans (id, deployment_id, instance_id, tenant_id, backend_runtime_id, plan_json, docker_preview, input_hash, plan_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		runPlanID, deployID, instanceID, tid, runtimeID, string(planJSON), runplan.EquivalentCommandPreview(plan), plan.InputHash, plan.PlanHash, now)
-
-	// Update instance with runplan ref
-	h.DB.Exec(`UPDATE model_instances SET current_run_plan_id = ? WHERE id = ?`, runPlanID, instanceID)
+	if _, err := tx.Exec(`INSERT INTO resolved_run_plans (id, deployment_id, instance_id, tenant_id, backend_runtime_id, plan_json, docker_preview, input_hash, plan_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		runPlanID, deployID, instanceID, tid, runtimeID, string(planJSON), runplan.EquivalentCommandPreview(plan), plan.InputHash, plan.PlanHash, now); err != nil {
+		log.Error("deployment.start.runplan_insert_failed", "error", err, "run_plan_id", runPlanID, "instance_id", instanceID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 
 	// Create GPU leases
 	for _, gid := range placement.GPUIds {
 		leaseID := uuid.NewString()
-		_, lerr := h.DB.Exec(`INSERT INTO gpu_leases (id, gpu_id, node_id, deployment_id, instance_id, tenant_id, status, reserved_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-			leaseID, gid, placement.NodeID, deployID, instanceID, tid, "reserved", now, now, now)
-		if lerr != nil {
-			log.Error("gpu_lease.reserve.failed", "lease_id", leaseID, "gpu_id", gid, "instance_id", instanceID, "deployment_id", deployID, "node_id", placement.NodeID, "error", lerr)
-		} else {
-			log.StateTransition(r.Context(), "deployment.start", "gpu_lease", leaseID, "", "reserved",
-				"gpu_id", gid, "instance_id", instanceID, "deployment_id", deployID, "node_id", placement.NodeID)
-			log.Info("gpu_lease.reserved", "lease_id", leaseID, "gpu_id", gid, "instance_id", instanceID, "deployment_id", deployID)
+		if _, err := tx.Exec(`INSERT INTO gpu_leases (id, gpu_id, node_id, deployment_id, instance_id, tenant_id, status, reserved_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			leaseID, gid, placement.NodeID, deployID, instanceID, tid, "reserved", now, now, now); err != nil {
+			log.Error("deployment.start.lease_insert_failed", "error", err, "lease_id", leaseID, "gpu_id", gid, "instance_id", instanceID)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
 		}
+		log.StateTransition(r.Context(), "deployment.start", "gpu_lease", leaseID, "", "reserved",
+			"gpu_id", gid, "instance_id", instanceID, "deployment_id", deployID, "node_id", placement.NodeID)
+		log.Info("gpu_lease.reserved", "lease_id", leaseID, "gpu_id", gid, "instance_id", instanceID, "deployment_id", deployID)
 	}
 
 	// Create agent task
-	h.DB.Exec(`INSERT INTO agent_tasks (id, task_type, status, tenant_id, deployment_id, instance_id, node_id, payload, timeout_seconds, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		taskID, "model_instance_start", "pending", tid, deployID, instanceID, placement.NodeID, string(agentPayload), 300, now, now)
+	if _, err := tx.Exec(`INSERT INTO agent_tasks (id, task_type, status, tenant_id, deployment_id, instance_id, node_id, payload, timeout_seconds, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		taskID, "model_instance_start", "pending", tid, deployID, instanceID, placement.NodeID, string(agentPayload), 300, now, now); err != nil {
+		log.Error("deployment.start.task_insert_failed", "error", err, "task_id", taskID, "instance_id", instanceID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 
 	// Update deployment status
-	h.DB.Exec(`UPDATE model_deployments SET desired_state = 'running', status = 'running', updated_at = ? WHERE id = ?`, now, deployID)
+	if _, err := tx.Exec(`UPDATE model_deployments SET desired_state = 'running', status = 'running', updated_at = ? WHERE id = ?`, now, deployID); err != nil {
+		log.Error("deployment.start.deployment_update_failed", "error", err, "deployment_id", deployID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("deployment.start.tx_commit_failed", "error", err, "deployment_id", deployID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 
 	log.OperationCompleted(ctx, "deployment.start", opStart,
 		"deployment_id", deployID, "instance_id", instanceID, "task_id", taskID, "run_plan_id", runPlanID)

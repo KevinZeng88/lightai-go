@@ -6,6 +6,7 @@
         <el-button size="small" @click="refresh" :icon="RefreshRight">{{ t('common.refresh') }}</el-button>
       </div>
     </div>
+    <el-alert v-if="errorMessage" type="error" :title="errorMessage" show-icon closable @close="errorMessage=''" style="margin-bottom:12px" />
     <el-table :data="items" v-loading="loading" size="small">
       <el-table-column prop="username" :label="t('users.username')" min-width="120" />
       <el-table-column prop="display_name" :label="t('users.displayName')" width="140" />
@@ -51,8 +52,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'; import { RefreshRight } 
 import { fetchUsers, createUser, updateUser, disableUser, resetPassword, type User } from '@/api/users'; import { useAuthStore } from '@/stores/auth'; import { formatDateTime } from '@/utils/format'
 const { t } = useI18n(); const auth = useAuthStore()
 const isPlatformAdmin = auth.user?.is_platform_admin || false
-const items = ref<User[]>([]); const loading = ref(false)
-async function refresh() { loading.value=true; try { items.value = await fetchUsers() } catch { items.value=[] } finally { loading.value=false } }
+const items = ref<User[]>([]); const loading = ref(false); const errorMessage = ref('')
+async function refresh() { loading.value=true; errorMessage.value=''; try { items.value = await fetchUsers() } catch (e: any) { items.value=[]; errorMessage.value = e?.message || String(e) } finally { loading.value=false } }
 const createForm = ref({ username: '', display_name: '', password: '', is_platform_admin: false })
 const createVisible = ref(false)
 const creating = ref(false)

@@ -114,9 +114,10 @@ func main() {
 	kernelVer := detectKernelVersion()
 
 	// P0-011: Warn about default agent token in production.
+	// AUD-002: Use RedactValue to avoid writing the token value to log files.
 	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
 		log.Warn("using default agent token -- NOT safe for production",
-			"agent_token", cfg.AgentToken,
+			"agent_token", log.RedactValue("agent_token", cfg.AgentToken),
 			"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
 		)
 	}

@@ -38,32 +38,46 @@ func (h *AuditHandler) HandleListAuditLogs(w http.ResponseWriter, r *http.Reques
 		limit = 200
 	}
 
-	query := `SELECT id, action, entity_type, entity_id, detail, operator_user_id, created_at FROM audit_logs WHERE 1=1`
-	var args []interface{}
+	// Build WHERE clause for both COUNT and SELECT queries.
+	countQuery := `SELECT COUNT(*) FROM audit_logs WHERE 1=1`
+	selectQuery := `SELECT id, action, entity_type, entity_id, detail, operator_user_id, created_at FROM audit_logs WHERE 1=1`
+	var countArgs []interface{}
 
 	// Tenant scope: platform_admin sees all; others see their tenant's logs.
 	if !info.IsPlatformAdmin {
-		query += ` AND operator_user_id IN (SELECT user_id FROM tenant_memberships WHERE tenant_id = ?)`
-		args = append(args, info.TenantID)
+		countQuery += ` AND operator_user_id IN (SELECT user_id FROM tenant_memberships WHERE tenant_id = ?)`
+		selectQuery += ` AND operator_user_id IN (SELECT user_id FROM tenant_memberships WHERE tenant_id = ?)`
+		countArgs = append(countArgs, info.TenantID)
 	}
 
 	if action != "" {
-		query += ` AND action = ?`
-		args = append(args, action)
+		countQuery += ` AND action = ?`
+		selectQuery += ` AND action = ?`
+		countArgs = append(countArgs, action)
 	}
 	if entityType != "" {
-		query += ` AND entity_type = ?`
-		args = append(args, entityType)
+		countQuery += ` AND entity_type = ?`
+		selectQuery += ` AND entity_type = ?`
+		countArgs = append(countArgs, entityType)
 	}
 	if entityID != "" {
-		query += ` AND entity_id = ?`
-		args = append(args, entityID)
+		countQuery += ` AND entity_id = ?`
+		selectQuery += ` AND entity_id = ?`
+		countArgs = append(countArgs, entityID)
 	}
 
-	query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
-	args = append(args, limit, offset)
+	// AUD-010: Run separate COUNT query for correct total (not len(page)).
+	var total int
+	if err := h.DB.QueryRow(countQuery, countArgs...).Scan(&total); err != nil {
+		log.Error("audit count query failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "query failed")
+		return
+	}
 
-	rows, err := h.DB.Query(query, args...)
+	selectQuery += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+	selectArgs := append(countArgs, limit, offset)
+
+	rows, err := h.DB.Query(selectQuery, selectArgs...)
 	if err != nil {
 		log.Error("audit list query failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "query failed")
@@ -95,6 +109,6 @@ func (h *AuditHandler) HandleListAuditLogs(w http.ResponseWriter, r *http.Reques
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"entries": entries,
-		"total":   len(entries),
+		"total":   total,
 	})
 }

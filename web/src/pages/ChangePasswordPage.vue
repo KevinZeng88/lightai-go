@@ -5,13 +5,13 @@
       <el-alert type="warning" :title="t('auth.forceChangePasswordHint')" :closable="false" style="margin-bottom: 16px" />
       <el-form @submit.prevent="doChange">
         <el-form-item>
-          <el-input v-model="currentPassword" type="password" :placeholder="t('auth.currentPassword')" show-password />
+          <el-input v-model="currentPassword" type="password" :placeholder="t('auth.currentPassword')" show-password @keyup.enter="doChange" />
         </el-form-item>
         <el-form-item>
-          <el-input v-model="newPassword" type="password" :placeholder="t('auth.newPassword')" show-password />
+          <el-input v-model="newPassword" type="password" :placeholder="t('auth.newPassword')" show-password @keyup.enter="doChange" />
         </el-form-item>
         <el-form-item>
-          <el-input v-model="confirmPassword" type="password" :placeholder="t('auth.confirmPassword')" show-password />
+          <el-input v-model="confirmPassword" type="password" :placeholder="t('auth.confirmPassword')" show-password @keyup.enter="doChange" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="doChange" :loading="loading" style="width: 100%">

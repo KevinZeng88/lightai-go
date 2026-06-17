@@ -105,6 +105,7 @@
         </el-descriptions>
 
         <h4 style="margin-top: 16px">{{ t('nodes.gpusOnNode') }} ({{ nodeGpus.length }})</h4>
+        <el-alert v-if="gpuError" type="error" :title="gpuError" show-icon closable @close="gpuError=''" style="margin-bottom:8px" />
         <el-table :data="nodeGpus" size="small" v-loading="gpuLoading">
           <el-table-column prop="index" :label="t('gpus.index')" width="50" />
           <el-table-column prop="vendor" :label="t('gpus.vendor')" width="80" />
@@ -193,6 +194,8 @@ const dockerImages = ref<{ image: string; size: string }[]>([])
 const dockerImagesLoading = ref(false)
 const dockerImagesLoaded = ref(false)
 const dockerImagesError = ref(false)
+const gpuError = ref('')
+const listError = ref('')
 
 const { loading, refresh } = useAutoRefresh(async () => {
   const [n, g] = await Promise.all([fetchNodes(), fetchGPUs()])
@@ -242,7 +245,7 @@ async function openDetail(row: Node) {
   dockerImages.value = []
   dockerImagesLoaded.value = false
   dockerImagesError.value = false
-  try { nodeGpus.value = (await fetchGPUs({ node_id: row.id })) || [] } catch { nodeGpus.value = [] }
+  try { nodeGpus.value = (await fetchGPUs({ node_id: row.id })) || [] } catch (e: any) { nodeGpus.value = []; gpuError.value = e?.message || String(e) }
   gpuLoading.value = false
   try { nodeSystem.value = await fetchNodeSystem(row.id) } catch { /* */ }
   sysLoading.value = false

@@ -6,6 +6,7 @@
         <el-button size="small" @click="refresh" :icon="RefreshRight">{{ t('common.refresh') }}</el-button>
       </div>
     </div>
+    <el-alert v-if="errorMessage" type="error" :title="errorMessage" show-icon closable @close="errorMessage=''" style="margin-bottom:12px" />
     <el-table :data="items" v-loading="loading" size="small">
       <el-table-column prop="name" :label="t('tenants.name')" min-width="140" />
       <el-table-column prop="slug" :label="t('tenants.slug')" width="120" />
@@ -38,9 +39,9 @@ import { ref } from 'vue'; import { useI18n } from 'vue-i18n'; import { RefreshR
 import { fetchTenants, createTenant, updateTenant, disableTenant, type Tenant } from '@/api/tenants'; import { useAuthStore } from '@/stores/auth'; import { formatDateTime } from '@/utils/format'
 const { t } = useI18n(); const auth = useAuthStore()
 const isPlatformAdmin = auth.user?.is_platform_admin || false
-const items = ref<Tenant[]>([]); const loading = ref(false); const dialogVisible = ref(false); const saving = ref(false)
+const items = ref<Tenant[]>([]); const loading = ref(false); const dialogVisible = ref(false); const saving = ref(false); const errorMessage = ref('')
 const form = ref({ name: '', slug: '' })
-async function refresh() { loading.value=true; try { items.value = await fetchTenants() } catch { items.value=[] } finally { loading.value=false } }
+async function refresh() { loading.value=true; errorMessage.value=''; try { items.value = await fetchTenants() } catch (e: any) { items.value=[]; errorMessage.value = e?.message || String(e) } finally { loading.value=false } }
 function openCreate() { form.value={name:'',slug:''}; dialogVisible.value=true }
 async function save() { saving.value=true; try { await createTenant(form.value); ElMessage.success('Created'); dialogVisible.value=false; refresh() } catch(e:any) { ElMessage.error(e?.message||'Error') } finally { saving.value=false } }
 refresh()

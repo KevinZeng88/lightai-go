@@ -362,59 +362,72 @@ func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBri
 // existing 2s interval.
 func sweepExpiredTasks(tx *sql.Tx, nodeID string, now string) {
 	// Tasks that exceeded timeout_seconds.
-	tx.Exec(
+	if _, err := tx.Exec(
 		`UPDATE agent_tasks SET status = ?, finished_at = ?, updated_at = ?
 		 WHERE node_id = ? AND status IN (?, ?, ?)
 		 AND (strftime('%s', ?) - strftime('%s', created_at)) > timeout_seconds`,
 		TaskStatusTimedOut, now, now, nodeID,
 		TaskStatusPending, TaskStatusClaimed, TaskStatusInProgress,
 		now,
-	)
+	); err != nil {
+		// AUD-007: Log sweep errors instead of silently discarding.
+		log.Error("sweep.task_timeout.failed", "node_id", nodeID, "error", err)
+	}
 
 	// Instances for timed-out tasks → failed.
-	tx.Exec(
+	if _, err := tx.Exec(
 		`UPDATE model_instances SET actual_state = ?, updated_at = ?
 		 WHERE id IN (SELECT instance_id FROM agent_tasks WHERE status = ? AND node_id = ? AND instance_id != '')`,
 		InstanceStateFailed, now, TaskStatusTimedOut, nodeID,
-	)
+	); err != nil {
+		log.Error("sweep.instance_fail.failed", "node_id", nodeID, "error", err)
+	}
 
 	// Leases past expires_at → failed (reserved leases only).
 	// Active leases are only failed by the server-side sweep when the node is offline.
 	// Query before UPDATE for per-lease cleanup logging.
-	leaseRows, _ := tx.Query(
+	leaseRows, lerr := tx.Query(
 		`SELECT id, gpu_id, instance_id, deployment_id, node_id FROM gpu_leases
 		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status = ?`,
 		now, LeaseReserved,
 	)
-	type leaseRec struct{ id, gpuID, instanceID, deploymentID, leaseNodeID string }
-	var expiredLeases []leaseRec
-	for leaseRows.Next() {
-		var lr leaseRec
-		leaseRows.Scan(&lr.id, &lr.gpuID, &lr.instanceID, &lr.deploymentID, &lr.leaseNodeID)
-		expiredLeases = append(expiredLeases, lr)
-	}
-	leaseRows.Close()
+	if lerr != nil {
+		log.Error("sweep.lease_query.failed", "node_id", nodeID, "error", lerr)
+	} else {
+		type leaseRec struct{ id, gpuID, instanceID, deploymentID, leaseNodeID string }
+		var expiredLeases []leaseRec
+		for leaseRows.Next() {
+			var lr leaseRec
+			leaseRows.Scan(&lr.id, &lr.gpuID, &lr.instanceID, &lr.deploymentID, &lr.leaseNodeID)
+			expiredLeases = append(expiredLeases, lr)
+		}
+		leaseRows.Close()
 
-	tx.Exec(
-		`UPDATE gpu_leases SET status = ?, updated_at = ?
-		 WHERE expires_at IS NOT NULL AND expires_at < ? AND status = ?`,
-		LeaseFailed, now, now, LeaseReserved,
-	)
-
-	for _, lr := range expiredLeases {
-		log.StateTransition(context.Background(), "lease.sweep", "gpu_lease", lr.id, LeaseReserved, LeaseFailed,
-			"gpu_id", lr.gpuID, "instance_id", lr.instanceID, "deployment_id", lr.deploymentID, "node_id", lr.leaseNodeID)
-	}
-	if len(expiredLeases) > 0 {
-		log.Info("gpu_lease.sweep.expired", "count", len(expiredLeases), "node_id", nodeID)
+		if _, err := tx.Exec(
+			`UPDATE gpu_leases SET status = ?, updated_at = ?
+			 WHERE expires_at IS NOT NULL AND expires_at < ? AND status = ?`,
+			LeaseFailed, now, now, LeaseReserved,
+		); err != nil {
+			log.Error("sweep.lease_fail.failed", "node_id", nodeID, "error", err)
+		} else {
+			for _, lr := range expiredLeases {
+				log.StateTransition(context.Background(), "lease.sweep", "gpu_lease", lr.id, LeaseReserved, LeaseFailed,
+					"gpu_id", lr.gpuID, "instance_id", lr.instanceID, "deployment_id", lr.deploymentID, "node_id", lr.leaseNodeID)
+			}
+			if len(expiredLeases) > 0 {
+				log.Info("gpu_lease.sweep.expired", "count", len(expiredLeases), "node_id", nodeID)
+			}
+		}
 	}
 
 	// Deployments for failed instances → failed.
-	tx.Exec(
+	if _, err := tx.Exec(
 		`UPDATE model_deployments SET status = 'failed', updated_at = ?
 		 WHERE id IN (SELECT deployment_id FROM model_instances WHERE actual_state = ?)`,
 		now, InstanceStateFailed,
-	)
+	); err != nil {
+		log.Error("sweep.deployment_fail.failed", "node_id", nodeID, "error", err)
+	}
 }
 
 // HandleListNode handles GET /api/nodes.
@@ -589,8 +602,10 @@ func (h *AgentHandler) HandleGetNodeDockerImages(w http.ResponseWriter, r *http.
 	agentURL := fmt.Sprintf("http://%s:%d/docker-images", addr, port)
 	resp, err := http.Get(agentURL)
 	if err != nil {
+		// AUD-008: Return 502 when agent is unreachable so caller can distinguish
+		// "no images" from "agent down".
 		log.Warn("failed to query agent docker images", "node_id", nodeID, "url", agentURL, "error", err)
-		writeJSON(w, http.StatusOK, []interface{}{})
+		writeError(w, http.StatusBadGateway, "agent unreachable")
 		return
 	}
 	defer resp.Body.Close()

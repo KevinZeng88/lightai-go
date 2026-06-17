@@ -83,18 +83,20 @@ func main() {
 	})
 
 	// P0-011: Check for default agent token in production.
+	// AUD-001: Use RedactValue to avoid writing the token value to log files.
 	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
+		maskedToken := log.RedactValue("agent_token", cfg.AgentToken)
 		if cfg.DevMode {
 			log.Warn("using default agent token in dev mode — NOT safe for production",
-				"agent_token", cfg.AgentToken,
+				"agent_token", maskedToken,
 			)
 		} else {
 			log.Error("DEFAULT AGENT TOKEN DETECTED",
-				"agent_token", cfg.AgentToken,
+				"agent_token", maskedToken,
 				"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
 			)
 			fmt.Fprintf(os.Stderr, "\n=== SECURITY WARNING ===\n")
-			fmt.Fprintf(os.Stderr, "Default agent token detected: %s\n", cfg.AgentToken)
+			fmt.Fprintf(os.Stderr, "Default agent token detected (value redacted in logs).\n")
 			fmt.Fprintf(os.Stderr, "This is NOT safe for production.\n")
 			fmt.Fprintf(os.Stderr, "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.\n")
 			fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(openssl rand -hex 32)\n")

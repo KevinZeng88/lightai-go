@@ -41,11 +41,17 @@ class ApiClient {
     })
 
     // P0-007: Parse JSON, but handle non-JSON responses gracefully.
+    // AUD-013: Capture text body on JSON parse failure for better error messages.
     let data: any
     try {
       data = await resp.json()
     } catch {
-      data = {}
+      try {
+        const text = await resp.text()
+        data = { error: text || `HTTP ${resp.status}` }
+      } catch {
+        data = { error: `HTTP ${resp.status}` }
+      }
     }
 
     // P0-007: Throw structured error on non-2xx responses.

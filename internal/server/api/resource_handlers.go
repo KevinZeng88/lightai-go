@@ -240,24 +240,29 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 			if fs.MountPoint == "" {
 				continue
 			}
-			tx.Exec(
+			if _, ferr := tx.Exec(
 				`INSERT OR REPLACE INTO node_filesystem_snapshots
 				 (node_id, mount_point, device, fs_type, total_bytes, used_bytes, free_bytes, used_percent, collected_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				nodeID, fs.MountPoint, fs.Device, fs.FSType,
 				fs.TotalBytes, fs.UsedBytes, fs.FreeBytes,
 				fmt.Sprintf("%.1f", fs.UsedPercent), now,
-			)
+			); ferr != nil {
+				log.Error("save filesystem snapshot error", "node_id", nodeID, "mount_point", fs.MountPoint, "error", ferr)
+			}
 		}
 
 		// Save network interface snapshots.
 		for _, net := range sys.NetworkInterfaces {
-			tx.Exec(
+			if _, nerr := tx.Exec(
 				`INSERT OR REPLACE INTO node_network_snapshots
 				 (node_id, interface_name, up, bytes_recv, bytes_sent, collected_at)
 				 VALUES (?, ?, ?, ?, ?, ?)`,
 				nodeID, net.Name, boolToInt(net.Up), net.BytesRecv, net.BytesSent, now,
-			)
+			); nerr != nil {
+				// AUD-006: Log non-fatal network write error.
+				log.Error("save network snapshot error", "node_id", nodeID, "interface", net.Name, "error", nerr)
+			}
 		}
 
 		// Update node info (timestamp + enrich from system snapshot).
@@ -265,7 +270,7 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 		// Update last_heartbeat_at and status so the node stays online even
 		// if heartbeat requests fail while resource reports succeed.
 		if sys.OS != "" || sys.KernelVersion != "" {
-			tx.Exec(`UPDATE nodes SET
+			if _, uerr := tx.Exec(`UPDATE nodes SET
 				os = CASE WHEN ? != '' THEN ? ELSE os END,
 				kernel = CASE WHEN ? != '' THEN ? ELSE kernel END,
 				last_heartbeat_at = ?, status = 'online', updated_at = ?
@@ -273,10 +278,14 @@ func (h *ResourceHandler) HandleResourceReport(w http.ResponseWriter, r *http.Re
 				sys.OS, sys.OS,
 				sys.KernelVersion, sys.KernelVersion,
 				now, now, nodeID,
-			)
+			); uerr != nil {
+				log.Error("update node info error", "node_id", nodeID, "error", uerr)
+			}
 		} else {
-			tx.Exec(`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ?`,
-				now, now, nodeID)
+			if _, uerr := tx.Exec(`UPDATE nodes SET last_heartbeat_at = ?, status = 'online', updated_at = ? WHERE id = ?`,
+				now, now, nodeID); uerr != nil {
+				log.Error("update node heartbeat error", "node_id", nodeID, "error", uerr)
+			}
 		}
 	}
 

@@ -6,6 +6,7 @@
         <el-button size="small" @click="refresh" :icon="RefreshRight">{{ t('common.refresh') }}</el-button>
       </div>
     </div>
+    <el-alert v-if="errorMessage" type="error" :title="errorMessage" show-icon closable @close="errorMessage=''" style="margin-bottom:12px" />
     <el-table :data="items" v-loading="loading" size="small">
       <el-table-column prop="name" :label="t('roles.name')" width="160" />
       <el-table-column prop="display_name" :label="t('roles.displayName')" width="160" />
@@ -43,8 +44,8 @@ import { ref } from 'vue'; import { useI18n } from 'vue-i18n'; import { RefreshR
 import { fetchRoles, createRole, deleteRole, fetchPermissions, updateRolePermissions, type Role, type Permission } from '@/api/roles'; import { useAuthStore } from '@/stores/auth'
 const { t } = useI18n(); const auth = useAuthStore()
 const isPlatformAdmin = auth.user?.is_platform_admin || false
-const items = ref<Role[]>([]); const loading = ref(false)
-async function refresh() { loading.value=true; try { items.value = await fetchRoles() } catch { items.value=[] } finally { loading.value=false } }
+const items = ref<Role[]>([]); const loading = ref(false); const errorMessage = ref('')
+async function refresh() { loading.value=true; errorMessage.value=''; try { items.value = await fetchRoles() } catch (e: any) { items.value=[]; errorMessage.value = e?.message || String(e) } finally { loading.value=false } }
 refresh()
 
 // Create
@@ -75,7 +76,7 @@ async function confirmDelete(row: Role) {
 
 // Permissions
 const permVisible = ref(false); const savingPerms = ref(false); const loadingPerms = ref(false)
-const allPermissions = ref<Permission[]>([]); const selectedPermIds = ref<string[]>([])
+const allPermissions = ref<Permission[]>([]); const selectedPermIds = ref<string[]>([]); const permErrorMessage = ref('')
 const editingRole = ref<Role | null>(null)
 async function openPermissions(row: Role) {
   editingRole.value = row
@@ -84,7 +85,7 @@ async function openPermissions(row: Role) {
   try {
     allPermissions.value = await fetchPermissions()
     selectedPermIds.value = []
-  } catch { allPermissions.value = [] }
+  } catch (e: any) { allPermissions.value = []; permErrorMessage.value = e?.message || String(e) }
   finally { loadingPerms.value = false }
 }
 async function doUpdatePermissions() {

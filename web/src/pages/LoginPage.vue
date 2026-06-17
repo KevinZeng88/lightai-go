@@ -4,10 +4,10 @@
       <h2>LightAI Go</h2>
       <el-form @submit.prevent="doLogin">
         <el-form-item>
-          <el-input v-model="username" :placeholder="t('auth.username')" />
+          <el-input v-model="username" :placeholder="t('auth.username')" @keyup.enter="doLogin" />
         </el-form-item>
         <el-form-item>
-          <el-input v-model="password" type="password" :placeholder="t('auth.password')" show-password />
+          <el-input v-model="password" type="password" :placeholder="t('auth.password')" show-password @keyup.enter="doLogin" />
         </el-form-item>
         <!-- P0-007: Tenant selection for multi-tenant users -->
         <el-form-item v-if="availableTenants.length > 1">
