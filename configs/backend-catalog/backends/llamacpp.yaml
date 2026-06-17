@@ -1,0 +1,9 @@
+id: backend.llamacpp
+slug: llamacpp
+name: llama.cpp
+managed_by: system
+supported_model_formats: [gguf]
+protocols: [openai-compatible]
+default_health_check:
+  type: http
+  path: /health

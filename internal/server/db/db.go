@@ -132,6 +132,12 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if currentVersion < 13 {
+		if err := db.migrateV13(); err != nil {
+			return fmt.Errorf("migrate v13: %w", err)
+		}
+	}
+
 	log.Info("db migrate: completed", "duration_ms", time.Since(migrateStart).Milliseconds())
 	return nil
 }
@@ -1024,6 +1030,119 @@ func (db *DB) migrateV12() error {
 	return nil
 }
 
+// migrateV13 aligns the runtime schema with the Backend / BackendVersion /
+// BackendRuntime / NodeBackendRuntime / ModelLocation target design.
+func (db *DB) migrateV13() error {
+	alterStatements := []string{
+		`ALTER TABLE inference_backends ADD COLUMN slug TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE inference_backends ADD COLUMN managed_by TEXT NOT NULL DEFAULT 'system'`,
+		`ALTER TABLE inference_backends ADD COLUMN source TEXT NOT NULL DEFAULT 'embedded'`,
+		`ALTER TABLE inference_backends ADD COLUMN catalog_version TEXT NOT NULL DEFAULT 'v1'`,
+		`ALTER TABLE inference_backends ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE inference_backends ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
+		`ALTER TABLE backend_versions ADD COLUMN slug TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_versions ADD COLUMN managed_by TEXT NOT NULL DEFAULT 'system'`,
+		`ALTER TABLE backend_versions ADD COLUMN source TEXT NOT NULL DEFAULT 'embedded'`,
+		`ALTER TABLE backend_versions ADD COLUMN catalog_version TEXT NOT NULL DEFAULT 'v1'`,
+		`ALTER TABLE backend_versions ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_versions ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN slug TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN managed_by TEXT NOT NULL DEFAULT 'user'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN source TEXT NOT NULL DEFAULT 'api'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN catalog_version TEXT NOT NULL DEFAULT 'v1'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN verification_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE resolved_run_plans ADD COLUMN node_backend_runtime_id TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			// Columns may already exist from a partially applied development DB.
+		}
+	}
+
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS model_locations (
+		id TEXT PRIMARY KEY,
+		model_artifact_id TEXT NOT NULL REFERENCES model_artifacts(id),
+		node_id TEXT NOT NULL REFERENCES nodes(id),
+		path_type TEXT NOT NULL DEFAULT 'directory',
+		model_root TEXT NOT NULL DEFAULT '',
+		relative_path TEXT NOT NULL DEFAULT '',
+		absolute_path TEXT NOT NULL DEFAULT '',
+		size_bytes INTEGER NOT NULL DEFAULT 0,
+		checksum TEXT NOT NULL DEFAULT '',
+		manifest_digest TEXT NOT NULL DEFAULT '',
+		discovered_metadata_json TEXT NOT NULL DEFAULT '{}',
+		match_status TEXT NOT NULL DEFAULT 'exact_match',
+		verification_status TEXT NOT NULL DEFAULT 'verified',
+		manual_override INTEGER NOT NULL DEFAULT 0,
+		override_reason TEXT NOT NULL DEFAULT '',
+		override_by TEXT NOT NULL DEFAULT '',
+		override_at TEXT,
+		last_scanned_at TEXT,
+		last_error TEXT NOT NULL DEFAULT '',
+		tenant_id TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(model_artifact_id, node_id, absolute_path)
+	)`); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS node_backend_runtimes (
+		id TEXT PRIMARY KEY,
+		backend_runtime_id TEXT NOT NULL REFERENCES backend_runtimes(id),
+		node_id TEXT NOT NULL REFERENCES nodes(id),
+		runner_type TEXT NOT NULL DEFAULT 'docker',
+		image_ref TEXT NOT NULL DEFAULT '',
+		image_id TEXT NOT NULL DEFAULT '',
+		image_digest TEXT NOT NULL DEFAULT '',
+		image_present INTEGER NOT NULL DEFAULT 0,
+		docker_available INTEGER NOT NULL DEFAULT 0,
+		driver_version TEXT NOT NULL DEFAULT '',
+		toolkit_version TEXT NOT NULL DEFAULT '',
+		device_check_json TEXT NOT NULL DEFAULT '{}',
+		status TEXT NOT NULL DEFAULT 'unknown',
+		status_reason TEXT NOT NULL DEFAULT '',
+		last_checked_at TEXT,
+		tenant_id TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(node_id, backend_runtime_id)
+	)`); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS run_plan_groups (
+		id TEXT PRIMARY KEY,
+		deployment_plan_id TEXT NOT NULL REFERENCES model_deployments(id),
+		mode TEXT NOT NULL DEFAULT 'single',
+		desired_count INTEGER NOT NULL DEFAULT 1,
+		ready_count INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL DEFAULT 'pending',
+		group_config_json TEXT NOT NULL DEFAULT '{}',
+		tenant_id TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return err
+	}
+
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_model_locations_artifact ON model_locations(model_artifact_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_model_locations_node ON model_locations(node_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_node_backend_runtimes_node ON node_backend_runtimes(node_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_node_backend_runtimes_runtime ON node_backend_runtimes(backend_runtime_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_run_plan_groups_deployment ON run_plan_groups(deployment_plan_id)`)
+
+	db.seedTargetBackendCatalog()
+
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (13, 'V13: backend catalog, node backend runtime, model locations, run plan groups')`); err != nil {
+		return err
+	}
+	return nil
+}
+
 // seedBuiltInBackends inserts the three built-in inference backends.
 func (db *DB) seedBuiltInBackends() {
 	// vLLM
@@ -1101,4 +1220,76 @@ func (db *DB) seedBuiltInBackends() {
 		8080,
 		'{"nvidia":"ghcr.io/ggerganov/llama.cpp:server-b4817"}',
 		'{}', 0)`)
+}
+
+func (db *DB) seedTargetBackendCatalog() {
+	now := time.Now().Format(time.RFC3339)
+	backends := []struct {
+		id, slug, name, display, formats, protocols string
+	}{
+		{"backend.llamacpp", "llamacpp", "llamacpp", "llama.cpp", `["gguf"]`, `{"type":"openai-compatible","modelsPath":"/v1/models"}`},
+		{"backend.vllm", "vllm", "vllm", "vLLM", `["huggingface","safetensors"]`, `{"type":"openai-compatible","modelsPath":"/v1/models"}`},
+		{"backend.sglang", "sglang", "sglang", "SGLang", `["huggingface","safetensors"]`, `{"type":"openai-compatible","modelsPath":"/v1/models"}`},
+		{"backend.ollama", "ollama", "ollama", "Ollama", `["ollama"]`, `{"type":"ollama","modelsPath":"/api/tags"}`},
+	}
+	for _, b := range backends {
+		db.Exec(`INSERT OR IGNORE INTO inference_backends
+			(id, name, display_name, description, protocol_json, default_version, parameter_format, common_parameters_json, default_env_json, is_builtin, is_enabled, slug, managed_by, source, catalog_version, checksum, status, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			b.id, b.name, b.display, b.display+" inference backend", b.protocols, "latest", "space", "[]", "{}", 1, 1,
+			b.slug, "system", "embedded", "v1", catalogChecksum(b.id+b.formats+b.protocols), "active", now, now)
+	}
+
+	versions := []struct {
+		id, backendID, slug, version, display, entrypoint, args, params, paramDefs, hc string
+		port                                                                           int
+		images, env                                                                    string
+		isDefault                                                                      int
+	}{
+		{"backend-version.llamacpp.server", "backend.llamacpp", "llama-cpp-server", "server", "llama.cpp Server", `[]`, `["-m","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","-ngl","99"]`, `[]`, `[{"name":"served_model_name","cli_name":"--alias","type":"string","required":false}]`, `{"path":"/health","expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 8080, `{"nvidia":"ghcr.io/ggml-org/llama.cpp:server-cuda13","cpu":"ghcr.io/ggml-org/llama.cpp:server"}`, `{}`, 1},
+		{"backend-version.llamacpp.server-metax", "backend.llamacpp", "llama-cpp-server-metax", "server-metax", "llama.cpp Server MetaX", `[]`, `["-m","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[]`, `{"path":"/health","expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 8080, `{"metax":"llamacpp-metax:latest"}`, `{}`, 0},
+		{"backend-version.vllm.openai-latest", "backend.vllm", "vllm-openai-latest", "openai-latest", "vLLM OpenAI Latest", `["vllm","serve"]`, `["{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","--served-model-name","{{served_model_name}}","--max-model-len","{{max_model_len}}","--gpu-memory-utilization","{{gpu_memory_utilization}}"]`, `[]`, `[{"name":"served_model_name","cli_name":"--served-model-name","type":"string","required":true},{"name":"max_model_len","cli_name":"--max-model-len","type":"integer","default":4096,"required":false},{"name":"gpu_memory_utilization","cli_name":"--gpu-memory-utilization","type":"number","default":0.9,"required":false},{"name":"tensor_parallel_size","cli_name":"--tensor-parallel-size","type":"integer","default":1,"required":false}]`, `{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 8000, `{"nvidia":"vllm/vllm-openai:latest","metax":"0d307f1665d3","huawei":"template-only"}`, `{}`, 1},
+		{"backend-version.vllm.openai-0.9", "backend.vllm", "vllm-openai-0.9", "0.9", "vLLM OpenAI 0.9", `["vllm","serve"]`, `["{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[]`, `{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 8000, `{"nvidia":"vllm/vllm-openai:v0.9.0"}`, `{}`, 0},
+		{"backend-version.sglang.openai-latest", "backend.sglang", "sglang-openai-latest", "openai-latest", "SGLang OpenAI Latest", `["python3","-m","sglang.launch_server"]`, `["--model-path","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"served_model_name","cli_name":"--served-model-name","type":"string","required":false}]`, `{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 30000, `{"nvidia":"lmsysorg/sglang:latest","metax":"sglang-metax:latest","huawei":"template-only"}`, `{}`, 1},
+		{"backend-version.ollama.latest", "backend.ollama", "ollama-latest", "latest", "Ollama Latest", `["ollama","serve"]`, `[]`, `[]`, `[]`, `{"path":"/api/tags","expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 11434, `{"nvidia":"ollama/ollama:latest","cpu":"ollama/ollama:latest"}`, `{}`, 1},
+	}
+	for _, v := range versions {
+		db.Exec(`INSERT OR IGNORE INTO backend_versions
+			(id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated, slug, managed_by, source, catalog_version, checksum, status, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			v.id, v.backendID, v.version, v.display, v.isDefault, v.entrypoint, v.args, v.params, v.paramDefs, v.hc, v.port, v.images, v.env, 0,
+			v.slug, "system", "embedded", "v1", catalogChecksum(v.id+v.args+v.images), "active", now, now)
+	}
+
+	type runtimeSeed struct {
+		id, name, display, backendID, versionID, slug, vendor, image, env, docker, mount, verification string
+	}
+	runtimes := []runtimeSeed{
+		{"runtime.vllm.nvidia-docker", "vllm-nvidia-docker", "vLLM NVIDIA Docker", "backend.vllm", "backend-version.vllm.openai-latest", "vllm-nvidia-docker", "nvidia", "vllm/vllm-openai:latest", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","privileged":false,"ipc_mode":"host","shm_size":"16gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.vllm.metax-docker", "vllm-metax-docker", "vLLM MetaX Docker", "backend.vllm", "backend-version.vllm.openai-latest", "vllm-metax-docker", "metax", "0d307f1665d3", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","privileged":true,"ipc_mode":"host","uts_mode":"host","shm_size":"100gb","devices":[{"host_path":"/dev/dri","container_path":"/dev/dri"},{"host_path":"/dev/mxcd","container_path":"/dev/mxcd"},{"host_path":"/dev/infiniband","container_path":"/dev/infiniband"}],"group_add":["video"],"security_options":["seccomp=unconfined","apparmor=unconfined"],"ulimits":{"memlock":"-1"}}`, `{"container_path":"/models","readonly":true}`, `{"status":"requires_hardware_validation","optional_high_risk_devices":["/dev/mem"]}`},
+		{"runtime.vllm.huawei-docker", "vllm-huawei-docker", "vLLM Huawei Docker", "backend.vllm", "backend-version.vllm.openai-latest", "vllm-huawei-docker", "huawei", "template-only", `{"ASCEND_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"ASCEND_VISIBLE_DEVICES","devices":[{"host_path":"/dev/davinci_manager","container_path":"/dev/davinci_manager"},{"host_path":"/dev/devmm_svm","container_path":"/dev/devmm_svm"},{"host_path":"/dev/hisi_hdc","container_path":"/dev/hisi_hdc"},{"host_path":"/usr/local/dcmi","container_path":"/usr/local/dcmi"},{"host_path":"/usr/local/bin/npu-smi","container_path":"/usr/local/bin/npu-smi"},{"host_path":"/usr/local/Ascend/driver/lib64","container_path":"/usr/local/Ascend/driver/lib64"},{"host_path":"/usr/local/Ascend/driver/version.info","container_path":"/usr/local/Ascend/driver/version.info"},{"host_path":"/etc/ascend_install.info","container_path":"/etc/ascend_install.info"}]}`, `{"container_path":"/models","readonly":true}`, `{"status":"template_only"}`},
+		{"runtime.llamacpp.nvidia-docker", "llamacpp-nvidia-docker", "llama.cpp NVIDIA Docker", "backend.llamacpp", "backend-version.llamacpp.server", "llamacpp-nvidia-docker", "nvidia", "ghcr.io/ggml-org/llama.cpp:server-cuda13", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","ipc_mode":"host","shm_size":"8gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.llamacpp.cpu-docker", "llamacpp-cpu-docker", "llama.cpp CPU Docker", "backend.llamacpp", "backend-version.llamacpp.server", "llamacpp-cpu-docker", "cpu", "ghcr.io/ggml-org/llama.cpp:server", `{}`, `{}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.sglang.nvidia-docker", "sglang-nvidia-docker", "SGLang NVIDIA Docker", "backend.sglang", "backend-version.sglang.openai-latest", "sglang-nvidia-docker", "nvidia", "lmsysorg/sglang:latest", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","ipc_mode":"host","shm_size":"32gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.ollama.nvidia-docker", "ollama-nvidia-docker", "Ollama NVIDIA Docker", "backend.ollama", "backend-version.ollama.latest", "ollama-nvidia-docker", "nvidia", "ollama/ollama:latest", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.ollama.cpu-docker", "ollama-cpu-docker", "Ollama CPU Docker", "backend.ollama", "backend-version.ollama.latest", "ollama-cpu-docker", "cpu", "ollama/ollama:latest", `{}`, `{}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+	}
+	for _, rt := range runtimes {
+		db.Exec(`INSERT OR IGNORE INTO backend_runtimes
+			(id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, slug, managed_by, source, catalog_version, checksum, status, verification_json, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			rt.id, rt.name, rt.display, rt.backendID, rt.versionID, rt.slug, rt.vendor, "docker", rt.image, "if_not_present", "[]", "[]", rt.env, rt.docker, rt.mount, "{}", 1, 0, "",
+			rt.slug, "system", "embedded", "v1", catalogChecksum(rt.id+rt.docker+rt.image), "active", rt.verification, now, now)
+	}
+}
+
+func catalogChecksum(s string) string {
+	h := 0
+	for _, r := range s {
+		h = h*31 + int(r)
+	}
+	if h < 0 {
+		h = -h
+	}
+	return fmt.Sprintf("checksum:%08x", h)
 }

@@ -311,8 +311,8 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Get runtime config
-	var rtVendor, rtImage, rtDockerJSON, rtArgsOverride, rtEntrypointOverride, rtDefaultEnv, rtBackendID, rtVersionID string
-	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&rtVendor, &rtImage, &rtDockerJSON, &rtArgsOverride, &rtEntrypointOverride, &rtDefaultEnv, &rtBackendID, &rtVersionID)
+	var rtVendor, rtImage, rtDockerJSON, rtArgsOverride, rtEntrypointOverride, rtDefaultEnv, rtBackendID, rtVersionID, rtModelMount string
+	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&rtVendor, &rtImage, &rtDockerJSON, &rtArgsOverride, &rtEntrypointOverride, &rtDefaultEnv, &rtBackendID, &rtVersionID, &rtModelMount)
 
 	// Get backend info
 	var backendName, backendDefaultEnv string
@@ -339,6 +339,33 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 			log.Info("gpu_lease.auto_assigned", "gpu_id", autoGpuID, "node_id", placement.NodeID, "instance_id", instanceID)
 		}
 	}
+
+	var nodeRuntimeID, nodeRuntimeStatus string
+	h.DB.QueryRow(`SELECT id, status FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, placement.NodeID, runtimeID).Scan(&nodeRuntimeID, &nodeRuntimeStatus)
+	if nodeRuntimeID == "" || nodeRuntimeStatus != "ready" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error":   "node backend runtime is not ready",
+			"details": []string{"enable and check the BackendRuntime on the target node before starting a deployment"},
+			"node_id": placement.NodeID, "backend_runtime_id": runtimeID, "status": nodeRuntimeStatus,
+		})
+		return
+	}
+
+	var locationID, modelRoot, relativePath, absolutePath, verificationStatus, matchStatus string
+	h.DB.QueryRow(`SELECT id, model_root, relative_path, absolute_path, verification_status, match_status
+		FROM model_locations
+		WHERE model_artifact_id = ? AND node_id = ? AND verification_status IN ('verified','warning','manually_accepted') AND match_status IN ('exact_match','probable_match','manual_attested')
+		ORDER BY updated_at DESC LIMIT 1`, artifactID, placement.NodeID).Scan(&locationID, &modelRoot, &relativePath, &absolutePath, &verificationStatus, &matchStatus)
+	if locationID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"error":   "model location is not available on target node",
+			"details": []string{"add a ModelLocation for this ModelArtifact on the target node before starting a deployment"},
+			"node_id": placement.NodeID, "model_artifact_id": artifactID,
+		})
+		return
+	}
+	_ = verificationStatus
+	_ = matchStatus
 
 	log.Info("instance.start.requested",
 		"operation_id", operationID,
@@ -377,6 +404,8 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 
 	var dockerSpec runplan.DockerSpecInfo
 	json.Unmarshal([]byte(rtDockerJSON), &dockerSpec)
+	var modelMount runplan.ModelMountInfo
+	json.Unmarshal([]byte(rtModelMount), &modelMount)
 
 	if rtEntryOverride != nil {
 		entrypoint = rtEntryOverride
@@ -399,8 +428,8 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	plan, errs, warns := runplan.Resolve(runplan.ResolveInput{
 		Backend:        &runplan.BackendInfo{ID: rtBackendID, Name: backendName, DefaultEnv: backendEnv},
 		BackendVersion: &runplan.VersionInfo{ID: rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
-		BackendRuntime: &runplan.RuntimeInfo{ID: runtimeID, Vendor: rtVendor, RuntimeType: "docker", ImageName: rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec},
-		Artifact:       &runplan.ArtifactInfo{ID: artifactID, Name: strVal(artifact, "name", ""), Path: strVal(artifact, "path", "")},
+		BackendRuntime: &runplan.RuntimeInfo{ID: runtimeID, Vendor: rtVendor, RuntimeType: "docker", ImageName: rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
+		Artifact:       &runplan.ArtifactInfo{ID: artifactID, Name: strVal(artifact, "name", ""), Path: absolutePath, ModelRoot: modelRoot, RelativePath: relativePath},
 		Deployment:     &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: params, EnvOverrides: envOverrides, Service: runplan.ServiceInfo{HostPort: service.HostPort}, Placement: runplan.PlacementInfo{NodeID: placement.NodeID, GPUIds: placement.GPUIds}},
 		InstanceID:     instanceID,
 		Node:           &runplan.NodeInfo{ID: placement.NodeID, IP: nodeIP},
@@ -432,16 +461,17 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"deployment_id":       deployID,
 		"runtime_type":        "docker",
 		"vendor":              rtVendor,
-		"model_path":          strVal(artifact, "path", ""),
+		"model_path":          absolutePath,
 		"served_model_name":   strVal(params, "served_model_name", strVal(artifact, "name", "")),
 		"node_id":             placement.NodeID,
 		"agent_id":            "",
 		"gpu_device_ids":      gpuDeviceIDs,
-		"gpu_visible_env_key": "CUDA_VISIBLE_DEVICES",
+		"gpu_visible_env_key": plan.GPUVisibleEnvKey,
 		"operation_id":        operationID,
 		"env":                 plan.Env,
 		"args":                plan.Args,
 		"volumes":             plan.Mounts,
+		"devices":             plan.Devices,
 		"host_port":           service.HostPort,
 		"container_port":      bvPort,
 		"ports": []map[string]interface{}{
@@ -459,6 +489,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 			"shm_size":         plan.ShmSize,
 			"security_options": plan.SecurityOptions,
 			"ulimits":          plan.Ulimits,
+			"group_add":        plan.GroupAdd,
 			"gpu_device_ids":   gpuDeviceIDs,
 		},
 		"health_check": map[string]interface{}{
@@ -499,8 +530,16 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Insert runplan
-	if _, err := tx.Exec(`INSERT INTO resolved_run_plans (id, deployment_id, instance_id, tenant_id, backend_runtime_id, plan_json, docker_preview, input_hash, plan_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		runPlanID, deployID, instanceID, tid, runtimeID, string(planJSON), runplan.EquivalentCommandPreview(plan), plan.InputHash, plan.PlanHash, now); err != nil {
+	groupID := uuid.NewString()
+	if _, err := tx.Exec(`INSERT INTO run_plan_groups (id, deployment_plan_id, mode, desired_count, ready_count, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+		groupID, deployID, "single", 1, 0, "pending", tid, now, now); err != nil {
+		log.Error("deployment.start.runplan_group_insert_failed", "error", err, "group_id", groupID, "deployment_id", deployID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if _, err := tx.Exec(`INSERT INTO resolved_run_plans (id, deployment_id, instance_id, tenant_id, backend_runtime_id, node_backend_runtime_id, plan_json, docker_preview, input_hash, plan_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		runPlanID, deployID, instanceID, tid, runtimeID, nodeRuntimeID, string(planJSON), runplan.EquivalentCommandPreview(plan), plan.InputHash, plan.PlanHash, now); err != nil {
 		log.Error("deployment.start.runplan_insert_failed", "error", err, "run_plan_id", runPlanID, "instance_id", instanceID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -742,6 +781,84 @@ func (h *AgentHandler) HandleListInstances(w http.ResponseWriter, r *http.Reques
 			"request_id", log.RequestIDFromContext(r.Context()))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *AgentHandler) HandleListRunPlanGroups(w http.ResponseWriter, r *http.Request) {
+	deployID := r.PathValue("id")
+	rows, err := h.DB.Query(`SELECT id, deployment_plan_id, mode, desired_count, ready_count, status, group_config_json, tenant_id, created_at, updated_at FROM run_plan_groups WHERE deployment_plan_id = ? ORDER BY created_at DESC`, deployID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer rows.Close()
+	var out []map[string]interface{}
+	for rows.Next() {
+		var id, did, mode, status, cfg, tid, ca, ua string
+		var desired, ready int
+		if err := rows.Scan(&id, &did, &mode, &desired, &ready, &status, &cfg, &tid, &ca, &ua); err != nil {
+			continue
+		}
+		out = append(out, map[string]interface{}{
+			"id": id, "deployment_plan_id": did, "mode": mode,
+			"desired_count": desired, "ready_count": ready, "status": status,
+			"group_config_json": json.RawMessage(cfg), "tenant_id": tid,
+			"created_at": ca, "updated_at": ua,
+		})
+	}
+	if out == nil {
+		out = []map[string]interface{}{}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *AgentHandler) HandleGetNodeRunPlan(w http.ResponseWriter, r *http.Request) {
+	m := h.getNodeRunPlanJSON(r.PathValue("id"))
+	if m == nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, m)
+}
+
+func (h *AgentHandler) HandleGetNodeRunPlanPreview(w http.ResponseWriter, r *http.Request) {
+	m := h.getNodeRunPlanJSON(r.PathValue("id"))
+	if m == nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id":              m["id"],
+		"command_preview": m["command_preview"],
+	})
+}
+
+func (h *AgentHandler) HandleGetNodeRunPlanLogs(w http.ResponseWriter, r *http.Request) {
+	m := h.getNodeRunPlanJSON(r.PathValue("id"))
+	if m == nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	// Agent log proxy is not available in the current HTTP protocol. Return a
+	// structured response instead of fabricating Docker logs.
+	writeJSON(w, http.StatusAccepted, map[string]interface{}{
+		"id":      m["id"],
+		"status":  "DOCUMENTED_BLOCKER",
+		"message": "Docker logs require Agent log proxy support; use local docker logs on the target node for now.",
+	})
+}
+
+func (h *AgentHandler) getNodeRunPlanJSON(id string) map[string]interface{} {
+	row := h.DB.QueryRow(`SELECT id, deployment_id, instance_id, tenant_id, backend_runtime_id, COALESCE(node_backend_runtime_id,''), plan_json, docker_preview, input_hash, plan_hash, created_at FROM resolved_run_plans WHERE id = ?`, id)
+	var rid, did, iid, tid, brid, nbrid, plan, preview, inputHash, planHash, ca string
+	if err := row.Scan(&rid, &did, &iid, &tid, &brid, &nbrid, &plan, &preview, &inputHash, &planHash, &ca); err != nil {
+		return nil
+	}
+	return map[string]interface{}{
+		"id": rid, "deployment_plan_id": did, "instance_id": iid, "tenant_id": tid,
+		"backend_runtime_id": brid, "node_backend_runtime_id": nbrid,
+		"run_plan_json": json.RawMessage(plan), "command_preview": preview,
+		"input_hash": inputHash, "plan_hash": planHash, "created_at": ca,
+	}
 }
 
 func (h *AgentHandler) HandleGetInstance(w http.ResponseWriter, r *http.Request) {

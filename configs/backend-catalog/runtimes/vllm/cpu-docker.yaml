@@ -1,0 +1,14 @@
+id: runtime.vllm.cpu-docker
+backend_id: backend.vllm
+backend_version_id: backend-version.vllm.openai-latest
+slug: vllm-cpu-docker
+managed_by: system
+runner_type: docker
+vendor: cpu
+image_ref: vllm/vllm-openai:latest
+mount_policy:
+  model:
+    container_mount_dir: /models
+    readonly: true
+verification:
+  status: template_only

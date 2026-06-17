@@ -1,0 +1,19 @@
+id: runtime.llamacpp.nvidia-docker
+backend_id: backend.llamacpp
+backend_version_id: backend-version.llamacpp.server
+slug: llamacpp-nvidia-docker
+managed_by: system
+runner_type: docker
+vendor: nvidia
+image_ref: ghcr.io/ggml-org/llama.cpp:server-cuda13
+mount_policy:
+  model:
+    container_mount_dir: /models
+    readonly: true
+docker_options:
+  ipc_mode: host
+  shm_size: 8gb
+env:
+  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+verification:
+  status: verified

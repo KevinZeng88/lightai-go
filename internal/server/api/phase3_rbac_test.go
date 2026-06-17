@@ -75,8 +75,8 @@ func TestBackendListReadOnly(t *testing.T) {
 	}
 	var list []map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &list)
-	if len(list) != 3 {
-		t.Errorf("got %d backends, want 3", len(list))
+	if len(list) != 4 {
+		t.Errorf("got %d backends, want 4", len(list))
 	}
 }
 

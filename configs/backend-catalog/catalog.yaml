@@ -1,0 +1,11 @@
+catalog_version: v1
+checksum: checksum:backend-catalog-v1
+backends:
+  - backends/llamacpp.yaml
+  - backends/vllm.yaml
+  - backends/sglang.yaml
+  - backends/ollama.yaml
+external_overrides:
+  backends: ../backend-catalog.d/custom-backends
+  versions: ../backend-catalog.d/custom-versions
+  runtimes: ../backend-catalog.d/custom-runtimes

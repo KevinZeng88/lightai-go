@@ -345,7 +345,7 @@ export default {
     active: '活跃',
   },
   backends: {title:"推理后端",name:"名称",displayName:"显示名称",defaultVersion:"默认版本",paramFormat:"参数格式",commonParams:"常用参数",versions:"版本列表",detail:"后端详情",isDefault:"默认",port:"端口",actions:"操作"},
-  runtimes: {title:"运行配置",name:"名称",displayName:"显示名称",vendor:"厂商",type:"类型",image:"镜像",templateName:"模板名称",createFromTemplate:"从模板创建"},
+  runtimes: {title:"运行配置",name:"名称",displayName:"显示名称",vendor:"厂商",type:"类型",image:"镜像",templateName:"模板名称",createFromTemplate:"从模板创建",selectTemplate:"选择模板",managedBy:"管理方",systemManaged:"系统",userManaged:"用户",editRuntime:"编辑运行配置",systemReadonly:"系统内置 Runtime 只读，需要修改时请复制为用户自定义 Runtime。",highRiskOptions:"高风险选项",listOptions:"列表选项",customOptions:"自定义参数",commandPreview:"命令预览",dockerOptions:"Docker 参数",privileged:"特权模式",ipcMode:"IPC 模式",utsMode:"UTS 模式",networkMode:"网络模式",pidMode:"PID 模式",shmSize:"共享内存大小",privilegedRisk:"授予容器较高权限，仅可信 Runtime 可启用。",namespaceRisk:"与宿主机共享命名空间，启用前需确认隔离影响。",resourceRisk:"会改变宿主机资源暴露，启用前请确认节点容量。",devices:"设备",optionalDevices:"可选设备",groupAdd:"附加用户组",securityOpt:"安全选项",capAdd:"能力",deviceCgroupRules:"设备 Cgroup 规则",extraHosts:"额外 Hosts",ulimits:"Ulimit",env:"环境变量",extraMounts:"额外挂载",customArgs:"自定义 Args",customEnv:"自定义 Env",customDockerOptions:"自定义 Docker Options",created:"运行配置已创建",saved:"运行配置已保存",deleted:"运行配置已删除",deleteConfirm:"确认删除 {name}？"},
   artifacts: {title:"模型文件",name:"名称",path:"路径",format:"格式",taskType:"任务类型",architecture:"架构",size:"规模",quantization:"量化"},
   deployments: {title:"模型部署",name:"名称",status:"状态",artifact:"模型文件",runtime:"运行配置",nodeId:"节点ID",gpuIds:"GPU IDs",hostPort:"主机端口",dryRun:"Dry Run",start:"启动",stop:"停止"},
   instances: {title:"模型实例",deployment:"部署ID",state:"状态",node:"节点",container:"容器ID",port:"端口",endpoint:"端点",detail:"实例详情"},

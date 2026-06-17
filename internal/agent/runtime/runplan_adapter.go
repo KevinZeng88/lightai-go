@@ -32,6 +32,7 @@ func ConvertRunplanToAgentSpec(plan PlanInput) AgentRunSpec {
 			ShmSize:         plan.ShmSize,
 			SecurityOptions: plan.SecurityOptions,
 			Ulimits:         plan.Ulimits,
+			GroupAdd:        plan.GroupAdd,
 			GPUDeviceIDs:    plan.GPUDeviceIDs,
 		},
 	}
@@ -93,6 +94,7 @@ type PlanInput struct {
 	GPUDeviceIDs     []string
 	GPUVisibleEnvKey string
 	SecurityOptions  []string
+	GroupAdd         []string
 }
 
 // PlanDevice mirrors runplan.DeviceMapping.

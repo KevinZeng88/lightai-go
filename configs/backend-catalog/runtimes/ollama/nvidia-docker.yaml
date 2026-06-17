@@ -1,0 +1,12 @@
+id: runtime.ollama.nvidia-docker
+backend_id: backend.ollama
+backend_version_id: backend-version.ollama.latest
+slug: ollama-nvidia-docker
+managed_by: system
+runner_type: docker
+vendor: nvidia
+image_ref: ollama/ollama:latest
+env:
+  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+verification:
+  status: verified

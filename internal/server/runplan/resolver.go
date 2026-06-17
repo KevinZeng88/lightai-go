@@ -79,15 +79,16 @@ type RuntimeInfo struct {
 
 // DockerSpecInfo holds Docker runtime configuration.
 type DockerSpecInfo struct {
-	Privileged      bool              `json:"privileged"`
-	IPCMode         string            `json:"ipc_mode"`
-	UTSMode         string            `json:"uts_mode"`
-	NetworkMode     string            `json:"network_mode"`
-	ShmSize         string            `json:"shm_size"`
-	Ulimits         map[string]string `json:"ulimits"`
-	SecurityOptions []string          `json:"security_options"`
-	Devices         []DeviceMapping   `json:"devices"`
-	GroupAdd        []string          `json:"group_add"`
+	Privileged       bool              `json:"privileged"`
+	IPCMode          string            `json:"ipc_mode"`
+	UTSMode          string            `json:"uts_mode"`
+	NetworkMode      string            `json:"network_mode"`
+	ShmSize          string            `json:"shm_size"`
+	GPUVisibleEnvKey string            `json:"gpu_visible_env_key"`
+	Ulimits          map[string]string `json:"ulimits"`
+	SecurityOptions  []string          `json:"security_options"`
+	Devices          []DeviceMapping   `json:"devices"`
+	GroupAdd         []string          `json:"group_add"`
 }
 
 // ModelMountInfo holds model mount configuration.
@@ -107,9 +108,11 @@ type NodeOverrideInfo struct {
 
 // ArtifactInfo is the minimal artifact data.
 type ArtifactInfo struct {
-	ID   string
-	Name string
-	Path string
+	ID           string
+	Name         string
+	Path         string
+	ModelRoot    string
+	RelativePath string
 }
 
 // DeploymentInfo is the minimal deployment data.
@@ -200,7 +203,10 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	hostPort := in.Deployment.Service.HostPort
 
 	// 11. GPU visible env.
-	gpuVisibleKey := "CUDA_VISIBLE_DEVICES"
+	gpuVisibleKey := docker.GPUVisibleEnvKey
+	if gpuVisibleKey == "" {
+		gpuVisibleKey = defaultVisibleEnvKey(in.BackendRuntime.Vendor)
+	}
 	gpuIDs := make([]string, 0)
 	for _, g := range in.AssignedGPUs {
 		gpuIDs = append(gpuIDs, fmt.Sprintf("%d", g.Index))
@@ -219,12 +225,14 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 
 		Privileged:  docker.Privileged,
 		IPCMode:     docker.IPCMode,
+		UTSMode:     docker.UTSMode,
 		NetworkMode: docker.NetworkMode,
 		ShmSize:     docker.ShmSize,
 		Ulimits:     docker.Ulimits,
 
-		Devices: docker.Devices,
-		Mounts:  mounts,
+		Devices:  docker.Devices,
+		Mounts:   mounts,
+		GroupAdd: docker.GroupAdd,
 
 		HostPort:      hostPort,
 		ContainerPort: containerPort,
@@ -442,6 +450,9 @@ func mergeDockerSpec(in ResolveInput) DockerSpecInfo {
 		if override.ShmSize != "" {
 			docker.ShmSize = override.ShmSize
 		}
+		if override.GPUVisibleEnvKey != "" {
+			docker.GPUVisibleEnvKey = override.GPUVisibleEnvKey
+		}
 		if len(override.Devices) > 0 {
 			docker.Devices = override.Devices
 		}
@@ -466,27 +477,50 @@ func buildMounts(in ResolveInput) []MountMapping {
 	var mounts []MountMapping
 
 	// Model mount: use directory mount (matching direct smoke convention)
-	modelHostPath := in.Artifact.Path
-	hostDir := modelHostPath
-	modelFile := filepathBase(modelHostPath)
-	if idx := strings.LastIndex(modelHostPath, "/"); idx >= 0 {
-		hostDir = modelHostPath[:idx]
-	}
+	hostDir := modelHostRoot(in.Artifact)
 	if in.NodeRuntimeOverride != nil && in.NodeRuntimeOverride.ModelRootHostPath != "" {
 		hostDir = in.NodeRuntimeOverride.ModelRootHostPath
 	}
+	containerPath := in.BackendRuntime.ModelMount.ContainerPath
+	if containerPath == "" {
+		containerPath = "/models"
+	}
+	readonly := true
+	if in.BackendRuntime.ModelMount.ContainerPath != "" {
+		readonly = in.BackendRuntime.ModelMount.Readonly
+	}
 
-	// Mount the parent directory as /models:ro
 	mounts = append(mounts, MountMapping{
 		HostPath:      hostDir,
-		ContainerPath: "/models",
-		Readonly:      true,
+		ContainerPath: containerPath,
+		Readonly:      readonly,
 	})
 
-	// Model path in container = /models/<filename>
-	_ = modelFile // used via containerPath + "/" + modelFile in var map
-
 	return mounts
+}
+
+func modelHostRoot(artifact *ArtifactInfo) string {
+	if artifact == nil {
+		return ""
+	}
+	if artifact.ModelRoot != "" {
+		return artifact.ModelRoot
+	}
+	modelHostPath := artifact.Path
+	if idx := strings.LastIndex(modelHostPath, "/"); idx >= 0 {
+		return modelHostPath[:idx]
+	}
+	return modelHostPath
+}
+
+func modelRelativePath(artifact *ArtifactInfo) string {
+	if artifact == nil {
+		return ""
+	}
+	if artifact.RelativePath != "" {
+		return strings.TrimPrefix(artifact.RelativePath, "/")
+	}
+	return filepathBase(artifact.Path)
 }
 
 func filepathBase(path string) string {
@@ -522,14 +556,18 @@ func buildVarMap(in ResolveInput) map[string]string {
 	vars := make(map[string]string)
 
 	// Model path in container (after mount translation)
-	modelBase := filepathBase(in.Artifact.Path)
-	_ = modelBase
+	modelBase := modelRelativePath(in.Artifact)
+	containerMount := in.BackendRuntime.ModelMount.ContainerPath
+	if containerMount == "" {
+		containerMount = "/models"
+	}
+	modelContainerPath := strings.TrimRight(containerMount, "/") + "/" + strings.TrimLeft(modelBase, "/")
 
-	vars["MODEL_CONTAINER_PATH"] = "/models/" + filepathBase(in.Artifact.Path)
+	vars["MODEL_CONTAINER_PATH"] = modelContainerPath
 	vars["model_container_path"] = vars["MODEL_CONTAINER_PATH"]
 	vars["MODEL_HOST_PATH"] = in.Artifact.Path
 	vars["model_host_path"] = in.Artifact.Path
-	vars["model_parent_host_path"] = strings.TrimSuffix(in.Artifact.Path, "/"+modelBase)
+	vars["model_parent_host_path"] = modelHostRoot(in.Artifact)
 	vars["MODEL_PARENT_HOST_PATH"] = vars["model_parent_host_path"]
 
 	port := fmt.Sprintf("%d", in.BackendVersion.DefaultContainerPort)
@@ -583,6 +621,8 @@ func buildVarMap(in ResolveInput) map[string]string {
 	}
 	vars["ASSIGNED_GPU_INDEXES"] = strings.Join(gpuIDs, ",")
 	vars["assigned_gpu_indexes"] = vars["ASSIGNED_GPU_INDEXES"]
+	vars["VENDOR_VISIBLE_DEVICES"] = vars["ASSIGNED_GPU_INDEXES"]
+	vars["vendor_visible_devices"] = vars["ASSIGNED_GPU_INDEXES"]
 	vars["ASSIGNED_GPU_COUNT"] = fmt.Sprintf("%d", len(gpuIDs))
 	vars["assigned_gpu_count"] = vars["ASSIGNED_GPU_COUNT"]
 
@@ -596,6 +636,15 @@ func buildVarMap(in ResolveInput) map[string]string {
 	vars["node_ip"] = vars["NODE_IP"]
 
 	return vars
+}
+
+func defaultVisibleEnvKey(vendor string) string {
+	switch strings.ToLower(vendor) {
+	case "huawei", "ascend":
+		return "ASCEND_VISIBLE_DEVICES"
+	default:
+		return "CUDA_VISIBLE_DEVICES"
+	}
 }
 
 func computeInputHash(in ResolveInput) string {

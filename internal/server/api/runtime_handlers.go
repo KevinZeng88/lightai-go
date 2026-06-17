@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"lightai-go/internal/common/log"
@@ -106,6 +107,10 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
+	if editable, _ := existing["is_editable"].(bool); !editable {
+		writeError(w, http.StatusConflict, "system-managed runtime is read-only; create a user-managed copy before editing")
+		return
+	}
 	tid, _ := existing["tenant_id"].(string)
 	if tid != "" && !tenantScopeCheck(r, tid) && !isPlatformAdmin(r) {
 		writeError(w, http.StatusNotFound, "not found")
@@ -119,10 +124,14 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
-	for _, f := range []string{"display_name", "image_name", "image_pull_policy", "vendor"} {
+	for _, f := range []string{"display_name", "image_name", "image_pull_policy", "vendor", "default_env_json", "docker_json", "model_mount_json", "health_check_override_json", "args_override_json", "entrypoint_override_json"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
-			args = append(args, v)
+			if strings.HasSuffix(f, "_json") || f == "docker_json" {
+				args = append(args, jsonString(v))
+			} else {
+				args = append(args, v)
+			}
 		}
 	}
 	args = append(args, id)
@@ -144,6 +153,10 @@ func (h *AgentHandler) HandleDeleteBackendRuntime(w http.ResponseWriter, r *http
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
+	if editable, _ := existing["is_editable"].(bool); !editable {
+		writeError(w, http.StatusConflict, "system-managed runtime is read-only")
+		return
+	}
 	tid, _ := existing["tenant_id"].(string)
 	if tid != "" && !tenantScopeCheck(r, tid) && !isPlatformAdmin(r) {
 		writeError(w, http.StatusNotFound, "not found")
@@ -157,6 +170,133 @@ func (h *AgentHandler) HandleDeleteBackendRuntime(w http.ResponseWriter, r *http
 	}
 	log.OperationCompleted(ctx, "backend_runtime.delete", opStart, "id", id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, br.name, br.display_name, br.vendor
+		FROM node_backend_runtimes nbr
+		JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id
+		WHERE nbr.node_id = ?
+		ORDER BY br.name`, nodeID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer rows.Close()
+	var out []map[string]interface{}
+	for rows.Next() {
+		var id, runtimeID, nid, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, rtName, rtDisplay, vendor string
+		var imagePresent, dockerAvailable int
+		if err := rows.Scan(&id, &runtimeID, &nid, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &rtName, &rtDisplay, &vendor); err != nil {
+			continue
+		}
+		out = append(out, map[string]interface{}{
+			"id": id, "backend_runtime_id": runtimeID, "node_id": nid, "runner_type": runner,
+			"image_ref": imageRef, "image_id": imageID, "image_digest": digest,
+			"image_present": imagePresent == 1, "docker_available": dockerAvailable == 1,
+			"driver_version": driver, "toolkit_version": toolkit, "device_check_json": json.RawMessage(checkJSON),
+			"status": status, "status_reason": reason, "last_checked_at": checked, "tenant_id": tid,
+			"created_at": ca, "updated_at": ua,
+			"backend_runtime": map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
+		})
+	}
+	if out == nil {
+		out = []map[string]interface{}{}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *AgentHandler) HandleEnableNodeBackendRuntime(w http.ResponseWriter, r *http.Request) {
+	h.upsertNodeBackendRuntime(w, r, false)
+}
+
+func (h *AgentHandler) HandleCheckNodeBackendRuntime(w http.ResponseWriter, r *http.Request) {
+	h.upsertNodeBackendRuntime(w, r, true)
+}
+
+func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.Request, checkOnly bool) {
+	nodeID := r.PathValue("id")
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	runtimeID := strVal(req, "backend_runtime_id", "")
+	if runtimeID == "" {
+		writeError(w, http.StatusBadRequest, "backend_runtime_id is required")
+		return
+	}
+	rt := h.getBackendRuntimeJSON(runtimeID)
+	if rt == nil {
+		writeError(w, http.StatusNotFound, "backend runtime not found")
+		return
+	}
+	vendor := strVal(rt, "vendor", "")
+	imageRef := strVal(req, "image_ref", strVal(rt, "image_name", ""))
+	imagePresent := boolVal(req, "image_present", false)
+	dockerAvailable := boolVal(req, "docker_available", false)
+	status, reason := h.evaluateNodeBackendRuntime(nodeID, vendor, imageRef, imagePresent, dockerAvailable)
+	if checkOnly && status == "unknown" {
+		reason = "check request did not provide docker/image evidence"
+	}
+	id := nodeID + ":" + runtimeID
+	tid := tenantID(r)
+	now := time.Now().Format(time.RFC3339)
+	_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
+		(id, backend_runtime_id, node_id, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(node_id, backend_runtime_id) DO UPDATE SET
+			image_ref=excluded.image_ref,
+			image_present=excluded.image_present,
+			docker_available=excluded.docker_available,
+			driver_version=excluded.driver_version,
+			toolkit_version=excluded.toolkit_version,
+			device_check_json=excluded.device_check_json,
+			status=excluded.status,
+			status_reason=excluded.status_reason,
+			last_checked_at=excluded.last_checked_at,
+			updated_at=excluded.updated_at`,
+		id, runtimeID, nodeID, "docker", imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
+		strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
+		status, reason, now, tid, now, now)
+	if err != nil {
+		log.Error("node backend runtime upsert failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id": id, "backend_runtime_id": runtimeID, "node_id": nodeID,
+		"image_ref": imageRef, "image_present": imagePresent, "docker_available": dockerAvailable,
+		"status": status, "status_reason": reason, "last_checked_at": now,
+	})
+}
+
+func (h *AgentHandler) evaluateNodeBackendRuntime(nodeID, vendor, imageRef string, imagePresent, dockerAvailable bool) (string, string) {
+	if vendor == "huawei" || vendor == "ascend" {
+		return "template_only", "Huawei/Ascend runtime is a template only until an adapter and hardware validation are available"
+	}
+	if vendor != "cpu" {
+		var count int
+		h.DB.QueryRow(`SELECT COUNT(*) FROM gpu_devices WHERE node_id = ? AND lower(vendor) = lower(?)`, nodeID, vendor).Scan(&count)
+		if count == 0 {
+			return "unsupported_device", "node has no matching GPU vendor"
+		}
+	}
+	if !dockerAvailable {
+		return "unknown", "docker availability has not been verified"
+	}
+	if imageRef != "" && !imagePresent {
+		return "missing_image", "docker image is not present on node"
+	}
+	return "ready", "runtime verified for node"
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {

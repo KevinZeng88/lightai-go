@@ -1,0 +1,10 @@
+id: runtime.llamacpp.cpu-docker
+backend_id: backend.llamacpp
+backend_version_id: backend-version.llamacpp.server
+slug: llamacpp-cpu-docker
+managed_by: system
+runner_type: docker
+vendor: cpu
+image_ref: ghcr.io/ggml-org/llama.cpp:server
+verification:
+  status: verified

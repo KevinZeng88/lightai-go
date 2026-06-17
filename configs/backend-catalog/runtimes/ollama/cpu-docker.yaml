@@ -1,0 +1,10 @@
+id: runtime.ollama.cpu-docker
+backend_id: backend.ollama
+backend_version_id: backend-version.ollama.latest
+slug: ollama-cpu-docker
+managed_by: system
+runner_type: docker
+vendor: cpu
+image_ref: ollama/ollama:latest
+verification:
+  status: verified

@@ -15,7 +15,7 @@ export async function listRuntimes(): Promise<BackendRuntime[]> {
 }
 
 export async function getRuntime(id: string): Promise<BackendRuntime> {
-  return apiClient.get(`/api/v1/backend-runtimes/${id}`)
+  return apiClient.get(`/backend-runtimes/${id}`)
 }
 
 export async function createRuntimeFromTemplate(data: Record<string, any>): Promise<BackendRuntime> {

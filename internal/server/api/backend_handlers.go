@@ -93,6 +93,45 @@ func (h *AgentHandler) HandleListBackendVersions(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (h *AgentHandler) HandleListAllBackendVersions(w http.ResponseWriter, r *http.Request) {
+	backendID := r.URL.Query().Get("backend_id")
+	query := `SELECT id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated, created_at, updated_at FROM backend_versions`
+	var args []interface{}
+	if backendID != "" {
+		query += ` WHERE backend_id = ?`
+		args = append(args, backendID)
+	}
+	query += ` ORDER BY backend_id, version`
+	rows, err := h.DB.Query(query, args...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer rows.Close()
+	var out []map[string]interface{}
+	for rows.Next() {
+		var id, bid, ver, dn, dep, dargs, dbp, pdefs, hc, dimg, env, ca, ua string
+		var isDef, isDep int
+		var dcp int
+		if err := rows.Scan(&id, &bid, &ver, &dn, &isDef, &dep, &dargs, &dbp, &pdefs, &hc, &dcp, &dimg, &env, &isDep, &ca, &ua); err != nil {
+			continue
+		}
+		out = append(out, map[string]interface{}{
+			"id": id, "backend_id": bid, "version": ver, "display_name": dn,
+			"is_default": isDef == 1, "default_entrypoint_json": json.RawMessage(dep),
+			"default_args_json": json.RawMessage(dargs), "default_backend_params_json": json.RawMessage(dbp),
+			"parameter_defs_json": json.RawMessage(pdefs), "health_check_json": json.RawMessage(hc),
+			"default_container_port": dcp, "default_images_json": json.RawMessage(dimg),
+			"env_json": redactRawJSON(env), "is_deprecated": isDep == 1,
+			"created_at": ca, "updated_at": ua,
+		})
+	}
+	if out == nil {
+		out = []map[string]interface{}{}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // ==========================================================================
 // BackendRuntimeTemplate (read-only from config files)
 // ==========================================================================

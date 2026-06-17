@@ -1,0 +1,12 @@
+id: runtime.llamacpp.huawei-docker
+backend_id: backend.llamacpp
+backend_version_id: backend-version.llamacpp.server
+slug: llamacpp-huawei-docker
+managed_by: system
+runner_type: docker
+vendor: huawei
+image_ref: template-only
+env:
+  ASCEND_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+verification:
+  status: template_only

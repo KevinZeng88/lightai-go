@@ -53,7 +53,7 @@ const dryRunResult = ref<any>(null); const runPlanData = ref('')
 const createForm = ref({ name: '', model_artifact_id: '', backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 onMounted(async () => { await refresh() })
-async function refresh() { loading.value = true; try { items.value = await apiClient.get('/api/v1/model-deployments') } catch (e: any) {} loading.value = false }
+async function refresh() { loading.value = true; try { items.value = await apiClient.get('/deployments') } catch (e: any) {} loading.value = false }
 
 function showCreate() { createVisible.value = true }
 async function doCreate() {
@@ -61,20 +61,20 @@ async function doCreate() {
   try {
     createForm.value.placement_json = JSON.stringify({ node_id: createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
     createForm.value.service_json = JSON.stringify({ host_port: createForm.value.host_port })
-    await apiClient.post('/api/v1/model-deployments', createForm.value)
+    await apiClient.post('/deployments', createForm.value)
     ElMessage.success('Created'); createVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
   saving.value = false
 }
 
 async function doDryRun(row: any) {
-  try { dryRunResult.value = await apiClient.post(`/api/v1/model-deployments/${row.id}/dry-run`, {}) } catch (e: any) {}
+  try { dryRunResult.value = await apiClient.post(`/deployments/${row.id}/dry-run`, {}) } catch (e: any) {}
   dryRunVisible.value = true
 }
 
 async function doStart(row: any) {
   try {
-    const res = await apiClient.post(`/api/v1/model-deployments/${row.id}/start`, {})
+    const res = await apiClient.post(`/deployments/${row.id}/start`, {})
     runPlanData.value = res.docker_preview || JSON.stringify(res, null, 2)
     runPlanVisible.value = true
     ElMessage.success('Started')
@@ -83,11 +83,11 @@ async function doStart(row: any) {
 }
 
 async function doStop(row: any) {
-  try { await apiClient.post(`/api/v1/model-deployments/${row.id}/stop`, {}); ElMessage.success('Stopped'); await refresh() } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+  try { await apiClient.post(`/deployments/${row.id}/stop`, {}); ElMessage.success('Stopped'); await refresh() } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
 }
 
 async function handleDelete(row: any) {
-  try { await ElMessageBox.confirm(`Delete ${row.name}?`, 'Confirm', { type: 'warning' }); await apiClient.delete(`/api/v1/model-deployments/${row.id}`); ElMessage.success('Deleted'); await refresh() } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || 'Failed') }
+  try { await ElMessageBox.confirm(`Delete ${row.name}?`, 'Confirm', { type: 'warning' }); await apiClient.delete(`/deployments/${row.id}`); ElMessage.success('Deleted'); await refresh() } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || 'Failed') }
 }
 
 // JSON used directly

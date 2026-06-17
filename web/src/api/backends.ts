@@ -21,15 +21,15 @@ export interface BackendRuntimeTemplate {
 }
 
 export async function listBackends(): Promise<InferenceBackend[]> {
-  return apiClient.get('/inference-backends')
+  return apiClient.get('/backends')
 }
 
 export async function getBackend(id: string): Promise<InferenceBackend> {
-  return apiClient.get(`/api/v1/inference-backends/${id}`)
+  return apiClient.get(`/backends/${id}`)
 }
 
 export async function listBackendVersions(backendId: string): Promise<BackendVersion[]> {
-  return apiClient.get(`/api/v1/inference-backends/${backendId}/versions`)
+  return apiClient.get(`/backends/${backendId}/versions`)
 }
 
 export async function listRuntimeTemplates(): Promise<BackendRuntimeTemplate[]> {
@@ -37,5 +37,5 @@ export async function listRuntimeTemplates(): Promise<BackendRuntimeTemplate[]> 
 }
 
 export async function getRuntimeTemplate(name: string): Promise<BackendRuntimeTemplate> {
-  return apiClient.get(`/api/v1/backend-runtime-templates/${name}`)
+  return apiClient.get(`/backend-runtime-templates/${name}`)
 }
