@@ -754,11 +754,14 @@ func processTask(ctx context.Context, client *http.Client, cfg *config.AgentConf
 	if opID == "" {
 		opID = task.ID
 	} // fallback
-	log.Info("task execution: begin",
+	log.Info("agent_task.execution.started",
+		"operation_id", opID,
 		"task_id", task.ID,
 		"task_type", task.TaskType,
+		"agent_id", agentID,
+		"node_id", task.NodeID,
+		"deployment_id", task.DeploymentID,
 		"instance_id", task.InstanceID,
-		"operation_id", opID,
 	)
 
 	result := register.TaskResult{

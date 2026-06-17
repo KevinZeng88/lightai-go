@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -67,6 +68,8 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 
 	id := uuid.NewString()
 	tid := tenantID(r)
+	actorID := actorIDFromSession(r)
+	requestID := log.RequestIDFromContext(r.Context())
 	now := time.Now().Format(time.RFC3339)
 
 	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -77,10 +80,27 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		"stopped", "stopped", tid, now, now,
 	)
 	if err != nil {
-		log.Error("create deployment", "error", err)
+		log.Error("deployment.create.failed", "error", err, "name", name,
+			"tenant_id", tid, "request_id", requestID)
+		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+			TenantID: tid, ActorID: actorID,
+			Action: "deployment.create", ResourceType: "deployment",
+			ResourceID: id, Result: "failure",
+			RequestID: requestID, Error: err.Error(),
+		})
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	log.Info("deployment.created", "deployment_id", id, "name", name,
+		"tenant_id", tid, "actor_id", actorID,
+		"model_artifact_id", artifactID, "backend_runtime_id", backendRuntimeID,
+		"request_id", requestID)
+	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+		TenantID: tid, ActorID: actorID,
+		Action: "deployment.create", ResourceType: "deployment",
+		ResourceID: id, Result: "success", RequestID: requestID,
+	})
 	writeJSON(w, http.StatusCreated, h.getDeploymentJSON(id))
 }
 
@@ -308,6 +328,17 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	nodeIP := "127.0.0.1"
 	h.DB.QueryRow(`SELECT primary_ip FROM nodes WHERE id = ?`, placement.NodeID).Scan(&nodeIP)
 
+	log.Info("instance.start.requested",
+		"operation_id", operationID,
+		"tenant_id", deploy["tenant_id"],
+		"actor_id", actorIDFromSession(r),
+		"deployment_id", deployID,
+		"instance_id", instanceID,
+		"node_id", placement.NodeID,
+		"gpu_ids", placement.GPUIds,
+		"request_id", log.RequestIDFromContext(r.Context()),
+	)
+
 	var entrypoint, argsOverride []string
 	json.Unmarshal([]byte(bvEntrypoint), &entrypoint)
 	json.Unmarshal([]byte(bvArgs), &bvArgs) // placeholder, actual parsing in resolver
@@ -471,8 +502,8 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Create agent task
-	if _, err := tx.Exec(`INSERT INTO agent_tasks (id, task_type, status, tenant_id, deployment_id, instance_id, node_id, payload, timeout_seconds, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		taskID, "model_instance_start", "pending", tid, deployID, instanceID, placement.NodeID, string(agentPayload), 300, now, now); err != nil {
+	if _, err := tx.Exec(`INSERT INTO agent_tasks (id, task_type, status, tenant_id, deployment_id, instance_id, node_id, payload, timeout_seconds, operation_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		taskID, "model_instance_start", "pending", tid, deployID, instanceID, placement.NodeID, string(agentPayload), 300, operationID, now, now); err != nil {
 		log.Error("deployment.start.task_insert_failed", "error", err, "task_id", taskID, "instance_id", instanceID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -491,8 +522,26 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Log after commit succeeds so correlation IDs are durable.
+	log.Info("agent_task.created",
+		"operation_id", operationID,
+		"task_id", taskID,
+		"task_type", "model_instance_start",
+		"deployment_id", deployID,
+		"instance_id", instanceID,
+		"agent_id", "", "node_id", placement.NodeID,
+		"generation", 1, "attempt", 1,
+	)
+
 	log.OperationCompleted(ctx, "deployment.start", opStart,
 		"deployment_id", deployID, "instance_id", instanceID, "task_id", taskID, "run_plan_id", runPlanID)
+
+	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+		TenantID: tid, ActorID: actorIDFromSession(r),
+		Action: "instance.start", ResourceType: "model_instance",
+		ResourceID: instanceID, Result: "success",
+		RequestID: log.RequestIDFromContext(r.Context()), OperationID: operationID,
+	})
 
 	// Agent will claim this task on next heartbeat and execute Docker start.
 	// For now, attempt direct Docker execution if Agent is not running.
@@ -509,7 +558,8 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 
 func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Request) {
 	deployID := r.PathValue("id")
-	ctx, opStart := log.StartOperation(r.Context(), "deployment.stop", "deployment_id", deployID)
+	operationID := uuid.NewString()
+	ctx, opStart := log.StartOperation(r.Context(), "deployment.stop", "deployment_id", deployID, "operation_id", operationID)
 	_ = opStart
 	deploy := h.getDeploymentJSON(deployID)
 	if deploy == nil {
@@ -522,7 +572,8 @@ func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Reque
 	}
 
 	now := time.Now().Format(time.RFC3339)
-	_ = deploy["tenant_id"].(string)
+	tid := deploy["tenant_id"].(string)
+	actorID := actorIDFromSession(r)
 
 	// Find ALL non-terminal instances (running, starting, failed, pending, initializing)
 	rows, err := h.DB.Query(`SELECT id, node_id, container_id, actual_state FROM model_instances WHERE deployment_id = ? AND actual_state NOT IN ('stopped')`, deployID)
@@ -539,6 +590,18 @@ func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Reque
 		instances = append(instances, i)
 	}
 
+	// Log stop request with instance details.
+	for _, i := range instances {
+		log.Info("instance.stop.requested",
+			"operation_id", operationID,
+			"tenant_id", tid, "actor_id", actorID,
+			"deployment_id", deployID,
+			"instance_id", i.id,
+			"container_id", i.containerID,
+			"request_id", log.RequestIDFromContext(r.Context()),
+		)
+	}
+
 	// Idempotent: if no non-stopped instances, still update deployment status
 	warnings := []string{}
 	for _, i := range instances {
@@ -553,7 +616,7 @@ func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Reque
 		} else if n > 0 {
 			log.StateTransition(r.Context(), "deployment.stop", "gpu_lease", i.id, "reserved/active", "released",
 				"instance_id", i.id, "count", n)
-			log.Info("gpu_lease.released", "instance_id", i.id, "count", n)
+			log.Info("gpu_lease.released", "operation_id", operationID, "instance_id", i.id, "count", n)
 		}
 
 		// Cancel pending agent tasks
@@ -562,8 +625,26 @@ func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Reque
 
 	h.DB.Exec(`UPDATE model_deployments SET desired_state = 'stopped', status = 'stopped', updated_at = ? WHERE id = ?`, now, deployID)
 
+	for _, i := range instances {
+		log.Info("instance.stop.completed",
+			"operation_id", operationID,
+			"deployment_id", deployID,
+			"instance_id", i.id,
+			"container_id", i.containerID,
+			"final_state", i.state,
+		)
+	}
+
 	log.OperationCompleted(ctx, "deployment.stop", opStart,
 		"deployment_id", deployID, "instances_stopped", len(instances))
+
+	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+		TenantID: tid, ActorID: actorID,
+		Action: "instance.stop", ResourceType: "model_instance",
+		ResourceID: deployID, Result: "success",
+		RequestID: log.RequestIDFromContext(r.Context()), OperationID: operationID,
+		Detail: fmt.Sprintf("instances_stopped=%d", len(instances)),
+	})
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "stopped", "instances_stopped": len(instances), "warnings": warnings})
 }
 
@@ -665,13 +746,26 @@ func (h *AgentHandler) HandleGetInstance(w http.ResponseWriter, r *http.Request)
 
 func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Request) {
 	deployID := r.PathValue("id")
+	tid := tenantID(r)
+	actorID := actorIDFromSession(r)
+	requestID := log.RequestIDFromContext(r.Context())
+
 	deploy := h.getDeploymentJSON(deployID)
 	if deploy == nil {
+		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+			TenantID: tid, ActorID: actorID,
+			Action: "deployment.dry_run", ResourceType: "deployment",
+			ResourceID: deployID, Result: "failure",
+			RequestID: requestID, Error: "not_found",
+		})
+		log.Warn("deployment.dry_run.failed", "request_id", requestID,
+			"tenant_id", tid, "actor_id", actorID, "deployment_id", deployID,
+			"reason", "not_found")
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
 
-	runtimeID := deploy["backend_runtime_id"].(string)
+	runtimeID := strVal(deploy, "backend_runtime_id", "")
 	var rtVendor, rtImage, rtDockerJSON string
 	var bvPort int
 	h.DB.QueryRow(`SELECT vendor, image_name, docker_json FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&rtVendor, &rtImage, &rtDockerJSON)
@@ -679,15 +773,41 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 
 	// Simple dry-run: validate references exist
 	errors := []string{}
-	if deploy["model_artifact_id"] == "" {
+	if strVal(deploy, "model_artifact_id", "") == "" {
 		errors = append(errors, "model_artifact_id is required")
 	}
-	if deploy["backend_runtime_id"] == "" {
+	if runtimeID == "" {
 		errors = append(errors, "backend_runtime_id is required")
 	}
 
+	valid := len(errors) == 0
+	if valid {
+		log.Info("deployment.dry_run.succeeded", "request_id", requestID,
+			"tenant_id", tid, "actor_id", actorID, "deployment_id", deployID,
+			"model_artifact_id", strVal(deploy, "model_artifact_id", ""),
+			"backend_runtime_id", runtimeID,
+			"runtime", "docker", "vendor", rtVendor, "image", rtImage)
+		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+			TenantID: tid, ActorID: actorID,
+			Action: "deployment.dry_run", ResourceType: "deployment",
+			ResourceID: deployID, Result: "success",
+			RequestID: requestID,
+			Detail: fmt.Sprintf("runtime=%s vendor=%s image=%s", runtimeID, rtVendor, rtImage),
+		})
+	} else {
+		log.Warn("deployment.dry_run.failed", "request_id", requestID,
+			"tenant_id", tid, "actor_id", actorID, "deployment_id", deployID,
+			"reason", "validation_failed", "errors", fmt.Sprintf("%v", errors))
+		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+			TenantID: tid, ActorID: actorID,
+			Action: "deployment.dry_run", ResourceType: "deployment",
+			ResourceID: deployID, Result: "failure",
+			RequestID: requestID, Error: fmt.Sprintf("validation: %v", errors),
+		})
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"valid":    len(errors) == 0,
+		"valid":    valid,
 		"errors":   errors,
 		"warnings": []string{},
 	})

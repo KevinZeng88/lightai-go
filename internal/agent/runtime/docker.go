@@ -71,6 +71,7 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 	log.Info("docker.create.started",
 		"operation_id", opID,
 		"instance_id", spec.InstanceID,
+		"deployment_id", spec.DeploymentID,
 		"image", opts.Image,
 		"container_name", opts.ContainerName,
 		"env_keys", log.RedactEnvKeys(spec.Env),
@@ -94,6 +95,7 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 		"operation_id", opID,
 		"container_id", containerID,
 		"container_name", opts.ContainerName,
+		"deployment_id", spec.DeploymentID,
 		"duration_ms", createDuration,
 	)
 	if createDuration > log.SummaryConfig.SlowDockerThresholdMs {
@@ -107,6 +109,7 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 		"operation_id", opID,
 		"container_id", containerID,
 		"container_name", opts.ContainerName,
+		"deployment_id", spec.DeploymentID,
 	)
 
 	if err := d.client.ContainerStart(ctx, containerID); err != nil {
@@ -127,6 +130,7 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 	log.Info("docker.start.completed",
 		"operation_id", opID,
 		"container_id", containerID,
+		"deployment_id", spec.DeploymentID,
 		"duration_ms", startDuration,
 	)
 	if startDuration > log.SummaryConfig.SlowDockerThresholdMs {

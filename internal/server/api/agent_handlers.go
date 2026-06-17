@@ -348,6 +348,17 @@ func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBri
 			NodeID: rt.taskNodeID, TimeoutSeconds: rt.timeoutSeconds,
 			AgentRunSpec: json.RawMessage(rt.taskPayload),
 		})
+		// Per-task claim log with full correlation IDs.
+		log.Info("agent_task.claimed",
+			"operation_id", rt.operationID,
+			"task_id", rt.id,
+			"task_type", rt.taskType,
+			"agent_id", agentID,
+			"node_id", nodeID,
+			"deployment_id", rt.deploymentID,
+			"instance_id", rt.instanceID,
+			"generation", rt.generation,
+		)
 	}
 	return tasks
 }
@@ -950,6 +961,12 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 			log.StateTransition(r.Context(), "task.result", "instance", taskInstanceID, prevActualState, actualState,
 				"task_id", taskID, "deployment_id", taskDeploymentID, "node_id", taskNodeID,
 				"container_id", containerID, "duration_ms", log.DurationMs(startTime))
+			log.Info("instance.state.updated",
+				"operation_id", opID,
+				"instance_id", taskInstanceID,
+				"old_state", prevActualState, "new_state", actualState,
+				"container_id", containerID, "endpoint_url", endpointURL,
+			)
 			if opID != "" {
 				log.Info("task.result.processed",
 					"operation_id", opID, "task_id", taskID, "instance_id", taskInstanceID,

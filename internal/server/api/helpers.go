@@ -43,6 +43,14 @@ func tenantID(r *http.Request) string {
 	return ""
 }
 
+func actorIDFromSession(r *http.Request) string {
+	info := auth.SessionInfoFromContext(r.Context())
+	if info != nil && info.UserID != "" {
+		return info.UserID
+	}
+	return "system"
+}
+
 func isPlatformAdmin(r *http.Request) bool {
 	info := auth.SessionInfoFromContext(r.Context())
 	return info != nil && info.IsPlatformAdmin

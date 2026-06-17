@@ -178,7 +178,7 @@ func CheckEndpointReady(ctx context.Context, cfg *HealthCheckConfig, instanceID,
 						"attempts", attempt,
 						"http_status", resp.StatusCode,
 					)
-					log.InfoContext(ctx, "health_check.completed",
+					log.InfoContext(ctx, "runtime.health_check.succeeded",
 						"instance_id", instanceID,
 						"container_id", containerID,
 						"endpoint_url", url,
