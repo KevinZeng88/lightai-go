@@ -3,8 +3,6 @@ import { useAuthStore } from '@/stores/auth'
 /** Base path prefix for all LightAI management API calls. */
 export const API_BASE = '/api/v1'
 
-const BASE = ''
-
 export class ApiError extends Error {
   status: number
   data: any
@@ -35,7 +33,7 @@ class ApiClient {
       headers['X-CSRF-Token'] = authStore.csrfToken
     }
 
-    const resp = await fetch(BASE + url, {
+    const resp = await fetch(fullUrl, {
       method,
       headers,
       credentials: 'include',

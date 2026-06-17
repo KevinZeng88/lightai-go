@@ -32,6 +32,17 @@ const router = createRouter({
           name: 'GPUs',
           component: () => import('@/pages/GpusPage.vue'),
         },
+        // [Phase1] old model runtime pages removed — new pages added in Phase 5
+        {
+          path: 'backends',
+          name: 'Backends',
+          component: () => import('@/pages/BackendsPage.vue'),
+        },
+        {
+          path: 'runtimes',
+          name: 'BackendRuntimes',
+          component: () => import('@/pages/BackendRuntimesPage.vue'),
+        },
         {
           path: 'models/artifacts',
           name: 'ModelArtifacts',
@@ -46,16 +57,6 @@ const router = createRouter({
           path: 'models/instances',
           name: 'ModelInstances',
           component: () => import('@/pages/ModelInstancesPage.vue'),
-        },
-        {
-          path: 'runtime/environments',
-          name: 'RuntimeEnvironments',
-          component: () => import('@/pages/RuntimeEnvironmentsPage.vue'),
-        },
-        {
-          path: 'runtime/templates',
-          name: 'RunTemplates',
-          component: () => import('@/pages/RunTemplatesPage.vue'),
         },
         {
           path: 'observability/overview',

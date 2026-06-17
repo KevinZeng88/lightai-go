@@ -41,7 +41,7 @@
           <template #default="{ row }">{{ nodeGpuMem(row.id) }}</template>
         </el-table-column>
         <el-table-column :label="t('nodes.lastHeartbeat')" width="100">
-          <template #default="{ row }">{{ formatRelativeTime(row.last_heartbeat_at, locale) }}</template>
+          <template #default="{ row }"><span :title="formatDateTime(row.last_heartbeat_at)">{{ formatRelativeTime(row.last_heartbeat_at, locale) }}</span></template>
         </el-table-column>
         <template #empty>{{ t('dashboard.noNodes') }}</template>
       </el-table>
@@ -116,10 +116,10 @@
       </template>
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item :label="t('dashboard.agentLastReport')">
-          {{ latestHeartbeat ? formatRelativeTime(latestHeartbeat, locale) : '—' }}
+          <span :title="latestHeartbeat ? formatDateTime(latestHeartbeat) : ''">{{ latestHeartbeat ? formatRelativeTime(latestHeartbeat, locale) : '—' }}</span>
         </el-descriptions-item>
         <el-descriptions-item :label="t('dashboard.latestCollection')">
-          {{ latestCollected ? formatRelativeTime(latestCollected, locale) : '—' }}
+          <span :title="latestCollected ? formatDateTime(latestCollected) : ''">{{ latestCollected ? formatRelativeTime(latestCollected, locale) : '—' }}</span>
         </el-descriptions-item>
         <el-descriptions-item :label="t('dashboard.heartbeatTimeout')">
           <StatusTag :status="heartbeatOk ? 'healthy' : 'warning'" />
@@ -250,12 +250,16 @@ const nodeList = computed(() =>
 )
 
 // ---- Diagnostic helpers ----
+// P2-001: last_heartbeat_at is now updated by both heartbeat AND resource report.
+// This represents Agent last communication time (last contact of any kind).
 const latestHeartbeat = computed(() => {
   const onlineNodes = allNodes.value.filter(n => n.last_heartbeat_at)
   if (onlineNodes.length === 0) return null
   return onlineNodes.reduce((max, n) => (n.last_heartbeat_at! > max ? n.last_heartbeat_at! : max), '')
 })
 
+// P2-001: collected_at now uses server receive time (not Agent payload time).
+// This represents when GPU data was last successfully received by the server.
 const latestCollected = computed(() => {
   const gpusWithTime = allGpus.value.filter(g => g.collected_at)
   if (gpusWithTime.length === 0) return null

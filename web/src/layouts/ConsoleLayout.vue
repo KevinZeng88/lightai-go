@@ -39,8 +39,8 @@
             <el-icon><Setting /></el-icon>
             <span>{{ t('nav.runtime') }}</span>
           </template>
-          <el-menu-item index="/runtime/environments">{{ t('nav.runtimeEnvironments') }}</el-menu-item>
-          <el-menu-item index="/runtime/templates">{{ t('nav.runTemplates') }}</el-menu-item>
+          <el-menu-item index="/backends">{{ t('backends.title') }}</el-menu-item>
+          <el-menu-item index="/runtimes">{{ t('runtimes.title') }}</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="system">
