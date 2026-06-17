@@ -120,6 +120,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(openssl rand -hex 32)\n")
 		os.Exit(1)
 	}
+	// REVIEW-020: Warn about config fields that are documented but not yet implemented.
+	if cfg.Collectors.ReportInterval != 0 && cfg.Collectors.ReportInterval != 5*time.Second {
+		log.Warn("config: collectors.report_interval is set but not yet implemented — using default 5s",
+			"configured", cfg.Collectors.ReportInterval.String())
+	}
+	if cfg.Metrics.AdvertiseAddr != "" {
+		log.Warn("config: metrics.advertise_addr is set but not yet implemented — agent uses auto-detected address",
+			"configured", cfg.Metrics.AdvertiseAddr)
+	}
+
 	log.Info("agent starting",
 		"version", version.String(),
 		"agent_id", agentID,
