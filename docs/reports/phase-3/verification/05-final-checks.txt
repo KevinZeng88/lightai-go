@@ -1,0 +1,41 @@
+=== go test ./... -count=1 ===
+?   	lightai-go/cmd/agent	[no test files]
+?   	lightai-go/cmd/server	[no test files]
+ok  	lightai-go/internal/agent/collector	0.011s
+ok  	lightai-go/internal/agent/metrics	0.004s
+ok  	lightai-go/internal/agent/register	0.008s
+ok  	lightai-go/internal/agent/runtime	0.003s
+ok  	lightai-go/internal/agent/state	0.005s
+?   	lightai-go/internal/common/config	[no test files]
+ok  	lightai-go/internal/common/errors	0.002s
+?   	lightai-go/internal/common/log	[no test files]
+?   	lightai-go/internal/common/types	[no test files]
+ok  	lightai-go/internal/common/version	0.001s
+ok  	lightai-go/internal/server/api	0.541s
+?   	lightai-go/internal/server/auth	[no test files]
+?   	lightai-go/internal/server/db	[no test files]
+?   	lightai-go/internal/server/metrics	[no test files]
+?   	lightai-go/internal/server/models	[no test files]
+?   	lightai-go/internal/server/rbac	[no test files]
+ok  	lightai-go/internal/server/runplan	0.002s
+?   	lightai-go/web	[no test files]
+
+=== go build ./cmd/server/ ===
+OK
+
+=== go build ./cmd/agent/ ===
+OK
+
+=== npm --prefix web run build ===
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2.91s
+
+=== Phase 3 test summary ===
+--- PASS: TestBackendListReadOnly (0.00s)
+--- PASS: TestBackendVersionList (0.00s)
+--- PASS: TestBackendRuntimeCRUD (0.00s)
+--- PASS: TestBackendRuntimeTenantIsolation (0.00s)
+--- PASS: TestDefaultEnvJSONRedaction (0.00s)
+--- PASS: TestCreateFromTemplate (0.00s)
+PASS

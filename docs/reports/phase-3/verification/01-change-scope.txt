@@ -1,0 +1,175 @@
+=== git status --short ===
+ M VERSION
+ M cmd/agent/main.go
+ M cmd/server/main.go
+ M docs/PHASE-STATUS.md
+ M docs/review/phase-2g-full-review-fix-all-final-report.md
+ M internal/server/api/agent_handlers.go
+ D internal/server/api/deployment_lifecycle.go
+ D internal/server/api/instance_state.go
+ D internal/server/api/lease.go
+ D internal/server/api/model_handlers.go
+ D internal/server/api/model_handlers_test.go
+ D internal/server/api/rbac_phase2f_test.go
+ D internal/server/api/resolve_helper.go
+ M internal/server/api/resource_handlers.go
+ M internal/server/api/router.go
+ D internal/server/api/sweep.go
+ D internal/server/api/task_constants.go
+ D internal/server/api/task_handlers.go
+ M internal/server/auth/bootstrap.go
+ M internal/server/db/db.go
+ M internal/server/models/models.go
+ D internal/server/resolver/resolver.go
+ M scripts/check-glibc-compat.sh
+ M scripts/package-release-docker.sh
+ M scripts/package-release.sh
+ M web/src/api/client.ts
+ D web/src/api/modelArtifacts.ts
+ D web/src/api/modelDeployments.ts
+ D web/src/api/modelInstances.ts
+ D web/src/api/runTemplates.ts
+ D web/src/api/runtimeEnvironments.ts
+ M web/src/locales/en-US.ts
+ M web/src/locales/zh-CN.ts
+ M web/src/pages/DashboardPage.vue
+ M web/src/pages/GpusPage.vue
+ M web/src/pages/ModelArtifactsPage.vue
+ M web/src/pages/ModelDeploymentsPage.vue
+ M web/src/pages/ModelInstancesPage.vue
+ M web/src/pages/NodesPage.vue
+ D web/src/pages/RunTemplatesPage.vue
+ D web/src/pages/RuntimeEnvironmentsPage.vue
+ M web/src/router/index.ts
+ M web/src/utils/format.ts
+ M web/src/utils/status.ts
+ M web/tests/formatters.test.mjs
+?? configs/model-runtime/
+?? docs/design/13-backend-runplan-runtime-design.md
+?? docs/plan/phase-2g-heartbeat-collection-time-investigation.md
+?? docs/plan/phase-2h-web-node-visibility-investigation.md
+?? docs/plan/phase-3-auto-execution-guard.md
+?? docs/plan/phase-3-backend-runplan-refactor.md
+?? docs/plan/phase-3-step-by-step-execution.md
+?? docs/reports/
+?? docs/review/gpustack-runtime-reference-review.md
+?? docs/testing/
+?? internal/agent/runtime/runplan_adapter.go
+?? internal/agent/runtime/runplan_adapter_test.go
+?? internal/server/api/artifact_handlers.go
+?? internal/server/api/backend_handlers.go
+?? internal/server/api/constants.go
+?? internal/server/api/deployment_lifecycle_handlers.go
+?? internal/server/api/helpers.go
+?? internal/server/api/patch_validator.go
+?? internal/server/api/phase3_rbac_test.go
+?? internal/server/api/runtime_handlers.go
+?? internal/server/models/artifact.go
+?? internal/server/models/backend.go
+?? internal/server/models/deployment.go
+?? internal/server/models/instance.go
+?? internal/server/models/runplan.go
+?? internal/server/models/runtime.go
+?? internal/server/runplan/
+?? scripts/smoke-model-backends.sh
+?? web/src/api/backends.ts
+?? web/src/api/runtimes.ts
+?? web/src/pages/BackendRuntimesPage.vue
+?? web/src/pages/BackendsPage.vue
+
+=== git diff --stat ===
+ VERSION                                            |    2 +-
+ cmd/agent/main.go                                  |   44 +
+ cmd/server/main.go                                 |    7 +-
+ docs/PHASE-STATUS.md                               |   42 +-
+ .../phase-2g-full-review-fix-all-final-report.md   |   47 +
+ internal/server/api/agent_handlers.go              |   73 +-
+ internal/server/api/deployment_lifecycle.go        |  512 ------
+ internal/server/api/instance_state.go              |   93 --
+ internal/server/api/lease.go                       |  137 --
+ internal/server/api/model_handlers.go              | 1646 --------------------
+ internal/server/api/model_handlers_test.go         | 1178 --------------
+ internal/server/api/rbac_phase2f_test.go           |  628 --------
+ internal/server/api/resolve_helper.go              |  149 --
+ internal/server/api/resource_handlers.go           |   19 +-
+ internal/server/api/router.go                      |  106 +-
+ internal/server/api/sweep.go                       |  119 --
+ internal/server/api/task_constants.go              |   24 -
+ internal/server/api/task_handlers.go               |  228 ---
+ internal/server/auth/bootstrap.go                  |   73 +-
+ internal/server/db/db.go                           |  360 +++++
+ internal/server/models/models.go                   |  255 +--
+ internal/server/resolver/resolver.go               |  458 ------
+ scripts/check-glibc-compat.sh                      |   66 +-
+ scripts/package-release-docker.sh                  |   21 +-
+ scripts/package-release.sh                         |    1 +
+ web/src/api/client.ts                              |    4 +-
+ web/src/api/modelArtifacts.ts                      |   44 -
+ web/src/api/modelDeployments.ts                    |   96 --
+ web/src/api/modelInstances.ts                      |   51 -
+ web/src/api/runTemplates.ts                        |   57 -
+ web/src/api/runtimeEnvironments.ts                 |   59 -
+ web/src/locales/en-US.ts                           |   72 +-
+ web/src/locales/zh-CN.ts                           |   72 +-
+ web/src/pages/DashboardPage.vue                    |   10 +-
+ web/src/pages/GpusPage.vue                         |    2 +-
+ web/src/pages/ModelArtifactsPage.vue               |  170 +-
+ web/src/pages/ModelDeploymentsPage.vue             |  354 +----
+ web/src/pages/ModelInstancesPage.vue               |  146 +-
+ web/src/pages/NodesPage.vue                        |   36 +-
+ web/src/pages/RunTemplatesPage.vue                 |  162 --
+ web/src/pages/RuntimeEnvironmentsPage.vue          |  189 ---
+ web/src/router/index.ts                            |   21 +-
+ web/src/utils/format.ts                            |   41 +-
+ web/src/utils/status.ts                            |   14 +-
+ web/tests/formatters.test.mjs                      |  148 +-
+ 45 files changed, 1179 insertions(+), 6857 deletions(-)
+
+=== git diff --name-status ===
+M	VERSION
+M	cmd/agent/main.go
+M	cmd/server/main.go
+M	docs/PHASE-STATUS.md
+M	docs/review/phase-2g-full-review-fix-all-final-report.md
+M	internal/server/api/agent_handlers.go
+D	internal/server/api/deployment_lifecycle.go
+D	internal/server/api/instance_state.go
+D	internal/server/api/lease.go
+D	internal/server/api/model_handlers.go
+D	internal/server/api/model_handlers_test.go
+D	internal/server/api/rbac_phase2f_test.go
+D	internal/server/api/resolve_helper.go
+M	internal/server/api/resource_handlers.go
+M	internal/server/api/router.go
+D	internal/server/api/sweep.go
+D	internal/server/api/task_constants.go
+D	internal/server/api/task_handlers.go
+M	internal/server/auth/bootstrap.go
+M	internal/server/db/db.go
+M	internal/server/models/models.go
+D	internal/server/resolver/resolver.go
+M	scripts/check-glibc-compat.sh
+M	scripts/package-release-docker.sh
+M	scripts/package-release.sh
+M	web/src/api/client.ts
+D	web/src/api/modelArtifacts.ts
+D	web/src/api/modelDeployments.ts
+D	web/src/api/modelInstances.ts
+D	web/src/api/runTemplates.ts
+D	web/src/api/runtimeEnvironments.ts
+M	web/src/locales/en-US.ts
+M	web/src/locales/zh-CN.ts
+M	web/src/pages/DashboardPage.vue
+M	web/src/pages/GpusPage.vue
+M	web/src/pages/ModelArtifactsPage.vue
+M	web/src/pages/ModelDeploymentsPage.vue
+M	web/src/pages/ModelInstancesPage.vue
+M	web/src/pages/NodesPage.vue
+D	web/src/pages/RunTemplatesPage.vue
+D	web/src/pages/RuntimeEnvironmentsPage.vue
+M	web/src/router/index.ts
+M	web/src/utils/format.ts
+M	web/src/utils/status.ts
+M	web/tests/formatters.test.mjs
+
+=== git diff --check ===

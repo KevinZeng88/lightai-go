@@ -1,0 +1,3 @@
+Round 0: Start
+Round 1: Found node_id empty → auto-select online node ✅
+Round 2: Timeout 600s, instance state="" during wait → investigating HandleListInstances

@@ -1,7 +1,7 @@
 # LightAI Go Development Phase Status
 
-> Last updated: 2026-06-14
-> Current: RC1 Hotfix — credentials, logging, password reset, patch tooling
+> Last updated: 2026-06-16
+> Current: RC2 — runtime env, run templates, model deploy, templates config, UI polish
 
 ## Phase Summary
 
@@ -13,6 +13,9 @@
 | 2A | System/Registry/Mock | Done | `f259e42` |
 | 2B | NVIDIA Collector | Done | `7b0e039` |
 | 2B+ | node_id hardening | Done | `7649383` |
+| 2G | heartbeat/collection time fix + sweep SQL fix + web node visibility fix | Done | current |
+| 2H | web node visibility + sweep SQL param fix | Done | current |
+| 3W | Web Console MVP | Done | `5689c21` |
 | 2C | MetaX Collector | **Scripts Ready (mock verified, hardware pending)** | RC1 |
 | 3W | Web Console MVP | Done | `5689c21` |
 | 3W+ | Collector/Observability/Network | Done | `588e479` |
@@ -92,16 +95,33 @@
 1. Prometheus/Grafana binaries not included in dev repository (bundled mode needs download/preparation).
 2. Go Server does not yet have full Prometheus/Grafana supervisor (subprocess management is script-based).
 3. MetaX Phase 2C requires real MetaX hardware.
-4. Runtime Environment (Phase 3) not yet started.
-5. Model Registry (Phase 4) not yet started.
-6. Instance Lifecycle (Phase 5-7) not yet started.
-7. TLS/HTTPS not yet implemented.
+4. TLS/HTTPS not yet implemented.
+
+## Recent Additions (RC2)
+
+### Templates Config (`configs/templates/`)
+- Vendor-specific presets for run templates and runtime environments (NVIDIA, MetaX, CPU)
+- Docker image recommendation list
+- Node container image query (Agent → Server proxy)
+- Deployment dry-run command preview with full Docker spec
+- See `docs/templates-config.md`
+
+### Web UI
+- Runtime Environments, Run Templates, Model Artifacts, Model Deployments, Model Instances, Audit Logs
+- i18n coverage: 428 keys (zh-CN + en-US), all new pages translated
+- Relative time display: precise second-level (no more "刚刚")
+- Form presets: vendor-aware auto-fill for runtime env + run template create
+- Docker image autocomplete with suggestion list
+- Dry Run command preview in deployment page drawer
+
+### Packaging
+- Glibc check now scoped to specific build directory (not entire dist/)
+- Sweep SQL param count fix (3 places)
 
 ## Next Steps
 
 1. Phase 2C: MetaX real hardware adaptation.
-2. Phase 3: Runtime Environment management.
-3. Phase 4: Model definition management.
-4. Phase 5-7: Instance lifecycle, Docker operations, health checks.
-5. Phase 8: Web UI enhancements.
-6. Phase 9: Server-managed Prometheus/Grafana lifecycle.
+2. Phase 5-7: Instance lifecycle, Docker operations, health checks.
+3. Phase 8: Web UI enhancements.
+4. Phase 9: Server-managed Prometheus/Grafana lifecycle.
+5. TLS/HTTPS implementation.

@@ -1,0 +1,32 @@
+=== llama.cpp Docker smoke test ===
+
+--- Starting container ---
+15ffbd9b51adf51a0f2088f28f3b36e0eb847d52c0c0eeb8253df9fe2748f835
+
+--- docker ps ---
+15ffbd9b51ad   ghcr.io/ggml-org/llama.cpp:server-cuda13   "/app/llama-server -…"   6 seconds ago   Up 5 seconds (health: starting)   0.0.0.0:8002->8080/tcp, [::]:8002->8080/tcp   qwen35-9b-q4-llama
+
+--- docker logs (tail 100) ---
+warn: LLAMA_ARG_HOST environment variable is set, but will be overwritten by command line argument --host
+0.00.431.425 I log_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.431.429 I device_info:
+0.00.552.401 I   - CUDA0   : NVIDIA GeForce RTX 5090 Laptop GPU (24462 MiB, 23119 MiB free)
+0.00.552.415 I   - CPU     : Intel(R) Core(TM) Ultra 9 275HX (63730 MiB, 63730 MiB free)
+0.00.553.602 I system_info: n_threads = 24 (n_threads_batch = 24) / 24 | CUDA : ARCHS = 750,800,860,890,900,1200,1210 | USE_GRAPHS = 1 | PEER_MAX_BATCH_SIZE = 128 | BLACKWELL_NATIVE_FP4 = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.553.619 I srv  llama_server: n_parallel is set to auto, using n_parallel = 4 and kv_unified = true
+0.00.553.924 I srv          init: running without SSL
+0.00.554.896 I srv          init: using 23 threads for HTTP server
+0.00.555.105 I srv         start: binding port with default address family
+0.00.556.290 I srv  llama_server: loading model
+0.00.556.451 I srv    load_model: loading model '/models/Qwen3.5-9B-Q4_K_M.gguf'
+0.00.556.481 I common_init_result: fitting params to device memory ...
+0.00.556.482 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)
+0.05.082.956 W llama_context: n_ctx_seq (4096) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+0.05.109.680 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+
+--- GET /v1/models ---
+{"error":{"message":"Loading model","type":"unavailable_error","code":503}}
+--- POST /v1/chat/completions ---
+{"error":{"message":"Loading model","type":"unavailable_error","code":503}}
+--- cleanup ---
+qwen35-9b-q4-llama

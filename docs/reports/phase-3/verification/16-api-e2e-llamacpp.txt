@@ -1,0 +1,38 @@
+[11:26:01] === SINGLE: llamacpp ===
+[11:26:01] PASS: env OK
+[11:26:01] Starting server...
+[11:26:05] PASS: server PID=39504
+[11:26:05] Starting agent...
+[11:26:11] PASS: agent PID=39641
+[11:26:11] Login...
+[11:26:11] PASS: login OK
+[11:26:11] Seed llamacpp...
+[11:26:11] PASS: seed-llamacpp
+[11:26:11] Start llamacpp (full)...
+[11:26:11]   Instance: d31b6789-3cd4-494b-bd5d-144ce1a351b3
+[11:26:11] [TIMING] start-llamacpp.instance_created ts=1781666771
+[11:26:11] Waiting for instance running...
+[11:26:13] [WAIT] wait_progress elapsed_ms=2000 state=pending
+[11:26:15] FAIL: start-llamacpp: failed error=
+[11:26:15] Stop llamacpp...
+[11:26:15]   Stop response: status=stopped
+[11:26:17]   Instance state after stop: stopped
+[11:26:17] PASS: stop-llamacpp
+[11:26:17] Cleanup...
+[11:26:17] Stop vllm...
+[11:26:17] stop-vllm returned error: {"error":"not found"}
+[11:26:17]   Stop response: status=
+[11:26:19]   Instance state after stop: 
+[11:26:19] PASS: stop-vllm
+[11:26:19] Stop sglang...
+[11:26:19] stop-sglang returned error: {"error":"not found"}
+[11:26:19]   Stop response: status=
+[11:26:21]   Instance state after stop: 
+[11:26:21] PASS: stop-sglang
+[11:26:21] Stop llamacpp...
+[11:26:21]   Stop response: status=stopped
+[11:26:23]   Instance state after stop: stopped
+[11:26:23] PASS: stop-llamacpp
+[11:26:23] Stopped server (pid=39504)
+[11:26:23] Stopped agent (pid=39641)
+[11:26:23] PASS: cleanup done
