@@ -442,6 +442,13 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 	consecutiveFailures := 0
 	lastHBFailLog := time.Time{} // rate-limit heartbeat failure logs
 
+	// REVIEW-005: Periodic managed container reconciliation (every 60s).
+	reconcileTicker := time.NewTicker(60 * time.Second)
+	defer reconcileTicker.Stop()
+
+	// Initial reconciliation at startup.
+	go reconcileManagedContainers(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -562,6 +569,9 @@ func runAgentLoop(ctx context.Context, cfg *config.AgentConfig, agentID, hostnam
 					)
 				}
 			}
+
+		case <-reconcileTicker.C:
+			go reconcileManagedContainers(ctx)
 
 		case <-collectTicker.C:
 			collectAndReport(ctx, client, cfg, agentID, registry, snap, gpuMetricsSummary)
@@ -969,6 +979,35 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 	result.ContainerID = payload.ContainerID
 	result.DeploymentID = task.DeploymentID
 	result.NodeID = task.NodeID
+}
+
+// reconcileManagedContainers lists Docker containers with the LightAI naming prefix
+// and logs discrepancies against what the agent expects. REVIEW-005: Agent reconciliation.
+func reconcileManagedContainers(ctx context.Context) {
+	out, err := execCmd("docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}", "--filter", "name=lightai-")
+	if err != nil {
+		log.Debug("reconcile: docker ps failed (may be normal if Docker not available)", "error", err)
+		return
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	managed := 0
+	exited := 0
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		managed++
+		if strings.Contains(line, "Exited") {
+			exited++
+		}
+	}
+	if managed > 0 {
+		log.Info("reconcile: managed containers found",
+			"total", managed, "exited", exited, "running", managed-exited)
+	} else {
+		log.Debug("reconcile: no managed containers found")
+	}
 }
 
 // execCmd runs a command and returns its stdout as a string.

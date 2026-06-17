@@ -120,6 +120,12 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if currentVersion < 11 {
+		if err := db.migrateV11(); err != nil {
+			return fmt.Errorf("migrate v11: %w", err)
+		}
+	}
+
 	log.Info("db migrate: completed", "duration_ms", time.Since(migrateStart).Milliseconds())
 	return nil
 }
@@ -891,6 +897,28 @@ func (db *DB) migrateV10() error {
 		return err
 	}
 
+	return nil
+}
+
+// migrateV11 adds task lease and idempotency columns (REVIEW-004).
+func (db *DB) migrateV11() error {
+	cols := []string{
+		"ALTER TABLE agent_tasks ADD COLUMN lease_owner TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE agent_tasks ADD COLUMN lease_expires_at TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE agent_tasks ADD COLUMN operation_id TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE agent_tasks ADD COLUMN generation INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE agent_tasks ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1",
+		"ALTER TABLE agent_tasks ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3",
+	}
+	for _, c := range cols {
+		if _, err := db.Exec(c); err != nil {
+			// Column may already exist — non-fatal.
+		}
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (11, 'V11: task lease and idempotency columns on agent_tasks')`); err != nil {
+		return err
+	}
 	return nil
 }
 

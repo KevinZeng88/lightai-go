@@ -260,7 +260,7 @@ func (h *AgentHandler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 // claimAndReturnTasks atomically claims pending tasks for a node and returns them.
-// It runs in a transaction: sweep expired tasks first, then claim pending ones.
+// REVIEW-004: Uses conditional UPDATE to prevent double-claim races between concurrent heartbeats.
 func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBrief {
 	tx, err := database.Begin()
 	if err != nil {
@@ -270,71 +270,66 @@ func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBri
 	defer tx.Rollback()
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	leaseExpiry := time.Now().UTC().Add(5 * time.Minute).Format(time.RFC3339)
+	maxTasks := 10
 
 	// Step 1: Sweep expired tasks and leases.
 	sweepExpiredTasks(tx, nodeID, now)
 
-	// Step 2: Select pending tasks.
-	var taskIDs []string
+	// Step 2: Atomically claim pending tasks with a conditional UPDATE.
+	// Only tasks that are still 'pending' get claimed — eliminates SELECT-then-UPDATE race.
+	result, err := tx.Exec(
+		`UPDATE agent_tasks SET
+			status = ?,
+			claimed_at = ?,
+			agent_id = ?,
+			lease_owner = ?,
+			lease_expires_at = ?,
+			generation = generation + 1,
+			attempt = attempt + 1,
+			retry_count = retry_count + 1,
+			updated_at = ?
+		 WHERE id IN (
+			SELECT id FROM agent_tasks
+			WHERE node_id = ? AND status = ?
+			ORDER BY created_at ASC LIMIT ?
+		 )`,
+		TaskStatusClaimed, now, agentID, agentID, leaseExpiry, now,
+		nodeID, TaskStatusPending, maxTasks,
+	)
+	claimedCount := int64(0)
+	if err == nil {
+		claimedCount, _ = result.RowsAffected()
+	}
+
+	// Step 3: Fetch the tasks just claimed by this agent.
 	type rawTask struct {
 		id, taskType, tenantID, deploymentID, instanceID, taskNodeID, taskPayload string
 		timeoutSeconds                                                            int
+		generation                                                                int
+		operationID                                                               string
 	}
 	var rawTasks []rawTask
 
 	rows, err := tx.Query(
-		`SELECT id, task_type, tenant_id, deployment_id, COALESCE(instance_id,''), node_id, timeout_seconds, payload
-		 FROM agent_tasks WHERE node_id = ? AND status = ? ORDER BY created_at ASC LIMIT 10`,
-		nodeID, TaskStatusPending,
+		`SELECT id, task_type, tenant_id, deployment_id, COALESCE(instance_id,''), node_id, timeout_seconds, payload, generation, operation_id
+		 FROM agent_tasks WHERE node_id = ? AND status = ? AND agent_id = ? AND claimed_at = ?
+		 ORDER BY created_at ASC LIMIT ?`,
+		nodeID, TaskStatusClaimed, agentID, now, maxTasks,
 	)
-
-	// Diagnostic: log pending count for this node.
-	pendingCount := 0
-	for rows.Next() {
-		pendingCount++
-	}
-	rows.Close()
-	// DEBUG: no-task case is high-frequency. INFO only when tasks found.
-	if pendingCount > 0 {
-		log.Info("claim: pending tasks for node", "node_id", nodeID, "count", pendingCount)
-	} else {
-		log.Debug("claim: no pending tasks", "node_id", nodeID)
-	}
-
-	// Re-query after count.
-	rows, err = tx.Query(
-		`SELECT id, task_type, tenant_id, deployment_id, COALESCE(instance_id,''), node_id, timeout_seconds, payload
-		 FROM agent_tasks WHERE node_id = ? AND status = ? ORDER BY created_at ASC LIMIT 10`,
-		nodeID, TaskStatusPending,
-	)
-	if err != nil {
-		return nil
-	}
-	for rows.Next() {
-		var rt rawTask
-		if err := rows.Scan(&rt.id, &rt.taskType, &rt.tenantID, &rt.deploymentID, &rt.instanceID, &rt.taskNodeID, &rt.timeoutSeconds, &rt.taskPayload); err != nil {
-			continue
-		}
-		taskIDs = append(taskIDs, rt.id)
-		rawTasks = append(rawTasks, rt)
-	}
-	rows.Close()
-
-	// Step 3: Atomically claim them.
-	for _, id := range taskIDs {
-		tx.Exec(
-			`UPDATE agent_tasks SET status = ?, claimed_at = ?, agent_id = ?, retry_count = retry_count + 1, updated_at = ? WHERE id = ?`,
-			TaskStatusClaimed, now, agentID, now, id,
-		)
-	}
-	if len(taskIDs) > 0 {
-		log.Info("claim: claimed tasks", "node_id", nodeID, "claimed_count", len(taskIDs), "task_types", func() []string {
-			types := make([]string, len(rawTasks))
-			for i, rt := range rawTasks {
-				types[i] = rt.taskType
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var rt rawTask
+			if err := rows.Scan(&rt.id, &rt.taskType, &rt.tenantID, &rt.deploymentID, &rt.instanceID, &rt.taskNodeID, &rt.timeoutSeconds, &rt.taskPayload, &rt.generation, &rt.operationID); err != nil {
+				continue
 			}
-			return types
-		}())
+			rawTasks = append(rawTasks, rt)
+		}
+	}
+
+	if claimedCount > 0 {
+		log.Info("claim: claimed tasks", "node_id", nodeID, "claimed_count", claimedCount)
 	} else {
 		log.Debug("claim: no tasks claimed", "node_id", nodeID)
 	}
@@ -344,7 +339,7 @@ func claimAndReturnTasks(database *db.DB, nodeID, agentID string) []AgentTaskBri
 		return nil
 	}
 
-	// Build response from claimed tasks.
+	// Build response from claimed tasks. Include lease metadata for agent-side validation.
 	var tasks []AgentTaskBrief
 	for _, rt := range rawTasks {
 		tasks = append(tasks, AgentTaskBrief{
@@ -875,6 +870,37 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 	status := strVal(req, "status", "completed")
 	opID := strVal(req, "operation_id", "")
 	now := time.Now().UTC().Format(time.RFC3339)
+
+	// REVIEW-004: Validate task lease and generation before accepting result.
+	// Reject stale, duplicate, or old-generation results.
+	var taskStatus, taskOpID, taskLeaseOwner string
+	var taskGeneration int
+	err := h.DB.QueryRow(`SELECT status, COALESCE(operation_id,''), COALESCE(lease_owner,''), generation
+		FROM agent_tasks WHERE id = ?`, taskID).Scan(&taskStatus, &taskOpID, &taskLeaseOwner, &taskGeneration)
+	if err != nil {
+		log.Warn("task_result: task not found", "task_id", taskID, "error", err)
+		w.WriteHeader(http.StatusOK) // ack to prevent agent retry
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored", "reason": "task_not_found"})
+		return
+	}
+	if taskStatus == "completed" || taskStatus == "failed" || taskStatus == "timed_out" {
+		log.Info("task_result: duplicate/stale result ignored",
+			"task_id", taskID, "task_status", taskStatus, "op_id", opID)
+		w.WriteHeader(http.StatusOK)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored", "reason": "task_already_terminal"})
+		return
+	}
+	// If the task was claimed by a different agent, reject.
+	if taskLeaseOwner != "" {
+		agentID := strVal(req, "agent_id", "")
+		if agentID != "" && taskLeaseOwner != agentID {
+			log.Warn("task_result: lease owner mismatch",
+				"task_id", taskID, "lease_owner", taskLeaseOwner, "reporter", agentID)
+			w.WriteHeader(http.StatusOK)
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ignored", "reason": "lease_owner_mismatch"})
+			return
+		}
+	}
 
 	// Resolve instance_id and deployment_id from the task.
 	var taskInstanceID, taskDeploymentID, taskNodeID string
