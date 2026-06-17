@@ -11,7 +11,7 @@ export interface BackendRuntime {
 }
 
 export async function listRuntimes(): Promise<BackendRuntime[]> {
-  return apiClient.get('/api/v1/backend-runtimes')
+  return apiClient.get('/backend-runtimes')
 }
 
 export async function getRuntime(id: string): Promise<BackendRuntime> {
@@ -19,13 +19,13 @@ export async function getRuntime(id: string): Promise<BackendRuntime> {
 }
 
 export async function createRuntimeFromTemplate(data: Record<string, any>): Promise<BackendRuntime> {
-  return apiClient.post('/api/v1/backend-runtimes/from-template', data)
+  return apiClient.post('/backend-runtimes/from-template', data)
 }
 
 export async function patchRuntime(id: string, data: Record<string, any>): Promise<BackendRuntime> {
-  return apiClient.patch(`/api/v1/backend-runtimes/${id}`, data)
+  return apiClient.patch(`/backend-runtimes/${id}`, data)
 }
 
 export async function deleteRuntime(id: string): Promise<any> {
-  return apiClient.delete(`/api/v1/backend-runtimes/${id}`)
+  return apiClient.delete(`/backend-runtimes/${id}`)
 }
