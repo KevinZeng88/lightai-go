@@ -131,7 +131,10 @@ After first login, change passwords immediately.
 │   └── observability/      # Grafana dashboards, provisioning
 ├── scripts/                # Management scripts
 ├── logs/ data/ run/        # Runtime directories
-├── runtime/                # Credentials file (0600, auto-generated)
+├── runtime/                # Auto-generated credentials (0600)
+│   ├── security/           # Agent token (0600, auto-generated on first start)
+│   │   └── agent-token.env
+│   └── initial-credentials.txt
 ├── LICENSES/               # Third-party licenses
 └── README-RELEASE.md
 ```
@@ -187,19 +190,56 @@ All logs in English.
 
 ## Credentials
 
-- Initial passwords are auto-generated if not pre-set via environment variables.
-- Credentials saved to `runtime/initial-credentials.txt` (0600, not overwritten on restart).
-- To reset passwords: `./scripts/reset-password.sh` or `./scripts/reset-grafana-password.sh`.
-- Reset credentials saved to `runtime/reset-credentials.txt` (0600).
-- Passwords are never logged to stdout/stderr or log files.
+LightAI Go uses **two independent security credentials**:
+
+| Credential | Purpose | File | Auto-Generated? |
+|-----------|---------|------|-----------------|
+| **Admin Password** | Web console / API login | `runtime/initial-credentials.txt` | Yes, on bootstrap |
+| **Agent Token** | Server↔Agent mutual auth | `runtime/security/agent-token.env` | Yes, on first server start |
+
+- Initial admin password is auto-generated if `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` not set.
+- Agent Token is auto-generated as a 64-character hex string on first Server start.
+- Both files are `0600`, not world-readable, never overwritten after creation.
+- Passwords and tokens are never logged to stdout/stderr or log files (shown as `<redacted>`).
+
+### Agent Token Auto-Generation
+
+On **first startup**, the Server detects the default token and:
+
+1. Generates a secure random 64-char hex token.
+2. Writes it to `runtime/security/agent-token.env` (0600).
+3. Uses it for all subsequent Agent authentication.
+
+On **subsequent starts**, the Server reads from the existing file.
+
+The **Agent** (when running on the same machine):
+
+1. Detects the default token in its config.
+2. Reads from `runtime/security/agent-token.env`.
+3. Connects to the Server with the shared token.
+
+For **remote Agent** nodes:
+
+```bash
+# Option A: Copy the token file from the Server
+scp server:/opt/lightai-go/runtime/security/agent-token.env agent:/opt/lightai-go/runtime/security/
+
+# Option B: Set environment variable on the Agent
+export LIGHTAI_AGENT_TOKEN=<token-value>
+```
+
+- Setting `LIGHTAI_AGENT_TOKEN` overrides both config files and auto-generated tokens.
+- To reset the token: delete `runtime/security/agent-token.env` on all nodes, restart Server, copy new token to Agents.
+- Config file templates (`configs/server.release.yaml`, `configs/agent.yaml`) keep the default placeholder — they are never modified.
 
 ## Security
 
-- Set `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` for admin account (or use auto-generated)
-- Set `LIGHTAI_GRAFANA_ADMIN_PASSWORD` for Grafana (or use auto-generated)
-- Change default `agent_token` in configs before production
-- Do NOT expose 18080/19090/13000 to public internet directly
-- Use VPN, bastion host, or reverse proxy
+- Set `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` for admin account (or use auto-generated).
+- Set `LIGHTAI_GRAFANA_ADMIN_PASSWORD` for Grafana (or use auto-generated).
+- Agent Token is auto-generated on first start — no manual token creation needed.
+- For remote Agents, copy `runtime/security/agent-token.env` or use `LIGHTAI_AGENT_TOKEN`.
+- Do NOT expose 18080/19090/13000 to public internet directly.
+- Use VPN, bastion host, or reverse proxy.
 
 ## Troubleshooting
 

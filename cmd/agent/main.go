@@ -25,6 +25,7 @@ import (
 	"lightai-go/internal/agent/state"
 	"lightai-go/internal/common/config"
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/common/token"
 	"lightai-go/internal/common/types"
 	"lightai-go/internal/common/version"
 
@@ -113,12 +114,31 @@ func main() {
 	archName := runtime.GOARCH
 	kernelVer := detectKernelVersion()
 
-	// REVIEW-001: Refuse startup with default/empty agent token.
-	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
-		fmt.Fprintf(os.Stderr, "ERROR: Default or empty agent token detected.\n")
-		fmt.Fprintf(os.Stderr, "Set LIGHTAI_AGENT_TOKEN to a secure random value.\n")
-		fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(openssl rand -hex 32)\n")
-		os.Exit(1)
+	// Bootstrap Agent Token: prefer env var, then config, then shared local file.
+	// The Agent never auto-generates a token — only the Server does.
+	if token.IsDefault(cfg.AgentToken) {
+		resolved, err := token.BootstrapAgent(cfg.AgentToken)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\n=== AGENT TOKEN ERROR ===\n")
+			fmt.Fprintf(os.Stderr, "No valid Agent Token configured.\n\n")
+			fmt.Fprintf(os.Stderr, "The Agent requires the same token as the Server.\n")
+			fmt.Fprintf(os.Stderr, "Options:\n")
+			fmt.Fprintf(os.Stderr, "  1. Set LIGHTAI_AGENT_TOKEN environment variable\n")
+			fmt.Fprintf(os.Stderr, "  2. Copy %s from the Server installation\n", token.TokenFile)
+			fmt.Fprintf(os.Stderr, "  3. Set agent_token in the Agent config file\n\n")
+			fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(cat /path/to/server/%s)\n", token.TokenFile)
+			fmt.Fprintf(os.Stderr, "==============================\n\n")
+			os.Exit(1)
+		}
+		cfg.AgentToken = resolved
+		log.Info("agent token loaded from shared file",
+			"file", token.TokenFile,
+			"agent_token", "<redacted>",
+		)
+	} else {
+		log.Info("agent token loaded from config/environment",
+			"agent_token", "<redacted>",
+		)
 	}
 	// REVIEW-020: Warn about config fields that are documented but not yet implemented.
 	if cfg.Collectors.ReportInterval != 0 && cfg.Collectors.ReportInterval != 5*time.Second {

@@ -18,6 +18,7 @@ import (
 
 	"lightai-go/internal/common/config"
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/common/token"
 	"lightai-go/internal/common/types"
 	"lightai-go/internal/common/version"
 	"lightai-go/internal/server/api"
@@ -82,29 +83,31 @@ func main() {
 		RetentionDays: cfg.Logging.RetentionDays,
 	})
 
-	// P0-011: Check for default agent token in production.
-	// AUD-001: Use RedactValue to avoid writing the token value to log files.
-	if cfg.AgentToken == "" || cfg.AgentToken == "lightai-agent-token-change-me" || cfg.AgentToken == "dev-agent-token" {
-		maskedToken := log.RedactValue("agent_token", cfg.AgentToken)
-		if cfg.DevMode {
-			log.Warn("using default agent token in dev mode — NOT safe for production",
-				"agent_token", maskedToken,
-			)
-		} else {
-			// REVIEW-001: Refuse startup in non-dev mode with default/empty agent token.
-			log.Error("DEFAULT AGENT TOKEN DETECTED — refusing to start in non-dev mode",
-				"agent_token", maskedToken,
-				"help", "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.",
-			)
-			fmt.Fprintf(os.Stderr, "\n=== SECURITY ERROR ===\n")
-			fmt.Fprintf(os.Stderr, "Default or empty agent token detected.\n")
-			fmt.Fprintf(os.Stderr, "LightAI Go refuses to start in non-dev mode without a secure agent token.\n")
-			fmt.Fprintf(os.Stderr, "Set LIGHTAI_AGENT_TOKEN env var to a secure random value.\n")
-			fmt.Fprintf(os.Stderr, "Example: export LIGHTAI_AGENT_TOKEN=$(openssl rand -hex 32)\n")
-			fmt.Fprintf(os.Stderr, "Or set dev_mode: true in server config for development.\n")
-			fmt.Fprintf(os.Stderr, "=========================\n\n")
-			os.Exit(1)
+	// Bootstrap Agent Token: auto-generate on first startup, reuse on subsequent.
+	// LIGHTAI_AGENT_TOKEN env var and non-default config values always take precedence.
+	if token.IsDefault(cfg.AgentToken) {
+		resolved, autoGen, err := token.BootstrapServer(cfg.AgentToken)
+		if err != nil {
+			log.Fatal("failed to bootstrap agent token", "error", err)
 		}
+		cfg.AgentToken = resolved
+		if autoGen {
+			log.Info("agent token auto-generated and saved",
+				"file", token.TokenFile,
+				"agent_token", "<redacted>",
+			)
+			fmt.Fprintf(os.Stderr, "[lightai] Auto-generated Agent Token → %s\n", token.TokenFile)
+			fmt.Fprintf(os.Stderr, "[lightai] Set LIGHTAI_AGENT_TOKEN to override, or copy this file to Agent nodes.\n")
+		} else {
+			log.Info("agent token loaded from existing file",
+				"file", token.TokenFile,
+				"agent_token", "<redacted>",
+			)
+		}
+	} else {
+		log.Info("agent token loaded from config/environment",
+			"agent_token", "<redacted>",
+		)
 	}
 
 	log.Info("server starting",
