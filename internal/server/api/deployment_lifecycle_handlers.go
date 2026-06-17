@@ -328,6 +328,18 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	nodeIP := "127.0.0.1"
 	h.DB.QueryRow(`SELECT primary_ip FROM nodes WHERE id = ?`, placement.NodeID).Scan(&nodeIP)
 
+	// Auto-assign first available GPU on the node if none specified.
+	// Required for GPU lease chain: reserved → activated → released.
+	if len(placement.GPUIds) == 0 && placement.NodeID != "" {
+		var autoGpuID string
+		h.DB.QueryRow(`SELECT id FROM gpu_devices WHERE node_id = ? AND status = 'available' LIMIT 1`,
+			placement.NodeID).Scan(&autoGpuID)
+		if autoGpuID != "" {
+			placement.GPUIds = []string{autoGpuID}
+			log.Info("gpu_lease.auto_assigned", "gpu_id", autoGpuID, "node_id", placement.NodeID, "instance_id", instanceID)
+		}
+	}
+
 	log.Info("instance.start.requested",
 		"operation_id", operationID,
 		"tenant_id", deploy["tenant_id"],
@@ -404,6 +416,13 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Build GPU device ID list using NVIDIA indices (not internal UUIDs).
+	// NVIDIA container toolkit requires index-based device IDs like "0", not DB UUIDs.
+	gpuDeviceIDs := make([]string, len(gpuInfos))
+	for i, gi := range gpuInfos {
+		gpuDeviceIDs[i] = fmt.Sprintf("%d", gi.Index)
+	}
+
 	// Transaction: instance + runplan + lease + agent_task
 	now := time.Now().Format(time.RFC3339)
 	planJSON, _ := json.Marshal(plan)
@@ -417,7 +436,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"served_model_name":   strVal(params, "served_model_name", strVal(artifact, "name", "")),
 		"node_id":             placement.NodeID,
 		"agent_id":            "",
-		"gpu_device_ids":      placement.GPUIds,
+		"gpu_device_ids":      gpuDeviceIDs,
 		"gpu_visible_env_key": "CUDA_VISIBLE_DEVICES",
 		"operation_id":        operationID,
 		"env":                 plan.Env,
@@ -440,7 +459,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 			"shm_size":         plan.ShmSize,
 			"security_options": plan.SecurityOptions,
 			"ulimits":          plan.Ulimits,
-			"gpu_device_ids":   placement.GPUIds,
+			"gpu_device_ids":   gpuDeviceIDs,
 		},
 		"health_check": map[string]interface{}{
 			"enabled":          plan.HealthCheck.Path != "",
@@ -638,13 +657,15 @@ func (h *AgentHandler) HandleStopDeployment(w http.ResponseWriter, r *http.Reque
 	log.OperationCompleted(ctx, "deployment.stop", opStart,
 		"deployment_id", deployID, "instances_stopped", len(instances))
 
-	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
-		TenantID: tid, ActorID: actorID,
-		Action: "instance.stop", ResourceType: "model_instance",
-		ResourceID: deployID, Result: "success",
-		RequestID: log.RequestIDFromContext(r.Context()), OperationID: operationID,
-		Detail: fmt.Sprintf("instances_stopped=%d", len(instances)),
-	})
+	for _, i := range instances {
+		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+			TenantID: tid, ActorID: actorID,
+			Action: "instance.stop", ResourceType: "model_instance",
+			ResourceID: i.id, Result: "success",
+			RequestID: log.RequestIDFromContext(r.Context()), OperationID: operationID,
+			Detail: fmt.Sprintf("deployment_id=%s", deployID),
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "stopped", "instances_stopped": len(instances), "warnings": warnings})
 }
 
