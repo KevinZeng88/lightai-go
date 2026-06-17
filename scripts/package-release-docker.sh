@@ -149,8 +149,25 @@ echo "Release artifacts: $PROJECT_DIR/dist/"
 if $DO_GLIBC_CHECK; then
   echo ""
   echo "[check] Running glibc ABI compatibility check..."
-  if [ -x "$PROJECT_DIR/scripts/check-glibc-compat.sh" ]; then
-    "$PROJECT_DIR/scripts/check-glibc-compat.sh" "$PROJECT_DIR/dist" || {
+
+  # Read the version that was just built.
+  VERSION=$(head -1 "$PROJECT_DIR/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "")
+
+  if [ -z "$VERSION" ]; then
+    echo "  WARNING: cannot determine version, skipping glibc check"
+  elif [ -x "$PROJECT_DIR/scripts/check-glibc-compat.sh" ]; then
+    # Only check the release staging directory just produced by this build.
+    # Do NOT scan the whole dist/ — historical versions were already checked.
+    RELEASE_DIR="$PROJECT_DIR/dist/lightai-go-${VERSION}-linux-amd64"
+    CHECK_DIRS="$RELEASE_DIR"
+
+    # If a matching patch directory also exists (e.g. built in the same run), check it too.
+    PATCH_DIRS=$(find "$PROJECT_DIR/dist" -maxdepth 1 -type d -name "lightai-go-patch-*-to-${VERSION}-linux-amd64" 2>/dev/null || true)
+    for pd in $PATCH_DIRS; do
+      CHECK_DIRS="$CHECK_DIRS $pd"
+    done
+
+    "$PROJECT_DIR/scripts/check-glibc-compat.sh" $CHECK_DIRS || {
       echo ""
       echo "=== GLIBC CHECK FAILED ==="
       echo "The release contains binaries that require GLIBC >= 2.29."
