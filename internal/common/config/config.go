@@ -68,6 +68,7 @@ type AgentConfig struct {
 	GPU            GPUProfileConfig     `yaml:"gpu" json:"gpu"`
 	Logging        LoggingConfig        `yaml:"logging" json:"logging"`
 	Task           TaskConfig           `yaml:"task" json:"task"`
+	ModelBrowser   ModelBrowserConfig   `yaml:"model_browser" json:"model_browser"`
 }
 
 // AgentMetricsConfig holds agent metrics server settings.
@@ -83,6 +84,15 @@ type AgentMetricsConfig struct {
 // HeartbeatConfig holds heartbeat settings.
 type HeartbeatConfig struct {
 	Interval time.Duration `yaml:"interval" json:"interval"`
+}
+
+// ModelBrowserConfig holds model file browser settings.
+type ModelBrowserConfig struct {
+	Enabled        bool     `yaml:"enabled" json:"enabled"`
+	AllowedRoots   []string `yaml:"allowed_roots" json:"allowed_roots"`
+	MaxEntries     int      `yaml:"max_entries" json:"max_entries"`
+	MaxScanDepth   int      `yaml:"max_scan_depth" json:"max_scan_depth"`
+	FollowSymlinks bool     `yaml:"follow_symlinks" json:"follow_symlinks"`
 }
 
 // TaskConfig holds agent task execution settings.

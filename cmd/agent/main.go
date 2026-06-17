@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -294,9 +296,16 @@ func main() {
 		healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 		healthMux.HandleFunc("GET /docker-images", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			out, err := execCmd("docker", "images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}")
+			query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("query")))
+			limit := 100
+			if raw := r.URL.Query().Get("limit"); raw != "" {
+				if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 500 {
+					limit = n
+				}
+			}
+			out, err := execCmd("docker", "images", "--format", "{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Digest}}\t{{.CreatedAt}}\t{{.Size}}", "--no-trunc")
 			if err != nil {
-				json.NewEncoder(w).Encode([]map[string]interface{}{})
+				json.NewEncoder(w).Encode(map[string]interface{}{"images": []map[string]interface{}{}, "error": "docker daemon unavailable"})
 				return
 			}
 			lines := strings.Split(strings.TrimSpace(out), "\n")
@@ -306,23 +315,116 @@ func main() {
 				if line == "" {
 					continue
 				}
-				parts := strings.SplitN(line, "\t", 2)
-				if strings.Contains(parts[0], "<none>") {
+				parts := strings.SplitN(line, "\t", 6)
+				if len(parts) < 6 {
 					continue
 				}
-				size := ""
-				if len(parts) > 1 {
-					size = parts[1]
+				repo, tag, imageID, digest, createdAt, sz := parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
+				if query != "" && !strings.Contains(strings.ToLower(repo+":"+tag), query) && !strings.HasPrefix(strings.ToLower(imageID), query) {
+					continue
 				}
+				present := tag != "<none>"
 				images = append(images, map[string]interface{}{
-					"image": parts[0],
-					"size":  size,
+					"repository": repo, "tag": tag, "image_id": imageID, "digest": digest,
+					"created_at": createdAt, "size": sz, "image_ref": repo + ":" + tag, "image_present": present,
 				})
+				if len(images) >= limit {
+					break
+				}
 			}
 			if images == nil {
 				images = []map[string]interface{}{}
 			}
-			json.NewEncoder(w).Encode(images)
+			json.NewEncoder(w).Encode(map[string]interface{}{"images": images, "count": len(images)})
+		})
+
+		// File browser endpoint.
+		healthMux.HandleFunc("GET /files", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			root := strings.TrimSpace(r.URL.Query().Get("root"))
+			relPath := strings.TrimSpace(r.URL.Query().Get("path"))
+			if !cfg.ModelBrowser.Enabled || len(cfg.ModelBrowser.AllowedRoots) == 0 {
+				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "model browser not enabled"})
+				return
+			}
+			rootOK := false
+			for _, ar := range cfg.ModelBrowser.AllowedRoots {
+				if root == ar {
+					rootOK = true
+					break
+				}
+			}
+			if !rootOK {
+				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "root not allowed"})
+				return
+			}
+			absPath := filepath.Join(root, relPath)
+			cleanRoot := filepath.Clean(root)
+			if !strings.HasPrefix(filepath.Clean(absPath), cleanRoot+string(os.PathSeparator)) && filepath.Clean(absPath) != cleanRoot {
+				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "path traversal blocked"})
+				return
+			}
+			entries, err := os.ReadDir(absPath)
+			if err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "cannot read: " + err.Error()})
+				return
+			}
+			maxE := cfg.ModelBrowser.MaxEntries
+			if maxE <= 0 {
+				maxE = 1000
+			}
+			var result []map[string]interface{}
+			for _, e := range entries {
+				if len(result) >= maxE {
+					break
+				}
+				info, _ := e.Info()
+				isDir := e.IsDir()
+				et := "file"
+				if isDir {
+					et = "directory"
+				}
+				var sz int64
+				var mt string
+				if info != nil {
+					sz = info.Size()
+					mt = info.ModTime().UTC().Format(time.RFC3339)
+				}
+				result = append(result, map[string]interface{}{"name": e.Name(), "type": et, "size": sz, "mod_time": mt, "is_dir": isDir})
+			}
+			if result == nil {
+				result = []map[string]interface{}{}
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"entries": result, "count": len(result), "root": root, "path": relPath, "truncated": len(entries) > maxE})
+		})
+
+		// Model scanner endpoint.
+		healthMux.HandleFunc("POST /model-paths/scan", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			var req struct {
+				Root         string `json:"root"`
+				RelativePath string `json:"relative_path"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid request"})
+				return
+			}
+			if !cfg.ModelBrowser.Enabled {
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "model browser not enabled"})
+				return
+			}
+			rootOK := false
+			for _, ar := range cfg.ModelBrowser.AllowedRoots {
+				if req.Root == ar {
+					rootOK = true
+					break
+				}
+			}
+			if !rootOK {
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "root not allowed"})
+				return
+			}
+			json.NewEncoder(w).Encode(collector.ScanModelPath(req.Root, req.RelativePath))
 		})
 
 		metricsAddr := fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port)

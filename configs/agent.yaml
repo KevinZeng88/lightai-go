@@ -52,6 +52,16 @@ collectors:
     #       metrics_cmd: "deploy/collectors/gpu/metax/metrics.sh"
   report_interval: 5s
 
+model_browser:
+  enabled: true
+  allowed_roots:
+    - /home/kzeng/models
+    - /data/models
+    - /data/part2/MX-C500/model
+  max_entries: 1000
+  max_scan_depth: 2
+  follow_symlinks: false
+
 logging:
   format: text
   level: info

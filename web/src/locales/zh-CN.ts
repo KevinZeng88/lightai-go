@@ -350,4 +350,12 @@ export default {
   deployments: {title:"模型部署",name:"名称",status:"状态",artifact:"模型文件",runtime:"运行配置",nodeId:"节点ID",gpuIds:"GPU IDs",hostPort:"主机端口",dryRun:"Dry Run",start:"启动",stop:"停止"},
   instances: {title:"模型实例",deployment:"部署ID",state:"状态",node:"节点",container:"容器ID",port:"端口",endpoint:"端点",detail:"实例详情"},
   dockerLogs: {title:"Docker 日志",refresh:"刷新日志",copy:"复制日志",loadFailed:"日志加载失败",empty:"暂无日志",taskId:"任务 ID",runtimeState:"运行状态",noRunPlan:"当前实例没有可查询的运行计划"},
+  modelWizard: {title:"新增模型",selectNode:"选择节点",browseDir:"浏览目录",scanModel:"扫描模型",modelName:"模型名称",modelFormat:"格式",discoveredInfo:"扫描信息",createAndSave:"创建并保存",selectFile:"选择文件",selectDir:"选择目录"},
+  modelLocations: {title:"节点位置",addLocation:"添加位置",rescan:"重新扫描",attest:"人工确认",disable:"禁用",delete:"删除",node:"节点",path:"路径",pathType:"类型",status:"状态",matchStatus:"一致性",lastScanned:"最近扫描",noActiveInstances:"有活跃实例时不能删除"},
+  runtimeWizard: {title:"新增运行配置",selectBackend:"选择后端",selectVersion:"选择版本",selectNode:"选择节点",runnerType:"运行类型",browseImage:"浏览镜像",manualImage:"手动输入镜像",imageRef:"镜像引用",checkRuntime:"检测运行配置",params:"参数",save:"保存"},
+  nodeRuntime: {title:"节点运行配置",addNode:"添加节点",recheck:"重新检测",disable:"禁用",delete:"删除",imageRef:"镜像引用",imageId:"镜像ID",imagePresent:"镜像可用",status:"状态",driver:"驱动版本",lastChecked:"最近检测"},
+  fileBrowser: {title:"文件浏览",root:"根目录",path:"路径",refresh:"刷新",select:"选择",name:"名称",type:"类型",size:"大小",modTime:"修改时间",selectFile:"选择文件",selectDirectory:"选择目录",noAccess:"无访问权限"},
+  dockerImages: {title:"Docker 镜像",search:"搜索",repository:"仓库",tag:"标签",imageId:"镜像ID",digest:"摘要",created:"创建时间",size:"大小",select:"选择",manualInput:"手动输入",noImages:"无镜像"},
+  preflight: {title:"启动前检查",canRun:"可运行",candidateNodes:"候选节点",noNodes:"没有节点同时有模型位置和运行配置",errors:"错误",warnings:"警告"},
+  startWizard: {title:"启动实例",selectModel:"选择模型",selectRuntime:"选择运行配置",preflight:"启动前检查",selectNode:"选择节点",gpuConfig:"GPU 配置",portConfig:"端口配置",commandPreview:"命令预览",start:"启动"},
 }
