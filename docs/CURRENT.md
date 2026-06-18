@@ -203,6 +203,31 @@ GPU index mapping real multi-GPU validation is documented as product/runtime val
 Advanced node detail Docker readiness, GPU lease picker, and non-Docker runners remain formal documented blockers.
 ```
 
+
+## Runtime Observability Closeout (2026-06-19)
+
+All observability gaps closed:
+
+- **Container failure reporting**: agent preserves ContainerID on docker.start failure;
+  TaskResult.Status field routes failures to correct server handler;
+  last_error stores structured JSON {failure_reason_code, exit_code, container_id, error}.
+- **stdout/stderr single-line**: singleLineTail/singleLineTailStr escape newlines in log output.
+- **Log noise reduction**: /metrics (covers /metrics/targets via prefix) at DEBUG;
+  high-frequency GET list polling at DEBUG via isHighFrequencyGET middleware.
+- **Audit semantics**: instance.start.requested distinguishes task creation from container start success.
+- **Failed instance E2E**: scripts/e2e-model-runtime-failed-instance-logs.sh;
+  port conflict forces docker.start failure; verifies state=failed, container_id preserved,
+  last_error structured, logs API callable via current_run_plan_id.
+- **Instance detail API**: GET /api/v1/model-instances/{id} now returns current_run_plan_id.
+
+Three-backend matrix (all PASS):
+- llama.cpp: default + modified (--ctx-size 2048 --n-gpu-layers -1)
+- vLLM: default + modified (--max-model-len 2048)
+- SGLang: default + modified (--tp 1)
+
+Web: ModelInstancesPage log button checks current_run_plan_id (not actual_state);
+failed instances with run plan can access logs.
+
 ## Archive Rule
 
 Do not use these directories as current implementation guidance:

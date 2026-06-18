@@ -94,12 +94,22 @@ for i in $(seq 1 60); do
 done
 [ "$failed" = "1" ] || log "instance did not reach failed (may be running)"
 
-# Docker logs in failed state — requires current_run_plan_id from
-# the instance detail endpoint. The instance list API does not expose
-# run_plan_id; logs accessibility in failed state is verified via
-# program-level tests (TestModelInstanceFailedStateAllowsLogAccess).
-log "logs_api: skipped (requires run_plan_id from instance detail)"
-echo '{"note":"requires GET /api/v1/node-run-plans/{run_plan_id}/logs"}' > "$ARTIFACT_DIR/docker-logs-response.json"
+# Docker logs in failed state — get run_plan_id from instance detail
+inst_detail="$(api GET "/api/v1/model-instances/$instance_id" 2>/dev/null || echo '{}')"
+run_plan_id="$(echo "$inst_detail" | json_get current_run_plan_id 2>/dev/null)"
+if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "null" ]; then
+  logs_resp="$(api GET "/api/v1/node-run-plans/$run_plan_id/logs" 2>/dev/null || echo '{}')"
+  echo "$logs_resp" > "$ARTIFACT_DIR/docker-logs-response.json"
+  logs_len=$(echo "$logs_resp" | wc -c)
+  if [ "$logs_len" -gt 50 ]; then
+    log "logs_api: real response ($logs_len bytes) run_plan_id=$run_plan_id"
+  else
+    log "logs_api: response ($logs_len bytes) run_plan_id=$run_plan_id"
+  fi
+else
+  log "logs_api: no run_plan_id available (instance may not have been fully created)"
+  echo '{"error":"no run_plan_id"}' > "$ARTIFACT_DIR/docker-logs-response.json"
+fi
 
 # Status refresh
 status_refresh="$(api GET "/api/v1/model-instances/$instance_id" 2>/dev/null || echo '{}')"

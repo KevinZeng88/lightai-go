@@ -1289,11 +1289,11 @@ func (h *AgentHandler) getNodeRunPlanJSON(id string) map[string]interface{} {
 
 func (h *AgentHandler) HandleGetInstance(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	row := h.DB.QueryRow(`SELECT id, deployment_id, tenant_id, node_id, container_id, actual_state, desired_state, endpoint_url, host_port, container_port, last_error, started_at, stopped_at, created_at, updated_at FROM model_instances WHERE id = ?`, id)
+	row := h.DB.QueryRow(`SELECT id, deployment_id, tenant_id, node_id, container_id, actual_state, desired_state, endpoint_url, host_port, container_port, COALESCE(current_run_plan_id,''), last_error, started_at, stopped_at, created_at, updated_at FROM model_instances WHERE id = ?`, id)
 	var rid, did, tid, as, ds, ca string
-	var nid, cid, eu, le, sa, soa, ua sql.NullString
+	var nid, cid, eu, rpid, le, sa, soa, ua sql.NullString
 	var hp, cp int
-	if err := row.Scan(&rid, &did, &tid, &nid, &cid, &as, &ds, &eu, &hp, &cp, &le, &sa, &soa, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &did, &tid, &nid, &cid, &as, &ds, &eu, &hp, &cp, &rpid, &le, &sa, &soa, &ca, &ua); err != nil {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
@@ -1301,7 +1301,7 @@ func (h *AgentHandler) HandleGetInstance(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"id": rid, "deployment_id": did, "tenant_id": tid, "node_id": nid.String, "container_id": cid.String, "actual_state": as, "desired_state": ds, "endpoint_url": eu.String, "host_port": hp, "container_port": cp, "last_error": le.String, "started_at": sa.String, "stopped_at": soa.String, "created_at": ca, "updated_at": ua.String})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"id": rid, "deployment_id": did, "tenant_id": tid, "node_id": nid.String, "container_id": cid.String, "actual_state": as, "desired_state": ds, "endpoint_url": eu.String, "host_port": hp, "container_port": cp, "current_run_plan_id": rpid.String, "last_error": le.String, "started_at": sa.String, "stopped_at": soa.String, "created_at": ca, "updated_at": ua.String})
 }
 
 // ==========================================================================

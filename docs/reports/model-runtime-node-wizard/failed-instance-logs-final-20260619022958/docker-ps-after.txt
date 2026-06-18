@@ -1,2 +1,0 @@
-CONTAINER ID   NAMES                  IMAGE                     STATUS
-442fa0bca9c3   lightai-0cf78c66-fd9   vllm/vllm-openai:latest   Created

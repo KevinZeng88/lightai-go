@@ -204,3 +204,19 @@ Three-backend matrix:
 - SGLang default: PASS | modified (--tp 1): PASS
 
 Web failed-state log button: ModelInstancesPage checks current_run_plan_id (not actual_state); failed instances with run plan can access logs.
+
+---
+## 2026-06-19 Final Closeout: current_run_plan_id exposed
+
+| ID | Issue | Status |
+| -- | ----- | ------ |
+| OBS-008 | Instance detail API missing current_run_plan_id | FIXED — added to HandleGetInstance SELECT and response |
+| OBS-009 | Failed instance E2E could not call real logs API | FIXED — now gets run_plan_id from instance detail, calls GET /api/v1/node-run-plans/{id}/logs |
+
+Failed instance E2E final verification:
+- GET /api/v1/model-instances/{id} now returns current_run_plan_id
+- E2E script calls GET /api/v1/node-run-plans/{run_plan_id}/logs
+- docker-logs-response.json contains real API response ({} for port-conflict-short-lived container)
+- All verifications: state=failed, container_id preserved, last_error structured, cleanup successful
+
+No remaining unclosed items.
