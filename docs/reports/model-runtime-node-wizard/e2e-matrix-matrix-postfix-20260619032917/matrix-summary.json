@@ -1,0 +1,192 @@
+{
+  "matrix_dir": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917",
+  "results": [
+    {
+      "backend_runtime_id": "llamacpp-b9700-nvidia-cuda13",
+      "docker_spec_summary": {
+        "cmd": [
+          "-m",
+          "/models/Qwen3.5-9B-Q4_K_M.gguf",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080"
+        ],
+        "entrypoint": [
+          "/app/llama-server"
+        ],
+        "image": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+        "ports": {
+          "container_port": 8080,
+          "host_port": 8002
+        }
+      },
+      "label": "llamacpp-default",
+      "param_assertion": true,
+      "parameters_json": {},
+      "request_payload": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/llamacpp-default/deployment-request-payload.json",
+      "runplan": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/llamacpp-default/runplan.json",
+      "status": "PASS"
+    },
+    {
+      "backend_runtime_id": "llamacpp-b9700-nvidia-cuda13",
+      "docker_spec_summary": {
+        "cmd": [
+          "-m",
+          "/models/Qwen3.5-9B-Q4_K_M.gguf",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--ctx-size",
+          "2048",
+          "--n-gpu-layers",
+          "-1"
+        ],
+        "entrypoint": [
+          "/app/llama-server"
+        ],
+        "image": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+        "ports": {
+          "container_port": 8080,
+          "host_port": 8002
+        }
+      },
+      "label": "llamacpp-modified",
+      "param_assertion": true,
+      "parameters_json": {
+        "--ctx-size": "2048",
+        "--n-gpu-layers": "-1"
+      },
+      "request_payload": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/llamacpp-modified/deployment-request-payload.json",
+      "runplan": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/llamacpp-modified/runplan.json",
+      "status": "PASS"
+    },
+    {
+      "backend_runtime_id": "sglang-v0.5.12-nvidia-cuda",
+      "docker_spec_summary": {
+        "cmd": [
+          "--model-path",
+          "/models/Qwen3-0.6B-Instruct-2512",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "30000"
+        ],
+        "entrypoint": [
+          "python3",
+          "-m",
+          "sglang.launch_server"
+        ],
+        "image": "lmsysorg/sglang:latest",
+        "ports": {
+          "container_port": 30000,
+          "host_port": 8005
+        }
+      },
+      "label": "sglang-default",
+      "param_assertion": true,
+      "parameters_json": {},
+      "request_payload": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/sglang-default/deployment-request-payload.json",
+      "runplan": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/sglang-default/runplan.json",
+      "status": "PASS"
+    },
+    {
+      "backend_runtime_id": "sglang-v0.5.12-nvidia-cuda",
+      "docker_spec_summary": {
+        "cmd": [
+          "--model-path",
+          "/models/Qwen3-0.6B-Instruct-2512",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "30000",
+          "--tp",
+          "1"
+        ],
+        "entrypoint": [
+          "python3",
+          "-m",
+          "sglang.launch_server"
+        ],
+        "image": "lmsysorg/sglang:latest",
+        "ports": {
+          "container_port": 30000,
+          "host_port": 8005
+        }
+      },
+      "label": "sglang-modified",
+      "param_assertion": true,
+      "parameters_json": {
+        "--tp": "1"
+      },
+      "request_payload": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/sglang-modified/deployment-request-payload.json",
+      "runplan": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/sglang-modified/runplan.json",
+      "status": "PASS"
+    },
+    {
+      "backend_runtime_id": "runtime.vllm.nvidia-docker",
+      "docker_spec_summary": {
+        "cmd": [
+          "--model",
+          "/models/Qwen3-0.6B-Instruct-2512",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000"
+        ],
+        "entrypoint": [
+          "vllm",
+          "serve"
+        ],
+        "image": "vllm/vllm-openai:latest",
+        "ports": {
+          "container_port": 8000,
+          "host_port": 8004
+        }
+      },
+      "label": "vllm-default",
+      "param_assertion": true,
+      "parameters_json": {
+        "max_model_len": 4096,
+        "served_model_name": "e2e-wizard-20260619032942"
+      },
+      "request_payload": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/vllm-default/deployment-request-payload.json",
+      "runplan": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/vllm-default/runplan.json",
+      "status": "PASS"
+    },
+    {
+      "backend_runtime_id": "runtime.vllm.nvidia-docker",
+      "docker_spec_summary": {
+        "cmd": [
+          "--model",
+          "/models/Qwen3-0.6B-Instruct-2512",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000",
+          "--max-model-len",
+          "2048"
+        ],
+        "entrypoint": [
+          "vllm",
+          "serve"
+        ],
+        "image": "vllm/vllm-openai:latest",
+        "ports": {
+          "container_port": 8000,
+          "host_port": 8004
+        }
+      },
+      "label": "vllm-modified",
+      "param_assertion": true,
+      "parameters_json": {
+        "--gpu-memory-utilization": "0.80",
+        "--max-model-len": "2048"
+      },
+      "request_payload": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/vllm-modified/deployment-request-payload.json",
+      "runplan": "docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/vllm-modified/runplan.json",
+      "status": "PASS"
+    }
+  ]
+}

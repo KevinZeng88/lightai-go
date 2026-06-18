@@ -1,0 +1,5 @@
+CONTAINER ID   NAMES                  IMAGE                     STATUS
+ada18bf9b0ad   lightai-266c9fa7-c78   vllm/vllm-openai:latest   Created
+4823c236cfff   lightai-257dd985-363   vllm/vllm-openai:latest   Created
+b13757b6b468   lightai-87d4327d-c96   vllm/vllm-openai:latest   Created
+e966587817e3   lightai-5e5f64fe-ee9   vllm/vllm-openai:latest   Created

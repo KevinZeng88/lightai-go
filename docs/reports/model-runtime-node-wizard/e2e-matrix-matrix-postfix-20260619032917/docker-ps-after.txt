@@ -1,0 +1,9 @@
+CONTAINER ID   NAMES                  IMAGE                                      STATUS
+d255bd8b1fdc   lightai-42251d28-d5c   lmsysorg/sglang:latest                     Exited (0) 3 seconds ago
+764f35adbea4   lightai-30db073c-132   lmsysorg/sglang:latest                     Exited (0) About a minute ago
+d7dd2ab7a6d3   lightai-c045365b-6b0   ghcr.io/ggml-org/llama.cpp:server-cuda13   Exited (0) 5 minutes ago
+c0d962ce8d06   lightai-ce199b15-2aa   ghcr.io/ggml-org/llama.cpp:server-cuda13   Exited (0) 5 minutes ago
+ada18bf9b0ad   lightai-266c9fa7-c78   vllm/vllm-openai:latest                    Created
+4823c236cfff   lightai-257dd985-363   vllm/vllm-openai:latest                    Created
+b13757b6b468   lightai-87d4327d-c96   vllm/vllm-openai:latest                    Created
+e966587817e3   lightai-5e5f64fe-ee9   vllm/vllm-openai:latest                    Created

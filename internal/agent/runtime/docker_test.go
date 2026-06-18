@@ -180,6 +180,88 @@ func TestStartRejectsNonDocker(t *testing.T) {
 	}
 }
 
+func TestStartPostCreateContainerExitReturnsDiagnostics(t *testing.T) {
+	fake := NewFakeDockerClient()
+	fake.AfterStart = func(containerID string) {
+		fake.SetState(containerID, "exited", 2)
+		fake.AppendLogs(containerID, "startup failed\n")
+	}
+	driver := NewDockerRuntimeDriver(fake)
+
+	inst, err := driver.Start(context.Background(), makeTestSpec("docker"))
+	if err == nil {
+		t.Fatal("expected post-start exited container error")
+	}
+	if inst == nil {
+		t.Fatal("expected RuntimeInstance with container diagnostics")
+	}
+	if inst.ContainerID == "" {
+		t.Fatal("expected container_id to be preserved")
+	}
+	if inst.ExitCode != 2 {
+		t.Fatalf("exit_code=%d want 2", inst.ExitCode)
+	}
+	if inst.FailureReasonCode != "container_exited" {
+		t.Fatalf("failure_reason_code=%q want container_exited", inst.FailureReasonCode)
+	}
+	if !strings.Contains(inst.StdoutTailPreview, "startup failed") {
+		t.Fatalf("stdout_tail_preview missing logs: %q", inst.StdoutTailPreview)
+	}
+}
+
+func TestStartContainerStartErrorReturnsDiagnostics(t *testing.T) {
+	fake := NewFakeDockerClient()
+	fake.StartError = fmt.Errorf("failed to bind host port")
+	driver := NewDockerRuntimeDriver(fake)
+
+	inst, err := driver.Start(context.Background(), makeTestSpec("docker"))
+	if err == nil {
+		t.Fatal("expected docker start error")
+	}
+	if inst == nil {
+		t.Fatal("expected RuntimeInstance with container diagnostics")
+	}
+	if inst.ContainerID == "" {
+		t.Fatal("expected container_id to be preserved")
+	}
+	if inst.ExitCode != 128 {
+		t.Fatalf("exit_code=%d want 128", inst.ExitCode)
+	}
+	if inst.FailureReasonCode != "container_exited" {
+		t.Fatalf("failure_reason_code=%q want container_exited", inst.FailureReasonCode)
+	}
+}
+
+func TestStartHealthCheckFailureReturnsDiagnostics(t *testing.T) {
+	fake := NewFakeDockerClient()
+	driver := NewDockerRuntimeDriver(fake)
+	spec := makeTestSpec("docker")
+	spec.Docker.NetworkMode = ""
+	spec.HealthCheck = &HealthCheckConfig{
+		Enabled:         true,
+		Scheme:          "http",
+		Path:            "/never-ready",
+		Port:            65530,
+		ExpectedStatus:  200,
+		TimeoutSeconds:  1,
+		IntervalSeconds: 1,
+	}
+
+	inst, err := driver.Start(context.Background(), spec)
+	if err == nil {
+		t.Fatal("expected health check failure")
+	}
+	if inst == nil {
+		t.Fatal("expected RuntimeInstance with container diagnostics")
+	}
+	if inst.ContainerID == "" {
+		t.Fatal("expected container_id to be preserved")
+	}
+	if inst.FailureReasonCode != "health_check_failed" && inst.FailureReasonCode != "health_timeout" {
+		t.Fatalf("failure_reason_code=%q want health_check_failed or health_timeout", inst.FailureReasonCode)
+	}
+}
+
 // ==========================================================================
 // Stop tests
 // ==========================================================================

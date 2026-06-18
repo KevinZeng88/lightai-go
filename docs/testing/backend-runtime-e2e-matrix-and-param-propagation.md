@@ -305,29 +305,36 @@ Each E2E run must save artifacts under:
 docs/reports/model-runtime-node-wizard/e2e-matrix-<timestamp>/
 ```
 
-Each backend must have its own subdirectory:
+The current checked-in closeout evidence is:
 
 ```text
-llamacpp/
-vllm/
-sglang/
+docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/
 ```
 
-Each subdirectory must include:
+Each backend variant has its own subdirectory, for example:
 
 ```text
-1. BackendRuntime before/after JSON or YAML.
-2. NodeBackendRuntime snapshot JSON.
-3. Preflight RunPlan JSON.
-4. Equivalent Docker command.
-5. Agent docker.create.spec args_json.
-6. Container stdout/stderr tail.
-7. Server log tail.
-8. Agent log tail.
-9. /v1/models response.
-10. model instance test response.
-11. stop/cleanup result.
+llamacpp-default/
+llamacpp-modified/
+vllm-default/
+vllm-modified/
+sglang-default/
+sglang-modified/
 ```
+
+The closeout artifact set includes:
+
+```text
+1. deployment-request-payload.json for each backend variant.
+2. runplan.json for each backend variant.
+3. matrix-summary.json and matrix-summary.md.
+4. docker_spec_summary in matrix-summary.json.
+5. parameter propagation assertion in matrix-summary.json.
+```
+
+Local reruns also write per-variant `.log`, `server-this-run.log`, and
+`agent-this-run.log`; these logs are ignored by Git and are not required for
+the checked-in closeout evidence.
 
 ---
 
@@ -408,14 +415,15 @@ Dedicated failed-instance E2E at:
 `scripts/e2e-model-runtime-failed-instance-logs.sh`
 
 Logs at:
-`docs/reports/model-runtime-node-wizard/failed-instance-logs-20260619024025/`
+`docs/reports/model-runtime-node-wizard/failed-instance-logs-postfix-20260619032823/`
 
 Verified:
 - Instance state = failed, container_id preserved
 - last_error stores structured JSON {failure_reason_code, exit_code, container_id, error}
 - GET /api/v1/model-instances/{id} returns current_run_plan_id
 - GET /api/v1/node-run-plans/{run_plan_id}/logs returns real API response
-- Empty logs {} acceptable for port-conflict early-exit containers
+- Logs API response may have empty stdout/stderr for port-conflict early-exit
+  containers, but must return HTTP 200 with structured status/metadata.
 - stdout/stderr preview single-lined via singleLineTail/singleLineTailStr
 
 ### Independence
@@ -427,5 +435,6 @@ Verified:
 - failure_reason_code stored in model_instances.last_error JSON
 - /metrics and /metrics/targets at DEBUG (prefix match)
 - High-frequency GET polling lists at DEBUG (isHighFrequencyGET middleware)
-- Audit: instance.start.requested vs succeeded vs failed
+- Audit: instance.start.requested vs succeeded vs failed, verified via
+  `docs/reports/model-runtime-node-wizard/audit-logs-postfix-20260619033633/`
 - Web: ModelInstancesPage log button enabled when current_run_plan_id exists (any state)

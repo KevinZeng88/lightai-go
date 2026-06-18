@@ -1,0 +1,1 @@
+{"name":"e2e-llamacpp-matrix-postfix-20260619032917-deploy","model_artifact_id":"b1061ef3-c0d3-446a-a158-a25833d2fddc","backend_runtime_id":"llamacpp-b9700-nvidia-cuda13","placement_json":{"node_id":"node-70894186-093c-403d-87d1-08f17a690521","gpu_ids":["a16cf913-8923-46e8-b76f-ab8d5bd34379"]},"service_json":{"host_port":8002}}

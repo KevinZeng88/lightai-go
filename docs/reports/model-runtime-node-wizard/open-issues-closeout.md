@@ -220,3 +220,19 @@ Failed instance E2E final verification:
 - All verifications: state=failed, container_id preserved, last_error structured, cleanup successful
 
 No remaining unclosed items.
+
+---
+## 2026-06-19 Post-Closeout Review Fix Closeout
+
+Status: All post-closeout review findings are FIXED and verified.
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| P1-001 | Agent Docker failure reporting lost post-create container diagnostics | Docker create/start and health failure paths could return an error without full diagnostics | Failed instance logs could not reliably fetch Docker logs | FIXED | `internal/agent/runtime/docker.go`, `cmd/agent/main.go`, `internal/server/api/agent_handlers.go` | `go test ./internal/agent/runtime ./cmd/agent ./internal/server/api`; failed-instance E2E PASS at `failed-instance-logs-postfix-20260619032823/` | Closed |
+| P1-002 | Failed-instance E2E could print failures without failing | Script had non-fatal assertions for state, last_error, run_plan_id, and logs API | False PASS could mask broken failed logs | FIXED | `scripts/e2e-model-runtime-failed-instance-logs.sh` | Negative self-test exits non-zero; strict E2E PASS at `failed-instance-logs-postfix-20260619032823/assertion-summary.json` | Closed |
+| P2-001 | Audit docs claimed requested/succeeded/failed but code only wrote requested | Agent task result handler lacked success/failure audit writes | Runtime audit semantics incomplete | FIXED | `internal/server/api/agent_handlers.go` | Handler tests; API query PASS at `audit-logs-postfix-20260619033633/audit-assertions.json` | Closed |
+| P2-002 | Standalone vLLM E2E modified-param JSON quoting was invalid | Shell quoting could generate invalid deployment JSON | vLLM standalone validation could fail before product path | FIXED | `scripts/e2e-model-runtime-wizard-nvidia-vllm.sh`, `scripts/e2e-model-runtime-wizard-nvidia-api.sh`, `scripts/e2e/lib/model-runtime-common.sh` | Payload/deployment creation PASS at `e2e-vllm-standalone-vllm-payload-20260619032852/deployment-request-payload.json` | Closed |
+| P2-003 | E2E evidence/docs referenced non-specific or missing artifacts | Docs referenced generic matrix artifact paths without checked-in closeout evidence | Review could not reproduce evidence from repo | FIXED | `docs/testing/README.md`, `docs/testing/backend-runtime-e2e-matrix-and-param-propagation.md`, matrix artifacts | Matrix PASS at `e2e-matrix-matrix-postfix-20260619032917/matrix-summary.json` | Closed |
+| P3-001 | Tests hand-inserted failed rows instead of exercising Agent -> Server propagation | Runtime boundary tests did not cover real TaskResult handling | Regression risk in failed diagnostics path | FIXED | `internal/server/api/agent_task_result_test.go`, `cmd/agent/main_test.go`, `internal/agent/runtime/docker_test.go` | Handler-level success/failure/fallback tests PASS | Closed |
+
+No post-closeout review problem remains only in chat. No remaining risk is outside this formal closeout table.

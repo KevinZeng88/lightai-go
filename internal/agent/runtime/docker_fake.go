@@ -45,6 +45,8 @@ type FakeDockerClient struct {
 	mu         sync.Mutex
 	containers map[string]*fakeContainer // keyed by container ID
 	nameIndex  map[string]string         // container name → container ID
+	AfterStart func(containerID string)
+	StartError error
 }
 
 // NewFakeDockerClient returns a ready-to-use fake Docker client.
@@ -97,17 +99,28 @@ func (f *FakeDockerClient) ContainerCreate(ctx context.Context, opts ContainerCr
 
 func (f *FakeDockerClient) ContainerStart(ctx context.Context, containerID string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	c, ok := f.containers[containerID]
 	if !ok {
+		f.mu.Unlock()
 		return fmt.Errorf("container %s not found", containerID)
 	}
 	if c.State != "created" {
+		f.mu.Unlock()
 		return fmt.Errorf("container %s is in state %q, cannot start", containerID, c.State)
+	}
+	if f.StartError != nil {
+		c.ExitCode = 128
+		f.mu.Unlock()
+		return f.StartError
 	}
 	c.State = "running"
 	c.StartedAt = time.Now()
+	afterStart := f.AfterStart
+	f.mu.Unlock()
+	if afterStart != nil {
+		afterStart(containerID)
+	}
 	return nil
 }
 

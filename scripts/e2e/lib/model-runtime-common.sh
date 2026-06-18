@@ -59,6 +59,11 @@ api_body() {
   echo "$r" | sed '/^HTTP:/d'
 }
 
+validate_json_payload() {
+  local file="$1"
+  python3 -m json.tool "$file" >/dev/null
+}
+
 # ── stage helpers ──────────────────────────────────────────────────────────
 e2e_login() {
   log "stage=login start"
@@ -94,7 +99,24 @@ e2e_query_gpu() {
 
 e2e_add_model_root() {
   local root_path; root_path="$(dirname "$MODEL_PATH")"
-  ROOT_ID="$(api_ok POST "/api/v1/nodes/$NODE_ID/model-roots" "{\"path\":\"$root_path\"}" | json_get id)"
+  set +e
+  local root_resp; root_resp="$(api_ok POST "/api/v1/nodes/$NODE_ID/model-roots" "{\"path\":\"$root_path\"}" 2>/dev/null)"
+  local root_rc=$?
+  set -e
+  if [ "$root_rc" -eq 0 ]; then
+    ROOT_ID="$(echo "$root_resp" | json_get id)"
+  else
+    local roots; roots="$(api_body GET "/api/v1/nodes/$NODE_ID/model-roots?include_disabled=true" 2>/dev/null || echo '[]')"
+    ROOT_ID="$(python3 -c 'import json,sys
+target=sys.argv[1]
+data=json.load(sys.stdin)
+for item in data if isinstance(data, list) else []:
+    if item.get("path") == target:
+        print(item.get("id",""))
+        break
+' "$root_path" <<< "$roots")"
+    [ -n "$ROOT_ID" ] && api_body PATCH "/api/v1/nodes/$NODE_ID/model-roots/$ROOT_ID" '{"status":"enabled"}' >/dev/null 2>&1 || true
+  fi
   [ -n "$ROOT_ID" ] || { fail "add model root failed"; return 1; }
   log "root_id=$ROOT_ID root=$root_path"
 }
@@ -153,6 +175,9 @@ e2e_create_deployment() {
     payload="$payload,\"env_overrides_json\":{$DEPLOY_ENV}"
   fi
   payload="$payload}"
+  mkdir -p "$ARTIFACT_DIR"
+  printf '%s\n' "$payload" > "$ARTIFACT_DIR/deployment-request-payload.json"
+  validate_json_payload "$ARTIFACT_DIR/deployment-request-payload.json" || { fail "deployment payload is invalid JSON"; return 1; }
   DEPLOYMENT_ID="$(api_ok POST /api/v1/deployments "$payload" | json_get id)"
   [ -n "$DEPLOYMENT_ID" ] || { fail "create deployment failed"; return 1; }
   log "deployment_id=$DEPLOYMENT_ID"
@@ -210,8 +235,11 @@ e2e_instance_test() {
 }
 
 e2e_docker_logs() {
-  local r; r="$(api_body POST "/api/v1/model-instances/$INSTANCE_ID/logs" \
-    '{"tail":50}' 2>/dev/null || echo '{}')"
+  local inst run_plan_id
+  inst="$(api_body GET "/api/v1/model-instances/$INSTANCE_ID" 2>/dev/null || echo '{}')"
+  run_plan_id="$(echo "$inst" | json_get current_run_plan_id 2>/dev/null || true)"
+  [ -n "$run_plan_id" ] || { fail "logs API missing current_run_plan_id"; return 1; }
+  local r; r="$(api_body GET "/api/v1/node-run-plans/$run_plan_id/logs?tail=50" 2>/dev/null || echo '{}')"
   echo "$r" > "$ARTIFACT_DIR/logs.json"
   log "logs_api: $(echo "$r" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("ok" if d.get("logs") else "empty")' 2>/dev/null || echo 'parse_error')"
 }

@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "missing": [],
+  "counts": {
+    "instance.start.requested": 10,
+    "instance.start.succeeded": 6,
+    "instance.start.failed": 3
+  }
+}

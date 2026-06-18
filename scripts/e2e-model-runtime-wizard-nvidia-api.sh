@@ -11,6 +11,7 @@ COOKIE_JAR="$(mktemp)"
 CSRF_TOKEN=""
 DEPLOYMENT_ID=""; INSTANCE_ID=""; ARTIFACT_ID=""; RUNTIME_CLONE_ID=""; NBR_ID=""; ROOT_ID=""; ROOT_CREATED="0"; RUN_PLAN_ID=""
 EXIT_CODE=0; CURRENT_STAGE=""; STAGE_START_MS=""
+ARTIFACT_DIR="${ARTIFACT_DIR:-docs/reports/model-runtime-node-wizard/e2e-vllm-${RUN_ID}}"
 
 VLLM_IMAGE="${VLLM_IMAGE:-vllm/vllm-openai:latest}"
 VLLM_MODEL="${VLLM_MODEL:-/home/kzeng/models/Qwen3-0.6B-Instruct-2512}"
@@ -22,6 +23,7 @@ fail() { log "FAIL: $*"; EXIT_CODE=1; exit 1; }
 now_ms() { date +%s%3N; }
 stage_start() { CURRENT_STAGE="$1"; log "stage=$1 start"; STAGE_START_MS="$(now_ms)"; }
 stage_done() { local s="${1:-$CURRENT_STAGE}"; local d=$(($(now_ms) - STAGE_START_MS)); log "stage=$s done duration_ms=$d"; CURRENT_STAGE=""; }
+validate_json_payload() { python3 -m json.tool "$1" >/dev/null 2>&1; }
 
 json_get() {
   python3 -c 'import json,sys
@@ -89,6 +91,7 @@ trap on_exit EXIT
 
 need() { command -v "$1" >/dev/null 2>&1 || skip "$1 not installed"; }
 need curl; need python3; need go; need docker
+mkdir -p "$ARTIFACT_DIR"
 docker image inspect "$VLLM_IMAGE" >/dev/null 2>&1 || skip "image missing: $VLLM_IMAGE"
 [ -e "$VLLM_MODEL" ] || skip "model path missing: $VLLM_MODEL"
 
@@ -205,9 +208,13 @@ if [ -n "$DEPLOY_PARAMS" ]; then
 else
   deploy_payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$VLLM_PORT},\"parameters_json\":{\"served_model_name\":\"$PREFIX-$RUN_ID\",\"max_model_len\":4096},\"env_overrides_json\":{}}"
 fi
+printf '%s\n' "$deploy_payload" > "$ARTIFACT_DIR/deployment-request-payload.json"
+validate_json_payload "$ARTIFACT_DIR/deployment-request-payload.json" || fail "deployment payload is invalid JSON"
 deploy_json="$(api POST /api/v1/deployments "$deploy_payload")"
 DEPLOYMENT_ID="$(printf '%s' "$deploy_json" | json_get id)"
 [ -n "$DEPLOYMENT_ID" ] || fail "deployment create failed"
+printf '%s\n' "$deploy_json" > "$ARTIFACT_DIR/deployment-response.json"
+[ "${LIGHTAI_E2E_STOP_AFTER_DEPLOYMENT_CREATE:-0}" = "1" ] && { stage_done; log "STOP_AFTER_DEPLOYMENT_CREATE deployment_id=$DEPLOYMENT_ID artifact_dir=$ARTIFACT_DIR"; exit 0; }
 start_json="$(api POST "/api/v1/deployments/$DEPLOYMENT_ID/start" '{}')"
 INSTANCE_ID="$(printf '%s' "$start_json" | json_get instance_id)"
 [ -n "$INSTANCE_ID" ] || fail "start failed"
@@ -232,6 +239,7 @@ stage_done
 stage_start logs_api
 RUN_PLAN_ID="$(api GET "/api/v1/model-instances?deployment_id=$DEPLOYMENT_ID" | json_get current_run_plan_id)"
 [ -n "$RUN_PLAN_ID" ] || fail "node run plan not found"
+api GET "/api/v1/node-run-plans/$RUN_PLAN_ID" > "$ARTIFACT_DIR/runplan.json"
 api GET "/api/v1/node-run-plans/$RUN_PLAN_ID/logs?tail=50" >/tmp/e2e-wiz-logs.json
 stage_done
 

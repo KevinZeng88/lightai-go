@@ -11,9 +11,11 @@ MODEL="/home/kzeng/models/Qwen3-0.6B-Instruct-2512"
 PORT="8005"
 RUNTIME_ID="sglang-v0.5.12-nvidia-cuda"
 DEPLOY_PARAMS="${DEPLOY_PARAMS:-}"
+ARTIFACT_DIR="${ARTIFACT_DIR:-docs/reports/model-runtime-node-wizard/e2e-sglang-${RUN_ID}}"
 COOKIE_JAR="$(mktemp)"; CSRF_TOKEN=""; EXIT_CODE=0
 log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 fail() { log "FAIL: $*"; exit 1; }
+validate_json_payload() { python3 -m json.tool "$1" >/dev/null 2>&1; }
 json_get() { python3 -c 'import json,sys;d=json.load(sys.stdin)
 for k in sys.argv[1].split("."):
  if isinstance(d,list):d=d[0] if d else {}
@@ -23,6 +25,7 @@ print(d if d is not None else "")' "$1"; }
 api() { local m="$1" p="$2" d="${3:-}"; local a=(-sS -X "$m" "$SERVER_URL$p" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -H "Origin: $SERVER_URL" -H "Content-Type: application/json"); [ -n "$CSRF_TOKEN" ] && [ "$m" != "GET" ] && a+=(-H "X-CSRF-Token: $CSRF_TOKEN"); [ -n "$d" ] && a+=(-d "$d"); curl "${a[@]}" 2>/dev/null; }
 
 log "===== SGLang E2E ====="
+mkdir -p "$ARTIFACT_DIR"
 # Login
 CSRF_TOKEN="$(curl -sS -X POST "$SERVER_URL/api/v1/auth/login" -H "Origin: $SERVER_URL" -H "Content-Type: application/json" -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" -c "$COOKIE_JAR" | json_get csrf_token)"
 [ -n "$CSRF_TOKEN" ] || fail "login failed"
@@ -55,6 +58,8 @@ log "nbr enabled"
 payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$artifact_id\",\"backend_runtime_id\":\"$RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$PORT}"
 [ -n "$DEPLOY_PARAMS" ] && payload="$payload,\"parameters_json\":{$DEPLOY_PARAMS}"
 payload="$payload}"
+printf '%s\n' "$payload" > "$ARTIFACT_DIR/deployment-request-payload.json"
+validate_json_payload "$ARTIFACT_DIR/deployment-request-payload.json" || fail "deployment payload is invalid JSON"
 deploy_id="$(api POST /api/v1/deployments "$payload" | json_get id)"; [ -n "$deploy_id" ] || fail "deploy create failed"
 log "deploy=$deploy_id"
 
@@ -67,6 +72,10 @@ log "start_deployment"
 instance_id="$(api POST "/api/v1/deployments/$deploy_id/start" | json_get instance_id)"
 [ -n "$instance_id" ] || fail "start failed"
 log "instance=$instance_id"
+inst_detail="$(api GET "/api/v1/model-instances/$instance_id" 2>/dev/null || echo '{}')"
+printf '%s\n' "$inst_detail" > "$ARTIFACT_DIR/instance-detail-after-start.json"
+run_plan_id="$(printf '%s' "$inst_detail" | json_get current_run_plan_id)"
+[ -n "$run_plan_id" ] && api GET "/api/v1/node-run-plans/$run_plan_id" > "$ARTIFACT_DIR/runplan.json" 2>/dev/null || true
 
 # Health check
 log "health_check start"

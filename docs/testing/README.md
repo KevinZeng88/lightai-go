@@ -53,8 +53,14 @@ Constructs a port-conflict failure to verify:
 - Web: ModelInstancesPage log button enabled when `current_run_plan_id` exists (any actual_state)
 
 ### Evidence
-- Matrix: `docs/reports/model-runtime-node-wizard/e2e-matrix-*/`
-- Failed instance: `docs/reports/model-runtime-node-wizard/failed-instance-logs-20260619024025/`
+- Matrix: `docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/`
+- Failed instance: `docs/reports/model-runtime-node-wizard/failed-instance-logs-postfix-20260619032823/`
+- vLLM deployment payload: `docs/reports/model-runtime-node-wizard/e2e-vllm-standalone-vllm-payload-20260619032852/`
+- Audit API assertions: `docs/reports/model-runtime-node-wizard/audit-logs-postfix-20260619033633/`
+
+Runtime E2E artifact directories are checked in only for closeout evidence runs.
+For new local reruns, use the script defaults under `docs/reports/model-runtime-node-wizard/`
+or pass `ARTIFACT_DIR`/`VERIFY_BASE`; keep only the final PASS artifact set.
 
 ### Observability Status (2026-06-19): CLOSED
 

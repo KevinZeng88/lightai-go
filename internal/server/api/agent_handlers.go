@@ -886,10 +886,10 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 
 	// REVIEW-004: Validate task lease and generation before accepting result.
 	// Reject stale, duplicate, or old-generation results.
-	var taskStatus, taskOpID, taskLeaseOwner, taskType string
+	var taskStatus, taskOpID, taskLeaseOwner, taskType, taskTenantID string
 	var taskGeneration int
-	err := h.DB.QueryRow(`SELECT status, COALESCE(operation_id,''), COALESCE(lease_owner,''), generation, task_type
-		FROM agent_tasks WHERE id = ?`, taskID).Scan(&taskStatus, &taskOpID, &taskLeaseOwner, &taskGeneration, &taskType)
+	err := h.DB.QueryRow(`SELECT status, COALESCE(operation_id,''), COALESCE(lease_owner,''), generation, task_type, COALESCE(tenant_id,'')
+		FROM agent_tasks WHERE id = ?`, taskID).Scan(&taskStatus, &taskOpID, &taskLeaseOwner, &taskGeneration, &taskType, &taskTenantID)
 	if err != nil {
 		log.Warn("task_result: task not found", "task_id", taskID, "error", err)
 		w.WriteHeader(http.StatusOK) // ack to prevent agent retry
@@ -986,6 +986,7 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 
 			h.DB.Exec(`UPDATE model_instances SET actual_state = ?, container_id = ?, endpoint_url = ?, started_at = ? WHERE id = ?`,
 				actualState, containerID, endpointURL, now, taskInstanceID)
+			runPlanID := currentRunPlanID(h, taskInstanceID)
 
 			if success {
 				// Activate leases only after the Agent confirmed container start success.
@@ -997,8 +998,16 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 						"instance_id", taskInstanceID, "count", ln)
 					log.Info("gpu_lease.activated", "instance_id", taskInstanceID, "count", ln)
 				}
+				if taskType == "model_instance_start" {
+					writeInstanceStartAudit(r.Context(), h, taskTenantID, "instance.start.succeeded", "success", taskDeploymentID, taskInstanceID, runPlanID, taskNodeID, strVal(req, "agent_id", taskLeaseOwner), containerID, "", opID, "")
+				}
 			} else {
+				lastErrJSON := buildStartFailureLastError(req, errorMsg, containerID)
+				h.DB.Exec(`UPDATE model_instances SET last_error = ?, updated_at = ? WHERE id = ?`, string(lastErrJSON), now, taskInstanceID)
 				h.DB.Exec(`UPDATE gpu_leases SET status = 'failed' WHERE instance_id = ? AND status = 'reserved'`, taskInstanceID)
+				if taskType == "model_instance_start" {
+					writeInstanceStartAudit(r.Context(), h, taskTenantID, "instance.start.failed", "failure", taskDeploymentID, taskInstanceID, runPlanID, taskNodeID, strVal(req, "agent_id", taskLeaseOwner), containerID, strVal(req, "failure_reason_code", "task_failed"), opID, errorMsg)
+				}
 			}
 
 			// State transition logging.
@@ -1038,17 +1047,14 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 			var prevActualState string
 			h.DB.QueryRow(`SELECT COALESCE(actual_state,'pending') FROM model_instances WHERE id = ?`, taskInstanceID).Scan(&prevActualState)
 			containerID := strVal(req, "container_id", "")
-		exitCode := intVal(req, "exit_code", -1)
-		failureReason := strVal(req, "failure_reason_code", "task_failed")
-		lastErrJSON, _ := json.Marshal(map[string]interface{}{
-			"error": errorMsg,
-			"failure_reason_code": failureReason,
-			"container_id": containerID,
-			"exit_code": exitCode,
-		})
-		h.DB.Exec(`UPDATE model_instances SET actual_state = 'failed', container_id = CASE WHEN ? != '' THEN ? ELSE container_id END, last_error = ? WHERE id = ?`,
-			containerID, containerID, string(lastErrJSON), taskInstanceID)
+			failureReason := strVal(req, "failure_reason_code", "task_failed")
+			lastErrJSON := buildStartFailureLastError(req, errorMsg, containerID)
+			h.DB.Exec(`UPDATE model_instances SET actual_state = 'failed', container_id = CASE WHEN ? != '' THEN ? ELSE container_id END, last_error = ? WHERE id = ?`,
+				containerID, containerID, string(lastErrJSON), taskInstanceID)
 			h.DB.Exec(`UPDATE gpu_leases SET status = 'failed' WHERE instance_id = ? AND status = 'reserved'`, taskInstanceID)
+			if taskType == "model_instance_start" {
+				writeInstanceStartAudit(r.Context(), h, taskTenantID, "instance.start.failed", "failure", taskDeploymentID, taskInstanceID, currentRunPlanID(h, taskInstanceID), taskNodeID, strVal(req, "agent_id", taskLeaseOwner), containerID, failureReason, opID, errorMsg)
+			}
 
 			log.StateTransition(r.Context(), "task.result", "instance", taskInstanceID, prevActualState, "failed",
 				"task_id", taskID, "deployment_id", taskDeploymentID, "node_id", taskNodeID,
@@ -1067,4 +1073,56 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func buildStartFailureLastError(req map[string]interface{}, errorMsg, containerID string) []byte {
+	if containerID == "" {
+		containerID = strVal(req, "container_id", "")
+	}
+	payload := map[string]interface{}{
+		"error":               errorMsg,
+		"failure_reason_code": strVal(req, "failure_reason_code", "task_failed"),
+		"container_id":        containerID,
+		"exit_code":           intVal(req, "exit_code", -1),
+	}
+	if v := strVal(req, "stdout_tail_preview", ""); v != "" {
+		payload["stdout_tail_preview"] = v
+	}
+	if v := strVal(req, "stderr_tail_preview", ""); v != "" {
+		payload["stderr_tail_preview"] = v
+	}
+	out, _ := json.Marshal(payload)
+	return out
+}
+
+func currentRunPlanID(h *AgentHandler, instanceID string) string {
+	var runPlanID string
+	h.DB.QueryRow(`SELECT COALESCE(current_run_plan_id,'') FROM model_instances WHERE id = ?`, instanceID).Scan(&runPlanID)
+	return runPlanID
+}
+
+func writeInstanceStartAudit(ctx context.Context, h *AgentHandler, tenantID, action, result, deploymentID, instanceID, runPlanID, nodeID, agentID, containerID, failureReason, operationID, errorMsg string) {
+	detailMap := map[string]string{
+		"instance_id":   instanceID,
+		"deployment_id": deploymentID,
+		"run_plan_id":   runPlanID,
+		"node_id":       nodeID,
+		"agent_id":      agentID,
+		"container_id":  containerID,
+	}
+	if failureReason != "" {
+		detailMap["failure_reason_code"] = failureReason
+	}
+	detailBytes, _ := json.Marshal(detailMap)
+	WriteAudit(ctx, h.DB.DB, AuditEntry{
+		TenantID:     tenantID,
+		ActorID:      agentID,
+		Action:       action,
+		ResourceType: "model_instance",
+		ResourceID:   instanceID,
+		Result:       result,
+		Detail:       string(detailBytes),
+		OperationID:  operationID,
+		Error:        errorMsg,
+	})
 }

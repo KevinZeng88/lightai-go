@@ -14,18 +14,60 @@ USERNAME="${LIGHTAI_E2E_USERNAME:-admin}"
 PASSWORD="${LIGHTAI_E2E_PASSWORD:-test1234}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-docs/reports/model-runtime-node-wizard/failed-instance-logs-${RUN_ID}}"
-COOKIE_JAR="$(mktemp)"; CSRF_TOKEN=""; EXIT_CODE=0
+COOKIE_JAR="$(mktemp)"; CSRF_TOKEN=""
+node_id=""; gpu_id=""; root_id=""; artifact_id=""; deploy_id=""; instance_id=""; cid=""; reason_code=""; NC_PID=""
 mkdir -p "$ARTIFACT_DIR"
 
 log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
-fail() { log "FAIL: $*"; EXIT_CODE=1; }
-json_get() { python3 -c 'import json,sys;d=json.load(sys.stdin)
+fail() { log "FAIL: $*"; exit 1; }
+json_get() { python3 -c 'import json,sys
+d=json.load(sys.stdin)
 for k in sys.argv[1].split("."):
- if isinstance(d,list):d=d[0] if d else {}
- elif isinstance(d,dict):d=d.get(k,"")
- else:d=""
+    if isinstance(d,list):
+        d=d[0] if d else {}
+    elif isinstance(d,dict):
+        d=d.get(k,"")
+    else:
+        d=""
 print(d if d is not None else "")' "$1"; }
 api() { local m="$1" p="$2" d="${3:-}"; local a=(-sS -X "$m" "$SERVER_URL$p" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -H "Origin: $SERVER_URL" -H "Content-Type: application/json"); [ -n "$CSRF_TOKEN" ] && [ "$m" != "GET" ] && a+=(-H "X-CSRF-Token: $CSRF_TOKEN"); [ -n "$d" ] && a+=(-d "$d"); curl "${a[@]}" 2>/dev/null; }
+api_status() {
+  local m="$1" p="$2" out="$3" d="${4:-}"
+  local a=(-sS -X "$m" "$SERVER_URL$p" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -H "Origin: $SERVER_URL" -H "Content-Type: application/json")
+  [ -n "$CSRF_TOKEN" ] && [ "$m" != "GET" ] && a+=(-H "X-CSRF-Token: $CSRF_TOKEN")
+  [ -n "$d" ] && a+=(-d "$d")
+  curl "${a[@]}" -o "$out" -w '%{http_code}' 2>/dev/null || printf '000'
+}
+cleanup_on_exit() {
+  [ -n "${NC_PID:-}" ] && kill "$NC_PID" 2>/dev/null || true
+  [ -n "${deploy_id:-}" ] && api POST "/api/v1/deployments/$deploy_id/stop" >/dev/null 2>&1 || true
+  [ -n "${deploy_id:-}" ] && api DELETE "/api/v1/deployments/$deploy_id" >/dev/null 2>&1 || true
+  [ -n "${artifact_id:-}" ] && api DELETE "/api/v1/model-artifacts/$artifact_id" >/dev/null 2>&1 || true
+  [ -n "${node_id:-}" ] && [ -n "${root_id:-}" ] && api DELETE "/api/v1/nodes/$node_id/model-roots/$root_id" >/dev/null 2>&1 || true
+}
+trap cleanup_on_exit EXIT
+assert_nonempty() { [ -n "${2:-}" ] && [ "$2" != "null" ] && [ "$2" != "{}" ] || fail "$1 missing"; }
+assert_json_has() {
+  local file="$1" key="$2"
+  python3 - "$file" "$key" <<'PY' || exit 1
+import json, sys
+path, key = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+value = data
+for part in key.split("."):
+    if not isinstance(value, dict) or part not in value:
+        raise SystemExit(1)
+    value = value[part]
+if value in ("", None, {}, []):
+    raise SystemExit(1)
+PY
+}
+
+if [ "${LIGHTAI_FAILED_E2E_SELFTEST:-}" = "missing_run_plan" ]; then
+  run_plan_id=""
+  assert_nonempty current_run_plan_id "$run_plan_id"
+fi
 
 log "===== Failed Instance E2E ====="
 # Login
@@ -80,44 +122,42 @@ for i in $(seq 1 60); do
     [ -n "$cid" ] && log "container_id OK: $cid" || fail "container_id empty"
     # Verify last_error has failure info
     if [ -n "$lerr" ] && [ "$lerr" != "null" ] && [ "$lerr" != "{}" ]; then
-      log "last_error OK"
+      printf '%s' "$lerr" > "$ARTIFACT_DIR/last-error.json"
+      assert_json_has "$ARTIFACT_DIR/last-error.json" failure_reason_code || fail "last_error.failure_reason_code missing"
+      reason_code="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("failure_reason_code",""))' "$ARTIFACT_DIR/last-error.json")"
+      case "$reason_code" in
+        container_exited|health_check_failed|health_timeout|task_failed) log "last_error OK reason=$reason_code" ;;
+        *) fail "unexpected failure_reason_code=$reason_code" ;;
+      esac
     else
-      log "last_error: empty"
+      fail "last_error empty"
     fi
     failed=1
     break
   elif [ "$state" = "running" ]; then
-    log "instance running (unexpected) cid=$cid"
-    break
+    fail "instance running unexpectedly cid=$cid"
   fi
   sleep 2
 done
-[ "$failed" = "1" ] || log "instance did not reach failed (may be running)"
+[ "$failed" = "1" ] || fail "instance did not reach failed"
 
 # Docker logs in failed state — get run_plan_id from instance detail
 inst_detail="$(api GET "/api/v1/model-instances/$instance_id" 2>/dev/null || echo '{}')"
+echo "$inst_detail" > "$ARTIFACT_DIR/instance-detail.json"
 run_plan_id="$(echo "$inst_detail" | json_get current_run_plan_id 2>/dev/null)"
-if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "null" ]; then
-  logs_resp="$(api GET "/api/v1/node-run-plans/$run_plan_id/logs" 2>/dev/null || echo '{}')"
-  echo "$logs_resp" > "$ARTIFACT_DIR/docker-logs-response.json"
-  logs_len=$(echo "$logs_resp" | wc -c)
-  if [ "$logs_len" -gt 50 ]; then
-    log "logs_api: real response ($logs_len bytes) run_plan_id=$run_plan_id"
-  else
-    log "logs_api: response ($logs_len bytes) run_plan_id=$run_plan_id"
-  fi
-else
-  log "logs_api: no run_plan_id available (instance may not have been fully created)"
-  echo '{"error":"no run_plan_id"}' > "$ARTIFACT_DIR/docker-logs-response.json"
-fi
+assert_nonempty current_run_plan_id "$run_plan_id"
+api GET "/api/v1/node-run-plans/$run_plan_id" > "$ARTIFACT_DIR/run-plan.json" 2>/dev/null || fail "run plan fetch failed"
+logs_status="$(api_status GET "/api/v1/node-run-plans/$run_plan_id/logs" "$ARTIFACT_DIR/docker-logs-response.json")"
+echo "$logs_status" > "$ARTIFACT_DIR/docker-logs-http-status.txt"
+[ "$logs_status" = "200" ] || fail "logs API HTTP $logs_status"
+assert_json_has "$ARTIFACT_DIR/docker-logs-response.json" status || fail "logs response status missing"
+logs_len=$(wc -c < "$ARTIFACT_DIR/docker-logs-response.json")
+log "logs_api: HTTP 200 response=${logs_len}B run_plan_id=$run_plan_id"
 
 # Status refresh
 status_refresh="$(api GET "/api/v1/model-instances/$instance_id" 2>/dev/null || echo '{}')"
 echo "$status_refresh" > "$ARTIFACT_DIR/status-refresh-response.json"
 log "status_refresh state=$(echo "$status_refresh" | json_get actual_state)"
-
-# Kill port holder
-kill $NC_PID 2>/dev/null || true
 
 # Stop + cleanup
 api POST "/api/v1/deployments/$deploy_id/stop" >/dev/null 2>&1 || true; sleep 2
@@ -133,9 +173,7 @@ docker ps -a --format 'table {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}' > "$A
 
 echo '{"status":"cleanup_completed"}' > "$ARTIFACT_DIR/cleanup-result.json"
 
-if [ "$failed" = "1" ]; then
-  log "PASS: failed instance E2E completed"
-else
-  log "FAIL: instance did not reach failed state (check logs)"
-fi
-exit $EXIT_CODE
+cat > "$ARTIFACT_DIR/assertion-summary.json" <<JSON
+{"status":"PASS","instance_id":"$instance_id","run_plan_id":"$run_plan_id","container_id":"$cid","failure_reason_code":"$reason_code","logs_http_status":$logs_status}
+JSON
+log "PASS: failed instance E2E completed"

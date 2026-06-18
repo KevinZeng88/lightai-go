@@ -13,6 +13,30 @@
 
 The single-node NVIDIA Docker wizard flow is verified end to end. A user can add a persisted node model root, browse and scan a model, create ModelArtifact and ModelLocation, select Backend/BackendVersion/BackendRuntime, preflight, start Docker, query `/v1/models`, inspect Docker logs through API, stop, and clean up. Remaining P2 product-depth items are recorded as formal `DOCUMENTED_BLOCKER` entries in `docs/reports/model-runtime-node-wizard/open-issues-closeout.md`.
 
+## 2026-06-19 Post-Closeout Review Acceptance
+
+**Conclusion: PASS**
+
+The post-closeout review findings P1-001, P1-002, P2-001, P2-002, P2-003, and P3-001 are all fixed and verified. Runtime failure diagnostics now preserve `container_id`, `failure_reason_code`, `exit_code`, and log previews through Agent `TaskResult` and Server `HandleTaskResult`. Failed instance logs use `current_run_plan_id` to call `GET /api/v1/node-run-plans/{run_plan_id}/logs`, and the strict failed-instance E2E fails on missing state, `last_error`, run plan, container ID, or non-200 logs API.
+
+Checked-in evidence:
+
+```text
+docs/reports/model-runtime-node-wizard/failed-instance-logs-postfix-20260619032823/
+docs/reports/model-runtime-node-wizard/e2e-matrix-matrix-postfix-20260619032917/
+docs/reports/model-runtime-node-wizard/e2e-vllm-standalone-vllm-payload-20260619032852/
+docs/reports/model-runtime-node-wizard/audit-logs-postfix-20260619033633/
+```
+
+Verification highlights:
+
+```text
+failed-instance logs E2E: PASS, failure_reason_code=container_exited, logs API HTTP 200
+three-backend matrix: PASS for llama.cpp, vLLM, SGLang default and modified params
+vLLM standalone payload: PASS through deployment creation with valid JSON
+audit logs API: PASS for instance.start.requested, instance.start.succeeded, instance.start.failed
+```
+
 ---
 
 ## 1. Implemented Flow

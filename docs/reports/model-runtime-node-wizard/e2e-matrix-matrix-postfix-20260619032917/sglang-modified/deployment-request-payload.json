@@ -1,0 +1,1 @@
+{"name":"e2e-sglang-matrix-postfix-20260619032917-deploy","model_artifact_id":"6aceb37d-ef07-4314-a542-ec9caff9762a","backend_runtime_id":"sglang-v0.5.12-nvidia-cuda","placement_json":{"node_id":"node-70894186-093c-403d-87d1-08f17a690521","gpu_ids":["a16cf913-8923-46e8-b76f-ab8d5bd34379"]},"service_json":{"host_port":8005},"parameters_json":{"--tp":"1"}}

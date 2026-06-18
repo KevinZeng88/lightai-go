@@ -30,7 +30,7 @@ fi
 log "===== vLLM modified params ====="
 BACKEND_NAME="vllm-modified"
 ARTIFACT_DIR="$MATRIX_DIR/vllm-modified"
-DEPLOY_PARAMS='"\"--max-model-len\":\"2048\",\"--gpu-memory-utilization\":\"0.80\""'
+DEPLOY_PARAMS='"--max-model-len":"2048","--gpu-memory-utilization":"0.80"'
 HOST_PORT="8006"
 if e2e_run_default; then
   RESULT_MODIFIED="PASS"

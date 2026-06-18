@@ -126,9 +126,8 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 			"duration_ms", startDuration,
 			"error", err,
 		)
-		// Try to get container logs on failure.
-		d.logContainerFailure(ctx, containerID, opts.ContainerName)
-		return &RuntimeInstance{ContainerID: containerID, ContainerName: opts.ContainerName, InstanceID: spec.InstanceID}, fmt.Errorf("docker start: %w", err)
+		inst := d.diagnoseContainerFailure(ctx, spec, containerID, opts.ContainerName, "container_exited")
+		return inst, fmt.Errorf("docker start: %w", err)
 	}
 
 	startDuration := time.Since(startStart).Milliseconds()
@@ -159,8 +158,8 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 			"exit_code", info.ExitCode,
 			"container_error", info.Error,
 			"inspect_duration_ms", time.Since(verifyStart).Milliseconds())
-		d.logContainerFailure(ctx, containerID, opts.ContainerName)
-		return nil, fmt.Errorf("container %s is %s (exit_code=%d): %s", containerID[:12], info.State, info.ExitCode, info.Error)
+		inst := d.diagnoseContainerFailure(ctx, spec, containerID, opts.ContainerName, "container_exited")
+		return inst, fmt.Errorf("container %s is %s (exit_code=%d): %s", shortContainerID(containerID), info.State, info.ExitCode, info.Error)
 	}
 	log.DebugContext(ctx, "docker.post_start.verified_running",
 		"container_id", containerID,
@@ -179,14 +178,20 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 			return info.State, info.ExitCode, nil
 		}
 		if err := CheckEndpointReady(ctx, resolvedCfg, spec.InstanceID, containerID, opts.ContainerName, inspectFn); err != nil {
+			reasonCode := "health_check_failed"
+			if strings.Contains(strings.ToLower(err.Error()), "timeout") {
+				reasonCode = "health_timeout"
+			} else if strings.Contains(strings.ToLower(err.Error()), "container") && strings.Contains(strings.ToLower(err.Error()), "exit_code") {
+				reasonCode = "container_exited"
+			}
 			log.ErrorContext(ctx, "health_check.failed",
 				"container_id", containerID,
 				"instance_id", spec.InstanceID,
 				"error", err,
 				"duration_ms", time.Since(startTime).Milliseconds(),
 			)
-			d.logContainerFailure(ctx, containerID, opts.ContainerName)
-			return nil, fmt.Errorf("health check failed: %w", err)
+			inst := d.diagnoseContainerFailure(ctx, spec, containerID, opts.ContainerName, reasonCode)
+			return inst, fmt.Errorf("health check failed: %w", err)
 		}
 	} else {
 		log.InfoContext(ctx, "health_check.skipped",
@@ -274,6 +279,18 @@ func (d *DockerRuntimeDriver) Stop(ctx context.Context, instanceID string) error
 // It does not block the caller — failures in this diagnostic helper are silent.
 // operation_id is read from ctx.
 func (d *DockerRuntimeDriver) logContainerFailure(ctx context.Context, containerID, containerName string) {
+	_ = d.diagnoseContainerFailure(ctx, AgentRunSpec{}, containerID, containerName, "")
+}
+
+func (d *DockerRuntimeDriver) diagnoseContainerFailure(ctx context.Context, spec AgentRunSpec, containerID, containerName, reasonCode string) *RuntimeInstance {
+	inst := &RuntimeInstance{
+		InstanceID:        spec.InstanceID,
+		ContainerID:       containerID,
+		ContainerName:     containerName,
+		HostPort:          spec.HostPort,
+		FailureReasonCode: reasonCode,
+		ExitCode:          -1,
+	}
 	// Best-effort inspect.
 	info, err := d.client.ContainerInspect(ctx, containerName)
 	if err != nil {
@@ -282,7 +299,14 @@ func (d *DockerRuntimeDriver) logContainerFailure(ctx context.Context, container
 			"container_name", containerName,
 			"error", err,
 		)
-		return
+		return inst
+	}
+	inst.ContainerID = info.ID
+	inst.ContainerState = info.State
+	inst.ExitCode = info.ExitCode
+	inst.ContainerError = info.Error
+	if inst.FailureReasonCode == "" && info.State != "" && info.State != "running" {
+		inst.FailureReasonCode = "container_exited"
 	}
 
 	log.ErrorContext(ctx, "docker.container.exited",
@@ -304,20 +328,30 @@ func (d *DockerRuntimeDriver) logContainerFailure(ctx context.Context, container
 			"container_id", containerID,
 			"error", err,
 		)
-		return
+		return inst
 	}
 	if stderr != "" {
+		inst.StderrTailPreview = singleLineTailStr(stderr, 2048)
 		log.ErrorContext(ctx, "docker.container.stderr",
 			"container_id", containerID,
-			"stderr_tail_preview", singleLineTailStr(stderr, 2048),
+			"stderr_tail_preview", inst.StderrTailPreview,
 		)
 	}
 	if stdout != "" {
+		inst.StdoutTailPreview = singleLineTailStr(stdout, 2048)
 		log.InfoContext(ctx, "docker.container.stdout_tail",
 			"container_id", containerID,
-			"stdout_tail_preview", singleLineTailStr(stdout, 2048),
+			"stdout_tail_preview", inst.StdoutTailPreview,
 		)
 	}
+	return inst
+}
+
+func shortContainerID(containerID string) string {
+	if len(containerID) <= 12 {
+		return containerID
+	}
+	return containerID[:12]
 }
 
 // Inspect returns the current status of the instance's container.

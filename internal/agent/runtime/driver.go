@@ -119,11 +119,17 @@ type PortSpec struct {
 
 // RuntimeInstance is returned by Start on success.
 type RuntimeInstance struct {
-	InstanceID    string `json:"instance_id"`
-	ContainerID   string `json:"container_id"`
-	ContainerName string `json:"container_name"`
-	EndpointURL   string `json:"endpoint_url,omitempty"`
-	HostPort      int    `json:"host_port"`
+	InstanceID        string `json:"instance_id"`
+	ContainerID       string `json:"container_id"`
+	ContainerName     string `json:"container_name"`
+	EndpointURL       string `json:"endpoint_url,omitempty"`
+	HostPort          int    `json:"host_port"`
+	ExitCode          int    `json:"exit_code,omitempty"`
+	FailureReasonCode string `json:"failure_reason_code,omitempty"`
+	StdoutTailPreview string `json:"stdout_tail_preview,omitempty"`
+	StderrTailPreview string `json:"stderr_tail_preview,omitempty"`
+	ContainerState    string `json:"container_state,omitempty"`
+	ContainerError    string `json:"container_error,omitempty"`
 }
 
 // RuntimeInstanceStatus is returned by Inspect.

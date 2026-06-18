@@ -910,6 +910,7 @@ func processTask(ctx context.Context, client *http.Client, cfg *config.AgentConf
 	}
 
 	result.FinishedAt = time.Now().Format(time.RFC3339)
+	applyDefaultTaskResultStatus(&result)
 
 	if result.Success {
 		log.Info("task execution: completed",
@@ -953,6 +954,17 @@ func processTask(ctx context.Context, client *http.Client, cfg *config.AgentConf
 	}
 }
 
+func applyDefaultTaskResultStatus(result *register.TaskResult) {
+	if result.Status != "" {
+		return
+	}
+	if result.Success {
+		result.Status = "completed"
+		return
+	}
+	result.Status = "failed"
+}
+
 func processStartTask(ctx context.Context, task register.AgentTask, result *register.TaskResult) {
 	startTime := time.Now()
 	log.Info("start task: begin", "task_id", task.ID, "instance_id", task.InstanceID)
@@ -994,13 +1006,7 @@ func processStartTask(ctx context.Context, task register.AgentTask, result *regi
 	defer taskCancel()
 	inst, err := driver.Start(taskCtx, spec)
 	if err != nil {
-		result.Success = false
-		result.ErrorMessage = err.Error()
-		result.ExitCode = -1
-		result.Status = "failed"
-		if inst != nil && inst.ContainerID != "" {
-			result.ContainerID = inst.ContainerID
-		}
+		applyStartFailureDiagnostics(result, inst, err)
 		return
 	}
 
@@ -1012,6 +1018,30 @@ func processStartTask(ctx context.Context, task register.AgentTask, result *regi
 	result.InstanceID = inst.InstanceID
 	result.DeploymentID = task.DeploymentID
 	result.NodeID = task.NodeID
+}
+
+func applyStartFailureDiagnostics(result *register.TaskResult, inst *agentruntime.RuntimeInstance, err error) {
+	result.Success = false
+	if err != nil {
+		result.ErrorMessage = err.Error()
+	}
+	result.ExitCode = -1
+	result.Status = "failed"
+	result.FailureReasonCode = "task_failed"
+	if inst == nil {
+		return
+	}
+	if inst.ContainerID != "" {
+		result.ContainerID = inst.ContainerID
+	}
+	if inst.ExitCode != 0 || inst.FailureReasonCode != "" || inst.ContainerState != "" {
+		result.ExitCode = inst.ExitCode
+	}
+	if inst.FailureReasonCode != "" {
+		result.FailureReasonCode = inst.FailureReasonCode
+	}
+	result.StdoutTailPreview = inst.StdoutTailPreview
+	result.StderrTailPreview = inst.StderrTailPreview
 }
 
 func processStopTask(ctx context.Context, task register.AgentTask, result *register.TaskResult) {

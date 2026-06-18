@@ -254,23 +254,26 @@ func truncate(s string, maxLen int) string {
 
 // TaskResult is the payload sent when reporting task completion.
 type TaskResult struct {
-	TaskID       string `json:"task_id"`
-	OperationID  string `json:"operation_id,omitempty"`
-	NodeID       string `json:"node_id"`
-	Success      bool   `json:"success"`
-	Status       string `json:"status"`
-	InstanceID   string `json:"instance_id"`
-	DeploymentID string `json:"deployment_id,omitempty"`
-	ContainerID  string `json:"container_id"`
-	RuntimeState string `json:"runtime_state"`
-	ExitCode     int    `json:"exit_code"`
-	ErrorMessage string `json:"error_message"`
-	LogsSummary  string `json:"logs_summary,omitempty"`
-	Stdout       string `json:"stdout,omitempty"`
-	Stderr       string `json:"stderr,omitempty"`
-	Logs         string `json:"logs,omitempty"`
-	StartedAt    string `json:"started_at,omitempty"`
-	FinishedAt   string `json:"finished_at,omitempty"`
+	TaskID            string `json:"task_id"`
+	OperationID       string `json:"operation_id,omitempty"`
+	NodeID            string `json:"node_id"`
+	Success           bool   `json:"success"`
+	Status            string `json:"status"`
+	InstanceID        string `json:"instance_id"`
+	DeploymentID      string `json:"deployment_id,omitempty"`
+	ContainerID       string `json:"container_id"`
+	RuntimeState      string `json:"runtime_state"`
+	ExitCode          int    `json:"exit_code"`
+	FailureReasonCode string `json:"failure_reason_code,omitempty"`
+	StdoutTailPreview string `json:"stdout_tail_preview,omitempty"`
+	StderrTailPreview string `json:"stderr_tail_preview,omitempty"`
+	ErrorMessage      string `json:"error_message"`
+	LogsSummary       string `json:"logs_summary,omitempty"`
+	Stdout            string `json:"stdout,omitempty"`
+	Stderr            string `json:"stderr,omitempty"`
+	Logs              string `json:"logs,omitempty"`
+	StartedAt         string `json:"started_at,omitempty"`
+	FinishedAt        string `json:"finished_at,omitempty"`
 }
 
 // ReportTaskResult sends a task result back to the server.
