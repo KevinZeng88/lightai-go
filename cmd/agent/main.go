@@ -997,6 +997,9 @@ func processStartTask(ctx context.Context, task register.AgentTask, result *regi
 		result.Success = false
 		result.ErrorMessage = err.Error()
 		result.ExitCode = -1
+		if inst != nil && inst.ContainerID != "" {
+			result.ContainerID = inst.ContainerID
+		}
 		return
 	}
 

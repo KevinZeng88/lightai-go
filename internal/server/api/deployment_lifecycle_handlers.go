@@ -442,6 +442,12 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	json.Unmarshal([]byte(pf.bvParamDefs), &paramDefs)
 	var hc runplan.HealthCheckInput
 	json.Unmarshal([]byte(pf.bvHC), &hc)
+	if hc.ExpectedStatus == 0 {
+		ss := successStatusFromRaw(pf.bvHC)
+		if len(ss) > 0 {
+			hc.ExpectedStatus = ss[0]
+		}
+	}
 	var defaultImages map[string]string
 	json.Unmarshal([]byte(pf.bvDefaultImages), &defaultImages)
 	var bvEnvMap map[string]string
@@ -649,6 +655,11 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	}
 
 	healthTimeoutSeconds := planHealthTimeout2(pf.bvHC)
+	log.Info("preflight.health_timeout",
+		"deployment_id", deployID,
+		"backend_version_id", pf.rtVersionID,
+		"health_timeout_seconds", healthTimeoutSeconds,
+	)
 
 	// Transaction: instance + runplan + lease + agent_task
 	now := time.Now().Format(time.RFC3339)
@@ -807,6 +818,23 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"warnings":       pf.warns,
 		"docker_preview": pf.commandPreview,
 	})
+}
+
+
+// successStatusFromRaw extracts success_status array from raw health check JSON.
+func successStatusFromRaw(raw string) []int {
+	var m map[string]interface{}
+	if json.Unmarshal([]byte(raw), &m) != nil {
+		return nil
+	}
+	ss, _ := m["success_status"].([]interface{})
+	var out []int
+	for _, v := range ss {
+		if n, ok := v.(float64); ok {
+			out = append(out, int(n))
+		}
+	}
+	return out
 }
 
 func planHealthTimeout(hc runplan.HealthCheckInput, raw string) int {

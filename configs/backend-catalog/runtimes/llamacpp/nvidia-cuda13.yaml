@@ -27,7 +27,7 @@ env_schema:
     node_specific: true
     optional: true
 entrypoint:
-  - llama-server
+  - /app/llama-server
 args:
   - -m
   - "{{MODEL_CONTAINER_PATH}}"
