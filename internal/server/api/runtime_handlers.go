@@ -328,16 +328,19 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 			return
 		}
 	} else if checkOnly || hasSnapshot {
-		// Existing record: update only check-related fields.
-		// Check/validate must NOT refresh the snapshot from BackendRuntime.
-		// The snapshot is frozen at creation time and remains independent.
+		// Existing record: update only check result fields.
+		// Check/validate must NOT mutate runtime configuration fields
+		// (image_ref, config_snapshot_json, source_runtime_name,
+		//  source_runtime_revision). The snapshot is frozen at creation
+		// time and remains independent. image_ref is read from the
+		// request solely for status evaluation; it is NOT persisted back.
 		_, err := h.DB.Exec(`UPDATE node_backend_runtimes SET
-			image_ref=?, image_present=?, docker_available=?,
+			image_present=?, docker_available=?,
 			driver_version=?, toolkit_version=?, device_check_json=?,
 			status=?, status_reason=?, last_checked_at=?,
 			updated_at=?
 			WHERE id=?`,
-			imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
+			boolInt(imagePresent), boolInt(dockerAvailable),
 			strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
 			status, reason, now,
 			now, existingID)

@@ -203,6 +203,76 @@ func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 	}
 }
 
+func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-imgref")
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-imgref','node-imgref','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, "rt-imgref", "Runtime ImageRef", "")
+
+	// 1. Create NBR with image_ref = "img-a:tag".
+	ew := httptest.NewRecorder()
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-imgref","image_ref":"img-a:tag","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": "node-imgref"}))
+	if ew.Code != 200 {
+		t.Fatalf("enable code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// 2. Record original image_ref, snapshot, source fields.
+	var origImageRef, origSnapshot, origSourceName, origSourceRevision string
+	if err := db.QueryRow(`SELECT COALESCE(image_ref,''), COALESCE(config_snapshot_json,'{}'), COALESCE(source_runtime_name,''), COALESCE(source_runtime_revision,'') FROM node_backend_runtimes WHERE id='node-imgref:rt-imgref'`).Scan(&origImageRef, &origSnapshot, &origSourceName, &origSourceRevision); err != nil {
+		t.Fatalf("read nbr: %v", err)
+	}
+	if origImageRef != "img-a:tag" {
+		t.Fatalf("initial image_ref = %q, want img-a:tag", origImageRef)
+	}
+
+	// 3. Execute check with a different image_ref in the request (simulating user
+	//    providing a different image in the check form or BackendRuntime having a
+	//    different image_name).
+	cw := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(cw, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-imgref","image_ref":"img-b:tag","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": "node-imgref"}))
+	if cw.Code != 200 {
+		t.Fatalf("check code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	// 4. Assert image_ref was NOT mutated by check.
+	var afterImageRef, afterSnapshot, afterSourceName, afterSourceRevision string
+	if err := db.QueryRow(`SELECT COALESCE(image_ref,''), COALESCE(config_snapshot_json,'{}'), COALESCE(source_runtime_name,''), COALESCE(source_runtime_revision,'') FROM node_backend_runtimes WHERE id='node-imgref:rt-imgref'`).Scan(&afterImageRef, &afterSnapshot, &afterSourceName, &afterSourceRevision); err != nil {
+		t.Fatalf("read nbr after check: %v", err)
+	}
+	if afterImageRef != origImageRef {
+		t.Fatalf("image_ref mutated by check: %q -> %q", origImageRef, afterImageRef)
+	}
+	if afterSnapshot != origSnapshot {
+		t.Fatalf("config_snapshot_json changed after check: was=%s now=%s", origSnapshot, afterSnapshot)
+	}
+	if afterSourceName != origSourceName {
+		t.Fatalf("source_runtime_name changed after check: %q -> %q", origSourceName, afterSourceName)
+	}
+	if afterSourceRevision != origSourceRevision {
+		t.Fatalf("source_runtime_revision changed after check: %q -> %q", origSourceRevision, afterSourceRevision)
+	}
+
+	// 5. Assert check result fields WERE updated.
+	var status, lastChecked string
+	if err := db.QueryRow(`SELECT status, last_checked_at FROM node_backend_runtimes WHERE id='node-imgref:rt-imgref'`).Scan(&status, &lastChecked); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if status != "ready" {
+		t.Fatalf("status=%s, want ready", status)
+	}
+	if lastChecked == "" {
+		t.Fatalf("last_checked_at was not updated")
+	}
+}
+
 func TestPatchNodeBackendRuntimeSnapshotFieldsNeedRecheck(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
