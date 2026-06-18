@@ -91,3 +91,17 @@ No problems from this round are left only in chat history.
 | MRW-HARD-005 | Deployment wizard runtime visibility: filtered by backend_version_id only; preflight does NBR+ModelLocation validation | Frontend `filteredRuntimes` computed on BackendRuntime list (by `backend_version_id`), not NodeBackendRuntime readiness. Preflight does the actual validation. | Wizard Step 3 shows all matching BackendRuntime templates; preflight Step 4 validates actual readiness + ModelLocation. This is correct behavior — the template is selected first, then preflight validates. | VERIFIED | `web/src/pages/ModelDeploymentsPage.vue` line 182: `filteredRuntimes` filters `runtimes` by `backend_version_id`; `preflightDeployment` validates NBR ready + ModelLocation on specific node | Code review confirmed; E2E evidence from previous round | Closed |
 
 No problems from this round are left only in chat history.
+
+
+---
+
+## 2026-06-18 Structured Preflight Errors Round
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-SPE-001 | Preflight returned free-form English error strings directly to frontend | `preflightDeployment` appended raw strings like `"model location is not available on target node..."` to `pf.errs []string` | zh-CN users saw untranslated English errors; frontend had no reliable way to i18n-map them | FIXED | `internal/server/api/deployment_lifecycle_handlers.go` — added `PreflightError{Code,Message,Context}` struct, changed `errs []string` to `errs []PreflightError`, added `addErr()` helper, all error paths emit structured codes: `model_location_missing`, `node_backend_runtime_not_ready`, `node_offline`, `unknown` | `go build`, `go test ./...`, `go vet` all PASS | Closed |
+| MRW-SPE-002 | Frontend preflight display used raw error strings | `ModelDeploymentsPage.vue` line 101-103 used `<el-alert :title="e">` directly on string errors | Raw English or Go format strings displayed to user | FIXED | `web/src/pages/ModelDeploymentsPage.vue` — added `preflightErrorText()` helper mapping error.code → i18n key via codeMap; displays error context (node_id, artifact_id, runtime_id) as detail | `npm run build` PASS; `npm test` PASS; 585 keys both locales | Closed |
+| MRW-SPE-003 | Missing i18n keys for backendVersionMismatch, dockerImageMissing, runtimeDisabled, unknown | Only modelLocationMissing, nbrNotReady, nodeOffline existed | New or future error codes would display as fallback `[code] message` | FIXED | `web/src/locales/zh-CN.ts` (+4 keys), `web/src/locales/en-US.ts` (+4 keys), `ModelDeploymentsPage.vue` codeMap includes all 7 codes | `npm test` — 585 keys consistent | Closed |
+| MRW-SPE-004 | Wizard Step 3 label said "选择运行配置" but data source is BackendRuntime templates | `startWizard.selectRuntime` was "选择运行配置" / "Select Runtime" | User might expect node configs, not templates | FIXED | `zh-CN.ts`: "选择运行模板"; `en-US.ts`: "Select Runtime Template" | `npm test` PASS | Closed |
+
+No problems from this round are left only in chat history.
