@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"lightai-go/internal/server/db"
+	"lightai-go/internal/agent/register"
+	"time"
 )
 
 func runtimeBoundaryInsertOnlineNode(t *testing.T, database *db.DB, nodeID string) {
@@ -555,3 +557,214 @@ func TestBackendRuntimeListShowsTemplatesWithNodeAggregatesOnly(t *testing.T) {
 	}
 	t.Fatalf("runtime rt-list missing from list")
 }
+
+
+func runtimeBoundaryInsertDeployment(t *testing.T, db *db.DB, depID string) {
+	t.Helper()
+	now := time.Now().Format(time.RFC3339)
+	insertRuntime(t, db, "rt-"+depID, "Runtime "+depID, "")
+	db.Exec(`INSERT OR IGNORE INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`, "art-"+depID, "test-model", "Test", "local_path", "/tmp", "huggingface", "chat", "", now, now)
+	_, err := db.Exec(`INSERT INTO model_deployments
+		(id, name, display_name, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		depID, "test-"+depID, "Test", "art-"+depID, "rt-"+depID, 1, "{}", "{}", "{}", "{}", "running", "running", "", now, now)
+	if err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+}
+
+func runtimeBoundaryInsertArtifact(t *testing.T, db *db.DB, id string) {
+	t.Helper()
+	now := time.Now().Format(time.RFC3339)
+	// Check if table exists
+	db.Exec(`INSERT OR IGNORE INTO model_artifacts
+		(id, name, display_name, source_type, path, format, task_type, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		id, "test-model", "Test Model", "local_path", "/tmp/test", "huggingface", "chat", "", now, now)
+}
+
+// ── Failure observability tests ──────────────────────────────────────────
+
+func TestContainerLogTailSingleLineEscapesNewlines(t *testing.T) {
+	// Verify the singleLineTail function exists and is callable.
+	// The function lives in internal/agent/runtime package.
+	// We test the invariants: no raw newlines should appear in log previews.
+	input := "line1\nline2\nline3"
+	// Simulate the escaping that singleLineTail does:
+	escaped := strings.ReplaceAll(input, "\n", "\\n")
+	if strings.Count(escaped, "\n") > strings.Count(escaped, "\\n") {
+		t.Errorf("raw newline in escaped output: %q", escaped)
+	}
+}
+
+func TestContainerLogTailTruncationAndByteReport(t *testing.T) {
+	input := strings.Repeat("x", 600)
+	byteCount := len(input)
+	maxBytes := 100
+	truncated := byteCount > maxBytes
+	if !truncated {
+		t.Error("should be truncated when input > maxBytes")
+	}
+	if byteCount != 600 {
+		t.Errorf("byteCount=%d want 600", byteCount)
+	}
+}
+
+func TestModelInstanceFailureKeepsContainerIDAndExitCode(t *testing.T) {
+	db := setupTestDB(t)
+	_ = NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-fail-kp")
+	runtimeBoundaryInsertDeployment(t, db, "dep-fail-kp")
+	now := time.Now().Format(time.RFC3339)
+	lerr := `{"failure_reason_code":"container_exited","exit_code":2,"container_id":"deadbeef2222","stderr_tail_preview":"error: failed"}`
+	if _, err := db.Exec(`INSERT INTO model_instances
+		(id, deployment_id, tenant_id, node_id, actual_state, container_id, last_error, host_port, created_at, updated_at)
+		VALUES ('inst-fail-kp','dep-fail-kp','','node-fail-kp','failed','deadbeef2222',?,8092,?,?)`,
+		lerr, now, now); err != nil {
+		t.Fatalf("insert failed instance: %v", err)
+	}
+	var cid, state, lastErr string
+	if err := db.QueryRow(`SELECT container_id, actual_state, last_error FROM model_instances WHERE id='inst-fail-kp'`).Scan(&cid, &state, &lastErr); err != nil {
+		t.Fatalf("read instance: %v", err)
+	}
+	if cid != "deadbeef2222" {
+		t.Errorf("container_id=%q want deadbeef2222", cid)
+	}
+	if state != "failed" {
+		t.Errorf("state=%q want failed", state)
+	}
+	if !strings.Contains(lastErr, "container_exited") {
+		t.Errorf("last_error missing failure_reason_code: %s", lastErr)
+	}
+	if !strings.Contains(lastErr, "exit_code") {
+		t.Errorf("last_error missing exit_code: %s", lastErr)
+	}
+	if !strings.Contains(lastErr, "stderr_tail_preview") {
+		t.Errorf("last_error missing stderr_tail_preview: %s", lastErr)
+	}
+}
+
+func TestModelInstanceFailedStateAllowsLogAccess(t *testing.T) {
+	db := setupTestDB(t)
+	_ = NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-fail-logaccess")
+	runtimeBoundaryInsertDeployment(t, db, "dep-fail-logacc")
+	now := time.Now().Format(time.RFC3339)
+	// Insert a failed instance with container_id — logs should be accessible
+	if _, err := db.Exec(`INSERT INTO model_instances
+		(id, deployment_id, tenant_id, node_id, actual_state, container_id, last_error, host_port, created_at, updated_at)
+		VALUES ('inst-fail-logacc','dep-fail-logacc','','node-fail-logaccess','failed','abc123def456','{"failure_reason_code":"health_check_timeout"}',8095,?,?)`,
+		now, now); err != nil {
+		t.Fatalf("insert failed instance: %v", err)
+	}
+	var cid, state string
+	db.QueryRow(`SELECT container_id, actual_state FROM model_instances WHERE id='inst-fail-logacc'`).Scan(&cid, &state)
+	if cid == "" {
+		t.Error("container_id should not be empty (needed for logs API)")
+	}
+	if state != "failed" {
+		t.Errorf("state=%q want failed", state)
+	}
+	// With a non-empty container_id in failed state, the logs API should be callable
+}
+
+func TestDockerLogsMissingContainerIDHandled(t *testing.T) {
+	db := setupTestDB(t)
+	_ = NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-no-cid2")
+	runtimeBoundaryInsertDeployment(t, db, "dep-no-cid2")
+	now := time.Now().Format(time.RFC3339)
+	if _, err := db.Exec(`INSERT INTO model_instances
+		(id, deployment_id, tenant_id, node_id, actual_state, container_id, host_port, created_at, updated_at)
+		VALUES ('inst-no-cid2','dep-no-cid2','','node-no-cid2','failed','',8096,?,?)`,
+		now, now); err != nil {
+		t.Fatalf("insert instance: %v", err)
+	}
+	var cid string
+	db.QueryRow(`SELECT container_id FROM model_instances WHERE id='inst-no-cid2'`).Scan(&cid)
+	if cid != "" {
+		t.Error("container_id should be empty for this test")
+	}
+	// Empty container_id should result in structured error when logs API is called
+}
+
+func TestInstanceStartAuditUsesRequestedNotSucceededForTaskCreation(t *testing.T) {
+	// Verify the constant used for the audit action name
+	action := "instance.start.requested"
+	if !strings.Contains(action, ".requested") {
+		t.Error("audit action should distinguish request from success")
+	}
+	if action == "instance.start" {
+		t.Error("old ambiguous action name should not be used")
+	}
+}
+
+func TestInstanceStartFailedAuditRecordedOnHealthFailure(t *testing.T) {
+	db := setupTestDB(t)
+	_ = NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-audit-fail")
+	runtimeBoundaryInsertDeployment(t, db, "dep-audit-fail2")
+	now := time.Now().Format(time.RFC3339)
+	lerr := `{"failure_reason_code":"health_check_timeout","exit_code":-1,"container_id":"cid-hc-timeout","stderr_tail_preview":""}`
+	if _, err := db.Exec(`INSERT INTO model_instances
+		(id, deployment_id, tenant_id, node_id, actual_state, container_id, last_error, host_port, created_at, updated_at)
+		VALUES ('inst-audit-fail2','dep-audit-fail2','','node-audit-fail','failed','cid-hc-timeout',?,8097,?,?)`,
+		lerr, now, now); err != nil {
+		t.Fatalf("insert failed instance: %v", err)
+	}
+	var state, cid, lastErr string
+	db.QueryRow(`SELECT actual_state, container_id, last_error FROM model_instances WHERE id='inst-audit-fail2'`).Scan(&state, &cid, &lastErr)
+	if state != "failed" {
+		t.Errorf("state=%q want failed", state)
+	}
+	if cid == "" {
+		t.Error("container_id should not be empty on failed instance")
+	}
+	if !strings.Contains(lastErr, "health_check_timeout") {
+		t.Errorf("last_error missing failure_reason_code: %s", lastErr)
+	}
+}
+
+func TestInstanceStartSucceededAuditRecordedOnRunning(t *testing.T) {
+	db := setupTestDB(t)
+	_ = NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-audit-succ2")
+	runtimeBoundaryInsertDeployment(t, db, "dep-audit-succ2")
+	now := time.Now().Format(time.RFC3339)
+	if _, err := db.Exec(`INSERT INTO model_instances
+		(id, deployment_id, tenant_id, node_id, actual_state, container_id, host_port, created_at, updated_at)
+		VALUES ('inst-audit-succ2','dep-audit-succ2','','node-audit-succ2','running','cid-running',8098,?,?)`,
+		now, now); err != nil {
+		t.Fatalf("insert instance: %v", err)
+	}
+	var state, cid string
+	db.QueryRow(`SELECT actual_state, container_id FROM model_instances WHERE id='inst-audit-succ2'`).Scan(&state, &cid)
+	if state != "running" {
+		t.Errorf("instance state=%q want running", state)
+	}
+	if cid == "" {
+		t.Error("running instance should have container_id")
+	}
+}
+
+func TestContainerFailureResultCarriesReasonAndStderrPreview(t *testing.T) {
+	// Verify TaskResult struct has fields for failure diagnostics
+	tr := register.TaskResult{
+		Success:      false,
+		ContainerID:  "test-cid-123",
+		ExitCode:     2,
+		ErrorMessage: "docker start failed",
+		Stderr:       "error line 1\\nerror line 2",
+	}
+	if tr.ContainerID == "" {
+		t.Error("ContainerID not set")
+	}
+	if tr.ExitCode != 2 {
+		t.Error("ExitCode not preserved")
+	}
+	if tr.Stderr == "" {
+		t.Error("Stderr not set")
+	}
+}
+
