@@ -199,7 +199,12 @@ stage_done
 
 # Create and start deployment
 stage_start start_deployment
-deploy_payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$VLLM_PORT},\"parameters_json\":{\"served_model_name\":\"$PREFIX-$RUN_ID\",\"max_model_len\":4096},\"env_overrides_json\":{}}"
+DEPLOY_PARAMS="${DEPLOY_PARAMS:-}"
+if [ -n "$DEPLOY_PARAMS" ]; then
+  deploy_payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$VLLM_PORT},\"parameters_json\":{$DEPLOY_PARAMS},\"env_overrides_json\":{}}"
+else
+  deploy_payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$VLLM_PORT},\"parameters_json\":{\"served_model_name\":\"$PREFIX-$RUN_ID\",\"max_model_len\":4096},\"env_overrides_json\":{}}"
+fi
 deploy_json="$(api POST /api/v1/deployments "$deploy_payload")"
 DEPLOYMENT_ID="$(printf '%s' "$deploy_json" | json_get id)"
 [ -n "$DEPLOYMENT_ID" ] || fail "deployment create failed"
