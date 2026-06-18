@@ -299,9 +299,85 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		reason = "check request did not provide docker/image evidence"
 	}
 
-	// Capture a config snapshot from the BackendRuntime template at enable/check time.
-	// This freezes the runtime configuration so future template edits do not
-	// silently change the behavior of existing NodeBackendRuntime records.
+	id := nodeID + ":" + runtimeID
+	tid := tenantID(r)
+	now := time.Now().Format(time.RFC3339)
+
+	// Check whether a NodeBackendRuntime already exists for this (node, runtime) pair.
+	var existingID, existingSnapshot string
+	row := h.DB.QueryRow(`SELECT id, COALESCE(config_snapshot_json,'{}') FROM node_backend_runtimes WHERE node_id=? AND backend_runtime_id=?`, nodeID, runtimeID)
+	_ = row.Scan(&existingID, &existingSnapshot)
+	exists := existingID != ""
+	hasSnapshot := exists && existingSnapshot != "{}" && existingSnapshot != ""
+
+	if !exists {
+		// First time: create a new NodeBackendRuntime.
+		// Capture a frozen config snapshot from the BackendRuntime template.
+		// This freezes the runtime configuration so future template edits do not
+		// silently change the behavior of existing NodeBackendRuntime records.
+		snapshotJSON := h.buildRuntimeConfigSnapshot(rt, runtimeID)
+		_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
+			(id, backend_runtime_id, node_id, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, tenant_id, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			id, runtimeID, nodeID, "docker", imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
+			strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
+			status, reason, now, snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""), tid, now, now)
+		if err != nil {
+			log.Error("node backend runtime insert failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	} else if checkOnly || hasSnapshot {
+		// Existing record: update only check-related fields.
+		// Check/validate must NOT refresh the snapshot from BackendRuntime.
+		// The snapshot is frozen at creation time and remains independent.
+		_, err := h.DB.Exec(`UPDATE node_backend_runtimes SET
+			image_ref=?, image_present=?, docker_available=?,
+			driver_version=?, toolkit_version=?, device_check_json=?,
+			status=?, status_reason=?, last_checked_at=?,
+			updated_at=?
+			WHERE id=?`,
+			imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
+			strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
+			status, reason, now,
+			now, existingID)
+		if err != nil {
+			log.Error("node backend runtime update failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	} else {
+		// Legacy case: existing record with no snapshot — rebuild from template.
+		// This path only triggers for records created before the snapshot feature.
+		snapshotJSON := h.buildRuntimeConfigSnapshot(rt, runtimeID)
+		_, err := h.DB.Exec(`UPDATE node_backend_runtimes SET
+			image_ref=?, image_present=?, docker_available=?,
+			driver_version=?, toolkit_version=?, device_check_json=?,
+			status=?, status_reason=?, last_checked_at=?,
+			config_snapshot_json=?, source_runtime_name=?, source_runtime_revision=?,
+			updated_at=?
+			WHERE id=?`,
+			imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
+			strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
+			status, reason, now,
+			snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""),
+			now, existingID)
+		if err != nil {
+			log.Error("node backend runtime legacy update failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id": id, "backend_runtime_id": runtimeID, "node_id": nodeID,
+		"image_ref": imageRef, "image_present": imagePresent, "docker_available": dockerAvailable,
+		"status": status, "status_reason": reason, "last_checked_at": now,
+	})
+}
+
+// buildRuntimeConfigSnapshot captures a frozen config snapshot from a BackendRuntime.
+// This is called only at NodeBackendRuntime creation time (not on check/validate).
+func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID string) string {
 	snapshot := map[string]interface{}{
 		"source_runtime_id":          runtimeID,
 		"source_runtime_name":        strVal(rt, "name", ""),
@@ -320,41 +396,7 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		"health_check_override_json": rt["health_check_override_json"],
 		"version_snapshot_json":      rt["version_snapshot_json"],
 	}
-	snapshotJSON := jsonString(snapshot)
-
-	id := nodeID + ":" + runtimeID
-	tid := tenantID(r)
-	now := time.Now().Format(time.RFC3339)
-	_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
-		(id, backend_runtime_id, node_id, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, tenant_id, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(node_id, backend_runtime_id) DO UPDATE SET
-			image_ref=excluded.image_ref,
-			image_present=excluded.image_present,
-			docker_available=excluded.docker_available,
-			driver_version=excluded.driver_version,
-			toolkit_version=excluded.toolkit_version,
-			device_check_json=excluded.device_check_json,
-			status=excluded.status,
-			status_reason=excluded.status_reason,
-			last_checked_at=excluded.last_checked_at,
-			config_snapshot_json=excluded.config_snapshot_json,
-			source_runtime_name=excluded.source_runtime_name,
-			source_runtime_revision=excluded.source_runtime_revision,
-			updated_at=excluded.updated_at`,
-		id, runtimeID, nodeID, "docker", imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
-		strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
-		status, reason, now, snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""), tid, now, now)
-	if err != nil {
-		log.Error("node backend runtime upsert failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"id": id, "backend_runtime_id": runtimeID, "node_id": nodeID,
-		"image_ref": imageRef, "image_present": imagePresent, "docker_available": dockerAvailable,
-		"status": status, "status_reason": reason, "last_checked_at": now,
-	})
+	return jsonString(snapshot)
 }
 
 func (h *AgentHandler) evaluateNodeBackendRuntime(nodeID, vendor, imageRef string, imagePresent, dockerAvailable bool) (string, string) {

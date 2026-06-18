@@ -118,6 +118,91 @@ func TestNodeBackendRuntimeCopiesTemplateSnapshotAndTemplateEditDoesNotChangeIt(
 	}
 }
 
+func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-check")
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-check','node-check','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, "rt-check", "Runtime Check", "")
+
+	// 1. Create NodeBackendRuntime via enable (snapshot captured from BackendRuntime).
+	ew := httptest.NewRecorder()
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-check","image_ref":"img:orig","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": "node-check"}))
+	if ew.Code != 200 {
+		t.Fatalf("enable code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// 2. Record original snapshot + source tracking fields.
+	var origSnapshot, origSourceName, origSourceRevision string
+	if err := db.QueryRow(`SELECT COALESCE(config_snapshot_json,'{}'), COALESCE(source_runtime_name,''), COALESCE(source_runtime_revision,'') FROM node_backend_runtimes WHERE id='node-check:rt-check'`).Scan(&origSnapshot, &origSourceName, &origSourceRevision); err != nil {
+		t.Fatalf("read nbr: %v", err)
+	}
+	if !strings.Contains(origSnapshot, "img:test") {
+		t.Fatalf("snapshot missing template image: %s", origSnapshot)
+	}
+
+	// 3. Modify BackendRuntime template — change image, args, env, docker, health_check.
+	pw := httptest.NewRecorder()
+	h.HandlePatchBackendRuntime(pw, newReq("PATCH", "/x",
+		`{"image_name":"changed:v3","args_override_json":["--changed"],"default_env_json":{"CHANGED":"1"},"docker_json":{"ipc_mode":"none"},"health_check_override_json":{"type":"http","path":"/healthz"}}`,
+		adminSession(), map[string]string{"id": "rt-check"}))
+	if pw.Code != 200 {
+		t.Fatalf("patch runtime code=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	// 4. Run check/validate on NodeBackendRuntime.
+	cw := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(cw, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-check","image_ref":"img:orig","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": "node-check"}))
+	if cw.Code != 200 {
+		t.Fatalf("check code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	// 5. Assert config_snapshot_json did NOT change (check must not refresh from template).
+	var afterSnapshot, afterSourceName, afterSourceRevision string
+	if err := db.QueryRow(`SELECT COALESCE(config_snapshot_json,'{}'), COALESCE(source_runtime_name,''), COALESCE(source_runtime_revision,'') FROM node_backend_runtimes WHERE id='node-check:rt-check'`).Scan(&afterSnapshot, &afterSourceName, &afterSourceRevision); err != nil {
+		t.Fatalf("read nbr after check: %v", err)
+	}
+	if origSnapshot != afterSnapshot {
+		t.Fatalf("config_snapshot_json changed after check\nbefore=%s\nafter=%s", origSnapshot, afterSnapshot)
+	}
+	if afterSnapshot == "" || afterSnapshot == "{}" {
+		t.Fatalf("snapshot is empty after check: %s", afterSnapshot)
+	}
+	if strings.Contains(afterSnapshot, "changed:v3") {
+		t.Fatalf("snapshot was refreshed from modified template (contains changed:v3): %s", afterSnapshot)
+	}
+	if strings.Contains(afterSnapshot, "--changed") {
+		t.Fatalf("snapshot was refreshed from modified template (contains --changed): %s", afterSnapshot)
+	}
+
+	// 6. Assert source_runtime_name and source_runtime_revision were NOT overwritten.
+	if origSourceName != afterSourceName {
+		t.Fatalf("source_runtime_name changed after check: %q -> %q", origSourceName, afterSourceName)
+	}
+	if origSourceRevision != afterSourceRevision {
+		t.Fatalf("source_runtime_revision changed after check: %q -> %q", origSourceRevision, afterSourceRevision)
+	}
+
+	// 7. Assert check-related fields WERE updated.
+	var status, lastChecked string
+	if err := db.QueryRow(`SELECT status, last_checked_at FROM node_backend_runtimes WHERE id='node-check:rt-check'`).Scan(&status, &lastChecked); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if status != "ready" {
+		t.Fatalf("status=%s, want ready", status)
+	}
+	if lastChecked == "" {
+		t.Fatalf("last_checked_at was not updated")
+	}
+}
+
 func TestPatchNodeBackendRuntimeSnapshotFieldsNeedRecheck(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)

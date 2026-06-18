@@ -128,8 +128,8 @@ System BackendVersion can be cloned to user BackendVersion; user BackendVersion 
 BackendVersion -> BackendRuntime copies defaults at creation; later BackendVersion edits do NOT mutate existing BackendRuntime.
 BackendRuntime stores source_backend_id/source_backend_version_id/source_version_revision and version_snapshot_json.
 NodeBackendRuntime = node-level config with frozen config_snapshot_json.
-NBR snapshot captured at enable/check time (args, env, docker, mounts, health_check).
-BackendRuntime -> NodeBackendRuntime copies config at creation/check; later BackendRuntime edits do NOT mutate existing NodeBackendRuntime.
+NBR snapshot captured at creation time (args, env, docker, mounts, health_check).
+BackendRuntime -> NodeBackendRuntime copies config at creation only; later BackendRuntime edits do NOT mutate existing NodeBackendRuntime. NodeBackendRuntime check/validate only verifies the snapshot against node state and does NOT refresh the snapshot from BackendRuntime.
 RunPlan resolver reads BackendRuntime version_snapshot_json and NBR config_snapshot_json, not live mutable defaults.
 BackendRuntime template edits do NOT affect existing NodeBackendRuntime RunPlans.
 Editing NodeBackendRuntime image/snapshot fields invalidates ready status → needs_check.

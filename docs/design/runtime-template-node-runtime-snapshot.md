@@ -103,7 +103,7 @@ Current schema (`node_backend_runtimes` table):
 
 **Rules:**
 - NodeBackendRuntime references a BackendRuntime via `backend_runtime_id` as the source template.
-- At enable/check time, the system captures a **frozen config snapshot** (`config_snapshot_json`) of the BackendRuntime's args, env, docker, mounts, health_check, entrypoint, image, and vendor.
+- At creation/enable time, the system captures a **frozen config snapshot** (`config_snapshot_json`) of the BackendRuntime's args, env, docker, mounts, health_check, entrypoint, image, and vendor.
 - RunPlan resolution reads the NBR snapshot as the primary execution config source.
 - BackendRuntime template edits do NOT affect existing NodeBackendRuntime RunPlans.
 - NodeBackendRuntime status is determined by `evaluateNodeBackendRuntime()` which checks GPU vendor match, Docker availability, and image presence.
@@ -132,7 +132,7 @@ After creation, BackendRuntime is independent. BackendVersion reload/sync update
 
 ```
 User selects BackendRuntime → creates/enables NodeBackendRuntime on a specific node.
-At enable/check time, the system captures a config_snapshot_json from the current BackendRuntime:
+At creation/enable time, the system captures a config_snapshot_json from the current BackendRuntime:
   - source_runtime_id, source_runtime_name, source_runtime_revision
   - backend_id, backend_version_id
   - vendor, runtime_type, image_name, image_pull_policy
@@ -151,7 +151,7 @@ Creating a user-managed BackendRuntime (template clone) is a separate action:
 ### 2.3 Independence After Creation
 
 ```
-NodeBackendRuntime persists a frozen config_snapshot_json at enable/check time.
+NodeBackendRuntime persists a frozen config_snapshot_json captured at creation/enable time.
 After creation, template modifications do NOT affect the NBR's RunPlan output.
 The RunPlan resolver reads the NBR snapshot as the primary config source.
 BackendRuntime is still referenced for metadata (name, source tracking) but its
@@ -371,7 +371,7 @@ Step 6: Start
 ### Implemented (Phase 4, v17):
 - BackendVersion user catalog add/edit/clone/reload
 - BackendRuntime CRUD + BackendVersion snapshot-based creation
-- NodeBackendRuntime enable/check with **config snapshot capture** (`config_snapshot_json`)
+- NodeBackendRuntime enable with **config snapshot capture** at creation time (`config_snapshot_json`); check/validate only updates status fields (does NOT refresh snapshot)
 - RunPlan resolver reads Runtime version snapshot and NBR snapshot as the primary execution config
 - BackendVersion edits do NOT affect existing BackendRuntime RunPlans
 - BackendRuntime template edits do NOT affect existing NBR RunPlans
