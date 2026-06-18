@@ -29,3 +29,21 @@ All P0/P1 problems found in this round are FIXED and verified by the NVIDIA wiza
 | MRW-P2-011 | GPU lease display in Web is limited | E2E verifies lease release through cleanup, but Web does not expose a detailed lease panel | Operators have less direct visibility into lease lifecycle | DOCUMENTED_BLOCKER | Future `web/src/pages/ModelInstancesPage.vue` or node run plan detail lease panel | Start and stop a deployment, then verify allocated/released lease transitions render in Web | Keep out of current P0/P1 closure |
 
 No problems from this round are left only in chat history.
+
+---
+
+## 2026-06-18 Polish Round: i18n, UX, and Concept Cleanup
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-POL-001 | Bare English strings displayed across Web UI (toasts, status, alerts, dialogs) | `ElMessage.success('Created')`, raw `row.status` display, hardcoded `'Confirm'`/`'Failed'` etc. | Users on zh-CN see English UI text | FIXED | `web/src/locales/*.ts`, `web/src/utils/status.ts`, all page `.vue` files | `npm run build` PASS, `npm test` PASS, 577 keys both locale files | Closed |
+| MRW-POL-002 | `model root is not allowed` error toast was raw English | `RemoteFileBrowser.vue` mapped `root_not_allowed` error code but not all paths | User sees English error | FIXED | Already mapped via `fileBrowser.rootNotAllowed` i18n key; confirmed working | Existing `root_not_allowed` → `fileBrowser.rootNotAllowed` mapping verified | Already fixed before this round |
+| MRW-POL-003 | Check result displayed raw `ready` status and `runtime verified for node` reason | `RunnerConfigsPage.vue` alert title and `BackendRuntimesPage.vue` tag showed raw API strings | User sees English status labels | FIXED | `web/src/utils/status.ts` added `translateStatus()` and `translateStatusReason()`, applied to all pages | Build/test PASS | Closed |
+| MRW-POL-004 | Runtime config template created with same name as system template | Clone step in `RunnerConfigsPage.vue` didn't distinguish user config name | User confuses user config with system template | FIXED | Auto-suffix ` - 用户配置` / ` - Custom` with auto-increment on conflict, applied in both `RunnerConfigsPage.vue` and `BackendRuntimesPage.vue` | Build/test PASS | Closed |
+| MRW-POL-005 | "启动实例" button inaccurate for deployment wizard | Button text implied single action, wizard is multi-step | Misleading UX | FIXED | `startWizard.title` changed to `部署向导` / `Deployment Wizard` in both locale files | Build/test PASS | Closed |
+| MRW-POL-006 | Wizard single-select steps required manual "Next" click | Steps with only one select control needed extra click | Poor UX | FIXED | `web/src/composables/useWizardAutoAdvance.ts` shared helper, applied to ModelArtifacts, RunnerConfigs, Deployment wizards | Build/test PASS | Closed |
+| MRW-POL-007 | Runtime config list showed node_count=0, ready_count=0 when configs existed | Frontend hardcoded `node_count: 0, ready_count: 0`; backend didn't return aggregate counts | Incorrect display | FIXED | Backend: added JOIN query to enrich `HandleListBackendRuntimes` with node_count/ready_count. Frontend: reads actual API values | `go test ./...` PASS, build PASS | Closed |
+| MRW-POL-008 | Deployment wizard showed no runtime options when configs existed | Filter `r.backend_version_id === wizardVersionId` correct but no feedback when empty | User sees blank select | FIXED | Added `noRuntimeForVersion` alert when filtered list empty; verified filter logic matches backend | Build/test PASS | Closed |
+| MRW-POL-009 | Enabling runtime on node created BackendRuntime clone → polluted template list | `RunnerConfigsPage.doCreateConfig` called `/clone` then `/enable`, creating a new BackendRuntime per node enablement | User templates appeared in "运行模板" list after node enable | FIXED | Removed clone step; `doCreateConfig` now only calls `/enable` with existing template ID. `RunnerConfigsPage` now shows NodeBackendRuntime records (node-level configs). Template list shows BackendRuntime only. | Build/test PASS | Closed |
+
+No problems from this round are left only in chat history.

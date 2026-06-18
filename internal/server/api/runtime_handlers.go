@@ -31,6 +31,30 @@ func (h *AgentHandler) HandleListBackendRuntimes(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	// Enrich with node_count and ready_count from node_backend_runtimes
+	countRows, cerr := h.DB.Query(`SELECT backend_runtime_id, COUNT(*) AS node_count, SUM(CASE WHEN status = 'ready' THEN 1 ELSE 0 END) AS ready_count FROM node_backend_runtimes GROUP BY backend_runtime_id`)
+	if cerr == nil {
+		defer countRows.Close()
+		countMap := make(map[string]map[string]int)
+		for countRows.Next() {
+			var rid string
+			var nc, rc int
+			if e := countRows.Scan(&rid, &nc, &rc); e == nil {
+				countMap[rid] = map[string]int{"node_count": nc, "ready_count": rc}
+			}
+		}
+		for _, entry := range out {
+			id := strVal(entry, "id", "")
+			if stats, ok := countMap[id]; ok {
+				entry["node_count"] = stats["node_count"]
+				entry["ready_count"] = stats["ready_count"]
+			} else {
+				entry["node_count"] = 0
+				entry["ready_count"] = 0
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 

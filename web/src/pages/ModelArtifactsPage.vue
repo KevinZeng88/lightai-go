@@ -66,7 +66,7 @@
       </el-steps>
       <!-- Step 1: Select node -->
       <div v-if="wizardStep === 0">
-        <el-select v-model="wizardNodeId" :placeholder="$t('modelWizard.selectNode')" style="width:100%" filterable>
+        <el-select v-model="wizardNodeId" :placeholder="$t('modelWizard.selectNode')" style="width:100%" filterable @change="onWizAutoNext">
           <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizardNodeId" @click="wizardStep=1">{{ $t('common.next') }}</el-button></div>
@@ -120,6 +120,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import RemoteFileBrowser from '@/components/RemoteFileBrowser.vue'
+import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
 const { t } = useI18n()
 
@@ -133,6 +134,8 @@ const wizardVisible = ref(false); const wizardStep = ref(0)
 const wizardNodeId = ref(''); const wizardSelectedEntry = ref<any>(null)
 const wizardScanning = ref(false); const wizardSaving = ref(false)
 const scanResult = ref<any>(null); const wizardModelName = ref('')
+
+const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () => { wizardStep.value++ })
 
 // Add location state
 const addLocVisible = ref(false); const addLocNodeId = ref(''); const addLocPath = ref(''); const addLocSelected = ref<any>(null); const addLocSaving = ref(false)
@@ -157,17 +160,17 @@ async function doSave() {
   try {
     if (editingId) await apiClient.patch(`/api/v1/model-artifacts/${editingId}`, form.value)
     else await apiClient.post('/api/v1/model-artifacts', form.value)
-    ElMessage.success('Saved'); dialogVisible.value = false; await refresh()
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('artifacts.saved')); dialogVisible.value = false; await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   saving.value = false
 }
 
 async function handleDelete(row: any) {
   try {
-    await ElMessageBox.confirm(`Delete ${row.name}?`, 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(t('artifacts.deleteConfirm', { name: row.name }), t('common.confirm'), { type: 'warning' })
     await apiClient.delete(`/api/v1/model-artifacts/${row.id}`)
-    ElMessage.success('Deleted'); await refresh()
-  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('artifacts.deleted')); await refresh()
+  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
 }
 
 async function showDetail(row: any) {
@@ -213,8 +216,8 @@ async function doWizardSave() {
       path_type: scanResult.value.path_type || 'directory',
       verification_status: 'verified', match_status: 'exact_match',
     })
-    ElMessage.success('Model created'); wizardVisible.value = false; await refresh()
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('artifacts.created')); wizardVisible.value = false; await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   wizardSaving.value = false
 }
 
@@ -231,23 +234,23 @@ async function doAddLocation() {
       path_type: addLocSelected.value.path_type || 'directory',
       verification_status: 'verified', match_status: 'exact_match',
     })
-    ElMessage.success('Location added'); addLocVisible.value = false
+    ElMessage.success(t('modelLocations.added')); addLocVisible.value = false
     await showDetail(selected.value)
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   addLocSaving.value = false
 }
 async function doRescan(loc: any) {
   try {
     await apiClient.post(`/model-artifacts/${selected.value.id}/locations/${loc.id}/rescan`)
-    ElMessage.success('Rescanned'); await showDetail(selected.value)
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('modelLocations.rescanned')); await showDetail(selected.value)
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
 }
 async function doDeleteLocation(loc: any) {
   try {
-    await ElMessageBox.confirm(`Delete location?`, 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(t('modelLocations.deleteConfirm'), t('common.confirm'), { type: 'warning' })
     await apiClient.delete(`/model-artifacts/${selected.value.id}/locations/${loc.id}`)
-    ElMessage.success('Deleted'); await showDetail(selected.value)
-  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('modelLocations.deleted')); await showDetail(selected.value)
+  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
 }
 </script>
 

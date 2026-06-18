@@ -7,15 +7,14 @@
 
     <el-table :data="items" v-loading="loading" stripe>
       <el-table-column prop="name" :label="$t('runnerConfigs.name')" min-width="160" />
-      <el-table-column prop="template_name" :label="$t('runnerConfigs.template')" width="180" />
+      <el-table-column :label="$t('modelLocations.node')" width="180" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.node_label || row.node_id }}</template>
+      </el-table-column>
       <el-table-column :label="$t('runnerConfigs.runnerType')" width="100">
-        <template #default="{ row }">{{ row.runner_type || 'docker' }}</template>
+        <template #default="{ row }">{{ row.runner_type === 'docker' ? $t('runnerConfigs.runnerTypeDocker') : (row.runner_type || '-') }}</template>
       </el-table-column>
-      <el-table-column :label="$t('runnerConfigs.nodeCount')" width="80">
-        <template #default="{ row }">{{ row.node_count || 0 }}</template>
-      </el-table-column>
-      <el-table-column :label="$t('runnerConfigs.readyCount')" width="80">
-        <template #default="{ row }">{{ row.ready_count || 0 }}</template>
+      <el-table-column :label="$t('nodeRuntime.status')" width="100">
+        <template #default="{ row }"><el-tag :type="row.status==='ready'?'success':'warning'" size="small">{{ translateStatus(row.status, t) }}</el-tag></template>
       </el-table-column>
       <el-table-column :label="$t('common.actions')" width="200">
         <template #default="{ row }">
@@ -36,14 +35,14 @@
       </el-steps>
 
       <div v-if="step===0">
-        <el-select v-model="wizRunnerType" :placeholder="$t('runnerConfigs.selectRunnerType')" style="width:100%">
+        <el-select v-model="wizRunnerType" :placeholder="$t('runnerConfigs.selectRunnerType')" style="width:100%" @change="onWizAutoNext">
           <el-option label="Docker" value="docker" />
         </el-select>
         <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizRunnerType" @click="step=1">{{ $t('common.next') }}</el-button></div>
       </div>
 
       <div v-if="step===1">
-        <el-select v-model="wizTemplateId" :placeholder="$t('runnerConfigs.selectTemplate')" style="width:100%" filterable>
+        <el-select v-model="wizTemplateId" :placeholder="$t('runnerConfigs.selectTemplate')" style="width:100%" filterable @change="onWizTemplateSelected">
           <el-option v-for="t in templates" :key="t.id" :label="`${t.name} (${t.vendor})`" :value="t.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right">
@@ -53,7 +52,7 @@
       </div>
 
       <div v-if="step===2">
-        <el-select v-model="wizNodeId" :placeholder="$t('runnerConfigs.selectNode')" style="width:100%" filterable>
+        <el-select v-model="wizNodeId" :placeholder="$t('runnerConfigs.selectNode')" style="width:100%" filterable @change="onWizAutoNext">
           <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right">
@@ -72,19 +71,18 @@
 
       <div v-if="step===4">
         <el-form label-width="120px">
-          <el-form-item :label="$t('runnerConfigs.configName')"><el-input v-model="wizConfigName" /></el-form-item>
           <el-form-item :label="$t('runnerConfigs.template')"><span>{{ wizTemplateId }}</span></el-form-item>
-          <el-form-item :label="$t('runnerConfigs.runnerType')"><span>{{ wizRunnerType }}</span></el-form-item>
-          <el-form-item :label="$t('runnerConfigs.selectNode')"><span>{{ wizNodeId }}</span></el-form-item>
+          <el-form-item :label="$t('runnerConfigs.runnerType')"><span>{{ wizRunnerType === 'docker' ? $t('runnerConfigs.runnerTypeDocker') : wizRunnerType }}</span></el-form-item>
+          <el-form-item :label="$t('modelLocations.node')"><span>{{ wizNodeId }}</span></el-form-item>
           <el-form-item v-if="wizImageRef" :label="$t('runnerConfigs.selectImage')"><span>{{ wizImageRef }}</span></el-form-item>
         </el-form>
         <div v-if="wizCheckResult" style="margin-top:8px">
-          <el-alert :type="wizCheckResult.status==='ready'?'success':'warning'" :title="wizCheckResult.status" :description="wizCheckResult.status_reason" show-icon :closable="false" />
+          <el-alert :type="wizCheckResult.status==='ready'?'success':'warning'" :title="translateStatus(wizCheckResult.status, t)" :description="translateStatusReason(wizCheckResult.status_reason, t)" show-icon :closable="false" />
         </div>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="step=wizRunnerType==='docker'?3:2">{{ $t('common.prev') }}</el-button>
           <el-button @click="doCheck" :loading="checking">{{ $t('runnerConfigs.check') }}</el-button>
-          <el-button type="primary" :disabled="!wizConfigName" @click="doCreateConfig" :loading="saving">{{ $t('runnerConfigs.create') }}</el-button>
+          <el-button type="primary" :disabled="!wizCheckResult || wizCheckResult.status === 'unknown'" @click="doCreateConfig" :loading="saving">{{ $t('runnerConfigs.create') }}</el-button>
         </div>
       </div>
     </el-dialog>
@@ -94,20 +92,14 @@
       <template v-if="selected">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('runnerConfigs.name')">{{ selected.name }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelLocations.node')">{{ selected.node_label || selected.node_id }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.runnerType')">{{ selected.runner_type === 'docker' ? $t('runnerConfigs.runnerTypeDocker') : (selected.runner_type || '-') }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('nodeRuntime.status')">
+            <el-tag :type="selected.status==='ready'?'success':'warning'" size="small">{{ translateStatus(selected.status, t) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item :label="$t('nodeRuntime.imageRef')">{{ selected.image_ref || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runnerConfigs.template')">{{ selected.template_name || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runnerConfigs.runnerType')">{{ selected.runner_type || 'docker' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runnerConfigs.nodeCount')">{{ selected.node_count || 0 }}</el-descriptions-item>
         </el-descriptions>
-        <h4 style="margin-top:16px">{{ $t('nodeRuntime.title') }}</h4>
-        <el-table :data="detailNodeRuntimes" stripe size="small">
-          <el-table-column :label="$t('modelLocations.node')" width="240" show-overflow-tooltip><template #default="{ row }">{{ nodeLabel(row.node_id) }}</template></el-table-column>
-          <el-table-column :label="$t('nodeRuntime.imageRef')" min-width="160" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.image_ref || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="status" :label="$t('nodeRuntime.status')" width="100">
-            <template #default="{ row }"><el-tag :type="row.status==='ready'?'success':'warning'" size="small">{{ row.status }}</el-tag></template>
-          </el-table-column>
-        </el-table>
       </template>
     </el-drawer>
   </div>
@@ -120,6 +112,8 @@ import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import { listRuntimes } from '@/api/runtimes'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
+import { translateStatus, translateStatusReason } from '@/utils/status'
+import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
@@ -134,15 +128,37 @@ const wizTemplateId = ref(''); const wizRunnerType = ref('docker')
 const wizNodeId = ref(''); const wizImageRef = ref('')
 const wizConfigName = ref(''); const wizCheckResult = ref<any>(null)
 
-onMounted(async () => { await refresh(); await loadRefs() })
+const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(step, () => { step.value++ })
+
+onMounted(async () => { await loadRefs(); await refresh() })
 
 async function refresh() {
   loading.value = true
   try {
-    const runtimes = await listRuntimes()
-    items.value = (runtimes || []).filter((rt: any) => rt.is_editable).map((rt: any) => ({
-      id: rt.id, name: rt.name, template_name: rt.source_template_name || '-',
-      runner_type: 'docker', node_count: 0, ready_count: 0,
+    // Collect NodeBackendRuntime records from all nodes
+    const nbrList: any[] = []
+    for (const n of nodeItems.value) {
+      try {
+        const nbrs = await apiClient.get(`/nodes/${n.id}/backend-runtimes`)
+        if (Array.isArray(nbrs)) {
+          for (const nbr of nbrs) {
+            nbrList.push({ ...nbr, _node_label: n.label, _node_id: n.id })
+          }
+        }
+      } catch {}
+    }
+    items.value = nbrList.map((nbr: any) => ({
+      id: nbr.id,
+      name: nbr.backend_runtime?.name || nbr.backend_runtime_id,
+      template_name: nbr.backend_runtime?.name || '-',
+      runner_type: nbr.runner_type || 'docker',
+      node_count: 1,
+      ready_count: nbr.status === 'ready' ? 1 : 0,
+      status: nbr.status,
+      node_id: nbr._node_id,
+      node_label: nbr._node_label,
+      image_ref: nbr.image_ref,
+      backend_runtime_id: nbr.backend_runtime_id,
     }))
   } catch {}
   loading.value = false
@@ -155,6 +171,24 @@ async function loadRefs() {
 
 function startWizard() { wizardVisible.value = true; step.value = 0; wizTemplateId.value = ''; wizRunnerType.value = 'docker'; wizNodeId.value = ''; wizImageRef.value = ''; wizConfigName.value = ''; wizCheckResult.value = null; loadRefs() }
 
+function onWizTemplateSelected(templateId: string) {
+  const template = templates.value.find((t: any) => t.id === templateId)
+  if (!template) return
+  const suffix = t('runnerConfigs.customSuffix')
+  const baseName = `${template.name}${suffix}`
+  // Auto-append number if name conflicts with existing configs
+  const existingNames = new Set(items.value.map((c: any) => c.name))
+  let candidate = baseName
+  let counter = 2
+  while (existingNames.has(candidate)) {
+    candidate = `${baseName} ${counter}`
+    counter++
+  }
+  wizConfigName.value = candidate
+  // Auto-advance: this step has only one select control
+  step.value = 2
+}
+
 async function doCheck() {
   checking.value = true
   try {
@@ -166,38 +200,25 @@ async function doCheck() {
 async function doCreateConfig() {
   saving.value = true
   try {
-    // 1. Clone the template as a user runtime
-    const clone = await apiClient.post(`/backend-runtimes/${wizTemplateId.value}/clone`)
-    await apiClient.patch(`/backend-runtimes/${clone.id}`, { display_name: wizConfigName.value, name: wizConfigName.value })
-    // 2. Enable on node
-    await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: clone.id, image_ref: wizImageRef.value, image_present: !!wizImageRef.value, docker_available: wizRunnerType.value === 'docker' })
+    // Enable the selected template on the selected node (creates NodeBackendRuntime only, no BackendRuntime clone)
+    await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: wizTemplateId.value, image_ref: wizImageRef.value, image_present: !!wizImageRef.value, docker_available: wizRunnerType.value === 'docker' })
     ElMessage.success(t('runnerConfigs.created')); wizardVisible.value = false; await refresh()
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   saving.value = false
 }
 
 async function showDetail(row: any) {
   selected.value = row
-  detailNodeRuntimes.value = [];
-  for (const n of nodeItems.value) {
-    try {
-      const nrs = await apiClient.get(`/nodes/${n.id}/backend-runtimes`)
-      if (Array.isArray(nrs)) {
-        for (const nr of nrs) {
-          if (nr.backend_runtime_id === row.id) detailNodeRuntimes.value.push(nr)
-        }
-      }
-    } catch {}
-  }
   detailVisible.value = true
 }
 
 async function doDelete(row: any) {
   try {
-    await ElMessageBox.confirm(`Delete ${row.name}?`, 'Confirm', { type: 'warning' })
-    await apiClient.delete(`/backend-runtimes/${row.id}`)
-    ElMessage.success('Deleted'); await refresh()
-  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || 'Failed') }
+    await ElMessageBox.confirm(t('runnerConfigs.deleteConfirm', { name: row.name }), t('common.confirm'), { type: 'warning' })
+    // Delete the NodeBackendRuntime record (node-level config only; template is preserved)
+    await apiClient.delete(`/nodes/${row.node_id}/backend-runtimes/${row.id}`)
+    ElMessage.success(t('runnerConfigs.deleted')); await refresh()
+  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
 }
 </script>
 

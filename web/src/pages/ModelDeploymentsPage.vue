@@ -33,7 +33,7 @@
       <template #footer><el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doCreate" :loading="saving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="dryRunVisible" title="Dry Run Result" width="700px">
+    <el-dialog v-model="dryRunVisible" :title="$t('common.dryRunTitle')" width="700px">
       <pre v-if="dryRunResult" style="white-space:pre-wrap;max-height:400px;overflow:auto">{{ JSON.stringify(dryRunResult, null, 2) }}</pre>
     </el-dialog>
 
@@ -49,7 +49,7 @@
       </el-steps>
 
       <div v-if="wizardStep === 0">
-        <el-select v-model="wizardModelId" :placeholder="$t('startWizard.selectModel')" style="width:100%" filterable>
+        <el-select v-model="wizardModelId" :placeholder="$t('startWizard.selectModel')" style="width:100%" filterable @change="onWizAutoNext">
           <el-option v-for="m in models" :key="m.id" :label="`${m.name} (${m.format})`" :value="m.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizardModelId" @click="wizardStep=1">{{ $t('common.next') }}</el-button></div>
@@ -66,7 +66,7 @@
       </div>
 
       <div v-if="wizardStep === 2">
-        <el-select v-model="wizardVersionId" :placeholder="$t('startWizard.selectVersion')" style="width:100%" filterable @change="wizardRuntimeId=''">
+        <el-select v-model="wizardVersionId" :placeholder="$t('startWizard.selectVersion')" style="width:100%" filterable @change="wizardRuntimeId=''; $event && (wizardStep=3)">
           <el-option v-for="v in versions" :key="v.id" :label="v.display_name || v.version" :value="v.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right">
@@ -76,9 +76,12 @@
       </div>
 
       <div v-if="wizardStep === 3">
-        <el-select v-model="wizardRuntimeId" :placeholder="$t('startWizard.selectRuntime')" style="width:100%" filterable>
+        <el-select v-model="wizardRuntimeId" :placeholder="$t('startWizard.selectRuntime')" style="width:100%" filterable @change="$event && doPreflight()">
           <el-option v-for="r in filteredRuntimes" :key="r.id" :label="`${r.name} (${r.vendor})`" :value="r.id" />
         </el-select>
+        <el-alert v-if="wizardVersionId && filteredRuntimes.length === 0" type="info" :closable="false" style="margin-top:8px">
+          {{ $t('startWizard.noRuntimeForVersion') }}
+        </el-alert>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="wizardStep=2">{{ $t('common.prev') }}</el-button>
           <el-button type="primary" :disabled="!wizardRuntimeId" @click="doPreflight">{{ $t('startWizard.preflight') }}</el-button>
@@ -116,7 +119,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="runPlanVisible" title="RunPlan / Docker Preview" width="700px">
+    <el-dialog v-model="runPlanVisible" :title="$t('common.runPlanTitle')" width="700px">
       <pre v-if="runPlanData" style="white-space:pre-wrap;max-height:400px;overflow:auto">{{ runPlanData }}</pre>
     </el-dialog>
   </div>
@@ -125,8 +128,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
+import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
+
+const { t } = useI18n()
 
 const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([]); const backends = ref<any[]>([]); const versions = ref<any[]>([])
@@ -140,6 +147,8 @@ const wizardModelId = ref(''); const wizardBackendId = ref(''); const wizardVers
 const wizardStartNode = ref(''); const wizardHostPort = ref(8004)
 const preflightLoading = ref(false); const preflightResult = ref<any>(null)
 const wizardStarting = ref(false)
+
+const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () => { wizardStep.value++ })
 
 onMounted(async () => { await refresh(); await loadRefs() })
 async function refresh() { loading.value = true; try { items.value = await apiClient.get('/deployments') } catch (e: any) {} loading.value = false }
@@ -159,8 +168,8 @@ async function doCreate() {
     createForm.value.placement_json = JSON.stringify({ node_id: createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
     createForm.value.service_json = JSON.stringify({ host_port: createForm.value.host_port })
     await apiClient.post('/deployments', createForm.value)
-    ElMessage.success('Created'); createVisible.value = false; await refresh()
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('deployments.created')); createVisible.value = false; await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   saving.value = false
 }
 
@@ -169,13 +178,13 @@ async function doDryRun(row: any) {
   dryRunVisible.value = true
 }
 async function doStart(row: any) {
-  try { const res = await apiClient.post(`/deployments/${row.id}/start`, {}); runPlanData.value = res.docker_preview || JSON.stringify(res, null, 2); runPlanVisible.value = true; ElMessage.success('Started'); await refresh() } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+  try { const res = await apiClient.post(`/deployments/${row.id}/start`, {}); runPlanData.value = res.docker_preview || JSON.stringify(res, null, 2); runPlanVisible.value = true; ElMessage.success(t('deployments.started')); await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
 }
 async function doStop(row: any) {
-  try { await apiClient.post(`/deployments/${row.id}/stop`, {}); ElMessage.success('Stopped'); await refresh() } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+  try { await apiClient.post(`/deployments/${row.id}/stop`, {}); ElMessage.success(t('deployments.stopped')); await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
 }
 async function handleDelete(row: any) {
-  try { await ElMessageBox.confirm(`Delete ${row.name}?`, 'Confirm', { type: 'warning' }); await apiClient.delete(`/deployments/${row.id}`); ElMessage.success('Deleted'); await refresh() } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || 'Failed') }
+  try { await ElMessageBox.confirm(t('deployments.deleteConfirm', { name: row.name }), t('common.confirm'), { type: 'warning' }); await apiClient.delete(`/deployments/${row.id}`); ElMessage.success(t('deployments.deleted')); await refresh() } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
 }
 
 // ---- Start Wizard ----
@@ -185,6 +194,7 @@ async function onBackendSelected() {
   wizardVersionId.value = ''
   wizardRuntimeId.value = ''
   try { versions.value = await apiClient.get(`/backends/${wizardBackendId.value}/versions`) } catch { versions.value = [] }
+  if (wizardBackendId.value) wizardStep.value = 2
 }
 
 function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardModelId.value = ''; wizardBackendId.value = ''; wizardVersionId.value = ''; wizardRuntimeId.value = ''; versions.value = []; preflightResult.value = null; wizardStartNode.value = ''; loadRefs() }
@@ -211,8 +221,8 @@ async function doWizardStart() {
     const res = await apiClient.post(`/deployments/${deploy.id}/start`, {})
     runPlanData.value = res.docker_preview || JSON.stringify(res, null, 2)
     runPlanVisible.value = true; wizardVisible.value = false
-    ElMessage.success('Started'); await refresh()
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('deployments.started')); await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   wizardStarting.value = false
 }
 </script>

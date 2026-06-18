@@ -43,7 +43,7 @@ const items = ref<Tenant[]>([]); const loading = ref(false); const dialogVisible
 const form = ref({ name: '', slug: '' })
 async function refresh() { loading.value=true; errorMessage.value=''; try { items.value = await fetchTenants() } catch (e: any) { items.value=[]; errorMessage.value = e?.message || String(e) } finally { loading.value=false } }
 function openCreate() { form.value={name:'',slug:''}; dialogVisible.value=true }
-async function save() { saving.value=true; try { await createTenant(form.value); ElMessage.success('Created'); dialogVisible.value=false; refresh() } catch(e:any) { ElMessage.error(e?.message||'Error') } finally { saving.value=false } }
+async function save() { saving.value=true; try { await createTenant(form.value); ElMessage.success(t('tenants.created')); dialogVisible.value=false; refresh() } catch(e:any) { ElMessage.error(e?.message||t('common.failed')) } finally { saving.value=false } }
 refresh()
 
 // Edit

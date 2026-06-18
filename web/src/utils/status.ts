@@ -40,5 +40,31 @@ export function getStatusType(status: string): StatusType {
 export function translateStatus(status: string, t: (key: string) => string): string {
   const key = `status.${status}`
   const translated = t(key)
-  return translated === key ? status : translated
+  // If the i18n key doesn't exist, vue-i18n returns the key itself
+  return translated === key || translated.startsWith('status.') ? status : translated
+}
+
+const STATUS_REASON_MAP: Record<string, string> = {
+  'runtime verified for node': 'runtime.statusReason.verifiedForNode',
+  'docker image is not present on node': 'runtime.statusReason.missingImage',
+  'node has no matching GPU vendor': 'runtime.statusReason.noMatchingGPU',
+  'docker availability has not been verified': 'runtime.statusReason.dockerNotVerified',
+  'Huawei/Ascend runtime is a template only': 'runtime.statusReason.templateOnly',
+}
+
+export function translateStatusReason(reason: string, t: (key: string, params?: any) => string): string {
+  if (!reason) return ''
+  const key = STATUS_REASON_MAP[reason]
+  if (key) {
+    const translated = t(key)
+    return translated === key ? reason : translated
+  }
+  // Fallback: try to find by prefix match
+  for (const [pattern, mappedKey] of Object.entries(STATUS_REASON_MAP)) {
+    if (reason.toLowerCase().includes(pattern.toLowerCase())) {
+      const translated = t(mappedKey)
+      return translated === mappedKey ? reason : translated
+    }
+  }
+  return reason
 }

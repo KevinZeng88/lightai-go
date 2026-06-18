@@ -32,7 +32,7 @@
     <el-dialog v-model="createVisible" :title="$t('runtimes.createFromTemplate')" width="560px">
       <el-form :model="createForm" label-width="150px">
         <el-form-item :label="$t('runtimes.templateName')">
-          <el-select v-model="createForm.template_name" :placeholder="$t('runtimes.selectTemplate')">
+          <el-select v-model="createForm.template_name" :placeholder="$t('runtimes.selectTemplate')" @change="onCreateTemplateSelected">
             <el-option v-for="t in templates" :key="t.name" :label="t.name" :value="t.name" />
           </el-select>
         </el-form-item>
@@ -89,10 +89,10 @@
             <template #default="{ row }">{{ row.image_ref || '-' }}</template>
           </el-table-column>
           <el-table-column :label="$t('nodeRuntime.imagePresent')" width="90">
-            <template #default="{ row }"><el-tag :type="row.image_present ? 'success' : 'danger'" size="small">{{ row.image_present ? 'Yes' : 'No' }}</el-tag></template>
+            <template #default="{ row }"><el-tag :type="row.image_present ? 'success' : 'danger'" size="small">{{ row.image_present ? $t('common.yes') : $t('common.no') }}</el-tag></template>
           </el-table-column>
           <el-table-column prop="status" :label="$t('nodeRuntime.status')" width="100">
-            <template #default="{ row }"><el-tag :type="row.status==='ready'?'success':row.status==='missing_image'?'warning':'info'" size="small">{{ row.status }}</el-tag></template>
+            <template #default="{ row }"><el-tag :type="row.status==='ready'?'success':row.status==='missing_image'?'warning':'info'" size="small">{{ translateStatus(row.status, t) }}</el-tag></template>
           </el-table-column>
           <el-table-column :label="$t('common.actions')" width="150">
             <template #default="{ row: nr }">
@@ -126,6 +126,7 @@ import { listRuntimeTemplates, type BackendRuntimeTemplate } from '@/api/backend
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
+import { translateStatus, translateStatusReason } from '@/utils/status'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
 import { useI18n } from 'vue-i18n'
 
@@ -193,7 +194,21 @@ async function loadRefs() {
   loadNodes()
 }
 
-function showCreate() { createVisible.value = true }
+function showCreate() { createForm.value.template_name = 'vllm-nvidia-docker'; createForm.value.name = ''; createVisible.value = true }
+function onCreateTemplateSelected(templateName: string) {
+  const template = templates.value.find((t: any) => t.name === templateName)
+  if (!template) return
+  const suffix = t('runtimes.customSuffix')
+  const baseName = `${template.name}${suffix}`
+  const existingNames = new Set(runtimes.value.map((r: any) => r.name))
+  let candidate = baseName
+  let counter = 2
+  while (existingNames.has(candidate)) {
+    candidate = `${baseName} ${counter}`
+    counter++
+  }
+  createForm.value.name = candidate
+}
 async function doCreate() { creating.value = true; try { await createRuntimeFromTemplate(createForm.value); ElMessage.success(t('runtimes.created')); createVisible.value = false; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.requestFailed')) } creating.value = false }
 function showEdit(row: BackendRuntime) { selected.value = row; editingId = row.id; editForm.display_name = row.display_name; editForm.image_name = row.image_name; editForm.vendor = row.vendor; loadDockerJson(row); editVisible.value = true }
 async function doEdit() { editing.value = true; try { await patchRuntime(editingId, buildPayload()); ElMessage.success(t('runtimes.saved')); editVisible.value = false; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.requestFailed')) } editing.value = false }
@@ -203,8 +218,8 @@ async function handleDelete(row: BackendRuntime) { try { await ElMessageBox.conf
 async function doClone(row: BackendRuntime) {
   try {
     await apiClient.post(`/backend-runtimes/${row.id}/clone`)
-    ElMessage.success('Cloned'); await refresh()
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('runtimes.cloned')); await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
 }
 
 // Detail + node management
@@ -216,22 +231,22 @@ async function doAddNode() {
   if (!selected.value || !addNodeId.value || !addNodeImage.value) return; addNodeSaving.value = true
   try {
     await apiClient.post(`/nodes/${addNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: selected.value.id, image_ref: addNodeImage.value, image_present: true, docker_available: true })
-    ElMessage.success('Node added'); addNodeVisible.value = false; await loadNodeRuntimes(selected.value.id)
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('nodeRuntime.added')); addNodeVisible.value = false; await loadNodeRuntimes(selected.value.id)
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   addNodeSaving.value = false
 }
 async function doCheckNode(nr: any) {
   try {
     await apiClient.post(`/nodes/${nr.node_id}/backend-runtimes/check`, { backend_runtime_id: nr.backend_runtime_id })
-    ElMessage.success('Checked'); await loadNodeRuntimes(selected.value!.id)
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('nodeRuntime.checked')); await loadNodeRuntimes(selected.value!.id)
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
 }
 async function doDeleteNode(nr: any) {
   try {
-    await ElMessageBox.confirm('Delete node runtime?', 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(t('nodeRuntime.deleteConfirm'), t('common.confirm'), { type: 'warning' })
     await apiClient.delete(`/nodes/${nr.node_id}/backend-runtimes/${nr.id}`)
-    ElMessage.success('Deleted'); await loadNodeRuntimes(selected.value!.id)
-  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || 'Failed') }
+    ElMessage.success(t('nodeRuntime.deleted')); await loadNodeRuntimes(selected.value!.id)
+  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
 }
 
 // Wizard
