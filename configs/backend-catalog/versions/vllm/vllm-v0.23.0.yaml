@@ -51,6 +51,7 @@ health_check:
   path: /v1/models
   success_status:
     - 200
+  startup_timeout_seconds: 120
 official_reference_note:
   - vLLM official Docker docs: vllm/vllm-openai runs OpenAI-compatible server.
   - vLLM online serving docs: supports /v1/completions, /v1/chat/completions, /v1/embeddings.

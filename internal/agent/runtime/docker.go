@@ -68,12 +68,17 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 
 	// --- Docker create ---
 	createStart := time.Now()
-	log.Info("docker.create.started",
+	log.Info("docker.create.spec",
 		"operation_id", opID,
 		"instance_id", spec.InstanceID,
 		"deployment_id", spec.DeploymentID,
 		"image", opts.Image,
 		"container_name", opts.ContainerName,
+		"command_json", opts.Command,
+		"host_port", spec.HostPort,
+		"container_port", spec.ContainerPort,
+		"binds_count", len(opts.Binds),
+		"devices_count", len(opts.Devices),
 		"env_keys", log.RedactEnvKeys(spec.Env),
 	)
 

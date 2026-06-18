@@ -418,3 +418,120 @@ func TestContainerPathSafety(t *testing.T) {
 		})
 	}
 }
+
+func TestMapParametersToArgsClipsNameFallback(t *testing.T) {
+	// When def.CliName is empty, it must fall back to def.Name.
+	// ParameterDefs from BackendVersion catalog use "name":"--host",
+	// but did not include "cli_name".  mapParametersToArgs must output
+	// the flag-value pair, not bare values.
+	defs := []ParameterDef{
+		{Name: "--host", Default: "0.0.0.0"},
+		{Name: "--port", Default: "8000"},
+		{Name: "--model", Required: true, CliName: "--model"},
+	}
+	// No deployment params → all come from defaults.
+	args := mapParametersToArgs(map[string]interface{}{}, defs)
+	joined := strings.Join(args, " ")
+
+	// Must contain " --host 0.0.0.0", not bare " 0.0.0.0".
+	if !strings.Contains(joined, "--host") {
+		t.Errorf("expected --host flag in args, got: %q", joined)
+	}
+	if !strings.Contains(joined, "--port") {
+		t.Errorf("expected --port flag in args, got: %q", joined)
+	}
+	if strings.Contains(joined, " 0.0.0.0") && !strings.Contains(joined, "--host") {
+		t.Errorf("bare value 0.0.0.0 without --host flag: %q", joined)
+	}
+	if strings.Contains(joined, "8000") && !strings.Contains(joined, "--port") {
+		t.Errorf("bare value 8000 without --port flag: %q", joined)
+	}
+
+	// Required param without default and no deployment param → skipped.
+	if strings.Count(joined, "--model") > 1 {
+		t.Errorf("required param with no value should not appear twice: %q", joined)
+	}
+
+	// With explicit deployment params, they should take precedence.
+	args2 := mapParametersToArgs(map[string]interface{}{
+		"--host": "1.2.3.4",
+		"--port": "9999",
+	}, defs)
+	joined2 := strings.Join(args2, " ")
+	if !strings.Contains(joined2, "--host 1.2.3.4") {
+		t.Errorf("deployment param --host override not applied: %q", joined2)
+	}
+	if !strings.Contains(joined2, "--port 9999") {
+		t.Errorf("deployment param --port override not applied: %q", joined2)
+	}
+}
+
+func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
+	// Simulates a full vLLM deployment: BackendVersion parameter_defs
+	// use "name":"--host"/"--port" without cli_name.
+	// The resolved RunPlan args must contain --host and --port flags.
+	in := ResolveInput{
+		Backend:  &BackendInfo{ID: "backend.vllm", Name: "vllm", DefaultEnv: map[string]string{}},
+		BackendVersion: &VersionInfo{
+			ID:                "vllm-v0.23.0",
+			DefaultEntrypoint: []string{"vllm", "serve"},
+			DefaultArgs:       []string{"{{MODEL_CONTAINER_PATH}}"},
+			ParameterDefs: []ParameterDef{
+				{Name: "--host", Default: "0.0.0.0"},
+				{Name: "--port", Default: "8000"},
+				{Name: "--served-model-name"},
+				{Name: "--max-model-len"},
+			},
+			DefaultContainerPort: 8000,
+			HealthCheck:         HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
+			DefaultImages:        map[string]string{"default": "vllm/vllm-openai:latest"},
+		},
+		BackendRuntime: &RuntimeInfo{
+			ID:          "rt.vllm.nvidia",
+			Vendor:      "nvidia",
+			RuntimeType: "docker",
+			ImageName:   "vllm/vllm-openai:latest",
+			ModelMount:  ModelMountInfo{ContainerPath: "/models", Readonly: true},
+		},
+		Deployment: &DeploymentInfo{
+			ID:         "dep-vllm",
+			Name:       "vllm-test",
+			Parameters: map[string]interface{}{"served_model_name": "test", "max_model_len": float64(4096)},
+			EnvOverrides: map[string]string{},
+			Service:    ServiceInfo{HostPort: 8004},
+		},
+		Artifact: &ArtifactInfo{
+			ID:           "art-qwen",
+			Name:         "Qwen3",
+			RelativePath: "Qwen3-0.6B-Instruct-2512",
+		},
+		InstanceID: "inst-vllm-test",
+		Node:       &NodeInfo{ID: "n1", IP: "127.0.0.1"},
+		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
+	}
+	plan, _, _ := Resolve(in)
+	argsStr := strings.Join(plan.Args, " ")
+
+	// Must contain proper --flag value pairs.
+	if !strings.Contains(argsStr, "--host") {
+		t.Errorf("missing --host flag: %q", argsStr)
+	}
+	if !strings.Contains(argsStr, "--port") {
+		t.Errorf("missing --port flag: %q", argsStr)
+	}
+	// Verify flag-value integrity: value must be immediately after flag.
+	idxHost := strings.Index(argsStr, "--host")
+	if idxHost >= 0 {
+		afterHost := strings.TrimSpace(argsStr[idxHost+len("--host"):])
+		if !strings.HasPrefix(afterHost, "0.0.0.0") {
+			t.Errorf("--host not followed by 0.0.0.0: %q", argsStr)
+		}
+	}
+	idxPort := strings.Index(argsStr, "--port")
+	if idxPort >= 0 {
+		afterPort := strings.TrimSpace(argsStr[idxPort+len("--port"):])
+		if !strings.HasPrefix(afterPort, "8000") {
+			t.Errorf("--port not followed by 8000: %q", argsStr)
+		}
+	}
+}

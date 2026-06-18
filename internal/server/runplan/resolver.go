@@ -262,11 +262,29 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	plan.InputHash = computeInputHash(in)
 	plan.PlanHash = computePlanHash(plan)
 
-	log.Info("runplan resolve: completed",
-		"image", plan.Image, "args_count", len(plan.Args),
+	log.Info("runplan.docker_spec.resolved",
+		"image", plan.Image,
+		"entrypoint", plan.Entrypoint,
+		"args_json", plan.Args,
+		"args_count", len(plan.Args),
+		"host_port", plan.HostPort,
+		"container_port", plan.ContainerPort,
+		"mounts_count", len(plan.Mounts),
+		"env_keys", mapKeys(plan.Env),
+		"health_check_path", plan.HealthCheck.Path,
+		"source_backend_version_id", in.BackendVersion.ID,
 		"errors", len(errors), "warnings", len(warnings),
 		"duration_ms", time.Since(startTime).Milliseconds())
 	return plan, errors, warnings
+}
+
+// mapKeys returns the keys of a map as a sorted slice for safe logging.
+func mapKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func resolveImage(in ResolveInput) (string, []string) {
@@ -373,7 +391,11 @@ func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef) []s
 				continue
 			}
 		}
-		args = append(args, def.CliName)
+		cliName := def.CliName
+		if cliName == "" {
+			cliName = def.Name
+		}
+		args = append(args, cliName)
 		args = append(args, fmt.Sprintf("%v", val))
 	}
 	return args
