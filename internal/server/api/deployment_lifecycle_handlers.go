@@ -1319,8 +1319,9 @@ func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]ma
 // Model Instance Smoke Test
 // ==========================================================================
 
-// HandleModelInstanceTest executes a minimal chat-completion request against a
-// running instance to verify the model can actually perform inference.
+// HandleModelInstanceTest executes a smoke-test inference request against a
+// running instance. It resolves the runtime model id by querying /v1/models,
+// then attempts /v1/chat/completions with fallback to /v1/completions.
 func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	tid := tenantID(r)
@@ -1341,8 +1342,6 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-
-	// Must be running.
 	if instState != "running" {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"ok": false, "reason_code": "instance_not_running",
@@ -1351,14 +1350,14 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Read model name from deployment -> artifact.
-	var modelName string
-	h.DB.QueryRow(`SELECT COALESCE(ma.name,'') FROM model_deployments md JOIN model_artifacts ma ON ma.id = md.model_artifact_id WHERE md.id = ?`, deployID).Scan(&modelName)
-	if modelName == "" {
-		modelName = "unknown"
+	// Read artifact info for model id resolution.
+	var artifactName, artifactPath string
+	h.DB.QueryRow(`SELECT COALESCE(ma.name,''), COALESCE(ma.path,'') FROM model_deployments md JOIN model_artifacts ma ON ma.id = md.model_artifact_id WHERE md.id = ?`, deployID).Scan(&artifactName, &artifactPath)
+	if artifactName == "" {
+		artifactName = "unknown"
 	}
 
-	// Resolve endpoint: prefer endpoint_url, fall back to host_port.
+	// Resolve endpoint.
 	endpoint := endpointURL.String
 	if endpoint == "" && hostPort > 0 {
 		endpoint = fmt.Sprintf("http://127.0.0.1:%d", hostPort)
@@ -1371,112 +1370,246 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Build chat/completions request.
-	chatURL := strings.TrimRight(endpoint, "/") + "/v1/chat/completions"
-	reqBody, _ := json.Marshal(map[string]interface{}{
-		"model": modelName,
-		"messages": []map[string]string{
-			{"role": "user", "content": "ping"},
-		},
-		"max_tokens":  8,
-		"temperature": 0,
-	})
-
-	// Send request with timeout.
 	client := &http.Client{Timeout: 30 * time.Second}
-	startTime := time.Now()
-	httpReq, _ := http.NewRequestWithContext(r.Context(), "POST", chatURL, bytes.NewReader(reqBody))
-	httpReq.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(httpReq)
-	latencyMs := time.Since(startTime).Milliseconds()
 
+	// --- Phase 1: Resolve model id from /v1/models ---
+	// 1. Try RunPlan / NodeRunPlan resolved model name.
+	var runplanModel string
+	h.DB.QueryRow(`SELECT COALESCE(rp.model_name,'') FROM resolved_run_plans rp JOIN model_instances mi ON mi.current_run_plan_id = rp.id WHERE mi.deployment_id = ? ORDER BY rp.created_at DESC LIMIT 1`, deployID).Scan(&runplanModel)
+
+	modelName, resolutionMethod := resolveModelID(client, endpoint, artifactName, artifactPath, runplanModel)
+
+	if modelName == "" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok": false, "reason_code": "model_id_not_resolved",
+			"message":               "could not resolve model id from /v1/models or artifact",
+			"model_resolution_method": resolutionMethod,
+			"checked_at":              checkedAt,
+		})
+		return
+	}
+
+	// --- Phase 2: Attempt chat/completions, fallback to completions ---
 	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
 		TenantID: tid, ActorID: actorID,
 		Action: "model_instance.test.started", ResourceType: "instance",
 		ResourceID: id, Result: "success",
 		RequestID: requestID,
-		Detail:    fmt.Sprintf("endpoint=%s model=%s", chatURL, modelName),
+		Detail:    fmt.Sprintf("endpoint=%s model=%s method=%s", endpoint, modelName, resolutionMethod),
 	})
 
-	if err != nil {
-		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
-			TenantID: tid, ActorID: actorID,
-			Action: "model_instance.test.failed", ResourceType: "instance",
-			ResourceID: id, Result: "failure",
-			RequestID: requestID,
-			Detail:    fmt.Sprintf("reason=network_error endpoint=%s latency_ms=%d err=%v", chatURL, latencyMs, err),
-		})
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok": false, "reason_code": "network_error",
-			"message":    fmt.Sprintf("failed to reach instance: %v", err),
-			"endpoint":   chatURL,
-			"latency_ms": latencyMs,
-			"checked_at": checkedAt,
-		})
-		return
-	}
-	defer resp.Body.Close()
+	result := tryInference(client, endpoint, modelName)
+	result["model_resolution_method"] = resolutionMethod
+	result["checked_at"] = checkedAt
 
-	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	var respData map[string]interface{}
-	json.Unmarshal(bodyBytes, &respData)
-
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		// Extract preview from first choice.
-		preview := ""
-		if choices, ok := respData["choices"].([]interface{}); ok && len(choices) > 0 {
-			if choice, ok := choices[0].(map[string]interface{}); ok {
-				if msg, ok := choice["message"].(map[string]interface{}); ok {
-					if c, ok := msg["content"]; ok {
-						preview = fmt.Sprintf("%v", c)
-					}
-				}
-				if preview == "" {
-					if t, ok := choice["text"]; ok {
-						preview = fmt.Sprintf("%v", t)
-					}
-				}
-			}
-		}
-		resolvedModel := modelName
-		if m, ok := respData["model"].(string); ok && m != "" {
-			resolvedModel = m
-		}
+	if result["ok"] == true {
 		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
 			TenantID: tid, ActorID: actorID,
 			Action: "model_instance.test.succeeded", ResourceType: "instance",
 			ResourceID: id, Result: "success",
 			RequestID: requestID,
-			Detail:    fmt.Sprintf("endpoint=%s model=%s latency_ms=%d", chatURL, resolvedModel, latencyMs),
-		})
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok": true,
-			"endpoint":         chatURL,
-			"model":            resolvedModel,
-			"latency_ms":       latencyMs,
-			"response_preview": preview,
-			"checked_at":       checkedAt,
+			Detail:    fmt.Sprintf("endpoint=%s model=%s mode=%s latency_ms=%v", result["endpoint"], result["model"], result["mode"], result["latency_ms"]),
 		})
 	} else {
-		errMsg := fmt.Sprintf("HTTP %d", resp.StatusCode)
-		if em, ok := respData["error"].(map[string]interface{}); ok {
-			if m, ok := em["message"].(string); ok {
-				errMsg = m
-			}
-		}
 		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
 			TenantID: tid, ActorID: actorID,
 			Action: "model_instance.test.failed", ResourceType: "instance",
 			ResourceID: id, Result: "failure",
 			RequestID: requestID,
-			Detail:    fmt.Sprintf("reason=http_%d endpoint=%s latency_ms=%d", resp.StatusCode, chatURL, latencyMs),
-		})
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok": false, "reason_code": fmt.Sprintf("http_%d", resp.StatusCode),
-			"message":    errMsg,
-			"endpoint":   chatURL,
-			"latency_ms": latencyMs,
-			"checked_at": checkedAt,
+			Detail:    fmt.Sprintf("reason=%s endpoint=%s latency_ms=%v", result["reason_code"], result["endpoint"], result["latency_ms"]),
 		})
 	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// resolveModelID resolves the runtime model id by querying /v1/models and
+// matching against the artifact name/path basename.
+func resolveModelID(client *http.Client, endpoint, artifactName, artifactPath, runplanModel string) (string, string) {
+	// 1. RunPlan resolved model name passed from caller.
+	if runplanModel != "" {
+		return runplanModel, "runplan"
+	}
+
+	// 2. Query /v1/models from the runtime.
+	modelsURL := strings.TrimRight(endpoint, "/") + "/v1/models"
+	httpReq, _ := http.NewRequest("GET", modelsURL, nil)
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		// /v1/models failed — fall back to artifact name.
+		return artifactName, "artifact_name_fallback"
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return artifactName, "artifact_name_fallback"
+	}
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	var modelsResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &modelsResp); err != nil {
+		return artifactName, "artifact_name_fallback"
+	}
+
+	// Extract model ids.
+	var modelIDs []string
+	if data, ok := modelsResp["data"].([]interface{}); ok {
+		for _, d := range data {
+			if m, ok := d.(map[string]interface{}); ok {
+				if mid, ok := m["id"].(string); ok && mid != "" {
+					modelIDs = append(modelIDs, mid)
+				}
+			}
+		}
+	}
+	if len(modelIDs) == 0 {
+		return artifactName, "artifact_name_fallback"
+	}
+
+	// 3. Single model — use it directly.
+	if len(modelIDs) == 1 {
+		return modelIDs[0], "single_model_fallback"
+	}
+
+	// 4. Multiple models — try to match.
+	// Build candidates from artifact name, filename, path basename.
+	candidates := []string{artifactName}
+	if artifactPath != "" {
+		base := artifactPath
+		if idx := strings.LastIndex(base, "/"); idx >= 0 {
+			base = base[idx+1:]
+		}
+		if base != "" && base != artifactName {
+			candidates = append(candidates, base)
+		}
+	}
+
+	for _, c := range candidates {
+		for _, mid := range modelIDs {
+			if mid == c {
+				return mid, "models_exact_match"
+			}
+		}
+	}
+	for _, c := range candidates {
+		cl := strings.ToLower(c)
+		for _, mid := range modelIDs {
+			if strings.Contains(strings.ToLower(mid), cl) || strings.Contains(cl, strings.ToLower(mid)) {
+				return mid, "models_alias_match"
+			}
+		}
+	}
+
+	// 5. Cannot match — fail.
+	return "", "model_id_not_resolved"
+}
+
+// tryInference attempts chat/completions first, then falls back to completions
+// if the endpoint returns 404/405 (unsupported). Does not fallback for real
+// inference errors (OOM, auth failure, model load fail).
+func tryInference(client *http.Client, endpoint, modelName string) map[string]interface{} {
+	// Try chat/completions.
+	chatURL := strings.TrimRight(endpoint, "/") + "/v1/chat/completions"
+	chatBody, _ := json.Marshal(map[string]interface{}{
+		"model": modelName,
+		"messages": []map[string]string{{"role": "user", "content": "ping"}},
+		"max_tokens": 8, "temperature": 0,
+	})
+
+	startTime := time.Now()
+	httpReq, _ := http.NewRequest("POST", chatURL, bytes.NewReader(chatBody))
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(httpReq)
+	latencyMs := time.Since(startTime).Milliseconds()
+
+	if err != nil {
+		return map[string]interface{}{"ok": false, "reason_code": "network_error", "message": fmt.Sprintf("failed to reach instance: %v", err), "endpoint": chatURL, "latency_ms": latencyMs}
+	}
+
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	resp.Body.Close()
+
+	// Determine if this is a "method not supported" type error (404, 405).
+	isEndpointErr := resp.StatusCode == 404 || resp.StatusCode == 405
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		preview := extractPreview(bodyBytes, "chat")
+		resolvedModel := modelName
+		var respData map[string]interface{}
+		json.Unmarshal(bodyBytes, &respData)
+		if m, ok := respData["model"].(string); ok && m != "" {
+			resolvedModel = m
+		}
+		return map[string]interface{}{
+			"ok": true, "mode": "chat",
+			"endpoint": chatURL, "model": resolvedModel,
+			"latency_ms": latencyMs, "response_preview": preview,
+		}
+	}
+
+	// If chat endpoint not supported, try completions.
+	if isEndpointErr {
+		compURL := strings.TrimRight(endpoint, "/") + "/v1/completions"
+		compBody, _ := json.Marshal(map[string]interface{}{
+			"model": modelName,
+			"prompt": "ping", "max_tokens": 8, "temperature": 0,
+		})
+		compStart := time.Now()
+		compReq, _ := http.NewRequest("POST", compURL, bytes.NewReader(compBody))
+		compReq.Header.Set("Content-Type", "application/json")
+		compResp, compErr := client.Do(compReq)
+		compLatency := time.Since(compStart).Milliseconds()
+
+		if compErr != nil {
+			return map[string]interface{}{"ok": false, "reason_code": "completion_endpoint_failed", "message": fmt.Sprintf("completions also unreachable: %v", compErr), "endpoint": compURL, "latency_ms": compLatency}
+		}
+		compBytes, _ := io.ReadAll(io.LimitReader(compResp.Body, 8192))
+		compResp.Body.Close()
+
+		if compResp.StatusCode >= 200 && compResp.StatusCode < 300 {
+			preview := extractPreview(compBytes, "completion")
+			resolvedModel := modelName
+			var compData map[string]interface{}
+			json.Unmarshal(compBytes, &compData)
+			if m, ok := compData["model"].(string); ok && m != "" {
+				resolvedModel = m
+			}
+			return map[string]interface{}{
+				"ok": true, "mode": "completion",
+				"endpoint": compURL, "model": resolvedModel,
+				"latency_ms": compLatency, "response_preview": preview,
+			}
+		}
+		return map[string]interface{}{"ok": false, "reason_code": "completion_endpoint_failed", "message": fmt.Sprintf("completions returned HTTP %d", compResp.StatusCode), "endpoint": compURL, "latency_ms": compLatency}
+	}
+
+	// Real error (not endpoint-unsupported) — do not fallback.
+	var respData map[string]interface{}
+	json.Unmarshal(bodyBytes, &respData)
+	errMsg := fmt.Sprintf("HTTP %d", resp.StatusCode)
+	if em, ok := respData["error"].(map[string]interface{}); ok {
+		if m, ok := em["message"].(string); ok { errMsg = m }
+	}
+	return map[string]interface{}{"ok": false, "reason_code": "chat_endpoint_failed", "message": errMsg, "endpoint": chatURL, "latency_ms": latencyMs}
+}
+
+// extractPreview extracts a short response preview from chat or completion JSON.
+func extractPreview(bodyBytes []byte, mode string) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &data); err != nil {
+		return ""
+	}
+	choices, _ := data["choices"].([]interface{})
+	if len(choices) == 0 {
+		return ""
+	}
+	choice, _ := choices[0].(map[string]interface{})
+	if mode == "chat" {
+		if msg, ok := choice["message"].(map[string]interface{}); ok {
+			if c, ok := msg["content"]; ok {
+				return fmt.Sprintf("%v", c)
+			}
+		}
+	}
+	if t, ok := choice["text"]; ok {
+		return fmt.Sprintf("%v", t)
+	}
+	return ""
 }

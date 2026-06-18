@@ -118,3 +118,16 @@ No problems from this round are left only in chat history.
 | MRW-TEST-003 | Audit log entries for test actions | `WriteAudit` called for `model_instance.test.started`, `.succeeded`, `.failed` | Test events are traceable in audit log | VERIFIED | `deployment_lifecycle_handlers.go` — 3 WriteAudit calls | Code review confirmed | Closed |
 
 No problems from this round are left only in chat history.
+
+
+---
+
+## 2026-06-18 Model Test Hardening Round
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-TEST-004 | model id used `model_artifacts.name` only, doesn't match runtime's /v1/models | `HandleModelInstanceTest` read only artifact name; vLLM/llama.cpp may expose different model ids at runtime | Test could use wrong model id, causing false failures | FIXED | `internal/server/api/deployment_lifecycle_handlers.go` — new `resolveModelID()` function: 1) RunPlan model_name, 2) query /v1/models, 3) single model → use directly, 4) multi-model → exact match on artifact name/path basename, 5) alias/substring match, 6) fail with `model_id_not_resolved` | `go build/test/vet` PASS | Closed |
+| MRW-TEST-005 | Only chat/completions attempted; no completions fallback | `HandleModelInstanceTest` hardcoded `/v1/chat/completions`; if runtime only supports completions, test falsely fails | Models behind completions-only APIs (e.g., llama.cpp server) always fail | FIXED | `internal/server/api/deployment_lifecycle_handlers.go` — new `tryInference()` function: tries chat/completions first; if 404/405 (endpoint not supported), falls back to /v1/completions. Real errors (OOM, auth, model load fail) do NOT trigger fallback. Mode returned in response. | `go build/test/vet` PASS | Closed |
+| MRW-TEST-006 | New reason codes not i18n-mapped | `model_id_not_resolved`, `chat_endpoint_failed`, `completion_endpoint_failed` had no frontend translation | Users see raw codes | FIXED | `web/src/locales/zh-CN.ts` (+8 keys), `web/src/locales/en-US.ts` (+8 keys), `web/src/pages/ModelInstancesPage.vue` (extended `testReasonI18n` map + display mode and `model_resolution_method`) | `npm build` PASS; `npm test` PASS; 606 keys both locales | Closed |
+
+No problems from this round are left only in chat history.
