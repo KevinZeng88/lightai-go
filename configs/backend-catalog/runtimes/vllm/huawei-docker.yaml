@@ -10,6 +10,10 @@ mount_policy:
   model:
     container_mount_dir: /models
     readonly: true
+
+model_mount:
+  container_path: /models
+  readonly: true
 docker_options:
   devices:
     - /dev/davinci_manager

@@ -18,6 +18,10 @@ image_candidates:
   - "<from Metax release package>"
 image_note: "Do not invent public image tag. MacaRT-SGLang image is obtained from Metax PDE AI release package."
 runner_type: docker
+
+model_mount:
+  container_path: /models
+  readonly: true
 docker_options:
   privileged: true
   network_mode: host

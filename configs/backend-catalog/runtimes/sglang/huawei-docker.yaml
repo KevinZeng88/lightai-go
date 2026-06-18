@@ -8,5 +8,9 @@ vendor: huawei
 image_ref: template-only
 env:
   ASCEND_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+
+model_mount:
+  container_path: /models
+  readonly: true
 verification:
   status: template_only

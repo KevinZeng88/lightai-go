@@ -292,6 +292,7 @@ type preflightResult struct {
 	rtBackendID       string
 	rtVersionID       string
 	rtModelMount      string
+	rtHC              string
 	rtVersionSnapshot string
 	backendName       string
 	backendDefaultEnv string
@@ -384,7 +385,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	}
 
 	// Fetch runtime chain: backend_runtime → inference_backend → backend_version.
-	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json, COALESCE(version_snapshot_json,'{}') FROM backend_runtimes WHERE id = ?`, pf.runtimeID).Scan(&pf.rtVendor, &pf.rtImage, &pf.rtDockerJSON, &pf.rtArgsOverride, &pf.rtEntryOverride, &pf.rtDefaultEnv, &pf.rtBackendID, &pf.rtVersionID, &pf.rtModelMount, &pf.rtVersionSnapshot)
+	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json, COALESCE(health_check_override_json,'{}'), COALESCE(version_snapshot_json,'{}') FROM backend_runtimes WHERE id = ?`, pf.runtimeID).Scan(&pf.rtVendor, &pf.rtImage, &pf.rtDockerJSON, &pf.rtArgsOverride, &pf.rtEntryOverride, &pf.rtDefaultEnv, &pf.rtBackendID, &pf.rtVersionID, &pf.rtModelMount, &pf.rtHC, &pf.rtVersionSnapshot)
 	h.DB.QueryRow(`SELECT name, default_env_json FROM inference_backends WHERE id = ?`, pf.rtBackendID).Scan(&pf.backendName, &pf.backendDefaultEnv)
 	h.DB.QueryRow(`SELECT default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json FROM backend_versions WHERE id = ?`, pf.rtVersionID).Scan(&pf.bvEntrypoint, &pf.bvArgs, &pf.bvBackendParams, &pf.bvParamDefs, &pf.bvHC, &pf.bvPort, &pf.bvDefaultImages, &pf.bvEnv)
 	pf.applyRuntimeVersionSnapshot()
@@ -456,6 +457,10 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	json.Unmarshal([]byte(pf.rtDockerJSON), &dockerSpec)
 	var modelMount runplan.ModelMountInfo
 	json.Unmarshal([]byte(pf.rtModelMount), &modelMount)
+	var rtHC runplan.HealthCheckInput
+	if pf.rtHC != "" && pf.rtHC != "{}" {
+		json.Unmarshal([]byte(pf.rtHC), &rtHC)
+	}
 	if rtEntryOverride != nil {
 		entrypoint = rtEntryOverride
 	}
@@ -526,7 +531,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
 		Backend:             &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
 		BackendVersion:      &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
-		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
+		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount, HealthCheckOverride: rtHCOverridePtr(rtHC)},
 		NodeRuntimeOverride: nbrOverride,
 		Artifact:            &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
 		Deployment:          &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
@@ -588,6 +593,17 @@ func (pf *preflightResult) applyRuntimeVersionSnapshot() {
 			pf.bvPort = n
 		}
 	}
+}
+
+
+// rtHCOverridePtr returns a HealthCheckInput pointer only when
+// the override has a non-empty path. An empty override must be nil
+// so the resolver falls back to the BackendVersion health check.
+func rtHCOverridePtr(hc runplan.HealthCheckInput) *runplan.HealthCheckInput {
+	if hc.Path == "" {
+		return nil
+	}
+	return &hc
 }
 
 func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Request) {

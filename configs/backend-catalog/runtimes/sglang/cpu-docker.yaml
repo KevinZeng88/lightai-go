@@ -6,5 +6,9 @@ managed_by: system
 runner_type: docker
 vendor: cpu
 image_ref: lmsysorg/sglang:v0.5.13.post1-cu129-runtime
+
+model_mount:
+  container_path: /models
+  readonly: true
 verification:
   status: template_only

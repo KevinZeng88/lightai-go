@@ -6,5 +6,9 @@ managed_by: system
 runner_type: docker
 vendor: cpu
 image_ref: ollama/ollama:latest
+
+model_mount:
+  container_path: /models
+  readonly: true
 verification:
   status: verified

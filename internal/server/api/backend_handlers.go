@@ -17,12 +17,12 @@ import (
 )
 
 var (
-	backendCatalogSystemVersionsDir  = "configs/backend-catalog/versions"
-	backendCatalogUserVersionsDir    = defaultBackendCatalogUserVersionsDir()
-	backendCatalogSystemRuntimesDir  = "configs/backend-catalog/runtimes"
-	backendCatalogUserRuntimesDir    = defaultBackendCatalogUserRuntimesDir()
-	backendCatalogSystemBackendsDir  = "configs/backend-catalog/backends"
-	backendCatalogUserBackendsDir    = defaultBackendCatalogUserBackendsDir()
+	backendCatalogSystemVersionsDir = "configs/backend-catalog/versions"
+	backendCatalogUserVersionsDir   = defaultBackendCatalogUserVersionsDir()
+	backendCatalogSystemRuntimesDir = "configs/backend-catalog/runtimes"
+	backendCatalogUserRuntimesDir   = defaultBackendCatalogUserRuntimesDir()
+	backendCatalogSystemBackendsDir = "configs/backend-catalog/backends"
+	backendCatalogUserBackendsDir   = defaultBackendCatalogUserBackendsDir()
 )
 
 func defaultBackendCatalogUserRuntimesDir() string {
@@ -328,7 +328,7 @@ func (h *AgentHandler) ReloadBackendCatalogProjection() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return sum["versions"], nil  // keep legacy return type compat
+	return sum["versions"], nil // keep legacy return type compat
 }
 
 // reloadBackendCatalogs loads Backend definitions from system and user catalog files.
@@ -514,8 +514,8 @@ func (h *AgentHandler) upsertBackendRuntimeProjection(doc backendRuntimeCatalogD
 	}
 	// Pick first image candidate as default image_name
 	imageName := firstStringFromAny(doc.ImageCandidates)
-	if imageName == "" {
-		imageName = ""
+	if imageName == "" && doc.ImageRef != "" {
+		imageName = doc.ImageRef
 	}
 	vendor := doc.Vendor
 	name := doc.Name
@@ -531,6 +531,50 @@ func (h *AgentHandler) upsertBackendRuntimeProjection(doc backendRuntimeCatalogD
 	}
 	now := time.Now().Format(time.RFC3339)
 	configHash := checksumString(string(data))
+
+	// Read existing record to preserve runtime config fields that the
+	// YAML does not supply. This prevents old-format or partial YAML files
+	// from silently overwriting seeded runtime data with empty values.
+	var existing struct {
+		imageName, ipp, entrypoint, args, env, docker, mount, healthCheck string
+	}
+	row := h.DB.QueryRow(`SELECT image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json FROM backend_runtimes WHERE id=?`, doc.ID)
+	_ = row.Scan(&existing.imageName, &existing.ipp, &existing.entrypoint, &existing.args, &existing.env, &existing.docker, &existing.mount, &existing.healthCheck)
+
+	// Merge: use YAML values when provided, otherwise keep existing DB values.
+	// This protects against catalog reloads that would otherwise clear seeded data.
+	effectiveImage := imageName
+	if effectiveImage == "" && existing.imageName != "" {
+		effectiveImage = existing.imageName
+	}
+	effEntrypoint := jsonString(doc.Entrypoint)
+	if isEmptyJSON(effEntrypoint) && !isEmptyJSON(existing.entrypoint) && existing.entrypoint != "null" {
+		effEntrypoint = existing.entrypoint
+	}
+	effArgs := jsonString(doc.Args)
+	if isEmptyJSON(effArgs) && !isEmptyJSON(existing.args) && existing.args != "null" {
+		effArgs = existing.args
+	}
+	effEnv := jsonString(doc.EnvSchema)
+	if isEmptyJSON(effEnv) && !isEmptyJSON(existing.env) && existing.env != "null" {
+		effEnv = existing.env
+	}
+	effDocker := jsonString(doc.DockerOptions)
+	if isEmptyJSON(effDocker) && !isEmptyJSON(existing.docker) && existing.docker != "null" {
+		effDocker = existing.docker
+	}
+	effMount := jsonString(doc.ModelMount)
+	if isEmptyJSON(effMount) {
+		effMount = jsonString(map[string]interface{}{})
+	}
+	if isEmptyJSON(effMount) && !isEmptyJSON(existing.mount) && existing.mount != "null" {
+		effMount = existing.mount
+	}
+	effHealthCheck := jsonString(doc.HealthCheck)
+	if isEmptyJSON(effHealthCheck) && !isEmptyJSON(existing.healthCheck) && existing.healthCheck != "null" {
+		effHealthCheck = existing.healthCheck
+	}
+
 	_, err := h.DB.Exec(`INSERT INTO backend_runtimes
 		(id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, slug, managed_by, source, catalog_version, checksum, status, verification_json, hardware_family, accelerator_api, runtime_distribution, runtime_distribution_version, compatibility_json, image_candidates_json, image_note, devices_json, volumes_json, env_schema_json, args_schema_json, ports_json, high_risk_flags_json, config_hash, loaded_from, loaded_at, created_at, updated_at)
 		VALUES (?,?,?,?,?,'',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -575,8 +619,8 @@ func (h *AgentHandler) upsertBackendRuntimeProjection(doc backendRuntimeCatalogD
 			loaded_from=excluded.loaded_from,
 			loaded_at=excluded.loaded_at,
 			updated_at=excluded.updated_at`,
-		doc.ID, name, displayName, doc.BackendID, doc.BackendVersionID, vendor, runnerType, imageName, "if_not_present",
-		jsonString(doc.Entrypoint), jsonString(doc.Args), jsonString(doc.EnvSchema), jsonString(doc.DockerOptions), jsonString(map[string]interface{}{}), jsonString(doc.HealthCheck),
+		doc.ID, name, displayName, doc.BackendID, doc.BackendVersionID, vendor, runnerType, effectiveImage, "if_not_present",
+		effEntrypoint, effArgs, effEnv, effDocker, effMount, effHealthCheck,
 		isBuiltin, isEditable, "", slug, source, source, "v1", checksumString(doc.ID+doc.BackendID+doc.BackendVersionID), "active", jsonString(doc.Verification),
 		doc.HardwareFamily, doc.AcceleratorAPI, doc.RuntimeDistribution, doc.RuntimeDistributionVersion,
 		jsonString(doc.Compatibility), jsonString(doc.ImageCandidates), doc.ImageNote,
@@ -605,39 +649,41 @@ type backendCatalogDoc struct {
 }
 
 type backendRuntimeCatalogDoc struct {
-	ID                        string      `yaml:"id"`
-	Name                      string      `yaml:"name"`
-	DisplayName               string      `yaml:"display_name,omitempty"`
-	BackendID                 string      `yaml:"backend_id"`
-	BackendVersionID          string      `yaml:"backend_version_id"`
-	Source                    string      `yaml:"source,omitempty"`
-	ManagedBy                 string      `yaml:"managed_by,omitempty"`
-	Readonly                  bool        `yaml:"readonly"`
-	Slug                      string      `yaml:"slug,omitempty"`
-	Vendor                    string      `yaml:"vendor,omitempty"`
-	HardwareFamily            string      `yaml:"hardware_family,omitempty"`
-	AcceleratorAPI            string      `yaml:"accelerator_api,omitempty"`
-	RuntimeDistribution       string      `yaml:"runtime_distribution,omitempty"`
-	RuntimeDistributionVersion string     `yaml:"runtime_distribution_version,omitempty"`
-	Compatibility             interface{} `yaml:"compatibility,omitempty"`
-	ImageCandidates           interface{} `yaml:"image_candidates,omitempty"`
-	ImageNote                 string      `yaml:"image_note,omitempty"`
-	RunnerType                string      `yaml:"runner_type,omitempty"`
-	DockerOptions             interface{} `yaml:"docker_options,omitempty"`
-	Devices                   interface{} `yaml:"devices,omitempty"`
-	Volumes                   interface{} `yaml:"volumes,omitempty"`
-	EnvSchema                 interface{} `yaml:"env_schema,omitempty"`
-	Entrypoint                interface{} `yaml:"entrypoint,omitempty"`
-	Args                      interface{} `yaml:"args,omitempty"`
-	ArgsSchema                interface{} `yaml:"args_schema,omitempty"`
-	ArgsDefaults              interface{} `yaml:"args_defaults,omitempty"`
-	Ports                     interface{} `yaml:"ports,omitempty"`
-	HealthCheck               interface{} `yaml:"health_check,omitempty"`
-	HighRiskFlags             interface{} `yaml:"high_risk_flags,omitempty"`
-	Verification              interface{} `yaml:"verification,omitempty"`
-	SourceBackendVersionRevision string   `yaml:"source_backend_version_revision,omitempty"`
-	Revision                  string      `yaml:"revision,omitempty"`
-	ConfigHash                string      `yaml:"config_hash,omitempty"`
+	ID                           string      `yaml:"id"`
+	Name                         string      `yaml:"name"`
+	DisplayName                  string      `yaml:"display_name,omitempty"`
+	BackendID                    string      `yaml:"backend_id"`
+	BackendVersionID             string      `yaml:"backend_version_id"`
+	Source                       string      `yaml:"source,omitempty"`
+	ManagedBy                    string      `yaml:"managed_by,omitempty"`
+	Readonly                     bool        `yaml:"readonly"`
+	Slug                         string      `yaml:"slug,omitempty"`
+	Vendor                       string      `yaml:"vendor,omitempty"`
+	HardwareFamily               string      `yaml:"hardware_family,omitempty"`
+	AcceleratorAPI               string      `yaml:"accelerator_api,omitempty"`
+	RuntimeDistribution          string      `yaml:"runtime_distribution,omitempty"`
+	RuntimeDistributionVersion   string      `yaml:"runtime_distribution_version,omitempty"`
+	Compatibility                interface{} `yaml:"compatibility,omitempty"`
+	ImageCandidates              interface{} `yaml:"image_candidates,omitempty"`
+	ImageNote                    string      `yaml:"image_note,omitempty"`
+	RunnerType                   string      `yaml:"runner_type,omitempty"`
+	DockerOptions                interface{} `yaml:"docker_options,omitempty"`
+	Devices                      interface{} `yaml:"devices,omitempty"`
+	Volumes                      interface{} `yaml:"volumes,omitempty"`
+	EnvSchema                    interface{} `yaml:"env_schema,omitempty"`
+	Entrypoint                   interface{} `yaml:"entrypoint,omitempty"`
+	Args                         interface{} `yaml:"args,omitempty"`
+	ArgsSchema                   interface{} `yaml:"args_schema,omitempty"`
+	ArgsDefaults                 interface{} `yaml:"args_defaults,omitempty"`
+	Ports                        interface{} `yaml:"ports,omitempty"`
+	HealthCheck                  interface{} `yaml:"health_check,omitempty"`
+	HighRiskFlags                interface{} `yaml:"high_risk_flags,omitempty"`
+	ModelMount                   interface{} `yaml:"model_mount,omitempty"`
+	ImageRef                     string      `yaml:"image_ref,omitempty"`
+	Verification                 interface{} `yaml:"verification,omitempty"`
+	SourceBackendVersionRevision string      `yaml:"source_backend_version_revision,omitempty"`
+	Revision                     string      `yaml:"revision,omitempty"`
+	ConfigHash                   string      `yaml:"config_hash,omitempty"`
 }
 
 // reloadAllCatalogs reloads Backend, BackendVersion, and BackendRuntime

@@ -16,6 +16,10 @@ image_candidates:
   - ghcr.io/ggml-org/llama.cpp:server-cuda
   - ghcr.io/ggml-org/llama.cpp:server
 runner_type: docker
+
+model_mount:
+  container_path: /models
+  readonly: true
 docker_options:
   gpus: all
 env_schema:

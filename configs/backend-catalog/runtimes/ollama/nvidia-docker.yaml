@@ -8,5 +8,9 @@ vendor: nvidia
 image_ref: ollama/ollama:latest
 env:
   CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
+
+model_mount:
+  container_path: /models
+  readonly: true
 verification:
   status: verified

@@ -18,6 +18,10 @@ image_candidates:
   - quay.io/ascend/vllm-ascend:v0.21.0rc1-a3-openeuler
   - quay.io/ascend/vllm-ascend:v0.21.0rc1-310p
 runner_type: docker
+
+model_mount:
+  container_path: /models
+  readonly: true
 docker_options:
   network_mode: host
   shm_size: 1g

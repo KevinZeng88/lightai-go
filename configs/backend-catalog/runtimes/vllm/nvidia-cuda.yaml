@@ -16,6 +16,10 @@ image_candidates:
   - vllm/vllm-openai:v0.23.0-cu129-ubuntu2404
   - vllm/vllm-openai:latest
 runner_type: docker
+
+model_mount:
+  container_path: /models
+  readonly: true
 docker_options:
   gpus: all
   ipc_mode: host
