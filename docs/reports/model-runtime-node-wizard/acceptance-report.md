@@ -1,5 +1,10 @@
 # Model Runtime Node Wizard Acceptance Report
 
+> Status: CURRENT_REPORT
+> Last reviewed: 2026-06-18
+> Scope: Phase 4 model/runtime wizard acceptance
+> Read order: See `docs/CURRENT.md`
+
 **Phase:** 4 — Model Runtime Wizards
 **Branch:** `phase-4-model-runtime-wizards`
 **Date:** 2026-06-18

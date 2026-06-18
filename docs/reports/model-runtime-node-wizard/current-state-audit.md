@@ -1,8 +1,13 @@
 # Model Runtime Node Wizard Current State Audit
 
+> Status: CURRENT_REPORT
+> Last reviewed: 2026-06-18
+> Scope: Phase 4 current-state audit
+> Read order: See `docs/CURRENT.md`
+
 **Updated:** 2026-06-18 (post Phase 4 implementation)
 **Branch:** `phase-4-model-runtime-wizards`
-**Final commit:** `50a25a5`
+**Final commit:** `89bdf68`
 
 ## Status: ALL GAPS CLOSED
 

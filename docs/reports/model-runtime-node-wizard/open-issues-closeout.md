@@ -1,5 +1,10 @@
 # Model Runtime Node Wizard Open Issues Closeout
 
+> Status: CURRENT_REPORT
+> Last reviewed: 2026-06-18
+> Scope: Phase 4 formal closeout and documented blockers
+> Read order: See `docs/CURRENT.md`
+
 Date: 2026-06-18
 
 All P0/P1 problems found in this round are FIXED and verified by the NVIDIA wizard E2E. Remaining items are product-depth work that should not block the validated local NVIDIA Docker wizard path.

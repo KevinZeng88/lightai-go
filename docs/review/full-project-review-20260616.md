@@ -1,3 +1,8 @@
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Reference document; not the current entrypoint
+> Read order: See `docs/CURRENT.md`
+
 # LightAI Go Full Project Review — 2026-06-16
 
 ## 1. Executive Summary

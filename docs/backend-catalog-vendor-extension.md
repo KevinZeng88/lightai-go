@@ -1,5 +1,10 @@
 # Backend Catalog Vendor Extension
 
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Backend catalog vendor extension guidance
+> Read order: See `docs/CURRENT.md`
+
 LightAI Go now uses the target catalog path:
 
 ```text
@@ -92,4 +97,3 @@ The runtime template reserves:
 3. Keep node-specific image or readiness in NodeBackendRuntime, not BackendRuntime.
 4. Add a vendor adapter only when device discovery, visible-device mapping, or monitoring requires vendor-specific logic.
 5. Keep high-risk Docker options disabled unless the vendor runtime requires them and the risk is visible in Web.
-

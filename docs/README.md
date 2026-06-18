@@ -1,198 +1,85 @@
-# LightAI Go 文档阅读顺序
+# LightAI Go Documentation
 
-Claude / Codex 开发前必须先阅读本目录文档，并严格按文档开发。
+> Status: CURRENT
+> Last reviewed: 2026-06-18
+> Scope: Documentation entrypoint
+> Read order: Start with `docs/CURRENT.md`
 
-## 1. 阅读顺序
+This directory is the source of truth for LightAI Go design, acceptance status, and formal open issues.
 
-请按以下顺序阅读：
+## Current State
 
-1. `00-project-scope.md`
-2. `01-architecture.md`
-3. `02-server-agent-design.md`
-4. `03-resource-monitoring-design.md`
-5. `04-observability-design.md`
-6. `05-runtime-environment-design.md`
-7. `06-model-design.md`
-8. `07-instance-lifecycle-design.md`
-9. `08-engineering-contracts.md`
-10. `09-auth-tenant-design.md`
-11. `10-mvp-development-plan.md`
-
-跨文档出现冲突时，以 `08-engineering-contracts.md` 的统一工程契约为准。
-
-## 2. 当前阶段重点
-
-当前开发窗口只允许实现 Phase 0、Phase 0.5、Phase 1、Phase 2。这是当前窗口范围，不代表第一阶段只有这些 Phase。
-
-优先级：
-
-1. Server 可启动；
-2. Agent 可启动；
-3. 配置加载；
-4. 日志输出；
-5. Server `/healthz`；
-6. Agent `/healthz`；
-7. Server `/metrics`；
-8. Agent `/metrics`；
-9. Server `/metrics/targets`；
-10. default tenant；
-11. bootstrap platform admin；
-12. 本地 User、Membership、TenantMembershipRole；
-13. built-in Role、tenant custom Role 和 RolePermission；
-14. 系统只读 Permission catalog；
-15. 基础登录、退出和当前用户查询；
-16. Session、CSRF 和实时 permission code 校验；
-17. 核心资源 tenant / owner / audit 字段；
-18. Agent 注册；
-19. Agent 心跳；
-20. 节点在线 / 离线；
-21. SystemCollector；
-22. NvidiaCollector；
-23. MetaxCollector；
-24. CollectorRegistry；
-25. 资源上报；
-26. 节点查询 API；
-27. GPU 查询 API；
-28. Collector 诊断信息。
-
-MockGPUCollector 仅用于 `development` / `test` profile，默认关闭，不得替代 Phase 2 的 NVIDIA 和 MetaX 真实环境验收。
-
-## 3. 当前禁止实现
-
-当前禁止实现：
-
-1. Kubernetes；
-2. Ray；
-3. 多集群；
-4. 复杂调度；
-5. 模型市场；
-6. 自动下载模型；
-7. API Key；
-8. Token 统计；
-9. 额度管理；
-10. 成本核算；
-11. 复杂统一网关；
-12. 用户自定义 Permission code、资源级 ACL、字段级权限和多级组织继承；
-13. 高可用控制面；
-14. 完整模型服务代理；
-15. SSO / LDAP / OAuth；
-16. 租户级 GPU 配额、账单和隔离调度。
-
-第一阶段正式实现 Tenant/User/Membership、TenantMembershipRole、built-in/custom Role、系统只读 Permission catalog、RolePermission、Session 和资源归属字段，不实现上述资源级权限与组织能力。
-
-## 4. GPUStack 使用原则
-
-GPUStack 仅作为架构参考，不允许复制代码，不允许逐行翻译。
-
-Claude 不需要自行研究 GPUStack。
-LightAI Go 的开发依据是本目录下的设计文档。
-
-如果发现 GPUStack 与本目录文档存在差异，以本目录文档为准。
-
-## 5. 资源监控边界
-
-LightAI Go 必须保持以下边界：
+LightAI Go is currently on the Phase 4 model/runtime wizard line. The validated local NVIDIA Docker path is:
 
 ```text
-Agent 负责采集
-Server 负责管理
-SQLite 保存当前状态
-Prometheus 保存历史时序指标
-Grafana 负责展示
+node model root -> file browse -> model scan -> ModelArtifact/ModelLocation
+-> Backend -> BackendVersion -> BackendRuntime -> NodeBackendRuntime
+-> preflight -> Server RunPlan preview -> Agent Docker start
+-> /v1/models -> Docker logs -> stop -> cleanup
 ```
 
-Prometheus 不作为业务状态来源。
-Server 不通过 Prometheus 查询结果判断节点是否在线、GPU 是否存在、实例是否运行。
-
-## 6. 身份与凭证边界
+The current node model directory policy is scheme B:
 
 ```text
-Agent bootstrap/shared token != User Session != Future API Key
+Server persists node_model_roots.
+Agent keeps denied_roots, path traversal, and symlink escape checks as final protection.
+allowed roots default to empty.
+Users must explicitly add a model directory before browse / scan / save.
 ```
 
-Agent token 只用于 Agent 注册、心跳、资源上报、任务 claim 和状态回报。
-User Session 只用于 Web/API 管理操作。
-Future API Key 后续只用于模型服务调用。
-三类凭证不能混用。
+## Recommended Reading Order
 
-## 7. 当前必须实现的接口
+1. `docs/CURRENT.md`
+2. `docs/design/backend-runtime-runplan-docker.md`
+3. `docs/design/model-runtime-node-wizard.md`
+4. `docs/reports/backend-runtime-runplan/acceptance-report.md`
+5. `docs/reports/model-runtime-node-wizard/acceptance-report.md`
+6. `docs/reports/model-runtime-node-wizard/full-run-chain-review.md`
+7. `docs/reports/model-runtime-node-wizard/open-issues-closeout.md`
+8. `docs/reports/documentation-governance/cleanup-report.md`
 
-Phase 0 / Phase 0.5 / Phase 1 / Phase 2 至少需要实现：
+## Current Design Documents
+
+| Document | Purpose |
+| --- | --- |
+| `docs/design/backend-runtime-runplan-docker.md` | Current Backend / BackendVersion / BackendRuntime / RunPlan Docker design |
+| `docs/design/model-runtime-node-wizard.md` | Current model root, model wizard, runtime wizard, and deployment wizard design |
+| `docs/design/tenant-rbac-resource-ownership-design.md` | Tenant/RBAC ownership reference |
+| `docs/backend-catalog-vendor-extension.md` | Backend catalog vendor extension reference |
+
+## Current Reports
+
+| Report | Purpose |
+| --- | --- |
+| `docs/reports/backend-runtime-runplan/acceptance-report.md` | BackendRuntime / RunPlan / Docker lifecycle acceptance |
+| `docs/reports/backend-runtime-runplan/open-issues-closeout.md` | BackendRuntime formal blockers and external validation items |
+| `docs/reports/model-runtime-node-wizard/acceptance-report.md` | Phase 4 wizard acceptance and E2E evidence |
+| `docs/reports/model-runtime-node-wizard/full-run-chain-review.md` | Page-to-Docker run chain review |
+| `docs/reports/model-runtime-node-wizard/open-issues-closeout.md` | Phase 4 formal open issues closeout |
+| `docs/reports/documentation-governance/cleanup-report.md` | Documentation governance closeout for this cleanup |
+
+## Reference Documents
+
+The numbered legacy documents (`00-*.md` through `10-*.md`) remain in place for compatibility with existing agent instructions. They are reference material, not the current Phase 4 execution entrypoint. If they conflict with `docs/CURRENT.md`, use `docs/CURRENT.md`.
+
+GPUStack review documents are reference-only and must not be used to copy or translate GPUStack code.
+
+## Archive Policy
+
+Archived documents live under:
 
 ```text
-GET  /healthz
-GET  /metrics
-GET  /metrics/targets
-
-POST /api/v1/auth/login
-POST /api/v1/auth/logout
-POST /api/v1/auth/change-password
-GET  /api/v1/auth/me
-
-GET  /api/v1/users
-POST /api/v1/users
-GET  /api/v1/tenants
-POST /api/v1/tenants
-GET  /api/v1/tenant-memberships
-POST /api/v1/tenant-memberships
-GET  /api/v1/roles
-POST /api/v1/roles
-GET  /api/v1/permissions
-
-POST /api/v1/agent/register
-POST /api/v1/agent/heartbeat
-POST /api/v1/agent/resources/report
-
-GET  /api/v1/nodes
-GET  /api/v1/nodes/{node_id}
-GET  /api/v1/gpus
-GET  /api/v1/gpus/{gpu_id}
+docs/archive/
+docs/reports/archive/
 ```
 
-`/metrics/targets` 只由 Server 提供。
+Archive documents are historical evidence only. Do not use archive documents as current implementation guidance. If an archived document conflicts with `docs/CURRENT.md`, `docs/CURRENT.md` wins.
 
-## 8. 开发验收要求
+## Guidance For Future Agents
 
-每次开发完成后必须执行：
-
-```bash
-go fmt ./...
-go test ./...
-go build ./cmd/server
-go build ./cmd/agent
-git diff --check
-```
-
-如有失败，必须先修复后再提交。
-
-## 9. 提交要求
-
-每个阶段完成后单独提交。
-
-提交信息建议：
-
-```text
-phase0: add server agent skeleton
-phase0.5: add auth tenant rbac foundation
-phase1: add agent register heartbeat
-phase2: add system gpu resource reporting
-```
-
-不要把多个阶段混在一个大提交里。
-
-## 10. 第一轮开发建议
-
-第一轮只做 Phase 0：
-
-1. Server main；
-2. Agent main；
-3. 配置加载；
-4. 日志；
-5. 版本信息；
-6. `/healthz`；
-7. `/metrics`；
-8. `/metrics/targets`；
-9. 示例配置文件；
-10. 基础测试。
-
-第一轮不要做数据库，不要做注册心跳，不要做资源采集。
+1. Read `docs/CURRENT.md` first.
+2. Use current design documents under `docs/design/`.
+3. Use current reports under `docs/reports/<topic>/`.
+4. Treat `docs/archive/` and `docs/reports/archive/` as historical evidence only.
+5. Do not infer unresolved work from old phase plans; check the topic `open-issues-closeout.md` files.
+6. Do not mark MetaX or Huawei runtime paths ready unless they have real hardware validation evidence.

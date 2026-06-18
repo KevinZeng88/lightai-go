@@ -1,5 +1,10 @@
 # Model Runtime Node Wizard Full Run Chain Review
 
+> Status: CURRENT_REPORT
+> Last reviewed: 2026-06-18
+> Scope: Page-to-Docker run chain review
+> Read order: See `docs/CURRENT.md`
+
 Date: 2026-06-18
 
 Conclusion: ACCEPTED_WITH_GAPS

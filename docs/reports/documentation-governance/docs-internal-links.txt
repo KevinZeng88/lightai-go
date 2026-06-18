@@ -1,0 +1,405 @@
+docs/vendor-samples/metax/README.md:4:> Read order: See `docs/CURRENT.md`
+docs/vendor-samples/README.md:4:> Read order: See `docs/CURRENT.md`
+docs/vendor-samples/README.md:24:docs/vendor-samples/nvidia/query-success.csv
+docs/vendor-samples/README.md:25:docs/vendor-samples/nvidia/query-empty.csv
+docs/vendor-samples/README.md:26:docs/vendor-samples/nvidia/query-partial.csv
+docs/vendor-samples/README.md:27:docs/vendor-samples/nvidia/query-error.txt
+docs/vendor-samples/README.md:28:docs/vendor-samples/nvidia/version.txt
+docs/vendor-samples/README.md:53:docs/vendor-samples/metax/device-success.<ext>
+docs/vendor-samples/README.md:54:docs/vendor-samples/metax/metrics-success.<ext>
+docs/vendor-samples/README.md:55:docs/vendor-samples/metax/empty.<ext>
+docs/vendor-samples/README.md:56:docs/vendor-samples/metax/partial.<ext>
+docs/vendor-samples/README.md:57:docs/vendor-samples/metax/error.txt
+docs/vendor-samples/README.md:58:docs/vendor-samples/metax/version.txt
+docs/REVIEW-GPUSTACK-AUDIT.md:4:> Read order: See `docs/CURRENT.md`
+docs/GPU_COLLECTOR_ARCHITECTURE.md:4:> Read order: See `docs/CURRENT.md`
+docs/REVIEW-GPUSTACK-UI.md:4:> Read order: See `docs/CURRENT.md`
+docs/backend-catalog-vendor-extension.md:6:> Read order: See `docs/CURRENT.md`
+docs/archive/README.md:6:> Read order: See `docs/CURRENT.md`
+docs/archive/README.md:14:3. If an archive document conflicts with `docs/CURRENT.md`, `docs/CURRENT.md` wins.
+docs/archive/historical/rc1-codex-review-tracking.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/historical/rc1-patch-test.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/historical/rc1-review-fix-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/historical/rc1-review-fix-plan.md:175:| `docs/RC1_REVIEW_FIX_PLAN.md` | **主台账** — 唯一权威状态 |
+docs/archive/historical/rc1-review-fix-plan.md:176:| `docs/RC1_CODEX_REVIEW_TRACKING.md` | Codex Review 详细问题清单和验证记录 |
+docs/archive/historical/rc1-review-fix-plan.md:177:| `docs/GPU_COLLECTOR_ARCHITECTURE.md` | GPU 抽象架构文档 |
+docs/archive/historical/rc1-review-fix-plan.md:178:| `docs/archive/RC1_PATCH_TEST.md` | 已归档 — patch 测试临时文件 |
+docs/archive/historical/rc1-review-fix-plan.md:179:| `docs/REVIEW-GPUSTACK-AUDIT.md` | 独立 — GPUStack 审计（非 RC1） |
+docs/archive/historical/rc1-review-fix-plan.md:180:| `docs/REVIEW-GPUSTACK-UI.md` | 独立 — GPUStack UI 参考（非 RC1） |
+docs/archive/old-plans/phase-2g-full-review-fix-all-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-2g-full-review-fix-all-plan.md:13:Fixed ALL Critical / High / Medium / Low findings from `docs/review/claude-full-project-review-20260616.md`.
+docs/archive/old-plans/phase-2g-full-review-fix-all-plan.md:44:See `docs/review/phase-2g-full-review-fix-all-final-report.md`
+docs/archive/old-plans/phase-2h-web-node-visibility-investigation.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-2h-web-node-visibility-investigation.md:161:| `docs/plan/phase-2h-web-node-visibility-investigation.md` | This document |
+docs/archive/old-plans/12-phase-4-gateway-api-key-usage.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/backend-runtime-runplan-gap-fix-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/backend-runtime-runplan-gap-fix-plan.md:23:- `docs/backend-catalog-vendor-extension.md`
+docs/archive/old-plans/backend-runtime-runplan-gap-fix-plan.md:328:- `docs/reports/backend-runtime-runplan-acceptance-report.md`
+docs/archive/old-plans/backend-runtime-runplan-gap-fix-plan.md:329:- `docs/reports/backend-runtime-runplan-current-state-audit.md`
+docs/archive/old-plans/backend-runtime-runplan-gap-fix-plan.md:330:- `docs/plan/backend-runtime-runplan-gap-fix-plan.md`
+docs/archive/old-plans/backend-runtime-runplan-gap-fix-plan.md:331:- `docs/backend-catalog-vendor-extension.md`
+docs/archive/old-plans/backend-runtime-runplan-gap-fix-plan.md:355:- Any environment-only unverified items are documented as `DOCUMENTED_BLOCKER` in `docs/reports/backend-runtime-runplan/open-issues-closeout.md`.
+docs/archive/old-plans/phase-2f-tenant-rbac-resource-ownership-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-2f-tenant-rbac-resource-ownership-plan.md:57:| 1 | Create plan + audit | docs/plan/ | No | No |
+docs/archive/old-plans/phase-2f-tenant-rbac-resource-ownership-plan.md:67:| 11 | Docs: design + operations | docs/design/, docs/ops/ | No | No |
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-3-backend-runplan-refactor.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-3-backend-runplan-refactor.md:61:- `docs/templates-config.md`
+docs/archive/old-plans/phase-2f-continuation-steps.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-2f-continuation-steps.md:82:All 12 review findings from docs/review/full-project-review-20260616.md are closed.
+docs/archive/old-plans/12-phase-3-web-model-serving.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-2g-heartbeat-collection-time-investigation.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-2g-heartbeat-collection-time-investigation.md:294:| `docs/plan/phase-2g-heartbeat-collection-time-investigation.md` | This investigation document |
+docs/archive/old-plans/phase-3-step-by-step-execution.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-3-step-by-step-execution.md:16:> `docs/plan/phase-3-auto-execution-guard.md`。
+docs/archive/old-plans/phase-3-step-by-step-execution.md:98:rm docs/templates-config.md
+docs/archive/old-plans/12-phase-5-basic-scheduler.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:8:Fix all 12 issues from docs/review/full-project-review-20260616.md.
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:8:> 基于 `docs/design/12-model-runtime-serving-design.md`（修订版）
+docs/archive/old-plans/phase-3-auto-execution-guard.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/old-plans/phase-3-auto-execution-guard.md:94:- 写入 `docs/reports/phase-3/phase-2-report.md`。
+docs/archive/old-plans/phase-3-auto-execution-guard.md:107:- 写入 `docs/reports/phase-3/phase-3-report.md`。
+docs/archive/old-plans/phase-3-auto-execution-guard.md:121:- 写入 `docs/reports/phase-3/phase-4-report.md`。
+docs/archive/old-plans/phase-3-auto-execution-guard.md:135:- 写入 `docs/reports/phase-3/phase-5-report.md`。
+docs/archive/old-plans/phase-3-auto-execution-guard.md:153:- 写入 `docs/reports/phase-3/final-report.md`。
+docs/archive/old-plans/phase-3-auto-execution-guard.md:196:| 36 | docs/reports/phase-3/final-report.md 存在 | 文档 |
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/superseded/13-backend-runplan-runtime-design.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/superseded/13-backend-runplan-runtime-design.md:1492:- `docs/templates-config.md`
+docs/archive/superseded/12-model-runtime-serving-design.md:4:> Current entrypoint: docs/CURRENT.md
+docs/archive/superseded/12-model-runtime-serving-design.md:563:详见 `docs/plan/12-model-runtime-serving-implementation-plan.md` 及各 Phase 文档。
+docs/00-project-scope.md:4:> Read order: See `docs/CURRENT.md`
+docs/00-project-scope.md:61:第一阶段正式加入 Tenant、User、Membership、Role、Permission、RolePermission、TenantMembershipRole、Session、自定义角色管理和资源归属底座，但不实现 API Key、Token、额度、计费、SSO、用户自定义 Permission code、资源级 ACL、租户配额或账单。详细边界见 `docs/09-auth-tenant-design.md`。
+docs/02-server-agent-design.md:4:> Read order: See `docs/CURRENT.md`
+docs/CURRENT.md:6:> Read order: This file first, then `docs/README.md`
+docs/CURRENT.md:29:docs/reports/backend-runtime-runplan/acceptance-report.md
+docs/CURRENT.md:30:docs/reports/backend-runtime-runplan/open-issues-closeout.md
+docs/CURRENT.md:36:docs/reports/model-runtime-node-wizard/acceptance-report.md
+docs/CURRENT.md:37:docs/reports/model-runtime-node-wizard/full-run-chain-review.md
+docs/CURRENT.md:38:docs/reports/model-runtime-node-wizard/open-issues-closeout.md
+docs/CURRENT.md:125:docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/
+docs/CURRENT.md:141:docs/reports/backend-runtime-runplan/open-issues-closeout.md
+docs/CURRENT.md:142:docs/reports/model-runtime-node-wizard/open-issues-closeout.md
+docs/CURRENT.md:143:docs/reports/documentation-governance/open-issues.md
+docs/CURRENT.md:161:docs/archive/
+docs/CURRENT.md:162:docs/reports/archive/
+docs/CURRENT.md:169:1. `docs/CURRENT.md`
+docs/CURRENT.md:170:2. `docs/README.md`
+docs/CURRENT.md:171:3. Current topic design under `docs/design/`
+docs/CURRENT.md:172:4. Current topic acceptance/open issue reports under `docs/reports/<topic>/`
+docs/testing/model-runtime-runplan-test.md:4:> Read order: See `docs/CURRENT.md`
+docs/testing/model-runtime-runplan-test.md:457:grep -n "default_images_json" docs/design/13-backend-runplan-runtime-design.md
+docs/testing/model-runtime-gpu-smoke-tests.md:4:> Read order: See `docs/CURRENT.md`
+docs/testing/model-runtime-gpu-smoke-tests.md:211:参考：`docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md`
+docs/04-observability-design.md:4:> Read order: See `docs/CURRENT.md`
+docs/04-observability-design.md:97:See `docs/03-resource-monitoring-design.md` for full GPU metric list.
+docs/README.md:6:> Read order: Start with `docs/CURRENT.md`
+docs/README.md:32:1. `docs/CURRENT.md`
+docs/README.md:33:2. `docs/design/backend-runtime-runplan-docker.md`
+docs/README.md:34:3. `docs/design/model-runtime-node-wizard.md`
+docs/README.md:35:4. `docs/reports/backend-runtime-runplan/acceptance-report.md`
+docs/README.md:36:5. `docs/reports/model-runtime-node-wizard/acceptance-report.md`
+docs/README.md:37:6. `docs/reports/model-runtime-node-wizard/full-run-chain-review.md`
+docs/README.md:38:7. `docs/reports/model-runtime-node-wizard/open-issues-closeout.md`
+docs/README.md:39:8. `docs/reports/documentation-governance/cleanup-report.md`
+docs/README.md:45:| `docs/design/backend-runtime-runplan-docker.md` | Current Backend / BackendVersion / BackendRuntime / RunPlan Docker design |
+docs/README.md:46:| `docs/design/model-runtime-node-wizard.md` | Current model root, model wizard, runtime wizard, and deployment wizard design |
+docs/README.md:47:| `docs/design/tenant-rbac-resource-ownership-design.md` | Tenant/RBAC ownership reference |
+docs/README.md:48:| `docs/backend-catalog-vendor-extension.md` | Backend catalog vendor extension reference |
+docs/README.md:54:| `docs/reports/backend-runtime-runplan/acceptance-report.md` | BackendRuntime / RunPlan / Docker lifecycle acceptance |
+docs/README.md:55:| `docs/reports/backend-runtime-runplan/open-issues-closeout.md` | BackendRuntime formal blockers and external validation items |
+docs/README.md:56:| `docs/reports/model-runtime-node-wizard/acceptance-report.md` | Phase 4 wizard acceptance and E2E evidence |
+docs/README.md:57:| `docs/reports/model-runtime-node-wizard/full-run-chain-review.md` | Page-to-Docker run chain review |
+docs/README.md:58:| `docs/reports/model-runtime-node-wizard/open-issues-closeout.md` | Phase 4 formal open issues closeout |
+docs/README.md:59:| `docs/reports/documentation-governance/cleanup-report.md` | Documentation governance closeout for this cleanup |
+docs/README.md:63:The numbered legacy documents (`00-*.md` through `10-*.md`) remain in place for compatibility with existing agent instructions. They are reference material, not the current Phase 4 execution entrypoint. If they conflict with `docs/CURRENT.md`, use `docs/CURRENT.md`.
+docs/README.md:72:docs/archive/
+docs/README.md:73:docs/reports/archive/
+docs/README.md:76:Archive documents are historical evidence only. Do not use archive documents as current implementation guidance. If an archived document conflicts with `docs/CURRENT.md`, `docs/CURRENT.md` wins.
+docs/README.md:80:1. Read `docs/CURRENT.md` first.
+docs/README.md:81:2. Use current design documents under `docs/design/`.
+docs/README.md:82:3. Use current reports under `docs/reports/<topic>/`.
+docs/README.md:83:4. Treat `docs/archive/` and `docs/reports/archive/` as historical evidence only.
+docs/05-runtime-environment-design.md:4:> Read order: See `docs/CURRENT.md`
+docs/05-runtime-environment-design.md:359:Runtime 决定 entrypoint 和 command；Model 提供默认 `Args`；Instance 启用 args override 时整体替换 Model args。详细字段和算法见 `docs/08-engineering-contracts.md`。
+docs/05-runtime-environment-design.md:414:env、volume、device、port、args 和 extra args 的确定合并规则见 `docs/08-engineering-contracts.md`。
+docs/reports/archive/full-project-review/CLAUDE-RC3-EXECUTION-ENTRYPOINT.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/CLAUDE-RC3-EXECUTION-ENTRYPOINT.md:10:1. `docs/reports/full-project-review/rc3-full-hardening-execution-plan.md`
+docs/reports/archive/full-project-review/CLAUDE-RC3-EXECUTION-ENTRYPOINT.md:11:2. `docs/reports/full-project-review/rc3-clean-baseline-scope.md`
+docs/reports/archive/full-project-review/CLAUDE-RC3-EXECUTION-ENTRYPOINT.md:12:3. `docs/reports/full-project-review/rc3-acceptance-criteria.md`
+docs/reports/archive/full-project-review/CLAUDE-RC3-EXECUTION-ENTRYPOINT.md:13:4. `docs/reports/full-project-review/rc3-verification-matrix.md`
+docs/reports/archive/full-project-review/CLAUDE-RC3-EXECUTION-ENTRYPOINT.md:14:5. `docs/reports/full-project-review/rc3-issue-closeout-register.md`
+docs/reports/archive/full-project-review/CLAUDE-RC3-EXECUTION-ENTRYPOINT.md:15:6. `docs/reports/full-project-review/web-workflow-acceptance-checklist.md`
+docs/reports/archive/full-project-review/CLAUDE-RC3-EXECUTION-ENTRYPOINT.md:16:7. `docs/reports/full-project-review/rc3-final-closeout-report.md`
+docs/reports/archive/full-project-review/full-project-review-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/full-project-review-report.md:54:The Server/Agent boundary is well stated in docs and mostly respected: Server owns DB/API/RunPlan; Agent owns collection and Docker execution. However, the implementation does not yet satisfy the strongest contracts in `docs/08-engineering-contracts.md`:
+docs/reports/archive/full-project-review/full-project-review-report.md:180:Unresolved problems remain. All problems discovered in this review are documented in `docs/reports/full-project-review/issue-register.md` with statuses `Open` or `Not Verified`. No problems are intentionally left only in chat.
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:14:Claude must follow this document before changing code. The objective is to close all review findings from `docs/reports/full-project-review/issue-register.md`, plus user-added findings REVIEW-026 through REVIEW-030, by fixing code/config/schema/scripts/Web/docs/tests and proving each item through explicit verification.
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:65:/home/kzeng/projects/ai-platform-study/lightai-go/docs/reports/full-project-review
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:92:ls -la docs/reports/full-project-review
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:102:docs/reports/full-project-review/project-understanding-summary.md
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:103:docs/reports/full-project-review/full-project-review-report.md
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:104:docs/reports/full-project-review/issue-register.md
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:105:docs/reports/full-project-review/gpustack-gap-analysis.md
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:106:docs/reports/full-project-review/verification-log.md
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:107:docs/reports/full-project-review/recommended-hardening-plan.md
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:154:- Every required document exists in `docs/reports/full-project-review/`.
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:171:1. Scan all code/config/docs/scripts/Web/OpenAPI/tests for old runtime model names and paths.
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:560:3. Rewrite docs/ops and docs/testing around BackendRuntime/RunPlan.
+docs/reports/archive/full-project-review/rc3-full-hardening-execution-plan.md:697:- Old API/docs/config remnants: cleared or marked obsolete
+docs/reports/archive/full-project-review/project-understanding-summary.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/project-understanding-summary.md:24:The implementation is more advanced than the older Phase 0-2 wording in `docs/README.md`, but not yet mature enough to treat the model runtime path as production-ready.
+docs/reports/archive/full-project-review/project-understanding-summary.md:50:  - `docs/ops/`
+docs/reports/archive/full-project-review/project-understanding-summary.md:51:  - `docs/testing/`
+docs/reports/archive/full-project-review/project-understanding-summary.md:84:- `docs/README.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:85:- `docs/PHASE-STATUS.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:86:- `docs/RELEASE_NOTE_v0.1.9.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:87:- `docs/00-project-scope.md` through `docs/10-mvp-development-plan.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:88:- `docs/08-engineering-contracts.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:89:- `docs/09-auth-tenant-design.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:90:- `docs/GPU_COLLECTOR_ARCHITECTURE.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:91:- `docs/design/12-model-runtime-serving-design.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:92:- `docs/design/13-backend-runplan-runtime-design.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:93:- `docs/design/tenant-rbac-resource-ownership-design.md`
+docs/reports/archive/full-project-review/project-understanding-summary.md:94:- `docs/ops/*`
+docs/reports/archive/full-project-review/project-understanding-summary.md:95:- `docs/testing/*`
+docs/reports/archive/full-project-review/project-understanding-summary.md:96:- `docs/api/openapi.yaml`
+docs/reports/archive/full-project-review/project-understanding-summary.md:97:- RC/Phase review reports under `docs/reports/`, `docs/review/`
+docs/reports/archive/full-project-review/web-workflow-acceptance-checklist.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/recommended-hardening-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/recommended-hardening-plan.md:27:| Repair ops docs/scripts for new runtime model | `docs/ops`, `docs/testing`, scripts | Replace old RuntimeEnvironment/RunTemplate paths with BackendRuntime/RunPlan paths. | Execute docs as smoke script in disposable env. | Customer runbooks fail. |
+docs/reports/archive/full-project-review/recommended-hardening-plan.md:34:| Update OpenAPI | `docs/api/openapi.yaml`, route/DTO definitions | Regenerate or manually update all current `/api/v1` endpoints. | Diff route list against OpenAPI paths. | Integrator confusion. |
+docs/reports/archive/full-project-review/rc3-verification-matrix.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/rc3-verification-matrix.md:22:| Security | Release observability/LAN insecure | REVIEW-013 | Check docs + config | Reverse proxy/TLS guide created; agent token enforced; localhost default | docs/ops/reverse-proxy-tls.md | Fixed |
+docs/reports/archive/full-project-review/rc3-verification-matrix.md:23:| Security | TLS/HTTPS not documented | REVIEW-014 | Check docs | Reverse proxy deployment guide with nginx/Caddy examples | docs/ops/reverse-proxy-tls.md | Fixed |
+docs/reports/archive/full-project-review/gpustack-gap-analysis.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/gpustack-gap-analysis.md:14:| Runtime Model | GPUStack has inference backends, model instances, model routes, and gateway proxy. | LightAI recently moved to Backend/Runtime/RunPlan objects. | The current Server->Agent runtime payload is inconsistent with Docker execution, and old docs still reference removed APIs. | Stabilize one runtime object model, update docs/scripts/Web/API, then add gateway/API key later. |
+docs/reports/archive/full-project-review/gpustack-gap-analysis.md:19:| UI Architecture | GPUStack UI has service/request layers, access config, route config, hooks, locale files, and plugin extension points. | LightAI Web is compact Vue 3 app with Element Plus and direct API modules. | LightAI UI simplicity is fine, but tests are not wired and some docs/API paths are stale. | Keep simple UI; add runnable tests, API error states, and route/API contract checks. |
+docs/reports/archive/full-project-review/verification-log.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/verification-log.md:12:| `git status --short` | DIRTY | Initial status already had modified business files (`cmd/agent/main.go`, `cmd/server/main.go`, `internal/server/api/*`, `web/src/*`) and untracked `.mimocode/`, `docs/reports/rc2/`, `docs/superpowers/`. These were treated as user/pre-existing changes and not modified. |
+docs/reports/archive/full-project-review/log-traceability-followup.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/issue-register.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/issue-register.md:13:| REVIEW-004 | High | Reliability | Agent task claim is not a full lease/generation/idempotency implementation | `internal/server/api/agent_handlers.go:262-357` selects pending tasks then updates by ID without status/lease predicates; `agent_tasks` schema lacks `lease_owner`, `lease_expires_at`, `operation_id`, `attempt`, `max_attempts`; `docs/08-engineering-contracts.md:9-10` requires these semantics. | Concurrent heartbeats, delayed reports, retries, or restarted agents can produce duplicated or stale state transitions. | Implement contract-level task lease, generation, operation ID, and idempotent result acceptance. | Open |
+docs/reports/archive/full-project-review/issue-register.md:14:| REVIEW-005 | High | Reliability | No complete model instance reconciliation loop | `cmd/server/main.go:223-225` says sweep loop removed; Agent only processes tasks in `cmd/agent/main.go:724-950`; no startup scan of managed containers per `docs/08-engineering-contracts.md:11`. | Manual Docker changes, container crashes after successful task result, or Agent restart can leave DB state stale. | Add Agent container reconciliation and periodic status reports with generation/operation validation. | Open |
+docs/reports/archive/full-project-review/issue-register.md:15:| REVIEW-006 | High | Reliability | Stop path is not idempotent despite docs claiming it is | `internal/agent/runtime/docker.go:216-235` returns error when container is missing; `docs/ops/model-runtime-troubleshooting.md` states stop is idempotent and container absence is normal. | Operators may see failed stop operations and leaked leases for already-removed containers. | Treat missing container as successful stop for managed instances; release leases and update instance state. | Open |
+docs/reports/archive/full-project-review/issue-register.md:16:| REVIEW-007 | High | State Model | Failed task writes non-canonical `actual_state='error'` | `internal/server/api/agent_handlers.go:926-936`; documented states use `failed`, not `error` (`docs/07-instance-lifecycle-design.md:4`). | UI/status filters and operational docs may not recognize failed instances; lifecycle logic can miss them. | Normalize failure state to `failed` and migrate existing `error` rows if present. | Open |
+docs/reports/archive/full-project-review/issue-register.md:19:| REVIEW-010 | High | Database | Resource tables are created outside central migration and errors are ignored | `internal/server/api/resource_handlers.go:25-99` calls `database.Exec` for `gpu_devices`, system/filesystem/network tables without checking errors; `docs/08-engineering-contracts.md` requires consistent DB contracts. | Startup can continue with missing/drifted resource tables; upgrades depend on handler construction order. | Move all schema creation to migrations, check all errors, add schema verification tests. | Open |
+docs/reports/archive/full-project-review/issue-register.md:20:| REVIEW-011 | High | Upgrade | v0.1.9 release note documents no legacy tenant migration | `docs/RELEASE_NOTE_v0.1.9.md` says delete `data/lightai.db` if old `tenant_id='default'`. | Field upgrade can require data loss, which is not acceptable for pilot sites with accumulated node/runtime/model state. | Provide idempotent legacy migration or an explicit backup/upgrade tool. | Open |
+docs/reports/archive/full-project-review/issue-register.md:21:| REVIEW-012 | High | Documentation | Production/runtime docs still use removed API objects | `docs/ops/getting-started.md:37-43` references Runtime Environments and Run Templates; `docs/ops/model-runtime-e2e-local.md:140-184` uses `/runtime-environments` and `/run-templates`; code routes expose `/backend-runtimes` and no old routes. | Operators following docs will fail to create runtime/deployment objects. | Rewrite ops docs around BackendRuntime/ModelDeployment/RunPlan APIs and Web pages. | Open |
+docs/reports/archive/full-project-review/issue-register.md:23:| REVIEW-014 | High | Security | TLS/HTTPS is not implemented | `docs/PHASE-STATUS.md` lists TLS/HTTPS as a remaining limitation; release config binds `0.0.0.0`. | Session cookies, CSRF tokens, and admin actions travel over cleartext if deployed directly on LAN. | Add reverse-proxy reference deployment and TLS-ready config before pilot; implement native TLS later if needed. | Open |
+docs/reports/archive/full-project-review/issue-register.md:25:| REVIEW-016 | Medium | Web/API | OpenAPI is incomplete and version-stale | `docs/api/openapi.yaml` reports version `0.1.14`; routes in `internal/server/api/router.go` include many backend runtime/model/audit endpoints not fully described. | Integrators and support cannot rely on API contract docs. | Regenerate/update OpenAPI from current routes and DTOs; add API contract check. | Open |
+docs/reports/archive/full-project-review/issue-register.md:26:| REVIEW-017 | Medium | Observability | Bundled Prometheus/Grafana supervision remains script-oriented | `docs/PHASE-STATUS.md` states Go supervision is not fully implemented; scripts manage observability (`scripts/start-observability.sh`, `scripts/observability-up.sh`). | Service restarts, status, failures, and upgrades are harder to manage in pilot environments. | Decide product mode: systemd/script-managed or Go-managed; document and test the chosen model. | Open |
+docs/reports/archive/full-project-review/issue-register.md:27:| REVIEW-018 | Medium | GPU | MetaX real hardware validation remains incomplete | `docs/PHASE-STATUS.md` and `docs/RC1_REVIEW_FIX_PLAN.md` mark MetaX hardware pending. | MetaX delivery claims remain unproven for real 8-card hosts and field driver/tool output. | Run signed MetaX hardware verification and store sanitized evidence in reports/vendor samples. | Not Verified |
+docs/reports/archive/full-project-review/issue-register.md:30:| REVIEW-021 | Medium | Data Freshness | Server overwrites GPU `collected_at` with receive time | `internal/server/api/resource_handlers.go:207`, `316-340`; contract requires collector snapshot time (`docs/08-engineering-contracts.md:2`, `5`). | UI can show data as fresh even when Agent reports cached/stale collector data. | Store both `collected_at` and `reported_at`; use collector timestamp for data age and receive timestamp for transport health. | Open |
+docs/reports/archive/full-project-review/issue-register.md:34:| REVIEW-025 | Low | Documentation | Release/docs versions are inconsistent | `VERSION` was not asserted in docs; `docs/api/openapi.yaml` says `0.1.14`, `README-RELEASE.md` says `<version> (RC1)`, `docs/PHASE-STATUS.md` says RC2. | Support and upgrade discussions can reference the wrong artifact/version. | Maintain one release status source and update generated docs during packaging. | Open |
+docs/reports/archive/full-project-review/rc3-issue-closeout-register.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/rc3-issue-closeout-register.md:23:| REVIEW-014 | High | **Fixed** — TLS/reverse proxy deployment guide at docs/ops/reverse-proxy-tls.md | 2daed81 |
+docs/reports/archive/full-project-review/rc3-final-closeout-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/rc3-acceptance-criteria.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/full-project-review/rc3-clean-baseline-scope.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/README.md:6:> Read order: See `docs/CURRENT.md`
+docs/reports/archive/README.md:14:3. If an archived report conflicts with a current report under `docs/reports/<topic>/`, the current report wins.
+docs/reports/archive/README.md:15:4. If an archived report describes an unresolved issue, the issue must also appear in a current `open-issues-closeout.md` or `docs/reports/documentation-governance/open-issues.md`.
+docs/reports/archive/README.md:20:docs/reports/backend-runtime-runplan/
+docs/reports/archive/README.md:21:docs/reports/model-runtime-node-wizard/
+docs/reports/archive/README.md:22:docs/reports/documentation-governance/
+docs/reports/archive/phase-3/operation-lifecycle-logging-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/phase-3-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/final-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/final-report.md:48:| Logging coverage audit | Completed | docs/reports/phase-3/logging-coverage-audit.md |
+docs/reports/archive/phase-3/logging-hardening-final-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/logging-hardening-final-report.md:135:- `docs/reports/phase-3/logging-hardening-final-report.md` — this file
+docs/reports/archive/phase-3/phase-5-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/phase-5-report.md:39:- `docs/testing/model-runtime-gpu-smoke-tests.md`
+docs/reports/archive/phase-3/logging-coverage-audit.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/open-issues-closeout.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/phase-2-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/phase-1-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/phase-1-report.md:47:**Config:** configs/templates/runtime/, configs/templates/run/, configs/templates/docker-images.json, docs/templates-config.md
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:122:| `docs/design/13-backend-runplan-runtime-design.md` | Runtime design |
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:123:| `docs/plan/phase-*` (6 md) | Phase planning |
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:124:| `docs/reports/phase-3/` (8 md + 10 verification) | Audit/reports |
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:125:| `docs/review/gpustack-runtime-reference-review.md` | GPUStack review |
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:126:| `docs/testing/` (2 md) | Test documentation |
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:241:   - Files: `docs/reports/phase-3/`, `docs/design/`, `docs/plan/`, `docs/testing/`, `docs/review/`
+docs/reports/archive/phase-3/logging-hardening-progress.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/phase-4-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:5: M docs/PHASE-STATUS.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:6: M docs/review/phase-2g-full-review-fix-all-final-report.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:48:?? docs/design/13-backend-runplan-runtime-design.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:49:?? docs/plan/phase-2g-heartbeat-collection-time-investigation.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:50:?? docs/plan/phase-2h-web-node-visibility-investigation.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:51:?? docs/plan/phase-3-auto-execution-guard.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:52:?? docs/plan/phase-3-backend-runplan-refactor.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:53:?? docs/plan/phase-3-step-by-step-execution.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:54:?? docs/reports/
+docs/reports/archive/phase-3/verification/01-change-scope.txt:55:?? docs/review/gpustack-runtime-reference-review.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:56:?? docs/testing/
+docs/reports/archive/phase-3/verification/01-change-scope.txt:84: docs/PHASE-STATUS.md                               |   42 +-
+docs/reports/archive/phase-3/verification/01-change-scope.txt:132:M	docs/PHASE-STATUS.md
+docs/reports/archive/phase-3/verification/01-change-scope.txt:133:M	docs/review/phase-2g-full-review-fix-all-final-report.md
+docs/reports/archive/rc2-audit-open-issues-closeout.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/rc2/rc2-audit-verification-matrix.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/rc2/rc2-audit-verification-plan.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/rc2/rc2-audit-verification-plan.md:11:- **Audit source**: `docs/reports/rc2-audit-open-issues-closeout.md` (MiMoCode, 2026-06-17)
+docs/reports/archive/rc2/rc2-audit-remediation-report.md:4:> Current entrypoint: docs/CURRENT.md
+docs/reports/archive/rc2/rc2-audit-remediation-report.md:11:- **Audit source**: `docs/reports/rc2-audit-open-issues-closeout.md`
+docs/reports/backend-runtime-runplan/acceptance-report.md:6:> Read order: See `docs/CURRENT.md`
+docs/reports/backend-runtime-runplan/acceptance-report.md:167:- BRR-BLOCKER-001 is marked `FIXED` in `docs/reports/backend-runtime-runplan/open-issues-closeout.md`.
+docs/reports/backend-runtime-runplan/acceptance-report.md:189:docs/reports/backend-runtime-runplan/open-issues-closeout.md
+docs/reports/backend-runtime-runplan/acceptance-report.md:277:**Verification Dir:** `docs/reports/backend-runtime-runplan/final-verification-20260618-004001/`
+docs/reports/backend-runtime-runplan/claude-review-20260618.md:4:> Read order: See `docs/CURRENT.md`
+docs/reports/backend-runtime-runplan/claude-review-20260618.md:39:- `docs/backend-catalog-vendor-extension.md` — Vendor extension docs
+docs/reports/backend-runtime-runplan/open-issues-closeout.md:6:> Read order: See `docs/CURRENT.md`
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/e2e-output.log:80:(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: HEAD, GET
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/verify-dir.txt:1:docs/reports/backend-runtime-runplan/final-verification-20260618-004001
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/cleanup-evidence.log:8:docs/reports/backend-runtime-runplan/final-verification-20260618-004001/e2e-output.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/cleanup-evidence.log:9:docs/reports/backend-runtime-runplan/final-verification-20260618-004001/cleanup-evidence.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/cleanup-evidence.log:10:docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-this-run.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/cleanup-evidence.log:11:docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-e2e-filtered.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:2:-rw-r--r-- 1 kzeng kzeng 1.3K Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/start-all-retry.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:3:-rw-r--r-- 1 kzeng kzeng 159K Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-backup-before-clear/logs-before-clear.tar.gz
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:4:-rw-r--r-- 1 kzeng kzeng 15K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-e2e-filtered.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:5:-rw-r--r-- 1 kzeng kzeng 18K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/e2e-output.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:6:-rw-r--r-- 1 kzeng kzeng 19K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/agent-this-run.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:7:-rw-r--r-- 1 kzeng kzeng 19K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-this-run.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:8:-rw-r--r-- 1 kzeng kzeng 2 Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/e2e-exit-code.txt
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:9:-rw-r--r-- 1 kzeng kzeng 22 Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:10:-rw-r--r-- 1 kzeng kzeng 240 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-files-after-clear.txt
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:11:-rw-r--r-- 1 kzeng kzeng 333 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/stop-all.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:12:-rw-r--r-- 1 kzeng kzeng 4.0K Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-tail-after-restart.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:13:-rw-r--r-- 1 kzeng kzeng 476 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-files-before-clear.txt
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:14:-rw-r--r-- 1 kzeng kzeng 530 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/start-all.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:15:-rw-r--r-- 1 kzeng kzeng 604 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/scripts-list.txt
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:16:-rw-r--r-- 1 kzeng kzeng 7.6K Jun 18 00:43 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/agent-e2e-filtered.log
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:17:-rw-r--r-- 1 kzeng kzeng 72 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/verify-dir.txt
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-artifact-summary.txt:18:-rw-r--r-- 1 kzeng kzeng 92 Jun 18 00:40 docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-files-cleared.txt
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/agent-this-run.log:62:(APIServer pid=1) INFO 06-17 16:42:08 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: HEAD, GET
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-observability-review.md:4:> Read order: See `docs/CURRENT.md`
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-observability-review.md:9:**Verification Dir:** `docs/reports/backend-runtime-runplan/final-verification-20260618-004001/`
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-keyword-check.txt:21:docs/reports/backend-runtime-runplan/final-verification-20260618-004001/agent-this-run.log:2:2026-06-18 00:40:35.973 INFO  agent token loaded from shared file file=runtime/security/agent-token.env agent_token=<redacted>
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-keyword-check.txt:22:docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-this-run.log:1:2026-06-18 00:40:33.964 INFO  agent token loaded from existing file file=runtime/security/agent-token.env agent_token=<redacted>
+docs/reports/backend-runtime-runplan/current-state-audit.md:6:> Read order: See `docs/CURRENT.md`
+docs/reports/backend-runtime-runplan/current-state-audit.md:13:This audit compares the current repository with `docs/design/backend-runtime-runplan-docker.md`.
+docs/reports/backend-runtime-runplan/current-state-audit.md:31:R  docs/lightai-backend-runtime-runplan-docker-design.md -> docs/design/backend-runtime-runplan-docker.md
+docs/reports/backend-runtime-runplan/final-verification-20260618-005313/verify-dir.txt:1:docs/reports/backend-runtime-runplan/final-verification-20260618-005313
+docs/reports/README.md:6:> Read order: See `docs/CURRENT.md`
+docs/reports/README.md:23:docs/reports/archive/
+docs/reports/model-runtime-node-wizard/acceptance-report.md:6:> Read order: See `docs/CURRENT.md`
+docs/reports/model-runtime-node-wizard/acceptance-report.md:14:The single-node NVIDIA Docker wizard flow is verified end to end. A user can add a persisted node model root, browse and scan a model, create ModelArtifact and ModelLocation, select Backend/BackendVersion/BackendRuntime, preflight, start Docker, query `/v1/models`, inspect Docker logs through API, stop, and clean up. Remaining P2 product-depth items are recorded as formal `DOCUMENTED_BLOCKER` entries in `docs/reports/model-runtime-node-wizard/open-issues-closeout.md`.
+docs/reports/model-runtime-node-wizard/acceptance-report.md:181:docs/reports/model-runtime-node-wizard/full-run-chain-review.md
+docs/reports/model-runtime-node-wizard/acceptance-report.md:229:docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/
+docs/reports/model-runtime-node-wizard/acceptance-report.md:322:docs/reports/model-runtime-node-wizard/open-issues-closeout.md
+docs/reports/model-runtime-node-wizard/open-issues-closeout.md:6:> Read order: See `docs/CURRENT.md`
+docs/reports/model-runtime-node-wizard/full-run-chain-review.md:6:> Read order: See `docs/CURRENT.md`
+docs/reports/model-runtime-node-wizard/full-run-chain-review.md:12:The browser-to-Docker path is usable for formal NVIDIA local validation after this round: a user can add a node model root, browse and scan a model, create ModelArtifact/ModelLocation, enable NodeBackendRuntime, preflight, start Docker, inspect logs, stop, and clean up. Remaining product-depth gaps are tracked as formal entries in `docs/reports/model-runtime-node-wizard/open-issues-closeout.md`, not left only in this review.
+docs/reports/model-runtime-node-wizard/current-state-audit.md:6:> Read order: See `docs/CURRENT.md`
+docs/design/model-runtime-node-wizard.md:6:> Read order: See `docs/CURRENT.md`
+docs/design/model-runtime-node-wizard.md:9:**当前路径**：`docs/design/model-runtime-node-wizard.md`
+docs/design/README.md:6:> Read order: See `docs/CURRENT.md`
+docs/design/README.md:23:docs/archive/superseded/
+docs/design/README.md:30:Use lowercase kebab-case file names. New current designs should be added here. Historical or superseded designs should be moved to `docs/archive/superseded/`.
+docs/design/tenant-rbac-resource-ownership-design.md:4:> Read order: See `docs/CURRENT.md`
+docs/design/backend-runtime-runplan-docker.md:6:> Read order: See `docs/CURRENT.md`
+docs/design/backend-runtime-runplan-docker.md:8:> 当前路径：`docs/design/backend-runtime-runplan-docker.md`
+docs/06-model-design.md:4:> Read order: See `docs/CURRENT.md`
+docs/06-model-design.md:454:6. env、volume、port 等字段按 `docs/08-engineering-contracts.md` 的确定算法合并。
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:4:> Read order: See `docs/CURRENT.md`
+docs/CHANGELOG.md:4:> Read order: See `docs/CURRENT.md`
+docs/superpowers/plans/2026-06-17-totp-mfa.md:4:> Read order: See `docs/CURRENT.md`
+docs/08-engineering-contracts.md:4:> Read order: See `docs/CURRENT.md`
+docs/08-engineering-contracts.md:12:当 `docs/01-architecture.md` 至 `docs/07-instance-lifecycle-design.md`、`docs/10-mvp-development-plan.md` 与本文冲突时，以本文为准。专题文档可以补充实现细节，但不得改变本文定义的单位、字段语义、职责边界、合并算法和可靠性规则。
+docs/08-engineering-contracts.md:273:NVIDIA 和 MetaX Collector 的解析器必须基于测试环境采集的真实样例开发。采样流程和建议路径见 `docs/vendor-samples/README.md`。
+docs/08-engineering-contracts.md:288:详细设计见 `docs/09-auth-tenant-design.md`。跨模块必须遵守：
+docs/10-mvp-development-plan.md:4:> Read order: See `docs/CURRENT.md`
+docs/10-mvp-development-plan.md:330:2. 按 `docs/vendor-samples/README.md` 保存脱敏样例；
+docs/review/phase-2g-full-review-fix-all-final-report.md:4:> Read order: See `docs/CURRENT.md`
+docs/review/phase-2g-full-review-fix-all-final-report.md:10:Phase 2G addresses ALL 50 review findings from `docs/review/claude-full-project-review-20260616.md`. Every Critical, High, Medium, and Low item has been explicitly closed through code changes, test additions, documentation updates, or verified evidence of prior fix.
+docs/review/phase-2g-full-review-fix-all-final-report.md:59:| 42 | M24 | Medium | No OpenAPI/Swagger spec | Fixed: added openapi.yaml stub | `docs/api/openapi.yaml` |
+docs/review/phase-2g-full-review-fix-all-final-report.md:60:| 43 | M25 | Medium | Release notes gap v0.1.10-v0.1.14 | Fixed: consolidated changelog | `docs/CHANGELOG.md` |
+docs/review/phase-2g-full-review-fix-all-final-report.md:61:| 44 | M26 | Medium | No "Getting Started" for end users | Fixed: added deployment guide | `docs/ops/getting-started.md` |
+docs/review/phase-2g-full-review-fix-all-final-report.md:62:| 45 | M27 | Medium | Design docs outdated | Fixed: added banners + updated reading order | `docs/README.md`, `PHASE-STATUS.md` |
+docs/review/phase-2g-full-review-fix-all-final-report.md:63:| 46 | M28 | Medium | No architecture diagram | Fixed: added ASCII diagram | `docs/01-architecture.md` |
+docs/review/full-project-review-20260616.md:4:> Read order: See `docs/CURRENT.md`
+docs/review/full-project-review-20260616.md:43:| 1 | Plan + audit | docs/plan/phase-2f-*.md | - | plan doc | Done | - |
+docs/review/gpustack-runtime-reference-review.md:4:> Read order: See `docs/CURRENT.md`
+docs/review/gpustack-runtime-reference-review.md:301:GPUStack's `VersionConfig` under `InferenceBackend` bundles image, run_command, entrypoint, and env into a single dict per version. LightAI Go further splits this into three layers (see `docs/design/13-backend-runplan-runtime-design.md`):
+docs/review/claude-full-project-review-20260616.md:4:> Read order: See `docs/CURRENT.md`
+docs/review/claude-full-project-review-20260616.md:12:> Plan: `docs/review/claude-full-project-review-plan-20260616.md`
+docs/review/claude-full-project-review-20260616.md:258:| `README.md` / `docs/README.md` | Original Phase 0-2B window | Does not mention Phase 2F, model runtime, or tenant hardening |
+docs/review/claude-full-project-review-20260616.md:259:| `docs/00-project-scope.md` | Original | Not updated for post-2F status |
+docs/review/claude-full-project-review-20260616.md:260:| `docs/01-architecture.md` through `docs/10-*.md` | Original Phase 0-2B | Do not reflect model runtime implementation |
+docs/review/claude-full-project-review-20260616.md:261:| `docs/design/12-model-runtime-serving-design.md` | New | Matches implementation. V6/V7 migrations documented |
+docs/review/claude-full-project-review-20260616.md:262:| `docs/ops/model-runtime-e2e-local.md` | New | Good operational documentation |
+docs/review/claude-full-project-review-20260616.md:263:| `docs/ops/model-runtime-troubleshooting.md` | New | Practical troubleshooting guide |
+docs/review/claude-full-project-review-20260616.md:265:**Recommendation**: `docs/README.md`, `docs/PHASE-STATUS.md`, and `docs/00-project-scope.md` need updates to reflect post-Phase-2F reality. Release notes for v0.1.10 through v0.1.14 should be consolidated.
+docs/review/claude-full-project-review-20260616.md:583:| `docs/README.md` | ⚠️ Phase 0-2B window | ⚠️ Doesn't reflect post-2F | Reading order still valid |
+docs/review/claude-full-project-review-20260616.md:584:| `docs/PHASE-STATUS.md` | ✅ 2026-06-14 | ✅ | Phase tracking |
+docs/review/claude-full-project-review-20260616.md:585:| `docs/00-project-scope.md` | ⚠️ Original | ⚠️ Pre-dates model runtime | Scope definition |
+docs/review/claude-full-project-review-20260616.md:586:| `docs/01-architecture.md` | ⚠️ Original | ⚠️ Pre-dates model runtime | Architecture overview |
+docs/review/claude-full-project-review-20260616.md:587:| `docs/02-07` design docs | ⚠️ Original Phase 0-2B | Partial | Foundation design |
+docs/review/claude-full-project-review-20260616.md:588:| `docs/08-engineering-contracts.md` | ✅ | ✅ Excellent | Cross-module rules |
+docs/review/claude-full-project-review-20260616.md:589:| `docs/09-auth-tenant-design.md` | ✅ | ✅ | Auth/RBAC |
+docs/review/claude-full-project-review-20260616.md:590:| `docs/10-mvp-development-plan.md` | ⚠️ Original | ⚠️ Don't reflect current phase | Historical |
+docs/review/claude-full-project-review-20260616.md:591:| `docs/design/12-model-runtime-serving-design.md` | ✅ New | ✅ | Model runtime |
+docs/review/claude-full-project-review-20260616.md:592:| `docs/plan/12-*.md` | ✅ New | ✅ | Phase plans |
+docs/review/claude-full-project-review-20260616.md:593:| `docs/ops/model-runtime-e2e-local.md` | ✅ New | ✅ | E2E operations |
+docs/review/claude-full-project-review-20260616.md:594:| `docs/ops/model-runtime-troubleshooting.md` | ✅ New | ✅ | Troubleshooting |
+docs/review/claude-full-project-review-20260616.md:595:| `docs/ops/tenant-rbac-resource-ownership-operations.md` | ✅ New | ✅ | Tenant ops |
+docs/review/claude-full-project-review-20260616.md:596:| `docs/RC1_REVIEW_FIX_PLAN.md` | ✅ | ✅ | RC1 tracking |
+docs/review/claude-full-project-review-20260616.md:597:| `docs/RC1_CODEX_REVIEW_TRACKING.md` | ✅ | ✅ | Codex review |
+docs/review/claude-full-project-review-20260616.md:598:| `docs/GPU_COLLECTOR_ARCHITECTURE.md` | ✅ | ✅ | GPU architecture |
+docs/review/claude-full-project-review-20260616.md:599:| `docs/REVIEW-GPUSTACK-AUDIT.md` | ✅ | ✅ | GPUStack reference |
+docs/review/claude-full-project-review-20260616.md:600:| `docs/REVIEW-GPUSTACK-UI.md` | ✅ | ✅ | GPUStack UI reference |
+docs/review/claude-full-project-review-20260616.md:612:5. **Design docs outdated**: `docs/01`–`docs/10` were written for Phase 0-2B window and haven't been updated to reflect model runtime implementation.
+docs/review/claude-full-project-review-20260616.md:617:- `docs/plan/phase-2f-*.md` files are detailed but partially redundant with each other
+docs/review/claude-full-project-review-20260616.md:618:- `docs/design/tenant-rbac-resource-ownership-design.md` overlaps with `docs/09-auth-tenant-design.md`
+docs/review/claude-full-project-review-20260616.md:808:| M27 | Design docs outdated | `docs/01`–`docs/10` | Developers see stale information | Update docs to reflect current implementation | No | M | No | Yes |
+docs/review/claude-full-project-review-20260616.md:1021:docs/                       — Design, plan, ops, review documentation
+docs/review/claude-full-project-review-plan-20260616.md:4:> Read order: See `docs/CURRENT.md`
+docs/review/claude-full-project-review-plan-20260616.md:37:6. **Documentation** (`docs/`): design, plan, ops, review, README, release notes
+docs/review/claude-full-project-review-plan-20260616.md:90:docs/review/claude-full-project-review-20260616.md
+docs/ops/model-runtime-troubleshooting.md:4:> Read order: See `docs/CURRENT.md`
+docs/ops/reverse-proxy-tls.md:4:> Read order: See `docs/CURRENT.md`
+docs/ops/reverse-proxy-tls.md:90:- This is a documented known limitation per `docs/PHASE-STATUS.md`.
+docs/ops/tenant-rbac-resource-ownership-operations.md:4:> Read order: See `docs/CURRENT.md`
+docs/ops/getting-started.md:4:> Read order: See `docs/CURRENT.md`
+docs/ops/getting-started.md:79:See `docs/ops/model-runtime-troubleshooting.md` for model runtime issues.
+docs/ops/model-runtime-e2e-local.md:4:> Read order: See `docs/CURRENT.md`
+docs/09-auth-tenant-design.md:4:> Read order: See `docs/CURRENT.md`
+docs/PHASE-STATUS.md:6:> Read order: See `docs/CURRENT.md`
+docs/PHASE-STATUS.md:15:The detailed current entrypoint is `docs/CURRENT.md`.
+docs/PHASE-STATUS.md:22:| Auth, tenant, RBAC | Done | `docs/RELEASE_NOTE_v0.1.9.md`, current API |
+docs/PHASE-STATUS.md:35:| Backend catalog | Implemented | `configs/backend-catalog/`, `docs/design/backend-runtime-runplan-docker.md` |
+docs/PHASE-STATUS.md:36:| Backend / BackendVersion / BackendRuntime | Implemented | `docs/reports/backend-runtime-runplan/acceptance-report.md` |
+docs/PHASE-STATUS.md:40:| Docker logs through Server -> Agent | Implemented | `docs/reports/backend-runtime-runplan/open-issues-closeout.md` |
+docs/PHASE-STATUS.md:41:| ModelArtifact / ModelLocation | Implemented | `docs/reports/model-runtime-node-wizard/acceptance-report.md` |
+docs/PHASE-STATUS.md:42:| node_model_roots policy | Implemented | `docs/design/model-runtime-node-wizard.md` |
+docs/PHASE-STATUS.md:43:| Model/runtime/deployment wizard | Accepted with P2 gaps | `docs/reports/model-runtime-node-wizard/full-run-chain-review.md` |
+docs/PHASE-STATUS.md:68:docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/
+docs/PHASE-STATUS.md:75:| MetaX real hardware validation | DOCUMENTED_BLOCKER | `docs/reports/backend-runtime-runplan/open-issues-closeout.md` |
+docs/PHASE-STATUS.md:76:| Huawei vendor adapter | DOCUMENTED_BLOCKER | `docs/reports/backend-runtime-runplan/open-issues-closeout.md` |
+docs/PHASE-STATUS.md:77:| Model consistency deep comparison | DOCUMENTED_BLOCKER | `docs/reports/model-runtime-node-wizard/open-issues-closeout.md` |
+docs/PHASE-STATUS.md:78:| GPU auto/manual UX and lease display | DOCUMENTED_BLOCKER | `docs/reports/model-runtime-node-wizard/open-issues-closeout.md` |
+docs/PHASE-STATUS.md:79:| Documentation governance findings | Tracked | `docs/reports/documentation-governance/open-issues.md` |
+docs/PHASE-STATUS.md:93:docs/archive/
+docs/PHASE-STATUS.md:94:docs/reports/archive/
+docs/PHASE-STATUS.md:97:They are historical evidence only and must not override `docs/CURRENT.md`.
+docs/03-resource-monitoring-design.md:4:> Read order: See `docs/CURRENT.md`
+docs/RUNBOOK-LOCAL-VERIFY.md:4:> Read order: See `docs/CURRENT.md`
+docs/RELEASE_NOTE_v0.1.9.md:4:> Read order: See `docs/CURRENT.md`
+docs/01-architecture.md:4:> Read order: See `docs/CURRENT.md`
+docs/01-architecture.md:14:Server 同时负责本地用户、Tenant、Membership、RBAC、Session、tenant scope 和资源审计归属。基础身份设计见 `docs/09-auth-tenant-design.md`。
+docs/01-architecture.md:285:动态发现不以 Node 的业务 `online/offline` 状态作为过滤条件，具体契约见 `docs/08-engineering-contracts.md`。
+docs/01-architecture.md:493:三种模式的完整行为矩阵见 `docs/08-engineering-contracts.md`。
+docs/plan/README.md:6:> Read order: See `docs/CURRENT.md`
+docs/plan/README.md:22:docs/archive/old-plans/
+docs/plan/future-roadmap.md:6:> Read order: See `docs/CURRENT.md`
+docs/plan/future-roadmap.md:14:| BackendRuntime / RunPlan / Docker lifecycle | `docs/reports/backend-runtime-runplan/open-issues-closeout.md` |
+docs/plan/future-roadmap.md:15:| Model/runtime wizard | `docs/reports/model-runtime-node-wizard/open-issues-closeout.md` |
+docs/plan/future-roadmap.md:16:| Documentation governance | `docs/reports/documentation-governance/open-issues.md` |
+docs/plan/phase-4-model-runtime-wizard-implementation.md:4:> Read order: See `docs/CURRENT.md`

@@ -1,3 +1,8 @@
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Reference document; not the current entrypoint
+> Read order: See `docs/CURRENT.md`
+
 # GPUStack Runtime Reference Review
 
 > LightAI Go Phase 0 — GPUStack model runtime chain research for upcoming refactor.

@@ -1,3 +1,8 @@
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Reference document; not the current entrypoint
+> Read order: See `docs/CURRENT.md`
+
 # GPU 厂商采集样例说明
 
 本目录用于保存 NVIDIA 和 MetaX Collector 的脱敏测试夹具。不得提交客户现场或测试机器的未脱敏真实输出。
