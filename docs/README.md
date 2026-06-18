@@ -107,3 +107,7 @@ Archive documents are historical evidence only. Do not use archive documents as 
 4. Treat `docs/archive/` and `docs/reports/archive/` as historical evidence only.
 5. Do not infer unresolved work from old phase plans; check the topic `open-issues-closeout.md` files.
 6. Do not mark MetaX or Huawei runtime paths ready unless they have real hardware validation evidence.
+
+## Backend Runtime Testing
+
+- [Backend Runtime E2E Matrix and Parameter Propagation](testing/backend-runtime-e2e-matrix-and-param-propagation.md)
