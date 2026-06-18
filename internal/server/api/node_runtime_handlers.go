@@ -47,22 +47,32 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
+	needsRecheck := false
 	for _, f := range []string{"image_ref", "image_id", "image_digest", "driver_version", "toolkit_version"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
 			args = append(args, v)
+			// Editing image-ref fields invalidates ready status
+			if f == "image_ref" || f == "image_id" || f == "image_digest" {
+				needsRecheck = true
+			}
 		}
 	}
 	if v, ok := req["image_present"]; ok {
 		if b, ok := v.(bool); ok {
 			sets = append(sets, "image_present = ?")
 			args = append(args, boolInt(b))
+			needsRecheck = true
 		}
 	}
 	if v, ok := req["disabled"]; ok {
 		if b, ok := v.(bool); ok && b {
 			sets = append(sets, "status = 'disabled'")
+			needsRecheck = false // explicit disable overrides needs_check
 		}
+	}
+	if needsRecheck {
+		sets = append(sets, "status = 'needs_check'")
 	}
 	args = append(args, nbrID)
 	if _, err := h.DB.Exec(`UPDATE node_backend_runtimes SET `+joinSets(sets)+` WHERE id = ?`, args...); err != nil {

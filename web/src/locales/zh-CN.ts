@@ -365,6 +365,7 @@ export default {
     unsupported_device: '设备不支持',
     template_only: '仅模板',
     verified: '已验证',
+    needs_check: '需重新检测',
   },
   backends: {title:"推理后端",name:"名称",displayName:"显示名称",defaultVersion:"默认版本",paramFormat:"参数格式",commonParams:"常用参数",versions:"版本列表",detail:"后端详情",isDefault:"默认",port:"端口",actions:"操作"},
   runtimes: {title:"运行模板",name:"名称",displayName:"显示名称",vendor:"厂商",type:"类型",image:"镜像",templateName:"模板名称",createFromTemplate:"从模板创建",selectTemplate:"选择模板",managedBy:"管理方",systemManaged:"系统",userManaged:"用户",editRuntime:"编辑运行模板",systemReadonly:"系统内置模板只读，需要修改时请复制为用户自定义模板。",highRiskOptions:"高风险选项",listOptions:"列表选项",customOptions:"自定义参数",commandPreview:"命令预览",dockerOptions:"Docker 参数",privileged:"特权模式",ipcMode:"IPC 模式",utsMode:"UTS 模式",networkMode:"网络模式",pidMode:"PID 模式",shmSize:"共享内存大小",privilegedRisk:"授予容器较高权限，仅可信模板可启用。",namespaceRisk:"与宿主机共享命名空间，启用前需确认隔离影响。",resourceRisk:"会改变宿主机资源暴露，启用前请确认节点容量。",devices:"设备",optionalDevices:"可选设备",groupAdd:"附加用户组",securityOpt:"安全选项",capAdd:"能力",deviceCgroupRules:"设备 Cgroup 规则",extraHosts:"额外 Hosts",ulimits:"Ulimit",env:"环境变量",extraMounts:"额外挂载",customArgs:"自定义 Args",customEnv:"自定义 Env",customDockerOptions:"自定义 Docker Options",created:"模板已创建",saved:"模板已保存",deleted:"模板已删除",deleteConfirm:"确认删除 {name}？",clone:"复制",cloned:"模板已复制",customSuffix:" - 用户配置"},

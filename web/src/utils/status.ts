@@ -18,6 +18,7 @@ export function getStatusType(status: string): StatusType {
     case 'reserved':
     case 'leased':
     case 'syncing':
+    case 'needs_check':
       return 'warning'
     case 'error':
     case 'failed':

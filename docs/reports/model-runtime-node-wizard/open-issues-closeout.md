@@ -47,3 +47,16 @@ No problems from this round are left only in chat history.
 | MRW-POL-009 | Enabling runtime on node created BackendRuntime clone → polluted template list | `RunnerConfigsPage.doCreateConfig` called `/clone` then `/enable`, creating a new BackendRuntime per node enablement | User templates appeared in "运行模板" list after node enable | FIXED | Removed clone step; `doCreateConfig` now only calls `/enable` with existing template ID. `RunnerConfigsPage` now shows NodeBackendRuntime records (node-level configs). Template list shows BackendRuntime only. | Build/test PASS | Closed |
 
 No problems from this round are left only in chat history.
+
+---
+
+## 2026-06-18 Design Round: Template / Node-Config Boundary Formalization
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-DES-001 | BackendRuntime / NodeBackendRuntime boundary not formally documented | No design doc described the template vs node-config relationship, edit semantics, or status lifecycle | Agents and future developers could conflate the two concepts | FIXED | `docs/design/runtime-template-node-runtime-snapshot.md` (new), `docs/design/README.md`, `docs/README.md`, `docs/CURRENT.md` | Design doc reviewed; all doc links updated | Closed |
+| MRW-DES-002 | Editing NodeBackendRuntime image fields did not invalidate ready status | `HandlePatchNodeBackendRuntime` updated image_ref/image_present but left status='ready' | Node config could be edited and still show ready without re-check | FIXED | `internal/server/api/node_runtime_handlers.go` — added `needsRecheck` flag that sets `status='needs_check'` when image_ref/image_id/image_digest/image_present change | `go test ./...` PASS; `go vet ./...` PASS | Closed |
+| MRW-DES-003 | `needs_check` status not in i18n or status type mapping | New status value from DES-002 not translatable | Users would see raw English status text | FIXED | `web/src/locales/zh-CN.ts` (+`needs_check: '需重新检测'`), `web/src/locales/en-US.ts` (+`needs_check: 'Needs Check'`), `web/src/utils/status.ts` (warning type) | `npm run build` PASS; `npm test` PASS | Closed |
+| MRW-DES-004 | Template re-apply / template change not implemented | Design describes these as explicit user actions with diff UI | Operators cannot switch NodeBackendRuntime source template | DOCUMENTED_BLOCKER | Future: NodeBackendRuntime edit UI + diff display + explicit confirmation | Add diff UI and re-apply/change buttons with status invalidation | P2 future enhancement |
+
+No problems from this round are left only in chat history.

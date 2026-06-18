@@ -31,7 +31,8 @@ Users must explicitly add a model directory before browse / scan / save.
 
 1. `docs/CURRENT.md`
 2. `docs/design/backend-runtime-runplan-docker.md`
-3. `docs/design/model-runtime-node-wizard.md`
+3. `docs/design/runtime-template-node-runtime-snapshot.md`
+4. `docs/design/model-runtime-node-wizard.md`
 4. `docs/reports/backend-runtime-runplan/acceptance-report.md`
 5. `docs/reports/model-runtime-node-wizard/acceptance-report.md`
 6. `docs/reports/model-runtime-node-wizard/full-run-chain-review.md`
@@ -43,6 +44,7 @@ Users must explicitly add a model directory before browse / scan / save.
 | Document | Purpose |
 | --- | --- |
 | `docs/design/backend-runtime-runplan-docker.md` | Current Backend / BackendVersion / BackendRuntime / RunPlan Docker design |
+| `docs/design/runtime-template-node-runtime-snapshot.md` | BackendRuntime vs NodeBackendRuntime: template and node config boundary |
 | `docs/design/model-runtime-node-wizard.md` | Current model root, model wizard, runtime wizard, and deployment wizard design |
 | `docs/design/tenant-rbac-resource-ownership-design.md` | Tenant/RBAC ownership reference |
 | `docs/backend-catalog-vendor-extension.md` | Backend catalog vendor extension reference |
