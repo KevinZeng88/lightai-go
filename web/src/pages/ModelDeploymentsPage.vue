@@ -99,7 +99,18 @@
           <el-table-column prop="status" :label="$t('preflight.canRun')" width="80" />
         </el-table>
         <div v-if="preflightResult?.errors?.length" style="margin-top:8px">
-          <el-alert v-for="e in preflightResult.errors" :key="e" type="error" :title="e" show-icon :closable="false" />
+          <el-alert v-for="(e, idx) in preflightResult.errors" :key="idx" type="error" :closable="false">
+            <template #title>
+              {{ preflightErrorText(e) }}
+            </template>
+            <template v-if="e.context" #default>
+              <div style="font-size:12px;color:var(--el-color-info);margin-top:4px">
+                <span v-if="e.context.node_id">node: {{ e.context.node_id }}</span>
+                <span v-if="e.context.artifact_id"> | artifact: {{ e.context.artifact_id }}</span>
+                <span v-if="e.context.runtime_id"> | runtime: {{ e.context.runtime_id }}</span>
+              </div>
+            </template>
+          </el-alert>
         </div>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="wizardStep=3">{{ $t('common.prev') }}</el-button>
@@ -189,6 +200,28 @@ async function handleDelete(row: any) {
 
 // ---- Start Wizard ----
 const filteredRuntimes = computed(() => runtimes.value.filter((r) => !wizardVersionId.value || r.backend_version_id === wizardVersionId.value))
+
+// Map preflight error code to i18n-keyed user-facing text.
+function preflightErrorText(e: any): string {
+  if (!e || typeof e !== 'object') return String(e)
+  // Structured error with code
+  if (e.code) {
+    const codeMap: Record<string, string> = {
+      model_location_missing: 'preflight.reason.modelLocationMissing',
+      node_backend_runtime_not_ready: 'preflight.reason.nbrNotReady',
+      node_offline: 'preflight.reason.nodeOffline',
+      backend_version_mismatch: 'preflight.reason.backendVersionMismatch',
+      docker_image_missing: 'preflight.reason.dockerImageMissing',
+      runtime_disabled: 'preflight.reason.runtimeDisabled',
+    }
+    const i18nKey = codeMap[e.code]
+    if (i18nKey) return t(i18nKey)
+    // Fallback: show the message but prefixed with code
+    return `[${e.code}] ${e.message || ''}`
+  }
+  // Legacy string error (backward compat)
+  return typeof e === 'string' ? e : (e.message || JSON.stringify(e))
+}
 
 async function onBackendSelected() {
   wizardVersionId.value = ''

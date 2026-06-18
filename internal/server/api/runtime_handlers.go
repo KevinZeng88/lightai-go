@@ -269,12 +269,35 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 	if checkOnly && status == "unknown" {
 		reason = "check request did not provide docker/image evidence"
 	}
+
+	// Capture a config snapshot from the BackendRuntime template at enable/check time.
+	// This freezes the runtime configuration so future template edits do not
+	// silently change the behavior of existing NodeBackendRuntime records.
+	snapshot := map[string]interface{}{
+		"source_runtime_id":        runtimeID,
+		"source_runtime_name":      strVal(rt, "name", ""),
+		"source_runtime_revision":  strVal(rt, "updated_at", ""),
+		"backend_id":               strVal(rt, "backend_id", ""),
+		"backend_version_id":       strVal(rt, "backend_version_id", ""),
+		"vendor":                   strVal(rt, "vendor", ""),
+		"runtime_type":             strVal(rt, "runtime_type", "docker"),
+		"image_name":               strVal(rt, "image_name", ""),
+		"image_pull_policy":        strVal(rt, "image_pull_policy", "if_not_present"),
+		"entrypoint_override_json": rt["entrypoint_override_json"],
+		"args_override_json":       rt["args_override_json"],
+		"default_env_json":         rt["default_env_json"],
+		"docker_json":              rt["docker_json"],
+		"model_mount_json":         rt["model_mount_json"],
+		"health_check_override_json": rt["health_check_override_json"],
+	}
+	snapshotJSON := jsonString(snapshot)
+
 	id := nodeID + ":" + runtimeID
 	tid := tenantID(r)
 	now := time.Now().Format(time.RFC3339)
 	_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
-		(id, backend_runtime_id, node_id, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, tenant_id, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		(id, backend_runtime_id, node_id, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(node_id, backend_runtime_id) DO UPDATE SET
 			image_ref=excluded.image_ref,
 			image_present=excluded.image_present,
@@ -285,10 +308,13 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 			status=excluded.status,
 			status_reason=excluded.status_reason,
 			last_checked_at=excluded.last_checked_at,
+			config_snapshot_json=excluded.config_snapshot_json,
+			source_runtime_name=excluded.source_runtime_name,
+			source_runtime_revision=excluded.source_runtime_revision,
 			updated_at=excluded.updated_at`,
 		id, runtimeID, nodeID, "docker", imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
 		strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
-		status, reason, now, tid, now, now)
+		status, reason, now, snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""), tid, now, now)
 	if err != nil {
 		log.Error("node backend runtime upsert failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")

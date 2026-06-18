@@ -12,6 +12,7 @@ This directory contains current design documents and active reference designs.
 | File | Purpose |
 | --- | --- |
 | `backend-runtime-runplan-docker.md` | Current Backend / BackendVersion / BackendRuntime / RunPlan Docker design |
+| `runtime-template-node-runtime-snapshot.md` | BackendRuntime vs NodeBackendRuntime: formal template/node-config boundary |
 | `model-runtime-node-wizard.md` | Current model root policy, model wizard, runtime wizard, and deployment wizard design |
 | `tenant-rbac-resource-ownership-design.md` | Tenant/RBAC ownership design reference |
 

@@ -10,7 +10,7 @@
 Current branch verified during documentation governance:
 
 ```text
-main
+fix-runtime-template-node-config-ux
 ```
 
 Current relevant baseline:
@@ -116,6 +116,28 @@ The currently validated local NVIDIA single-node flow is:
 ```
 
 Server command preview must come from the Server RunPlan resolver, not from front-end Docker string concatenation.
+
+## BackendRuntime / NodeBackendRuntime Boundary
+
+Formal design for template vs node-level runtime config:
+
+```text
+docs/design/runtime-template-node-runtime-snapshot.md
+```
+
+Key rules:
+
+```text
+BackendRuntime = template (no node binding).
+NodeBackendRuntime = node-level config with frozen config_snapshot_json.
+NBR snapshot captured at enable/check time (args, env, docker, mounts, health_check).
+RunPlan resolver reads NBR snapshot, not live BackendRuntime.
+BackendRuntime template edits do NOT affect existing NodeBackendRuntime RunPlans.
+Editing NodeBackendRuntime image/snapshot fields invalidates ready status → needs_check.
+Model mount resolved per-node: host = model_root + / + relative_path.
+Container model path standardized: /models/<relative_path>.
+Template list shows BackendRuntime only; RunnerConfigsPage shows NodeBackendRuntime.
+```
 
 ## E2E Evidence
 

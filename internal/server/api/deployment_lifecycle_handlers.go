@@ -255,6 +255,14 @@ func (h *AgentHandler) HandleDeleteDeployment(w http.ResponseWriter, r *http.Req
 // Start / Stop Lifecycle
 // ==========================================================================
 
+// PreflightError is a structured preflight validation error with a stable
+// code for frontend i18n mapping and a human-readable message for logs.
+type PreflightError struct {
+	Code    string                 `json:"code"`
+	Message string                 `json:"message"`
+	Context map[string]interface{} `json:"context,omitempty"`
+}
+
 // preflightResult holds the output of the shared pre-start validation and
 // resolution logic used by both dry-run and real start.
 type preflightResult struct {
@@ -262,6 +270,8 @@ type preflightResult struct {
 	artifactID string
 	artifact   map[string]interface{}
 	runtimeID  string
+	nbrSnapshot string // config_snapshot_json from NodeBackendRuntime
+	nbrImageRef string // image_ref from NodeBackendRuntime
 	placement  struct {
 		NodeID string
 		GPUIds []string
@@ -298,9 +308,14 @@ type preflightResult struct {
 	relativePath      string
 	absolutePath      string
 	plan              *runplan.ResolvedRunPlan
-	errs              []string
+	errs              []PreflightError
 	warns             []string
 	commandPreview    string
+}
+
+// addErr appends a structured PreflightError to the result.
+func (pf *preflightResult) addErr(code, message string, ctx map[string]interface{}) {
+	pf.errs = append(pf.errs, PreflightError{Code: code, Message: message, Context: ctx})
 }
 
 // preflightDeployment performs all pre-start validation and resolution steps
@@ -311,11 +326,11 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 
 	deploy := h.getDeploymentJSON(deployID)
 	if deploy == nil {
-		pf.errs = append(pf.errs, "deployment not found")
+		pf.addErr("unknown", "deployment not found", nil)
 		return pf
 	}
 	if !tenantScopeCheck(r, deploy["tenant_id"].(string)) {
-		pf.errs = append(pf.errs, "deployment not found")
+		pf.addErr("unknown", "deployment not found", nil)
 		return pf
 	}
 	pf.deploy = deploy
@@ -323,11 +338,11 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	pf.artifactID = strVal(deploy, "model_artifact_id", "")
 	pf.runtimeID = strVal(deploy, "backend_runtime_id", "")
 	if pf.artifactID == "" {
-		pf.errs = append(pf.errs, "model_artifact_id is required")
+		pf.addErr("unknown", "model_artifact_id is required", map[string]interface{}{"artifact_id": pf.artifactID})
 		return pf
 	}
 	if pf.runtimeID == "" {
-		pf.errs = append(pf.errs, "backend_runtime_id is required")
+		pf.addErr("unknown", "backend_runtime_id is required", map[string]interface{}{"runtime_id": pf.runtimeID})
 		return pf
 	}
 
@@ -344,7 +359,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	// Validate artifact exists.
 	artifact := h.getArtifactJSON(pf.artifactID)
 	if artifact == nil {
-		pf.errs = append(pf.errs, "model artifact not found")
+		pf.addErr("model_location_missing", "model artifact not found", map[string]interface{}{"artifact_id": pf.artifactID})
 		return pf
 	}
 	pf.artifact = artifact
@@ -359,7 +374,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 			h.DB.QueryRow(`SELECT id FROM nodes WHERE status = 'online' AND tenant_id = ? LIMIT 1`, deployTid).Scan(&autoNodeID)
 		}
 		if autoNodeID == "" {
-			pf.errs = append(pf.errs, "no online node available for deployment")
+			pf.addErr("node_offline", "no online node available for deployment", nil)
 			return pf
 		}
 		pf.placement.NodeID = autoNodeID
@@ -384,11 +399,11 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		}
 	}
 
-	// Validate NodeBackendRuntime readiness.
+	// Validate NodeBackendRuntime readiness and read snapshot + image_ref.
 	var nodeRuntimeStatus string
-	h.DB.QueryRow(`SELECT id, status FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, pf.placement.NodeID, pf.runtimeID).Scan(&pf.nodeRuntimeID, &nodeRuntimeStatus)
+	h.DB.QueryRow(`SELECT id, status, COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, pf.placement.NodeID, pf.runtimeID).Scan(&pf.nodeRuntimeID, &nodeRuntimeStatus, &pf.nbrSnapshot, &pf.nbrImageRef)
 	if pf.nodeRuntimeID == "" || nodeRuntimeStatus != "ready" {
-		pf.errs = append(pf.errs, fmt.Sprintf("node backend runtime is not ready (status=%s). Enable and check the BackendRuntime on the target node before starting.", nodeRuntimeStatus))
+		pf.addErr("node_backend_runtime_not_ready", fmt.Sprintf("node backend runtime is not ready (status=%s)", nodeRuntimeStatus), map[string]interface{}{"node_id": pf.placement.NodeID, "runtime_id": pf.runtimeID, "node_runtime_id": pf.nodeRuntimeID, "nbr_status": nodeRuntimeStatus})
 		return pf
 	}
 
@@ -399,7 +414,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		WHERE model_artifact_id = ? AND node_id = ? AND verification_status IN ('verified','warning','manually_accepted') AND match_status IN ('exact_match','probable_match','manual_attested')
 		ORDER BY updated_at DESC LIMIT 1`, pf.artifactID, pf.placement.NodeID).Scan(&pf.locationID, &pf.modelRoot, &pf.relativePath, &pf.absolutePath, &verificationStatus, &matchStatus)
 	if pf.locationID == "" {
-		pf.errs = append(pf.errs, fmt.Sprintf("model location is not available on target node %s for artifact %s. Add a ModelLocation before starting.", pf.placement.NodeID, pf.artifactID))
+		pf.addErr("model_location_missing", fmt.Sprintf("model location is not available on target node %s for artifact %s", pf.placement.NodeID, pf.artifactID), map[string]interface{}{"node_id": pf.placement.NodeID, "artifact_id": pf.artifactID})
 		return pf
 	}
 	_ = verificationStatus
@@ -443,21 +458,80 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	var defaultArgs []string
 	json.Unmarshal([]byte(pf.bvArgs), &defaultArgs)
 
+	// If NodeBackendRuntime has a config snapshot, use it for runtime configuration
+	// instead of the live BackendRuntime template. This decouples node runs from
+	// future template edits.
+	if pf.nbrSnapshot != "" && pf.nbrSnapshot != "{}" {
+		var snap map[string]interface{}
+		if json.Unmarshal([]byte(pf.nbrSnapshot), &snap) == nil {
+			if v, ok := snap["args_override_json"]; ok {
+				var snapArgs []string
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapArgs) == nil {
+					argsOverride = snapArgs
+				}
+			}
+			if v, ok := snap["entrypoint_override_json"]; ok {
+				var snapEntry []string
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapEntry) == nil && len(snapEntry) > 0 {
+					rtEntryOverride = snapEntry
+					entrypoint = snapEntry
+				}
+			}
+			if v, ok := snap["default_env_json"]; ok {
+				var snapEnv map[string]string
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapEnv) == nil {
+					rtEnvMap = snapEnv
+				}
+			}
+			if v, ok := snap["docker_json"]; ok {
+				var snapDocker runplan.DockerSpecInfo
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapDocker) == nil {
+					dockerSpec = snapDocker
+				}
+			}
+			if v, ok := snap["model_mount_json"]; ok {
+				var snapMount runplan.ModelMountInfo
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapMount) == nil {
+					modelMount = snapMount
+				}
+			}
+			if v, ok := snap["image_name"]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					pf.rtImage = s
+				}
+			}
+			if v, ok := snap["vendor"]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					pf.rtVendor = s
+				}
+			}
+		}
+	}
+
+	// Build NodeRuntimeOverride from NBR image_ref (node-level image override).
+	var nbrOverride *runplan.NodeOverrideInfo
+	if pf.nbrImageRef != "" {
+		nbrOverride = &runplan.NodeOverrideInfo{
+			ImageName: pf.nbrImageRef,
+		}
+	}
+
 	instanceID := uuid.NewString()
 
-	// Call the real RunPlan resolver.
+	// Call the real RunPlan resolver with snapshot-based RuntimeInfo.
 	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
-		Backend:        &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
-		BackendVersion: &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
-		BackendRuntime: &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
-		Artifact:       &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
-		Deployment:     &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
-		InstanceID:     instanceID,
-		Node:           &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
-		AssignedGPUs:   pf.gpuInfos,
+		Backend:            &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
+		BackendVersion:     &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
+		BackendRuntime:     &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
+		NodeRuntimeOverride: nbrOverride,
+		Artifact:           &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
+		Deployment:         &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
+		InstanceID:         instanceID,
+		Node:               &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
+		AssignedGPUs:       pf.gpuInfos,
 	})
 	for _, e := range resolveErrs {
-		pf.errs = append(pf.errs, e.Error())
+		pf.addErr("unknown", e.Error(), nil)
 	}
 	for _, w := range resolveWarns {
 		pf.warns = append(pf.warns, w)
@@ -467,7 +541,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		pf.commandPreview = runplan.EquivalentCommandPreview(plan)
 	} else if len(pf.errs) == 0 {
 		// Resolver returned nil plan without explicit errors — add a catch-all.
-		pf.errs = append(pf.errs, "runplan resolution returned no plan")
+		pf.addErr("unknown", "runplan resolution returned no plan", nil)
 	}
 
 	return pf
@@ -484,9 +558,14 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	pfStageStart := time.Now()
 	pf := h.preflightDeployment(deployID, r)
 	if len(pf.errs) > 0 {
+		// Collect structured errors for JSON response.
+		var errSummary []string
+		for _, e := range pf.errs {
+			errSummary = append(errSummary, e.Message)
+		}
 		log.StageFailed(ctx, "deployment.start", "preflight", pfStageStart, fmt.Errorf("%v", pf.errs),
 			"deployment_id", deployID, "errors", pf.errs)
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "preflight validation failed", "details": pf.errs})
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "preflight validation failed", "errors": pf.errs, "details": errSummary})
 		return
 	}
 	log.StageCompleted(ctx, "deployment.start", "preflight", pfStageStart,
@@ -1156,7 +1235,7 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 	valid := len(pf.errs) == 0
 	result := map[string]interface{}{
 		"valid":    valid,
-		"errors":   pf.errs,
+		"errors":   pf.errs, "error_details": func() []string { var s []string; for _, e := range pf.errs { s = append(s, e.Message) }; return s }(),
 		"warnings": pf.warns,
 	}
 	if pf.plan != nil {

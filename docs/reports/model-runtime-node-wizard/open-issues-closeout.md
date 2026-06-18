@@ -47,3 +47,61 @@ No problems from this round are left only in chat history.
 | MRW-POL-009 | Enabling runtime on node created BackendRuntime clone → polluted template list | `RunnerConfigsPage.doCreateConfig` called `/clone` then `/enable`, creating a new BackendRuntime per node enablement | User templates appeared in "运行模板" list after node enable | FIXED | Removed clone step; `doCreateConfig` now only calls `/enable` with existing template ID. `RunnerConfigsPage` now shows NodeBackendRuntime records (node-level configs). Template list shows BackendRuntime only. | Build/test PASS | Closed |
 
 No problems from this round are left only in chat history.
+
+---
+
+## 2026-06-18 Design Round: Template / Node-Config Boundary Formalization
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-DES-001 | BackendRuntime / NodeBackendRuntime boundary not formally documented | No design doc described the template vs node-config relationship, edit semantics, or status lifecycle | Agents and future developers could conflate the two concepts | FIXED | `docs/design/runtime-template-node-runtime-snapshot.md` (new), `docs/design/README.md`, `docs/README.md`, `docs/CURRENT.md` | Design doc reviewed; all doc links updated | Closed |
+| MRW-DES-002 | Editing NodeBackendRuntime image fields did not invalidate ready status | `HandlePatchNodeBackendRuntime` updated image_ref/image_present but left status='ready' | Node config could be edited and still show ready without re-check | FIXED | `internal/server/api/node_runtime_handlers.go` — added `needsRecheck` flag that sets `status='needs_check'` when image_ref/image_id/image_digest/image_present change | `go test ./...` PASS; `go vet ./...` PASS | Closed |
+| MRW-DES-003 | `needs_check` status not in i18n or status type mapping | New status value from DES-002 not translatable | Users would see raw English status text | FIXED | `web/src/locales/zh-CN.ts` (+`needs_check: '需重新检测'`), `web/src/locales/en-US.ts` (+`needs_check: 'Needs Check'`), `web/src/utils/status.ts` (warning type) | `npm run build` PASS; `npm test` PASS | Closed |
+| MRW-DES-004 | Template re-apply / template change not implemented | Design describes these as explicit user actions with diff UI | Operators cannot switch NodeBackendRuntime source template | DOCUMENTED_BLOCKER | Future: NodeBackendRuntime edit UI + diff display + explicit confirmation | Add diff UI and re-apply/change buttons with status invalidation | P2 future enhancement |
+
+No problems from this round are left only in chat history.
+
+
+---
+
+## 2026-06-18 Snapshot Round: config_snapshot_json, RunPlan Independence, Per-Node Model Mount
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-SNAP-001 | RunPlan resolver used live BackendRuntime config at every start, contradicting snapshot independence | `runplan.Resolve` `buildArgs`/`buildEnv`/`buildMounts`/`buildHealthCheck` all read `in.BackendRuntime.*` directly; template edits silently changed next deployment start | Template edits silently affected running deployments on next start | FIXED | `internal/server/db/db.go` (migrateV16: `config_snapshot_json`, `source_runtime_name`, `source_runtime_revision`), `internal/server/api/runtime_handlers.go` (snapshot capture in `upsertNodeBackendRuntime`), `internal/server/api/deployment_lifecycle_handlers.go` (snapshot read in `preflightDeployment` overrides RuntimeInfo before `runplan.Resolve`) | `go test ./...` PASS; snapshot captured on enable; preflight uses snapshot; older BackendRuntime edits do not change RunPlan | Closed |
+| MRW-SNAP-002 | Model mount host path used only model_root, not model_root + relative_path — wrong for multi-node with different roots | `buildMounts` used `modelHostRoot` which returned just `ModelRoot` directory, not the full model path | Multiple nodes with different root directories could not have per-node model paths | FIXED | `internal/server/runplan/resolver.go` — `buildMounts` now constructs `hostPath = modelRoot + "/" + relativePath`, container path standardized to `/models/<relativePath>`; `buildVarMap` computes per-node `MODEL_HOST_PATH` from root+relativePath | `go test ./...` PASS; per-node mount test updated; MetaX and LlamaCpp tests verify new mount format | Closed |
+| MRW-SNAP-003 | BackendRuntime edits silently affected NBR RunPlan output | No snapshot existed; preflight read live template args/env/docker/health_check at start time | Operators could not reason about what config a deployment would use after template edits | FIXED | `config_snapshot_json` frozen at enable/check time; `preflightDeployment` overrides RuntimeInfo from snapshot; NBR `image_ref` takes precedence for image resolution | `go test ./...` PASS; `go vet ./...` PASS | Closed |
+| MRW-SNAP-004 | `needs_check` status invalidation only covered image fields, not snapshot config edits | `HandlePatchNodeBackendRuntime` only tracked image_ref/image_present changes | Editing snapshot fields could leave NBR as ready with stale config | FIXED | `node_runtime_handlers.go` — `needsRecheck` flag expanded to cover config_snapshot_json edits | `go test ./...` PASS | Closed |
+| MRW-SNAP-005 | `NodeRuntimeOverride` was never passed to RunPlan resolver in preflight | `preflightDeployment` did not build `NodeRuntimeOverride`; NBR image_ref was ignored at start time | Node-level image override not used during deployment start | FIXED | `preflightDeployment` now builds `NodeRuntimeOverride` from NBR `image_ref` when non-empty, passed to `runplan.Resolve` | `go test ./...` PASS | Closed |
+| MRW-SNAP-006 | Design doc claimed "full config snapshot is P2" | Previous `docs/design/runtime-template-node-runtime-snapshot.md` §2.2 described snapshot as "future upgrade" | Documentation contradicted the required implementation state | FIXED | Design doc updated: §1.2, §2.1, §2.2, §6 rewritten to document current snapshot implementation; P2 is now template re-apply/change UI and revision visualization | Design doc reviewed | Closed |
+
+No problems from this round are left only in chat history.
+
+
+---
+
+## 2026-06-18 Hardening Round: Container Path Safety, Error Messages, Design Verification
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-HARD-001 | Container model path generated from untrusted relative_path without validation | `buildMounts` constructed `/models/<relPath>` without checking for `..`, absolute prefix, or emptiness | Path traversal could escape `/models` directory | FIXED | `internal/server/runplan/resolver.go` — `buildMounts` now returns `([]MountMapping, error)`; validates: no empty, no `..`, no absolute prefix; `cleanPath` ensures no escape; `Resolve` returns error on invalid path. `buildVarMap` falls back to safe default. | `TestContainerPathSafety` 6 cases PASS; `go test ./...` PASS | Closed |
+| MRW-HARD-002 | Preflight error messages not i18n-ready for ModelLocation missing, NBR not ready, node offline | `preflightDeployment` returned free-form English error strings | Frontend displays raw English errors to zh-CN users | FIXED | `web/src/locales/zh-CN.ts` (+`preflight.reason.modelLocationMissing`/`nbrNotReady`/`nodeOffline`), `web/src/locales/en-US.ts` (same) | `npm run build` PASS; `npm test` PASS; 581 keys both locales | Closed |
+| MRW-HARD-003 | config_snapshot_json verified not to contain model host paths | Snapshot captures `rt["model_mount_json"]` which is `{"container_path":"/models","readonly":true}` from templates; model host path resolved per-node at RunPlan time from ModelLocation | Verified safe — no contamination | VERIFIED | `internal/server/api/runtime_handlers.go` lines 276-292; `internal/server/runplan/resolver.go` `buildMounts` uses `modelHostRoot(in.Artifact)` not snapshot for host path | Code review: snapshot contains only container mount rules; host path resolved per-node | Closed |
+| MRW-HARD-004 | Preflight auto-select node does not iterate candidates — documented limitation | `preflightDeployment` picks first online node when placement unspecified; if that node lacks ModelLocation, preflight fails without trying others | Single-node auto-select cannot fall back to other candidates | DOCUMENTED_BLOCKER | Future scheduler enhancement: iterate candidate nodes, exclude those without ModelLocation/NBR/GPU; report per-node reasons. Current single-node behavior is correct for specified-node path. | Implement multi-candidate iteration with per-node reason reporting | Documented: single-node auto-select uses first online node; multi-candidate iteration is future scheduler feature |
+| MRW-HARD-005 | Deployment wizard runtime visibility: filtered by backend_version_id only; preflight does NBR+ModelLocation validation | Frontend `filteredRuntimes` computed on BackendRuntime list (by `backend_version_id`), not NodeBackendRuntime readiness. Preflight does the actual validation. | Wizard Step 3 shows all matching BackendRuntime templates; preflight Step 4 validates actual readiness + ModelLocation. This is correct behavior — the template is selected first, then preflight validates. | VERIFIED | `web/src/pages/ModelDeploymentsPage.vue` line 182: `filteredRuntimes` filters `runtimes` by `backend_version_id`; `preflightDeployment` validates NBR ready + ModelLocation on specific node | Code review confirmed; E2E evidence from previous round | Closed |
+
+No problems from this round are left only in chat history.
+
+
+---
+
+## 2026-06-18 Structured Preflight Errors Round
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-SPE-001 | Preflight returned free-form English error strings directly to frontend | `preflightDeployment` appended raw strings like `"model location is not available on target node..."` to `pf.errs []string` | zh-CN users saw untranslated English errors; frontend had no reliable way to i18n-map them | FIXED | `internal/server/api/deployment_lifecycle_handlers.go` — added `PreflightError{Code,Message,Context}` struct, changed `errs []string` to `errs []PreflightError`, added `addErr()` helper, all error paths emit structured codes: `model_location_missing`, `node_backend_runtime_not_ready`, `node_offline`, `unknown` | `go build`, `go test ./...`, `go vet` all PASS | Closed |
+| MRW-SPE-002 | Frontend preflight display used raw error strings | `ModelDeploymentsPage.vue` line 101-103 used `<el-alert :title="e">` directly on string errors | Raw English or Go format strings displayed to user | FIXED | `web/src/pages/ModelDeploymentsPage.vue` — added `preflightErrorText()` helper mapping error.code → i18n key via codeMap; displays error context (node_id, artifact_id, runtime_id) as detail | `npm run build` PASS; `npm test` PASS; 585 keys both locales | Closed |
+| MRW-SPE-003 | Missing i18n keys for backendVersionMismatch, dockerImageMissing, runtimeDisabled, unknown | Only modelLocationMissing, nbrNotReady, nodeOffline existed | New or future error codes would display as fallback `[code] message` | FIXED | `web/src/locales/zh-CN.ts` (+4 keys), `web/src/locales/en-US.ts` (+4 keys), `ModelDeploymentsPage.vue` codeMap includes all 7 codes | `npm test` — 585 keys consistent | Closed |
+| MRW-SPE-004 | Wizard Step 3 label said "选择运行配置" but data source is BackendRuntime templates | `startWizard.selectRuntime` was "选择运行配置" / "Select Runtime" | User might expect node configs, not templates | FIXED | `zh-CN.ts`: "选择运行模板"; `en-US.ts`: "Select Runtime Template" | `npm test` PASS | Closed |
+
+No problems from this round are left only in chat history.

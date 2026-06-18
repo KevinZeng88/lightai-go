@@ -126,11 +126,13 @@ func TestLlamaCppNvidiaRunPlan(t *testing.T) {
 		t.Fatal("no mounts generated")
 	}
 	mount := plan.Mounts[0]
-	if mount.ContainerPath != "/models" {
-		t.Errorf("mount container_path: got %q, want /models", mount.ContainerPath)
+	expectedContainer := "/models/Qwen3.5-9B-Q4_K_M.gguf"
+	if mount.ContainerPath != expectedContainer {
+		t.Errorf("mount container_path: got %q, want %q", mount.ContainerPath, expectedContainer)
 	}
-	if mount.HostPath != "/home/kzeng/models/Qwen3.5-9B-Q4" {
-		t.Errorf("mount host_path: got %q, want /home/kzeng/models/Qwen3.5-9B-Q4", mount.HostPath)
+	expectedHost := "/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf"
+	if mount.HostPath != expectedHost {
+		t.Errorf("mount host_path: got %q, want %q", mount.HostPath, expectedHost)
 	}
 	if !mount.Readonly {
 		t.Error("model mount should be readonly")
