@@ -1037,7 +1037,17 @@ func (h *AgentHandler) HandleTaskResult(w http.ResponseWriter, r *http.Request) 
 		if taskInstanceID != "" {
 			var prevActualState string
 			h.DB.QueryRow(`SELECT COALESCE(actual_state,'pending') FROM model_instances WHERE id = ?`, taskInstanceID).Scan(&prevActualState)
-			h.DB.Exec(`UPDATE model_instances SET actual_state = 'failed', last_error = ? WHERE id = ?`, errorMsg, taskInstanceID)
+			containerID := strVal(req, "container_id", "")
+		exitCode := intVal(req, "exit_code", -1)
+		failureReason := strVal(req, "failure_reason_code", "task_failed")
+		lastErrJSON, _ := json.Marshal(map[string]interface{}{
+			"error": errorMsg,
+			"failure_reason_code": failureReason,
+			"container_id": containerID,
+			"exit_code": exitCode,
+		})
+		h.DB.Exec(`UPDATE model_instances SET actual_state = 'failed', container_id = CASE WHEN ? != '' THEN ? ELSE container_id END, last_error = ? WHERE id = ?`,
+			containerID, containerID, string(lastErrJSON), taskInstanceID)
 			h.DB.Exec(`UPDATE gpu_leases SET status = 'failed' WHERE instance_id = ? AND status = 'reserved'`, taskInstanceID)
 
 			log.StateTransition(r.Context(), "task.result", "instance", taskInstanceID, prevActualState, "failed",

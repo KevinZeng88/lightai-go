@@ -997,6 +997,7 @@ func processStartTask(ctx context.Context, task register.AgentTask, result *regi
 		result.Success = false
 		result.ErrorMessage = err.Error()
 		result.ExitCode = -1
+		result.Status = "failed"
 		if inst != nil && inst.ContainerID != "" {
 			result.ContainerID = inst.ContainerID
 		}
@@ -1005,6 +1006,7 @@ func processStartTask(ctx context.Context, task register.AgentTask, result *regi
 
 	log.Info("start task: completed", "task_id", task.ID, "instance_id", task.InstanceID, "duration_ms", time.Since(startTime).Milliseconds())
 	result.Success = true
+	result.Status = "completed"
 	result.ContainerID = inst.ContainerID
 	result.RuntimeState = "running"
 	result.InstanceID = inst.InstanceID

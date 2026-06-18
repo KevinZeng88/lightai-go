@@ -128,7 +128,7 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 		)
 		// Try to get container logs on failure.
 		d.logContainerFailure(ctx, containerID, opts.ContainerName)
-		return nil, fmt.Errorf("docker start: %w", err)
+		return &RuntimeInstance{ContainerID: containerID, ContainerName: opts.ContainerName, InstanceID: spec.InstanceID}, fmt.Errorf("docker start: %w", err)
 	}
 
 	startDuration := time.Since(startStart).Milliseconds()

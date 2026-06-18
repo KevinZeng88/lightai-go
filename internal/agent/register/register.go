@@ -258,6 +258,7 @@ type TaskResult struct {
 	OperationID  string `json:"operation_id,omitempty"`
 	NodeID       string `json:"node_id"`
 	Success      bool   `json:"success"`
+	Status       string `json:"status"`
 	InstanceID   string `json:"instance_id"`
 	DeploymentID string `json:"deployment_id,omitempty"`
 	ContainerID  string `json:"container_id"`

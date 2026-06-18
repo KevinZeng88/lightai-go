@@ -48,7 +48,12 @@ artifact="$(api POST /api/v1/model-artifacts "{\"name\":\"fail-test-$RUN_ID\",\"
 artifact_id="$(echo "$artifact" | json_get id)"; [ -n "$artifact_id" ] || fail "artifact create failed"
 api POST "/api/v1/model-artifacts/$artifact_id/locations" "{\"node_id\":\"$node_id\",\"root_id\":\"$root_id\",\"relative_path\":\"Qwen3-0.6B-Instruct-2512\",\"path_type\":\"directory\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" >/dev/null
 
-# Enable NBR (use wrong image to force failure)
+# Bind port 8090 first so Docker start fails with port conflict
+nc -l 8090 &>/dev/null &
+NC_PID=$!
+sleep 1
+
+# Enable NBR with valid image (port conflict will cause docker.start failure)
 api POST "/api/v1/nodes/$node_id/backend-runtimes/enable" "{\"backend_runtime_id\":\"vllm-v0.23.0-nvidia-cuda\",\"image_ref\":\"vllm/vllm-openai:latest\",\"image_present\":true,\"docker_available\":true}" >/dev/null
 
 # Create deployment with bad health check path to force health_check failure
@@ -103,6 +108,9 @@ log "logs_api: $(echo "$logs_resp" | python3 -c 'import json,sys; d=json.load(sy
 status_refresh="$(api GET "/api/v1/model-instances/$instance_id" 2>/dev/null || echo '{}')"
 echo "$status_refresh" > "$ARTIFACT_DIR/status-refresh-response.json"
 log "status_refresh state=$(echo "$status_refresh" | json_get actual_state)"
+
+# Kill port holder
+kill $NC_PID 2>/dev/null || true
 
 # Stop + cleanup
 api POST "/api/v1/deployments/$deploy_id/stop" >/dev/null 2>&1 || true; sleep 2
