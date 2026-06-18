@@ -33,7 +33,8 @@ type DockerClient interface {
 type ContainerCreateOptions struct {
 	Image          string
 	ContainerName  string
-	Command        []string // entrypoint + cmd
+	Entrypoint     []string // Docker ENTRYPOINT
+	Command        []string // Docker CMD (args)
 	Env            []string // "KEY=VALUE" format
 	Binds          []string // "host:container[:ro]" format
 	Devices        []DeviceMapping

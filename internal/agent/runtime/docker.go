@@ -383,6 +383,7 @@ func (d *DockerRuntimeDriver) buildCreateOptions(spec AgentRunSpec) ContainerCre
 		Image:         spec.Docker.Image,
 		ContainerName: containerNameFromInstance(spec.InstanceID),
 		Env:           mapToEnvList(spec.Env),
+		Entrypoint:    spec.Docker.Command,
 		Command:       spec.Docker.Args,
 	}
 

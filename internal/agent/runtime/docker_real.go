@@ -79,6 +79,9 @@ func (r *RealDockerClient) ContainerCreate(ctx context.Context, opts ContainerCr
 		Image: opts.Image,
 		Env:   opts.Env,
 	}
+	if len(opts.Entrypoint) > 0 {
+		cfg.Entrypoint = strslice.StrSlice(opts.Entrypoint)
+	}
 	if len(opts.Command) > 0 {
 		cfg.Cmd = strslice.StrSlice(opts.Command)
 	}
