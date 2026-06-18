@@ -1596,3 +1596,23 @@ NVIDIA E2E
 6. 所有新增、删除、禁用、手工确认和启动停止都要有审计和日志。
 7. Web 向导是产品化入口，底层仍保持现有 BackendRuntime / ModelLocation / NodeRunPlan 架构。
 ```
+
+---
+## Observability Closeout (2026-06-19)
+
+### E2E Verification
+Three-backend matrix (default + modified params): all PASS.
+Failed instance E2E: state=failed, container_id preserved, last_error structured,
+logs API callable via current_run_plan_id.
+Evidence: `docs/reports/model-runtime-node-wizard/failed-instance-logs-20260619024025/`
+
+### Docker logs during/after failure
+- Endpoint: `GET /api/v1/node-run-plans/{run_plan_id}/logs`
+- `current_run_plan_id` returned by `GET /api/v1/model-instances/{id}`
+- Web log button enabled when `current_run_plan_id` exists (any actual_state)
+
+### Failure reporting chain
+Agent TaskResult → Server task result handler → model_instances.last_error JSON:
+{failure_reason_code, exit_code, container_id, error}
+
+### Observability status: CLOSED

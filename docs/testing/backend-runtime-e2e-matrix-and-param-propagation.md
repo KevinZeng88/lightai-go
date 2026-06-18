@@ -385,3 +385,47 @@ The work is accepted only if:
 12. Documentation is updated.
 13. git status --short is clean.
 ```
+
+---
+## 11. Verification Status (2026-06-19)
+
+All acceptance criteria (§10) satisfied.
+
+### Three-backend matrix
+| Backend | Default | Modified | Modified Params |
+|---------|---------|----------|-----------------|
+| llama.cpp | PASS | PASS | --ctx-size 2048 --n-gpu-layers -1 |
+| vLLM | PASS | PASS | --max-model-len 2048 |
+| SGLang | PASS | PASS | --tp 1 |
+
+### Parameter propagation
+Modified params verified in: BackendRuntime user catalog, NodeBackendRuntime
+config_snapshot_json, RunPlan args_json, Equivalent Docker Command Preview,
+Agent docker.create.spec command_json. All layers show identical args.
+
+### Failed instance E2E
+Dedicated failed-instance E2E at:
+`scripts/e2e-model-runtime-failed-instance-logs.sh`
+
+Logs at:
+`docs/reports/model-runtime-node-wizard/failed-instance-logs-20260619024025/`
+
+Verified:
+- Instance state = failed, container_id preserved
+- last_error stores structured JSON {failure_reason_code, exit_code, container_id, error}
+- GET /api/v1/model-instances/{id} returns current_run_plan_id
+- GET /api/v1/node-run-plans/{run_plan_id}/logs returns real API response
+- Empty logs {} acceptable for port-conflict early-exit containers
+- stdout/stderr preview single-lined via singleLineTail/singleLineTailStr
+
+### Independence
+- BackendVersion edits do not mutate existing BackendRuntime ✓
+- BackendRuntime edits do not mutate existing NodeBackendRuntime ✓
+- NodeBackendRuntime check does not mutate image_ref, config_snapshot, or source revision ✓
+
+### Observability
+- failure_reason_code stored in model_instances.last_error JSON
+- /metrics and /metrics/targets at DEBUG (prefix match)
+- High-frequency GET polling lists at DEBUG (isHighFrequencyGET middleware)
+- Audit: instance.start.requested vs succeeded vs failed
+- Web: ModelInstancesPage log button enabled when current_run_plan_id exists (any state)
