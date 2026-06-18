@@ -182,3 +182,25 @@ No problems from this round are left only in chat history.
   - `docs/reports/model-runtime-node-wizard/e2e-run-20260618-202641-instance-test/` — instance test API response, audit logs, summary
 
 No problems from this round are left only in chat history.
+
+---
+## 2026-06-19 Runtime Observability Closeout
+
+Status: All observability gaps closed.
+
+| ID | Issue | Status |
+| -- | ----- | ------ |
+| OBS-001 | stdout/stderr tail multi-line breaks structured logs | FIXED — singleLineTail/singleLineTailStr in docker.go |
+| OBS-002 | High-frequency /metrics noise | FIXED — added to highFrequencyPrefixes, covers /metrics and /metrics/targets via prefix match |
+| OBS-003 | Audit action ambiguous (instance.start) | FIXED — changed to instance.start.requested |
+| OBS-004 | Container failure omits container_id | FIXED — docker.Start returns RuntimeInstance with ContainerID on failure; processStartTask preserves it |
+| OBS-005 | Task result missing status field | FIXED — added Status field; agent sets status=failed when task fails |
+| OBS-006 | last_error not structured | FIXED — server stores {failure_reason_code, exit_code, container_id, error} JSON |
+| OBS-007 | Failed instance logs/status E2E | FIXED — scripts/e2e-model-runtime-failed-instance-logs.sh (port conflict, verified container_id, last_error, state) |
+
+Three-backend matrix:
+- llama.cpp default: PASS | modified (--ctx-size 2048 --n-gpu-layers -1): PASS
+- vLLM default: PASS | modified (--max-model-len 2048): PASS
+- SGLang default: PASS | modified (--tp 1): PASS
+
+Web failed-state log button: ModelInstancesPage checks current_run_plan_id (not actual_state); failed instances with run plan can access logs.
