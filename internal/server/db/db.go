@@ -148,6 +148,11 @@ func (db *DB) Migrate() error {
 			return fmt.Errorf("migrate v15: %w", err)
 		}
 	}
+	if currentVersion < 16 {
+		if err := db.migrateV16(); err != nil {
+			return fmt.Errorf("migrate v16: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -1375,4 +1380,27 @@ func catalogChecksum(s string) string {
 		h = -h
 	}
 	return fmt.Sprintf("checksum:%08x", h)
+}
+
+
+// migrateV16 adds config_snapshot_json to node_backend_runtimes so each
+// NodeBackendRuntime captures a frozen copy of the resolved runtime
+// configuration at enable/check time, decoupling node runs from future
+// BackendRuntime template edits.
+func (db *DB) migrateV16() error {
+	alterStatements := []string{
+		`ALTER TABLE node_backend_runtimes ADD COLUMN config_snapshot_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE node_backend_runtimes ADD COLUMN source_runtime_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE node_backend_runtimes ADD COLUMN source_runtime_revision TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			// Columns may already exist from a partially applied development DB.
+		}
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (16, 'V16: node_backend_runtimes config snapshot')`); err != nil {
+		return err
+	}
+	return nil
 }

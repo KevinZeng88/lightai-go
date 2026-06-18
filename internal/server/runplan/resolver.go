@@ -476,22 +476,32 @@ func mergeDockerSpec(in ResolveInput) DockerSpecInfo {
 func buildMounts(in ResolveInput) []MountMapping {
 	var mounts []MountMapping
 
-	// Model mount: use directory mount (matching direct smoke convention)
-	hostDir := modelHostRoot(in.Artifact)
+	// Model mount: construct per-node host path from model_root + relative_path.
+	// Different nodes can have different roots; the container path is standardized
+	// and must match MODEL_CONTAINER_PATH used in template variable substitution.
+	hostRoot := modelHostRoot(in.Artifact)
 	if in.NodeRuntimeOverride != nil && in.NodeRuntimeOverride.ModelRootHostPath != "" {
-		hostDir = in.NodeRuntimeOverride.ModelRootHostPath
+		hostRoot = in.NodeRuntimeOverride.ModelRootHostPath
 	}
-	containerPath := in.BackendRuntime.ModelMount.ContainerPath
-	if containerPath == "" {
-		containerPath = "/models"
+	relPath := modelRelativePath(in.Artifact)
+	hostPath := hostRoot
+	if relPath != "" && relPath != "." {
+		hostPath = strings.TrimRight(hostRoot, "/") + "/" + strings.TrimLeft(relPath, "/")
 	}
-	readonly := true
-	if in.BackendRuntime.ModelMount.ContainerPath != "" {
-		readonly = in.BackendRuntime.ModelMount.Readonly
+
+	containerMountDir := in.BackendRuntime.ModelMount.ContainerPath
+	if containerMountDir == "" {
+		containerMountDir = "/models"
+	}
+	// Container path matches MODEL_CONTAINER_PATH: /models/<relative-path>
+	containerPath := strings.TrimRight(containerMountDir, "/") + "/" + strings.TrimLeft(relPath, "/")
+	readonly := in.BackendRuntime.ModelMount.Readonly
+	if in.BackendRuntime.ModelMount.ContainerPath == "" {
+		readonly = true
 	}
 
 	mounts = append(mounts, MountMapping{
-		HostPath:      hostDir,
+		HostPath:      hostPath,
 		ContainerPath: containerPath,
 		Readonly:      readonly,
 	})
@@ -563,10 +573,17 @@ func buildVarMap(in ResolveInput) map[string]string {
 	}
 	modelContainerPath := strings.TrimRight(containerMount, "/") + "/" + strings.TrimLeft(modelBase, "/")
 
+	// Compute per-node host model path: model_root + "/" + relative_path.
+	// Different nodes can have different host paths for the same model.
+	modelHostPath := in.Artifact.Path
+	if in.Artifact.ModelRoot != "" && in.Artifact.RelativePath != "" {
+		modelHostPath = strings.TrimRight(in.Artifact.ModelRoot, "/") + "/" + strings.TrimLeft(in.Artifact.RelativePath, "/")
+	}
+
 	vars["MODEL_CONTAINER_PATH"] = modelContainerPath
 	vars["model_container_path"] = vars["MODEL_CONTAINER_PATH"]
-	vars["MODEL_HOST_PATH"] = in.Artifact.Path
-	vars["model_host_path"] = in.Artifact.Path
+	vars["MODEL_HOST_PATH"] = modelHostPath
+	vars["model_host_path"] = vars["MODEL_HOST_PATH"]
 	vars["model_parent_host_path"] = modelHostRoot(in.Artifact)
 	vars["MODEL_PARENT_HOST_PATH"] = vars["model_parent_host_path"]
 

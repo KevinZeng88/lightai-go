@@ -64,22 +64,29 @@ Current schema (`node_backend_runtimes` table):
 | `tenant_id` | Tenant ownership |
 
 **Rules:**
-- NodeBackendRuntime references a BackendRuntime via `backend_runtime_id`.
-- It stores **node-level overrides** (image_ref, image_present, docker_available).
-- It does NOT duplicate the full template; it references + overrides.
+- NodeBackendRuntime references a BackendRuntime via `backend_runtime_id` as the source template.
+- At enable/check time, the system captures a **frozen config snapshot** (`config_snapshot_json`) of the BackendRuntime's args, env, docker, mounts, health_check, entrypoint, image, and vendor.
+- RunPlan resolution reads the NBR snapshot as the primary execution config source.
+- BackendRuntime template edits do NOT affect existing NodeBackendRuntime RunPlans.
 - NodeBackendRuntime status is determined by `evaluateNodeBackendRuntime()` which checks GPU vendor match, Docker availability, and image presence.
+- NodeBackendRuntime image fields can be overridden per node; a node-level `image_ref` is stored separately and takes precedence over the snapshot image.
 
 ## 2. Relationship Rules
 
 ### 2.1 Creation
 
 ```
-User selects BackendRuntime → creates NodeBackendRuntime on a specific node.
-System copies the template reference (backend_runtime_id) to the node record.
-Node-level fields (image_ref, image_present) are set during creation.
+User selects BackendRuntime → creates/enables NodeBackendRuntime on a specific node.
+At enable/check time, the system captures a config_snapshot_json from the current BackendRuntime:
+  - source_runtime_id, source_runtime_name, source_runtime_revision
+  - backend_id, backend_version_id
+  - vendor, runtime_type, image_name, image_pull_policy
+  - args_override_json, entrypoint_override_json
+  - default_env_json, docker_json, model_mount_json, health_check_override_json
+Node-level overrides (image_ref, image_present) are also stored.
 ```
 
-**Do NOT create a new BackendRuntime when enabling on a node.** The `HandleEnableNodeBackendRuntime` endpoint (POST `/nodes/{id}/backend-runtimes/enable`) already implements this correctly: it upserts a NodeBackendRuntime record with the given `backend_runtime_id`.
+**Do NOT create a new BackendRuntime when enabling on a node.** The `HandleEnableNodeBackendRuntime` endpoint (POST `/nodes/{id}/backend-runtimes/enable`) upserts a NodeBackendRuntime record with the given `backend_runtime_id` AND captures the snapshot.
 
 Creating a user-managed BackendRuntime (template clone) is a separate action:
 - BackendRuntimesPage "Clone" button → `POST /backend-runtimes/{id}/clone`
@@ -89,31 +96,35 @@ Creating a user-managed BackendRuntime (template clone) is a separate action:
 ### 2.2 Independence After Creation
 
 ```
-NodeBackendRuntime records the source template reference.
-After creation, template modifications do NOT automatically affect node configs.
-Runtime behavior is determined by the preflight/RunPlan resolver, which reads
-the BackendRuntime (template) + NodeBackendRuntime (node overrides) and merges them.
+NodeBackendRuntime persists a frozen config_snapshot_json at enable/check time.
+After creation, template modifications do NOT affect the NBR's RunPlan output.
+The RunPlan resolver reads the NBR snapshot as the primary config source.
+BackendRuntime is still referenced for metadata (name, source tracking) but its
+current config values do not override the snapshot.
 ```
 
-**Current implementation:** The `backend_runtime_id` reference means that template-level changes (args, env, docker options) WILL affect the next deployment start because the RunPlan resolver reads the template at resolution time. This is the "reference" pattern — intentional for the current phase.
-
-**Future full-snapshot upgrade:** A future migration may add `config_snapshot_json` and/or `override_json` fields to NodeBackendRuntime to fully decouple the node config from template changes. This is documented as a P2 enhancement and NOT required for current phase.
+**Current implementation (v16 migration):**
+- `node_backend_runtimes.config_snapshot_json` stores the frozen config.
+- `preflightDeployment` reads the snapshot and uses it to override the RuntimeInfo before calling `runplan.Resolve`.
+- Image resolution: NBR `image_ref` (node-level override) > snapshot `image_name` > BackendVersion.defaultImages.
+- If snapshot is empty (legacy data), the live BackendRuntime config is used as fallback.
 
 ### 2.3 Editing NodeBackendRuntime
 
 ```
-Editing a NodeBackendRuntime's node-level fields (image_ref, image_present)
-invalidates the ready status → status becomes "needs_check".
+Editing a NodeBackendRuntime's node-level fields (image_ref, image_present,
+config_snapshot_json) invalidates the ready status → status becomes "needs_check".
 Re-check is required before deployment.
 ```
 
-**Implementation:** `HandlePatchNodeBackendRuntime` sets `status = 'needs_check'` when image-related fields are modified. The preflight resolver excludes NBRs with `status != 'ready'`.
+**Implementation:** `HandlePatchNodeBackendRuntime` sets `status = 'needs_check'` when image-related fields or snapshot config are modified. The preflight resolver excludes NBRs with `status != 'ready'`.
 
 Fields that trigger status invalidation:
 - `image_ref`
 - `image_id`
 - `image_digest`
 - `image_present`
+- Any `config_snapshot_json` edit
 
 Fields that do NOT trigger invalidation (informational only):
 - `driver_version`
@@ -135,7 +146,56 @@ Not implemented in current phase. Documented as P2:
    subsequent starts.
 ```
 
-## 3. UI Display Rules
+## 3. Model Mount Per-Node Resolution
+
+### 3.1 ModelLocation → NodeRunPlan Mount
+
+```
+ModelArtifact (logical model)
+    └── ModelLocation (per-node physical location)
+            ├── node_id: which node
+            ├── model_root: root directory on that node (e.g., /data/models)
+            ├── relative_path: model subdirectory (e.g., qwen3.5-9b)
+            └── absolute_path: full path on disk
+
+Deployment with artifact + node → RunPlan resolver:
+    1. Query ModelLocation WHERE model_artifact_id=? AND node_id=?
+    2. host_path = model_root + "/" + relative_path
+    3. container_path = /models/<relative_path>  (standardized)
+    4. Mount: host_path:container_path:ro
+    5. MODEL_CONTAINER_PATH var = container_path
+```
+
+### 3.2 Multi-Node Example
+
+```
+ModelArtifact: Qwen3.5-9B
+
+Node A (model at /data/models/qwen3.5-9b):
+    host mount = /data/models/qwen3.5-9b:/models/qwen3.5-9b:ro
+    args use: --model /models/qwen3.5-9b
+
+Node B (model at /mnt/nvme/model-store/qwen3.5-9b):
+    host mount = /mnt/nvme/model-store/qwen3.5-9b:/models/qwen3.5-9b:ro
+    args use: --model /models/qwen3.5-9b
+
+→ Different host paths, same container path. Args remain identical.
+```
+
+### 3.3 NodeBackendRuntime Does Not Bind ModelLocation
+
+```
+NodeBackendRuntime = runtime config snapshot (how to run)
+ModelLocation = model file location (where the model is)
+
+These are independent:
+- Same NodeBackendRuntime can be used for different models.
+- Each Deployment selects artifact + runtime independently.
+- Model mount is resolved at RunPlan time based on (deployment.artifact, node).
+- NBR snapshot does not store model host paths.
+```
+
+## 4. UI Display Rules
 
 ### 3.1 "运行模板" Page (BackendRuntimesPage.vue)
 
@@ -197,7 +257,7 @@ Step 6: Start
      └──────── re-check ──── needs_check
 ```
 
-### 4.1 Status Values
+### 5.1 Status Values
 
 | Status | Meaning | Display (zh-CN) |
 |--------|---------|-----------------|
@@ -226,17 +286,22 @@ Step 6: Start
 
 ## 6. Current Implementation Status
 
-### Implemented (Phase 4, verified by NVIDIA E2E):
+### Implemented (Phase 4, v16):
 - BackendRuntime CRUD + template-based creation
-- NodeBackendRuntime enable/check/status evaluation
+- NodeBackendRuntime enable/check with **config snapshot capture** (`config_snapshot_json`)
+- RunPlan resolver reads NBR snapshot as the primary execution config
+- BackendRuntime template edits do NOT affect existing NBR RunPlans
+- `preflightDeployment` overrides RuntimeInfo from NBR snapshot before calling `runplan.Resolve`
+- Per-node model mount using `model_root + "/" + relative_path` → container path `/models/<slug>`
 - Node count / ready count aggregation on BackendRuntime list
 - RunnerConfigsPage shows NodeBackendRuntime records
 - Deployment wizard filters by backend_version_id + preflight
 - Status invalidation on NodeBackendRuntime edit (`needs_check`)
+- Expanded `needs_check` triggers: image_ref, image_id, image_digest, image_present, config_snapshot_json edits
 
-### Not yet implemented (P2 / future):
-- Full config snapshot in NodeBackendRuntime
+### P2 / future enhancements:
 - Template re-apply / template change with diff UI
+- Template revision visualization
 - Non-Docker runner types
 - GPU lease picker in deployment wizard
 - Port auto-suggestion

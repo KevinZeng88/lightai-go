@@ -81,7 +81,7 @@ func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
 		"--security-opt apparmor=unconfined",
 		"--shm-size 100gb",
 		"--ulimit memlock=-1",
-		"-v /data/part2/MX-C500/model:/models:ro",
+		"-v /data/part2/MX-C500/model/Qwen3:/models/Qwen3:ro",
 		"-e CUDA_VISIBLE_DEVICES=6,7",
 	} {
 		if !strings.Contains(preview, want) {

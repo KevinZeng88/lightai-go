@@ -129,9 +129,13 @@ Key rules:
 
 ```text
 BackendRuntime = template (no node binding).
-NodeBackendRuntime = node-level config (reference + overrides).
-NodeBackendRuntime creation does NOT clone BackendRuntime.
-Editing NodeBackendRuntime image fields invalidates ready status → needs_check.
+NodeBackendRuntime = node-level config with frozen config_snapshot_json.
+NBR snapshot captured at enable/check time (args, env, docker, mounts, health_check).
+RunPlan resolver reads NBR snapshot, not live BackendRuntime.
+BackendRuntime template edits do NOT affect existing NodeBackendRuntime RunPlans.
+Editing NodeBackendRuntime image/snapshot fields invalidates ready status → needs_check.
+Model mount resolved per-node: host = model_root + / + relative_path.
+Container model path standardized: /models/<relative_path>.
 Template list shows BackendRuntime only; RunnerConfigsPage shows NodeBackendRuntime.
 ```
 

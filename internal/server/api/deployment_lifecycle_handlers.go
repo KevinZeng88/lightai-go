@@ -262,6 +262,8 @@ type preflightResult struct {
 	artifactID string
 	artifact   map[string]interface{}
 	runtimeID  string
+	nbrSnapshot string // config_snapshot_json from NodeBackendRuntime
+	nbrImageRef string // image_ref from NodeBackendRuntime
 	placement  struct {
 		NodeID string
 		GPUIds []string
@@ -384,9 +386,9 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		}
 	}
 
-	// Validate NodeBackendRuntime readiness.
+	// Validate NodeBackendRuntime readiness and read snapshot + image_ref.
 	var nodeRuntimeStatus string
-	h.DB.QueryRow(`SELECT id, status FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, pf.placement.NodeID, pf.runtimeID).Scan(&pf.nodeRuntimeID, &nodeRuntimeStatus)
+	h.DB.QueryRow(`SELECT id, status, COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, pf.placement.NodeID, pf.runtimeID).Scan(&pf.nodeRuntimeID, &nodeRuntimeStatus, &pf.nbrSnapshot, &pf.nbrImageRef)
 	if pf.nodeRuntimeID == "" || nodeRuntimeStatus != "ready" {
 		pf.errs = append(pf.errs, fmt.Sprintf("node backend runtime is not ready (status=%s). Enable and check the BackendRuntime on the target node before starting.", nodeRuntimeStatus))
 		return pf
@@ -443,18 +445,77 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	var defaultArgs []string
 	json.Unmarshal([]byte(pf.bvArgs), &defaultArgs)
 
+	// If NodeBackendRuntime has a config snapshot, use it for runtime configuration
+	// instead of the live BackendRuntime template. This decouples node runs from
+	// future template edits.
+	if pf.nbrSnapshot != "" && pf.nbrSnapshot != "{}" {
+		var snap map[string]interface{}
+		if json.Unmarshal([]byte(pf.nbrSnapshot), &snap) == nil {
+			if v, ok := snap["args_override_json"]; ok {
+				var snapArgs []string
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapArgs) == nil {
+					argsOverride = snapArgs
+				}
+			}
+			if v, ok := snap["entrypoint_override_json"]; ok {
+				var snapEntry []string
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapEntry) == nil && len(snapEntry) > 0 {
+					rtEntryOverride = snapEntry
+					entrypoint = snapEntry
+				}
+			}
+			if v, ok := snap["default_env_json"]; ok {
+				var snapEnv map[string]string
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapEnv) == nil {
+					rtEnvMap = snapEnv
+				}
+			}
+			if v, ok := snap["docker_json"]; ok {
+				var snapDocker runplan.DockerSpecInfo
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapDocker) == nil {
+					dockerSpec = snapDocker
+				}
+			}
+			if v, ok := snap["model_mount_json"]; ok {
+				var snapMount runplan.ModelMountInfo
+				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapMount) == nil {
+					modelMount = snapMount
+				}
+			}
+			if v, ok := snap["image_name"]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					pf.rtImage = s
+				}
+			}
+			if v, ok := snap["vendor"]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					pf.rtVendor = s
+				}
+			}
+		}
+	}
+
+	// Build NodeRuntimeOverride from NBR image_ref (node-level image override).
+	var nbrOverride *runplan.NodeOverrideInfo
+	if pf.nbrImageRef != "" {
+		nbrOverride = &runplan.NodeOverrideInfo{
+			ImageName: pf.nbrImageRef,
+		}
+	}
+
 	instanceID := uuid.NewString()
 
-	// Call the real RunPlan resolver.
+	// Call the real RunPlan resolver with snapshot-based RuntimeInfo.
 	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
-		Backend:        &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
-		BackendVersion: &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
-		BackendRuntime: &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
-		Artifact:       &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
-		Deployment:     &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
-		InstanceID:     instanceID,
-		Node:           &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
-		AssignedGPUs:   pf.gpuInfos,
+		Backend:            &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
+		BackendVersion:     &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
+		BackendRuntime:     &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
+		NodeRuntimeOverride: nbrOverride,
+		Artifact:           &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
+		Deployment:         &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
+		InstanceID:         instanceID,
+		Node:               &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
+		AssignedGPUs:       pf.gpuInfos,
 	})
 	for _, e := range resolveErrs {
 		pf.errs = append(pf.errs, e.Error())
