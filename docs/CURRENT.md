@@ -7,19 +7,12 @@
 
 ## Branch Baseline
 
-Current branch verified during documentation governance:
+Current branch and commit verified during 2026-06-18 real-machine verification:
 
 ```text
-fix-runtime-template-node-config-ux
+Branch: main
+Commit: 48ee190 fix: harden model smoke test resolution and fallback
 ```
-
-Current relevant baseline:
-
-```text
-89bdf68 fix: add node model root policy and harden wizard flow
-```
-
-The working tree may contain a user-owned `VERSION` modification. Documentation or code tasks must not touch, stage, or commit that unrelated change.
 
 ## Accepted Runtime Chain
 
@@ -141,19 +134,21 @@ Template list shows BackendRuntime only; RunnerConfigsPage shows NodeBackendRunt
 
 ## E2E Evidence
 
-Current Phase 4 NVIDIA wizard E2E evidence:
+Current Phase 4 NVIDIA wizard E2E evidence (most recent first):
 
 ```text
-docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-201241/          (full E2E, PASS)
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-202641-instance-test/  (instance test API, PASS)
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/          (prior E2E, PASS)
 ```
 
-Result recorded there:
+Latest result (2026-06-18 20:14 CST on main `48ee190`):
 
 ```text
-PASS
+E2E: PASS (exit code 0)
+Instance test API: PASS (200 OK, chat mode, 177ms, single_model_fallback)
+Environment: Docker 29.5.3, NVIDIA RTX 5090 (24GB, nvidia-smi 610.43.02)
 ```
-
-This documentation cleanup did not change runtime code paths and therefore did not rerun E2E.
 
 ## Formal Open Issues
 

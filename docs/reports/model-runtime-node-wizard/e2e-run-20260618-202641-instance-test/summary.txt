@@ -1,0 +1,36 @@
+INSTANCE TEST API VERIFICATION SUMMARY
+======================================
+Date: 2026-06-18 20:26 CST
+Branch: main
+Commit: 48ee190
+
+Environment:
+  Docker: 29.5.3 (available)
+  GPU: NVIDIA RTX 5090 (24GB)
+  Model: Qwen3-0.6B-Instruct-2512
+
+Instance ID: 6380d872-9a24-4c07-9b8f-976ddc35a8a2
+Endpoint: http://127.0.0.1:8004/v1/chat/completions
+Mode: chat
+Model resolved: e2e-itest-202321 (single_model_fallback)
+Latency: 177ms
+Success: true
+Response preview: "Ping 是一种网络测试工具，用于"
+
+Audit logs:
+  - model_instance.test.started (success)
+  - model_instance.test.succeeded (success)
+
+/v1/models returned:
+  id: e2e-itest-202321
+  created: 1781785572
+  owned_by: vllm
+  max_model_len: 2048
+
+Verified:
+  1. API uses /v1/chat/completions ✅
+  2. model_resolution_method: single_model_fallback ✅
+  3. Returns endpoint, model, mode, latency_ms, response_preview, checked_at ✅
+  4. Audit log records test.started and test.succeeded ✅
+  5. Error case: instance_not_running when pending ✅
+  6. Pending instances blocked with reason_code ✅

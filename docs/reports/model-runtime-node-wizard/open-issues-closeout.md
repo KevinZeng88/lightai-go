@@ -131,3 +131,35 @@ No problems from this round are left only in chat history.
 | MRW-TEST-006 | New reason codes not i18n-mapped | `model_id_not_resolved`, `chat_endpoint_failed`, `completion_endpoint_failed` had no frontend translation | Users see raw codes | FIXED | `web/src/locales/zh-CN.ts` (+8 keys), `web/src/locales/en-US.ts` (+8 keys), `web/src/pages/ModelInstancesPage.vue` (extended `testReasonI18n` map + display mode and `model_resolution_method`) | `npm build` PASS; `npm test` PASS; 606 keys both locales | Closed |
 
 No problems from this round are left only in chat history.
+
+---
+
+## 2026-06-18 Real-Machine Verification: Instance Test API
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-VER-001 | Instance test API real-machine E2E verification | Fresh deployment + `POST /api/v1/model-instances/{id}/test` on running vLLM+NVIDIA RTX 5090 instance | Confirms test API works end-to-end on real hardware | VERIFIED | N/A (verification only) | `docs/reports/model-runtime-node-wizard/e2e-run-20260618-201241/` (full E2E), `e2e-run-20260618-202641-instance-test/` (instance test API) | Closed |
+| MRW-VER-002 | Test API resolved model via single_model_fallback | Only one model in `/v1/models`; test correctly used `single_model_fallback` | Model resolution method works correctly when single model exists | VERIFIED | `deployment_lifecycle_handlers.go` `resolveModelID()` | Response: `model_resolution_method: single_model_fallback`, `model: e2e-itest-202321` | Closed |
+| MRW-VER-003 | Chat/completions mode confirmed working | Test used `/v1/chat/completions` with 200 response; Qwen3 returned Chinese text | Chat mode correctly preferred and working | VERIFIED | `deployment_lifecycle_handlers.go` `tryInference()` | Response: `mode: chat`, `endpoint: /v1/chat/completions`, `latency_ms: 177` | Closed |
+| MRW-VER-004 | Audit log records test.started + test.succeeded | Two audit entries with entity_id, endpoint, model, resolution method | Traceability confirmed in audit trail | VERIFIED | `deployment_lifecycle_handlers.go` `WriteAudit()` | Audit API: `model_instance.test.started` and `model_instance.test.succeeded`, both `result=success` | Closed |
+| MRW-VER-005 | Pending instance correctly blocked from test | Test on pending instance returned 400 with `reason_code: instance_not_running` | Correct guard prevents testing non-running instances | VERIFIED | `deployment_lifecycle_handlers.go` `HandleModelInstanceTest()` | Response: `{"ok":false,"reason_code":"instance_not_running"}`, i18n-ready message | Closed |
+
+### Real-Machine Verification Evidence
+
+- **Date**: 2026-06-18 20:12-20:26 CST
+- **Environment**: WSL2, Docker 29.5.3, NVIDIA RTX 5090 (24GB, nvidia-smi 610.43.02, CUDA 13.3)
+- **Model**: Qwen3-0.6B-Instruct-2512 (huggingface)
+- **Backend**: vLLM (vllm/vllm-openai:latest), runtime: `runtime.vllm.nvidia-docker`
+- **Git**: branch `main`, commit `48ee190`
+- **Basic verification**: `go test ./...` PASS, `go vet ./...` PASS, `go build ./...` PASS, `npm build` PASS, `npm test` PASS (all 11 tests, 606 i18n keys)
+- **E2E result**: PASS (exit code 0), `/v1/models` returned model `e2e-wizard-*`
+- **Instance test API**: PASS (200 OK, 177ms latency)
+- **Instance ID**: `6380d872-9a24-4c07-9b8f-976ddc35a8a2`
+- **Model resolved**: `e2e-itest-202321` via `single_model_fallback`
+- **Mode**: `chat` (endpoint `/v1/chat/completions`)
+- **Response preview**: `"Ping 是一种网络测试工具，用于"`
+- **Log paths**:
+  - `docs/reports/model-runtime-node-wizard/e2e-run-20260618-201241/` — full E2E output, server/agent logs, exit code
+  - `docs/reports/model-runtime-node-wizard/e2e-run-20260618-202641-instance-test/` — instance test API response, audit logs, summary
+
+No problems from this round are left only in chat history.

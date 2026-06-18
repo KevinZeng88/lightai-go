@@ -1,0 +1,10 @@
+{
+  "checked_at": "2026-06-18T20:26:20+08:00",
+  "endpoint": "http://127.0.0.1:8004/v1/chat/completions",
+  "latency_ms": 177,
+  "mode": "chat",
+  "model": "e2e-itest-202321",
+  "model_resolution_method": "single_model_fallback",
+  "ok": true,
+  "response_preview": "Ping 是一种网络测试工具，用于"
+}

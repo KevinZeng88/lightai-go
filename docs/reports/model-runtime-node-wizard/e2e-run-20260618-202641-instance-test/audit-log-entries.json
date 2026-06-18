@@ -1,0 +1,4 @@
+[
+  {"action": "model_instance.test.started", "entity_id": "6380d872-9a24-4c07-9b8f-976ddc35a8a2", "detail": "endpoint=http://127.0.0.1:8004 model=e2e-itest-202321 method=single_model_fallback result=success"},
+  {"action": "model_instance.test.succeeded", "entity_id": "6380d872-9a24-4c07-9b8f-976ddc35a8a2", "result": "success"}
+]
