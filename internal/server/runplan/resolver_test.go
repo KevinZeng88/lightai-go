@@ -359,3 +359,62 @@ func TestArgsOverrideAppendOnly(t *testing.T) {
 		t.Error("original args should still be present (append, not replace)")
 	}
 }
+
+
+// TestContainerPathSafety validates that dangerous relative paths are rejected
+// and safe paths produce correct container mounts under /models.
+func TestContainerPathSafety(t *testing.T) {
+	baseInput := ResolveInput{
+		Backend:        &BackendInfo{ID: "b.vllm", Name: "vllm", DefaultEnv: map[string]string{}},
+		BackendVersion: &VersionInfo{ID: "bv.openai", DefaultEntrypoint: []string{"serve"}, DefaultArgs: []string{}, DefaultBackendParams: []string{}, ParameterDefs: []ParameterDef{}, HealthCheck: HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200}, DefaultContainerPort: 8000, DefaultImages: map[string]string{"nvidia": "img:latest"}, Env: map[string]string{}},
+		BackendRuntime: &RuntimeInfo{ID: "rt.vllm", Vendor: "nvidia", RuntimeType: "docker", ImageName: "img:latest", ArgsOverride: []string{}, DefaultEnv: map[string]string{}, Docker: DockerSpecInfo{}, ModelMount: ModelMountInfo{ContainerPath: "/models", Readonly: true}},
+		Deployment:     &DeploymentInfo{ID: "d1", Name: "test", Parameters: map[string]interface{}{}, EnvOverrides: map[string]string{}, Service: ServiceInfo{HostPort: 8002}, Placement: PlacementInfo{NodeID: "n1"}},
+		InstanceID:     "inst-safety",
+		Node:           &NodeInfo{ID: "n1", IP: "127.0.0.1"},
+		AssignedGPUs:   []GPUInfo{{Index: 0, Vendor: "nvidia"}},
+	}
+
+	tests := []struct {
+		name         string
+		modelRoot    string
+		relativePath string
+		wantErr      bool
+	}{
+		{"safe simple", "/data/models", "qwen", false},
+		{"safe nested", "/data/models", "family/qwen", false},
+		{"dangerous dotdot", "/data/models", "../etc", true},
+		{"dangerous absolute", "/data/models", "/etc", true},
+		{"dangerous empty", "/data/models", "", true},
+		{"safe with dot in name", "/data/models", "qwen3.5-9b", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := baseInput
+			in.Artifact = &ArtifactInfo{
+				ID:           "a1",
+				Name:         "test-model",
+				Path:         tt.modelRoot + "/" + tt.relativePath,
+				ModelRoot:    tt.modelRoot,
+				RelativePath: tt.relativePath,
+			}
+			_, errs, _ := Resolve(in)
+			hasErr := len(errs) > 0
+			if hasErr != tt.wantErr {
+				t.Errorf("Resolve() errors=%v, wantErr=%v. errs: %v", hasErr, tt.wantErr, errs)
+			}
+			if !tt.wantErr {
+				plan, _, _ := Resolve(in)
+				if plan != nil && len(plan.Mounts) > 0 {
+					cp := plan.Mounts[0].ContainerPath
+					if !strings.HasPrefix(cp, "/models/") && cp != "/models" {
+						t.Errorf("container path %q not under /models", cp)
+					}
+					if strings.Contains(cp, "..") {
+						t.Errorf("container path %q contains ..", cp)
+					}
+				}
+			}
+		})
+	}
+}

@@ -190,7 +190,11 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	docker := mergeDockerSpec(in)
 
 	// 8. Build model mounts.
-	mounts := buildMounts(in)
+	mounts, mountErr := buildMounts(in)
+	if mountErr != nil {
+		errors = append(errors, mountErr)
+		return nil, errors, warnings
+	}
 
 	// 9. Build health check.
 	hc := buildHealthCheck(in)
@@ -473,7 +477,7 @@ func mergeDockerSpec(in ResolveInput) DockerSpecInfo {
 	return docker
 }
 
-func buildMounts(in ResolveInput) []MountMapping {
+func buildMounts(in ResolveInput) ([]MountMapping, error) {
 	var mounts []MountMapping
 
 	// Model mount: construct per-node host path from model_root + relative_path.
@@ -484,10 +488,20 @@ func buildMounts(in ResolveInput) []MountMapping {
 		hostRoot = in.NodeRuntimeOverride.ModelRootHostPath
 	}
 	relPath := modelRelativePath(in.Artifact)
-	hostPath := hostRoot
-	if relPath != "" && relPath != "." {
-		hostPath = strings.TrimRight(hostRoot, "/") + "/" + strings.TrimLeft(relPath, "/")
+
+	// Validate relative path: must not be empty, must not escape.
+	// Check both the trimmed value AND the original RelativePath for absolute prefix.
+	if relPath == "" || relPath == "." {
+		return nil, fmt.Errorf("model relative_path is empty")
 	}
+	if strings.Contains(relPath, "..") {
+		return nil, fmt.Errorf("model relative_path is invalid: %q (must not contain ..)", relPath)
+	}
+	if in.Artifact != nil && strings.HasPrefix(in.Artifact.RelativePath, "/") {
+		return nil, fmt.Errorf("model relative_path must not be absolute: %q", in.Artifact.RelativePath)
+	}
+
+	hostPath := strings.TrimRight(hostRoot, "/") + "/" + strings.TrimLeft(relPath, "/")
 
 	containerMountDir := in.BackendRuntime.ModelMount.ContainerPath
 	if containerMountDir == "" {
@@ -495,6 +509,13 @@ func buildMounts(in ResolveInput) []MountMapping {
 	}
 	// Container path matches MODEL_CONTAINER_PATH: /models/<relative-path>
 	containerPath := strings.TrimRight(containerMountDir, "/") + "/" + strings.TrimLeft(relPath, "/")
+
+	// Safety: cleaned container path must stay under the mount directory.
+	cleaned := cleanPath(containerPath)
+	if !strings.HasPrefix(cleaned, cleanPath(containerMountDir)+"/") && cleaned != cleanPath(containerMountDir) {
+		return nil, fmt.Errorf("container model path escapes mount dir: %q (cleaned: %q)", containerPath, cleaned)
+	}
+
 	readonly := in.BackendRuntime.ModelMount.Readonly
 	if in.BackendRuntime.ModelMount.ContainerPath == "" {
 		readonly = true
@@ -502,11 +523,35 @@ func buildMounts(in ResolveInput) []MountMapping {
 
 	mounts = append(mounts, MountMapping{
 		HostPath:      hostPath,
-		ContainerPath: containerPath,
+		ContainerPath: cleaned,
 		Readonly:      readonly,
 	})
 
-	return mounts
+	return mounts, nil
+}
+
+// cleanPath removes redundant separators and resolves . components without
+// following symlinks. Unlike path.Clean, it rejects .. traversal.
+func cleanPath(p string) string {
+	if p == "" {
+		return "/"
+	}
+	parts := strings.FieldsFunc(p, func(r rune) bool { return r == '/' })
+	var out []string
+	for _, part := range parts {
+		switch part {
+		case ".":
+			continue
+		case "..":
+			// Reject — caller should have already validated no ..
+			return ""
+		}
+		out = append(out, part)
+	}
+	if len(out) == 0 {
+		return "/"
+	}
+	return "/" + strings.Join(out, "/")
 }
 
 func modelHostRoot(artifact *ArtifactInfo) string {
@@ -565,13 +610,19 @@ func buildHealthCheck(in ResolveInput) HealthCheck {
 func buildVarMap(in ResolveInput) map[string]string {
 	vars := make(map[string]string)
 
-	// Model path in container (after mount translation)
+	// Model path in container (after mount translation).
+	// relative_path is validated in buildMounts before reaching here; extra defense
+	// skips path-dependent vars if the path is invalid.
 	modelBase := modelRelativePath(in.Artifact)
 	containerMount := in.BackendRuntime.ModelMount.ContainerPath
 	if containerMount == "" {
 		containerMount = "/models"
 	}
 	modelContainerPath := strings.TrimRight(containerMount, "/") + "/" + strings.TrimLeft(modelBase, "/")
+	// Defense: if relative path is empty or escape-like, fall back to a safe default.
+	if modelBase == "" || modelBase == "." || strings.Contains(modelBase, "..") || strings.HasPrefix(modelBase, "/") {
+		modelContainerPath = containerMount // safe fallback: just the mount dir
+	}
 
 	// Compute per-node host model path: model_root + "/" + relative_path.
 	// Different nodes can have different host paths for the same model.

@@ -182,7 +182,27 @@ Node B (model at /mnt/nvme/model-store/qwen3.5-9b):
 → Different host paths, same container path. Args remain identical.
 ```
 
-### 3.3 NodeBackendRuntime Does Not Bind ModelLocation
+### 3.4 Container Path Safety
+
+The relative_path from ModelLocation is validated before use in mount generation:
+
+```
+Validation in buildMounts (runplan/resolver.go):
+  1. relative_path must not be empty or "."
+  2. relative_path must not contain ".."
+  3. Original RelativePath must not start with "/" (absolute)
+  4. Final container path is cleaned and must start with /models/ (no escape)
+
+Test coverage (TestContainerPathSafety):
+  relativePath = qwen            → /models/qwen             ✓
+  relativePath = family/qwen     → /models/family/qwen      ✓
+  relativePath = ../etc          → rejected (contains ..)   ✓
+  relativePath = /etc            → rejected (absolute)      ✓
+  relativePath = ""              → rejected (empty)         ✓
+  relativePath = qwen3.5-9b      → /models/qwen3.5-9b       ✓
+```
+
+### 3.5 NodeBackendRuntime Does Not Bind ModelLocation
 
 ```
 NodeBackendRuntime = runtime config snapshot (how to run)
