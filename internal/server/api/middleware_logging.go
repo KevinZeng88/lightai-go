@@ -15,6 +15,7 @@ var highFrequencyPrefixes = []string{
 	"/api/v1/agent/heartbeat",
 	"/api/v1/agent/resources/report",
 	"/api/v1/agent/tasks/", // task result endpoint
+	"/metrics",
 }
 
 // isHighFrequencyGET returns true for GET requests to frequently-polled resources.

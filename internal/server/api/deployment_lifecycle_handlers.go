@@ -804,7 +804,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 
 	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
 		TenantID: tid, ActorID: actorIDFromSession(r),
-		Action: "instance.start", ResourceType: "model_instance",
+		Action: "instance.start.requested", ResourceType: "model_instance",
 		ResourceID: instanceID, Result: "success",
 		RequestID: log.RequestIDFromContext(r.Context()), OperationID: operationID,
 	})

@@ -309,13 +309,13 @@ func (d *DockerRuntimeDriver) logContainerFailure(ctx context.Context, container
 	if stderr != "" {
 		log.ErrorContext(ctx, "docker.container.stderr",
 			"container_id", containerID,
-			"stderr_tail", strings.TrimSpace(stderr),
+			"stderr_tail_preview", singleLineTailStr(stderr, 2048),
 		)
 	}
 	if stdout != "" {
 		log.InfoContext(ctx, "docker.container.stdout_tail",
 			"container_id", containerID,
-			"stdout_tail", strings.TrimSpace(stdout),
+			"stdout_tail_preview", singleLineTailStr(stdout, 2048),
 		)
 	}
 }
@@ -511,4 +511,23 @@ func mapContainerState(dockerState string) string {
 	default:
 		return "unknown"
 	}
+}
+
+// singleLineTail escapes newlines, carriage returns, and tabs in a log tail
+// so it fits in a single structured log line.
+func singleLineTail(s string, maxBytes int) (escaped string, truncated bool, byteCount int) {
+	byteCount = len(s)
+	if len(s) > maxBytes {
+		s = s[:maxBytes]
+		truncated = true
+	}
+	r := strings.NewReplacer("\n", "\\n", "\r", "\\r", "\t", "\\t")
+	escaped = r.Replace(s)
+	return
+}
+
+// singleLineTailStr is a convenience wrapper returning only the escaped string.
+func singleLineTailStr(s string, maxBytes int) string {
+	escaped, _, _ := singleLineTail(s, maxBytes)
+	return escaped
 }
