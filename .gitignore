@@ -44,5 +44,8 @@ cookies.txt
 *.tar.gz
 third_party/
 
+# Runtime process files
+run/*.pid
+
 # E2E test artifacts
 /run/e2e/
