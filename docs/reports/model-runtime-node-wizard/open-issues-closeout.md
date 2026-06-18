@@ -105,3 +105,16 @@ No problems from this round are left only in chat history.
 | MRW-SPE-004 | Wizard Step 3 label said "选择运行配置" but data source is BackendRuntime templates | `startWizard.selectRuntime` was "选择运行配置" / "Select Runtime" | User might expect node configs, not templates | FIXED | `zh-CN.ts`: "选择运行模板"; `en-US.ts`: "Select Runtime Template" | `npm test` PASS | Closed |
 
 No problems from this round are left only in chat history.
+
+
+---
+
+## 2026-06-18 Model Smoke Test Round
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-TEST-001 | No way to verify model inference after instance starts | Only health check (/v1/models) existed; no chat/completions test | Operators cannot confirm the model actually works beyond API liveness | FIXED | `internal/server/api/deployment_lifecycle_handlers.go` (+`HandleModelInstanceTest`), `internal/server/api/router.go` (+`POST /api/v1/model-instances/{id}/test`), `web/src/pages/ModelInstancesPage.vue` (+test button, result dialog, reason_code→i18n mapping), `web/src/locales/zh-CN.ts` (+13 keys), `web/src/locales/en-US.ts` (+13 keys) | `go build/test/vet` PASS; `npm build/test` PASS; 598 keys both locales | Closed |
+| MRW-TEST-002 | Model test uses resolved model name, not user-entered ID | Test reads `model_artifacts.name` from deployment→artifact join; sends in chat/completions request body | Correct model is tested | VERIFIED | `HandleModelInstanceTest` — `SELECT COALESCE(ma.name,'') FROM model_deployments JOIN model_artifacts` | Code review confirmed | Closed |
+| MRW-TEST-003 | Audit log entries for test actions | `WriteAudit` called for `model_instance.test.started`, `.succeeded`, `.failed` | Test events are traceable in audit log | VERIFIED | `deployment_lifecycle_handlers.go` — 3 WriteAudit calls | Code review confirmed | Closed |
+
+No problems from this round are left only in chat history.

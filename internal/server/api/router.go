@@ -190,6 +190,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	miReadChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.RequirePermission("model_instance:read"))
 	mux.Handle("GET /api/v1/model-instances", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListInstances)))
 	mux.Handle("GET /api/v1/model-instances/{id}", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetInstance)))
+		mux.Handle("POST /api/v1/model-instances/{id}/test", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleModelInstanceTest)))
 	mux.Handle("GET /api/v1/node-run-plans/{id}", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeRunPlan)))
 	mux.Handle("GET /api/v1/node-run-plans/{id}/command-preview", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeRunPlanPreview)))
 	mux.Handle("GET /api/v1/node-run-plans/{id}/logs", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeRunPlanLogs)))

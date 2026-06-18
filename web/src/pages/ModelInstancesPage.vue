@@ -17,9 +17,18 @@
       <el-table-column prop="container_id" :label="t('instances.container')" width="180" show-overflow-tooltip />
       <el-table-column prop="host_port" :label="t('instances.port')" width="90" />
       <el-table-column prop="endpoint_url" :label="t('instances.endpoint')" min-width="200" show-overflow-tooltip />
-      <el-table-column :label="t('common.actions')" width="230" fixed="right">
+      <el-table-column :label="t('common.actions')" width="320" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="showDetail(row)">{{ t('common.detail') }}</el-button>
+          <el-button
+            size="small"
+            type="primary"
+            :disabled="row.actual_state !== 'running'"
+            :loading="testing && testRow?.id === row.id"
+            @click="doTest(row)"
+          >
+            {{ t('instances.test') }}
+          </el-button>
           <el-button
             size="small"
             :icon="Document"
@@ -31,6 +40,30 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <el-dialog v-model="testVisible" :title="t('instances.testResult')" width="560px">
+      <div v-if="testResult" class="test-result">
+        <el-alert
+          :type="testResult.ok ? 'success' : 'error'"
+          :title="testResult.ok ? t('instances.testPassed') : t('instances.testFailed')"
+          :description="testResult.ok ? '' : testErrorMessage"
+          show-icon
+          :closable="false"
+        />
+        <el-descriptions v-if="testResult.ok" :column="1" border size="small" style="margin-top:12px">
+          <el-descriptions-item :label="t('instances.testEndpoint')">{{ testResult.endpoint }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testModel')">{{ testResult.model }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testLatency')">{{ testResult.latency_ms }} ms</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testPreview')">{{ testResult.response_preview || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testCheckedAt')">{{ testResult.checked_at || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions v-else :column="1" border size="small" style="margin-top:12px">
+          <el-descriptions-item :label="t('instances.testEndpoint')">{{ testResult.endpoint || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testLatency')">{{ testResult.latency_ms != null ? testResult.latency_ms + ' ms' : '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testCheckedAt')">{{ testResult.checked_at || '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </el-dialog>
 
     <el-dialog v-model="detailVisible" :title="t('instances.detail')" width="640px">
       <div v-if="selected" class="detail-grid">
@@ -70,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Document, RefreshRight } from '@element-plus/icons-vue'
@@ -91,6 +124,32 @@ const logsError = ref('')
 const logsMeta = ref<any>(null)
 const logsRow = ref<any>(null)
 const autoOpenedFailedLogs = ref(false)
+
+// Model smoke test
+const testing = ref(false)
+const testVisible = ref(false)
+const testRow = ref<any>(null)
+const testResult = ref<any>(null)
+
+// Reason code → i18n key mapping for test failures
+const testReasonI18n: Record<string, string> = {
+  instance_not_running: 'instances.testReasonNotRunning',
+  no_endpoint: 'instances.testReasonNoEndpoint',
+  network_error: 'instances.testReasonNetworkError',
+}
+for (let i = 400; i < 600; i++) {
+  testReasonI18n[`http_${i}`] = 'instances.testReasonHttpError'
+}
+
+const testErrorMessage = computed(() => {
+  if (!testResult.value || testResult.value.ok) return ''
+  const code = testResult.value.reason_code || ''
+  const key = testReasonI18n[code]
+  if (key) return t(key, { code, message: testResult.value.message || '' })
+  // Check prefix match for http_xxx
+  if (code.startsWith('http_')) return t('instances.testReasonHttpError', { code, message: testResult.value.message || '' })
+  return testResult.value.message || code
+})
 
 onMounted(async () => {
   await refresh()
@@ -152,6 +211,20 @@ async function copyLogs() {
     ElMessage.success(t('common.copied'))
   } catch {
     ElMessage.error(t('common.copyFailed'))
+  }
+}
+
+async function doTest(row: any) {
+  testRow.value = row
+  testing.value = true
+  testVisible.value = true
+  testResult.value = null
+  try {
+    testResult.value = await apiClient.post(`/model-instances/${row.id}/test`, { mode: 'chat', prompt: 'ping', timeout_seconds: 30 })
+  } catch (e: any) {
+    testResult.value = { ok: false, reason_code: 'network_error', message: e?.message || t('common.requestFailed') }
+  } finally {
+    testing.value = false
   }
 }
 </script>

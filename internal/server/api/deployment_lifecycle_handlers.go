@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -1310,4 +1312,171 @@ func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]ma
 		out = []map[string]interface{}{}
 	}
 	return out, nil
+}
+
+
+// ==========================================================================
+// Model Instance Smoke Test
+// ==========================================================================
+
+// HandleModelInstanceTest executes a minimal chat-completion request against a
+// running instance to verify the model can actually perform inference.
+func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	tid := tenantID(r)
+	actorID := actorIDFromSession(r)
+	requestID := log.RequestIDFromContext(r.Context())
+	checkedAt := time.Now().Format(time.RFC3339)
+
+	// Read instance.
+	var instID, deployID, instTid, instState string
+	var hostPort int
+	var endpointURL sql.NullString
+	row := h.DB.QueryRow(`SELECT id, deployment_id, tenant_id, actual_state, endpoint_url, host_port FROM model_instances WHERE id = ?`, id)
+	if err := row.Scan(&instID, &deployID, &instTid, &instState, &endpointURL, &hostPort); err != nil {
+		writeError(w, http.StatusNotFound, "instance not found")
+		return
+	}
+	if !tenantScopeCheck(r, instTid) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	// Must be running.
+	if instState != "running" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false, "reason_code": "instance_not_running",
+			"message": fmt.Sprintf("instance is %s, must be running to test", instState),
+		})
+		return
+	}
+
+	// Read model name from deployment -> artifact.
+	var modelName string
+	h.DB.QueryRow(`SELECT COALESCE(ma.name,'') FROM model_deployments md JOIN model_artifacts ma ON ma.id = md.model_artifact_id WHERE md.id = ?`, deployID).Scan(&modelName)
+	if modelName == "" {
+		modelName = "unknown"
+	}
+
+	// Resolve endpoint: prefer endpoint_url, fall back to host_port.
+	endpoint := endpointURL.String
+	if endpoint == "" && hostPort > 0 {
+		endpoint = fmt.Sprintf("http://127.0.0.1:%d", hostPort)
+	}
+	if endpoint == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false, "reason_code": "no_endpoint",
+			"message": "instance has no endpoint URL or host port",
+		})
+		return
+	}
+
+	// Build chat/completions request.
+	chatURL := strings.TrimRight(endpoint, "/") + "/v1/chat/completions"
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"model": modelName,
+		"messages": []map[string]string{
+			{"role": "user", "content": "ping"},
+		},
+		"max_tokens":  8,
+		"temperature": 0,
+	})
+
+	// Send request with timeout.
+	client := &http.Client{Timeout: 30 * time.Second}
+	startTime := time.Now()
+	httpReq, _ := http.NewRequestWithContext(r.Context(), "POST", chatURL, bytes.NewReader(reqBody))
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(httpReq)
+	latencyMs := time.Since(startTime).Milliseconds()
+
+	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+		TenantID: tid, ActorID: actorID,
+		Action: "model_instance.test.started", ResourceType: "instance",
+		ResourceID: id, Result: "success",
+		RequestID: requestID,
+		Detail:    fmt.Sprintf("endpoint=%s model=%s", chatURL, modelName),
+	})
+
+	if err != nil {
+		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+			TenantID: tid, ActorID: actorID,
+			Action: "model_instance.test.failed", ResourceType: "instance",
+			ResourceID: id, Result: "failure",
+			RequestID: requestID,
+			Detail:    fmt.Sprintf("reason=network_error endpoint=%s latency_ms=%d err=%v", chatURL, latencyMs, err),
+		})
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok": false, "reason_code": "network_error",
+			"message":    fmt.Sprintf("failed to reach instance: %v", err),
+			"endpoint":   chatURL,
+			"latency_ms": latencyMs,
+			"checked_at": checkedAt,
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	var respData map[string]interface{}
+	json.Unmarshal(bodyBytes, &respData)
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		// Extract preview from first choice.
+		preview := ""
+		if choices, ok := respData["choices"].([]interface{}); ok && len(choices) > 0 {
+			if choice, ok := choices[0].(map[string]interface{}); ok {
+				if msg, ok := choice["message"].(map[string]interface{}); ok {
+					if c, ok := msg["content"]; ok {
+						preview = fmt.Sprintf("%v", c)
+					}
+				}
+				if preview == "" {
+					if t, ok := choice["text"]; ok {
+						preview = fmt.Sprintf("%v", t)
+					}
+				}
+			}
+		}
+		resolvedModel := modelName
+		if m, ok := respData["model"].(string); ok && m != "" {
+			resolvedModel = m
+		}
+		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+			TenantID: tid, ActorID: actorID,
+			Action: "model_instance.test.succeeded", ResourceType: "instance",
+			ResourceID: id, Result: "success",
+			RequestID: requestID,
+			Detail:    fmt.Sprintf("endpoint=%s model=%s latency_ms=%d", chatURL, resolvedModel, latencyMs),
+		})
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok": true,
+			"endpoint":         chatURL,
+			"model":            resolvedModel,
+			"latency_ms":       latencyMs,
+			"response_preview": preview,
+			"checked_at":       checkedAt,
+		})
+	} else {
+		errMsg := fmt.Sprintf("HTTP %d", resp.StatusCode)
+		if em, ok := respData["error"].(map[string]interface{}); ok {
+			if m, ok := em["message"].(string); ok {
+				errMsg = m
+			}
+		}
+		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+			TenantID: tid, ActorID: actorID,
+			Action: "model_instance.test.failed", ResourceType: "instance",
+			ResourceID: id, Result: "failure",
+			RequestID: requestID,
+			Detail:    fmt.Sprintf("reason=http_%d endpoint=%s latency_ms=%d", resp.StatusCode, chatURL, latencyMs),
+		})
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok": false, "reason_code": fmt.Sprintf("http_%d", resp.StatusCode),
+			"message":    errMsg,
+			"endpoint":   chatURL,
+			"latency_ms": latencyMs,
+			"checked_at": checkedAt,
+		})
+	}
 }
