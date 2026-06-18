@@ -1,0 +1,68 @@
+id: sglang-0.4.6-compatible
+backend_id: backend.sglang
+slug: sglang-0-4-6-compatible
+version: 0.4.6-compatible
+managed_by: system
+source: system
+readonly: true
+protocol: openai-compatible
+default_port: 30000
+default_host: 0.0.0.0
+default_model_mount:
+  container_path: /models
+  readonly: true
+default_endpoints:
+  models: /v1/models
+  chat_completions: /v1/chat/completions
+  completions: /v1/completions
+capabilities:
+  - models
+  - chat_completions
+  - completions
+  - openai_compatible
+default_entrypoint:
+  - python3
+  - -m
+  - sglang.launch_server
+default_args:
+  - --model-path
+  - "{{model_container_path}}"
+  - --host
+  - 0.0.0.0
+  - --port
+  - "{{container_port}}"
+default_args_schema:
+  - name: --model-path
+    required: true
+    value: "{{MODEL_CONTAINER_PATH}}"
+  - name: --host
+    default: "0.0.0.0"
+  - name: --port
+    default: "30000"
+  - name: --tp
+    optional: true
+  - name: --dp
+    optional: true
+  - name: --dist-init-addr
+    optional: true
+  - name: --nnodes
+    optional: true
+  - name: --node-rank
+    optional: true
+  - name: --trust-remote-code
+    optional: true
+  - name: --attention-backend
+    optional: true
+  - name: --enable-dp-attention
+    optional: true
+  - name: --enable-ep-moe
+    optional: true
+health_check:
+  type: http
+  path: /v1/models
+  success_status:
+    - 200
+official_reference_note:
+  - "SGLang 0.4.6-compatible is a vendor abstraction layer for MacaRT-SGLang and similar distributions."
+  - "MacaRT-SGLang wraps SGLang 0.4.6 with MetaX MXMACA acceleration."
+  - "Use BackendRuntime (not BackendVersion) to configure MacaRT-SGLang hardware/runtime parameters."

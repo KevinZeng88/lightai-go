@@ -168,6 +168,11 @@ func (db *DB) Migrate() error {
 			return fmt.Errorf("migrate v19: %w", err)
 		}
 	}
+	if currentVersion < 20 {
+		if err := db.migrateV20(); err != nil {
+			return fmt.Errorf("migrate v20: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -1334,6 +1339,7 @@ func (db *DB) seedTargetBackendCatalog() {
 		{"vllm-v0.23.0", "backend.vllm", "vllm-v0-23-0", "v0.23.0", "vLLM v0.23.0", "openai-compatible", `["vllm","serve"]`, `["--model","{{model_container_path}}"]`, `[]`, `[{"name":"--model","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"8000"},{"name":"--served-model-name","optional":true},{"name":"--tensor-parallel-size","optional":true},{"name":"--max-model-len","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 8000, `{"default":"vllm/vllm-openai:v0.23.0"}`, `["vllm/vllm-openai:v0.23.0","vllm/vllm-openai:v0.23.0-cu129-ubuntu2404","vllm/vllm-openai:latest"]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions","embeddings":"/v1/embeddings"}`, `["models","chat_completions","completions","embeddings","openai_compatible"]`, `{"container_path":"/models","readonly":true}`, `["vLLM official Docker docs: vllm/vllm-openai runs OpenAI-compatible server.","vLLM online serving docs: supports /v1/completions, /v1/chat/completions, /v1/embeddings.","vLLM v0.23.0 release line used as current system version baseline."]`, "v0.23.0", 1},
 		{"sglang-v0.5.12.post1", "backend.sglang", "sglang-v0-5-12-post1", "v0.5.12.post1", "SGLang v0.5.12.post1", "openai-compatible", `["python3","-m","sglang.launch_server"]`, `["--model-path","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"--model-path","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"30000"},{"name":"--tp","optional":true},{"name":"--tensor-parallel-size","optional":true},{"name":"--dp","optional":true},{"name":"--enable-metrics","optional":true},{"name":"--log-level","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 30000, `{"default":"lmsysorg/sglang:v0.5.12.post1"}`, `["lmsysorg/sglang:v0.5.12.post1","lmsysorg/sglang:latest-runtime","lmsysorg/sglang:latest","lmsysorg/sglang:v0.5.13.post1-cu129-runtime","lmsysorg/sglang:v0.5.13.post1-cu130-runtime"]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions","embeddings":"/v1/embeddings"}`, `["models","chat_completions","completions","embeddings","openai_compatible"]`, `{"container_path":"/models","readonly":true}`, `["SGLang install docs: Docker images are lmsysorg/sglang and lmsysorg/sglang:latest-runtime.","SGLang launch command: python3 -m sglang.launch_server --model-path ... --host ... --port ...","SGLang OpenAI API docs: supports chat/completions and completions.","SGLang server arguments docs: server args are available from python3 -m sglang.launch_server --help."]`, "v0.5.12.post1", 1},
 		{"sglang-v0.5.13.post1", "backend.sglang", "sglang-v0-5-13-post1", "v0.5.13.post1", "SGLang v0.5.13.post1", "openai-compatible", `["python3","-m","sglang.launch_server"]`, `["--model-path","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"--model-path","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"30000"},{"name":"--tp","optional":true},{"name":"--tensor-parallel-size","optional":true},{"name":"--dp","optional":true},{"name":"--enable-metrics","optional":true},{"name":"--log-level","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 30000, `{"default":"lmsysorg/sglang:v0.5.13.post1-cu129-runtime"}`, `["lmsysorg/sglang:v0.5.13.post1-cu129-runtime","lmsysorg/sglang:v0.5.13.post1-cu130-runtime","lmsysorg/sglang:latest-runtime","lmsysorg/sglang:latest"]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions","embeddings":"/v1/embeddings"}`, `["models","chat_completions","completions","embeddings","openai_compatible"]`, `{"container_path":"/models","readonly":true}`, `["SGLang v0.5.13.post1 tag verified with git ls-remote against github.com/sgl-project/sglang.git.","SGLang install docs: Docker images are lmsysorg/sglang and lmsysorg/sglang:latest-runtime."]`, "v0.5.13.post1", 0},
+		{"sglang-0.4.6-compatible", "backend.sglang", "sglang-0-4-6-compatible", "0.4.6-compatible", "SGLang 0.4.6-compatible", "openai-compatible", `["python3","-m","sglang.launch_server"]`, `["--model-path","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"--model-path","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"30000"},{"name":"--tp","optional":true},{"name":"--dp","optional":true},{"name":"--dist-init-addr","optional":true},{"name":"--nnodes","optional":true},{"name":"--node-rank","optional":true},{"name":"--trust-remote-code","optional":true},{"name":"--attention-backend","optional":true},{"name":"--enable-dp-attention","optional":true},{"name":"--enable-ep-moe","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 30000, `{}`, `[]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions"}`, `["models","chat_completions","completions","openai_compatible"]`, `{"container_path":"/models","readonly":true}`, `["SGLang 0.4.6-compatible is a vendor abstraction layer for MacaRT-SGLang and similar distributions.","MacaRT-SGLang wraps SGLang 0.4.6 with MetaX MXMACA acceleration.","Use BackendRuntime (not BackendVersion) to configure MacaRT-SGLang hardware/runtime parameters."]`, "0.4.6-compatible", 0},
 		{"llamacpp-b9700", "backend.llamacpp", "llamacpp-b9700", "b9700", "llama.cpp b9700", "openai-compatible-subset", `[]`, `["-m","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"-m","alias":"--model","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"8080"},{"name":"--ctx-size","alias":"-c","optional":true},{"name":"--n-gpu-layers","alias":"-ngl","optional":true},{"name":"--threads","alias":"-t","optional":true},{"name":"--threads-batch","alias":"-tb","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 8080, `{"default":"ghcr.io/ggml-org/llama.cpp:server"}`, `["ghcr.io/ggml-org/llama.cpp:server","ghcr.io/ggml-org/llama.cpp:server-cuda","ghcr.io/ggml-org/llama.cpp:server-cuda13"]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions","embeddings":"/v1/embeddings"}`, `["gguf","models","chat_completions","completions","embeddings","openai_compatible","web_ui"]`, `{"container_path":"/models","readonly":true}`, `["llama.cpp tools/server README: llama-server is HTTP server with REST APIs and Web UI.","llama.cpp server README: supports OpenAI API-compatible chat completions, responses, embeddings routes.","llama.cpp Docker docs: ghcr.io/ggml-org/llama.cpp:server contains llama-server only.","llama.cpp releases use build tags such as b9700 rather than stable semver."]`, "b9700", 1},
 		{"backend-version.ollama.latest", "backend.ollama", "ollama-latest", "latest", "Ollama Latest", "ollama", `["ollama","serve"]`, `[]`, `[]`, `[]`, `{"type":"http","path":"/api/tags","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 11434, `{"default":"ollama/ollama:latest"}`, `["ollama/ollama:latest"]`, `{}`, `{"models":"/api/tags"}`, `["ollama"]`, `{}`, `[]`, "latest", 1},
 	}
@@ -1382,6 +1388,39 @@ func (db *DB) seedTargetBackendCatalog() {
 			rt.id, rt.name, rt.display, rt.backendID, rt.versionID, rt.slug, rt.vendor, "docker", rt.image, "if_not_present", "[]", "[]", rt.env, rt.docker, rt.mount, "{}", 1, 0, "",
 			rt.slug, "system", "embedded", "v1", catalogChecksum(rt.id+rt.docker+rt.image), "active", rt.verification, now, now)
 	}
+}
+
+// migrateV20 adds hardware/runtime catalog columns to backend_runtimes
+// for the BackendRuntime layered catalog design.
+func (db *DB) migrateV20() error {
+	alterStatements := []string{
+		`ALTER TABLE backend_runtimes ADD COLUMN hardware_family TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN accelerator_api TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN runtime_distribution TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN runtime_distribution_version TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN compatibility_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN image_candidates_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN image_note TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN devices_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN volumes_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN env_schema_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN args_schema_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN ports_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN high_risk_flags_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN config_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN loaded_from TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN loaded_at TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			// Columns may already exist from a partially applied development DB.
+		}
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (20, 'V20: backend runtime catalog hardware/runtime columns')`); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (db *DB) normalizeLegacyBackendCatalogIDs() {

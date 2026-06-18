@@ -17,9 +17,27 @@ import (
 )
 
 var (
-	backendCatalogSystemVersionsDir = "configs/backend-catalog/versions"
-	backendCatalogUserVersionsDir   = defaultBackendCatalogUserVersionsDir()
+	backendCatalogSystemVersionsDir  = "configs/backend-catalog/versions"
+	backendCatalogUserVersionsDir    = defaultBackendCatalogUserVersionsDir()
+	backendCatalogSystemRuntimesDir  = "configs/backend-catalog/runtimes"
+	backendCatalogUserRuntimesDir    = defaultBackendCatalogUserRuntimesDir()
+	backendCatalogSystemBackendsDir  = "configs/backend-catalog/backends"
+	backendCatalogUserBackendsDir    = defaultBackendCatalogUserBackendsDir()
 )
+
+func defaultBackendCatalogUserRuntimesDir() string {
+	if dir := strings.TrimSpace(os.Getenv("LIGHTAI_BACKEND_CATALOG_USER_DIR")); dir != "" {
+		return filepath.Join(dir, "runtimes")
+	}
+	return "data/backend-catalog.d/user/runtimes"
+}
+
+func defaultBackendCatalogUserBackendsDir() string {
+	if dir := strings.TrimSpace(os.Getenv("LIGHTAI_BACKEND_CATALOG_USER_DIR")); dir != "" {
+		return filepath.Join(dir, "backends")
+	}
+	return "data/backend-catalog.d/user/backends"
+}
 
 func defaultBackendCatalogUserVersionsDir() string {
 	if dir := strings.TrimSpace(os.Getenv("LIGHTAI_BACKEND_CATALOG_USER_DIR")); dir != "" {
@@ -293,16 +311,355 @@ func (h *AgentHandler) HandleCloneBackendVersion(w http.ResponseWriter, r *http.
 }
 
 func (h *AgentHandler) HandleReloadBackendCatalog(w http.ResponseWriter, r *http.Request) {
-	count, err := h.reloadBackendVersionCatalogs()
+	ctx, opStart := log.StartOperation(r.Context(), "backend_catalog.reload")
+	sum, err := h.reloadAllCatalogs()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		log.OperationFailed(ctx, "backend_catalog.reload", "reload", opStart, err)
+		writeError(w, http.StatusInternalServerError, "reload failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "reloaded", "versions": count})
+	log.OperationCompleted(ctx, "backend_catalog.reload", opStart,
+		"backends", sum["backends"], "versions", sum["versions"], "runtimes", sum["runtimes"])
+	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "reloaded", "backends": sum["backends"], "versions": sum["versions"], "runtimes": sum["runtimes"]})
 }
 
 func (h *AgentHandler) ReloadBackendCatalogProjection() (int, error) {
-	return h.reloadBackendVersionCatalogs()
+	sum, err := h.reloadAllCatalogs()
+	if err != nil {
+		return 0, err
+	}
+	return sum["versions"], nil  // keep legacy return type compat
+}
+
+// reloadBackendCatalogs loads Backend definitions from system and user catalog files.
+func (h *AgentHandler) reloadBackendCatalogs() (int, error) {
+	count := 0
+	if n, err := h.reloadBackendCatalogDir(backendCatalogSystemBackendsDir, "system"); err != nil {
+		return count, err
+	} else {
+		count += n
+	}
+	if n, err := h.reloadBackendCatalogDir(backendCatalogUserBackendsDir, "user"); err != nil {
+		return count, err
+	} else {
+		count += n
+	}
+	return count, nil
+}
+
+func (h *AgentHandler) reloadBackendCatalogDir(root, source string) (int, error) {
+	count := 0
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry == nil || entry.IsDir() {
+			return err
+		}
+		name := strings.ToLower(entry.Name())
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var doc backendCatalogDoc
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+		if err := h.upsertBackendProjection(doc, source, path, data); err != nil {
+			return err
+		}
+		count++
+		return nil
+	})
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	return count, err
+}
+
+func (h *AgentHandler) upsertBackendProjection(doc backendCatalogDoc, source, loadedFrom string, data []byte) error {
+	if doc.ID == "" || doc.Name == "" {
+		return fmt.Errorf("invalid backend catalog file %s", loadedFrom)
+	}
+	if source == "" && doc.Source != "" {
+		source = doc.Source
+	}
+	if source == "" && doc.ManagedBy != "" {
+		source = doc.ManagedBy
+	}
+	if source == "" {
+		source = "system"
+	}
+	readonly := source == "system" || doc.Readonly
+	slug := doc.Slug
+	if slug == "" {
+		slug = slugify(doc.Name)
+	}
+	protocolJSON := jsonString(doc.ProtocolFamily)
+	if protocolJSON == "null" || protocolJSON == "" {
+		protocolJSON = "[]"
+	}
+	now := time.Now().Format(time.RFC3339)
+	configHash := checksumString(string(data))
+	name := doc.Name
+	if name == "" {
+		name = doc.ID
+	}
+	displayName := doc.DisplayName
+	if displayName == "" {
+		displayName = doc.Name
+		if displayName == "" {
+			displayName = name
+		}
+	}
+	_, err := h.DB.Exec(`INSERT INTO inference_backends
+		(id, name, display_name, description, protocol_json, default_version, parameter_format, is_builtin, is_enabled, created_at, updated_at)
+		VALUES (?,?,?,?,?,'','',1,1,?,?)
+		ON CONFLICT(id) DO UPDATE SET
+			name=excluded.name,
+			display_name=excluded.display_name,
+			description=excluded.description,
+			protocol_json=excluded.protocol_json,
+			updated_at=excluded.updated_at`,
+		doc.ID, name, displayName, doc.Description, protocolJSON, now, now)
+	if err != nil {
+		return fmt.Errorf("upsert backend %s: %w", doc.ID, err)
+	}
+	_ = configHash
+	_ = readonly
+	_ = slug
+	return nil
+}
+
+// reloadBackendRuntimeCatalogs loads BackendRuntime definitions from system and user catalog files.
+func (h *AgentHandler) reloadBackendRuntimeCatalogs() (int, error) {
+	count := 0
+	if n, err := h.reloadBackendRuntimeCatalogDir(backendCatalogSystemRuntimesDir, "system"); err != nil {
+		return count, err
+	} else {
+		count += n
+	}
+	if n, err := h.reloadBackendRuntimeCatalogDir(backendCatalogUserRuntimesDir, "user"); err != nil {
+		return count, err
+	} else {
+		count += n
+	}
+	return count, nil
+}
+
+func (h *AgentHandler) reloadBackendRuntimeCatalogDir(root, source string) (int, error) {
+	count := 0
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry == nil || entry.IsDir() {
+			return err
+		}
+		name := strings.ToLower(entry.Name())
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var doc backendRuntimeCatalogDoc
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+		if err := h.upsertBackendRuntimeProjection(doc, source, path, data); err != nil {
+			return err
+		}
+		count++
+		return nil
+	})
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	return count, err
+}
+
+func (h *AgentHandler) upsertBackendRuntimeProjection(doc backendRuntimeCatalogDoc, source, loadedFrom string, data []byte) error {
+	if doc.ID == "" || doc.BackendID == "" || doc.BackendVersionID == "" {
+		return fmt.Errorf("invalid backend runtime catalog file %s", loadedFrom)
+	}
+	if ok, err := h.backendExists(doc.BackendID); err != nil || !ok {
+		return fmt.Errorf("backend %q not found for %s", doc.BackendID, loadedFrom)
+	}
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = strings.TrimSpace(doc.Source)
+	}
+	if source == "" {
+		source = strings.TrimSpace(doc.ManagedBy)
+	}
+	if source == "" {
+		source = "user"
+	}
+	readonly := source == "system"
+	if source != "system" && doc.Readonly {
+		readonly = true
+	}
+	isBuiltin := 0
+	isEditable := 1
+	if readonly {
+		isBuiltin = 1
+		isEditable = 0
+	}
+	slug := doc.Slug
+	if slug == "" {
+		slug = slugify(doc.Name)
+	}
+	runnerType := doc.RunnerType
+	if runnerType == "" {
+		runnerType = "docker"
+	}
+	// Pick first image candidate as default image_name
+	imageName := firstStringFromAny(doc.ImageCandidates)
+	if imageName == "" {
+		imageName = ""
+	}
+	vendor := doc.Vendor
+	name := doc.Name
+	if name == "" {
+		name = doc.ID
+	}
+	displayName := doc.DisplayName
+	if displayName == "" {
+		displayName = doc.Name
+		if displayName == "" {
+			displayName = name
+		}
+	}
+	now := time.Now().Format(time.RFC3339)
+	configHash := checksumString(string(data))
+	_, err := h.DB.Exec(`INSERT INTO backend_runtimes
+		(id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, slug, managed_by, source, catalog_version, checksum, status, verification_json, hardware_family, accelerator_api, runtime_distribution, runtime_distribution_version, compatibility_json, image_candidates_json, image_note, devices_json, volumes_json, env_schema_json, args_schema_json, ports_json, high_risk_flags_json, config_hash, loaded_from, loaded_at, created_at, updated_at)
+		VALUES (?,?,?,?,?,'',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET
+			name=excluded.name,
+			display_name=excluded.display_name,
+			backend_id=excluded.backend_id,
+			backend_version_id=excluded.backend_version_id,
+			vendor=excluded.vendor,
+			runtime_type=excluded.runtime_type,
+			image_name=excluded.image_name,
+			image_pull_policy=excluded.image_pull_policy,
+			entrypoint_override_json=excluded.entrypoint_override_json,
+			args_override_json=excluded.args_override_json,
+			default_env_json=excluded.default_env_json,
+			docker_json=excluded.docker_json,
+			model_mount_json=excluded.model_mount_json,
+			health_check_override_json=excluded.health_check_override_json,
+			is_builtin=excluded.is_builtin,
+			is_editable=excluded.is_editable,
+			slug=excluded.slug,
+			managed_by=excluded.managed_by,
+			source=excluded.source,
+			catalog_version=excluded.catalog_version,
+			checksum=excluded.checksum,
+			status=excluded.status,
+			verification_json=excluded.verification_json,
+			hardware_family=excluded.hardware_family,
+			accelerator_api=excluded.accelerator_api,
+			runtime_distribution=excluded.runtime_distribution,
+			runtime_distribution_version=excluded.runtime_distribution_version,
+			compatibility_json=excluded.compatibility_json,
+			image_candidates_json=excluded.image_candidates_json,
+			image_note=excluded.image_note,
+			devices_json=excluded.devices_json,
+			volumes_json=excluded.volumes_json,
+			env_schema_json=excluded.env_schema_json,
+			args_schema_json=excluded.args_schema_json,
+			ports_json=excluded.ports_json,
+			high_risk_flags_json=excluded.high_risk_flags_json,
+			config_hash=excluded.config_hash,
+			loaded_from=excluded.loaded_from,
+			loaded_at=excluded.loaded_at,
+			updated_at=excluded.updated_at`,
+		doc.ID, name, displayName, doc.BackendID, doc.BackendVersionID, vendor, runnerType, imageName, "if_not_present",
+		jsonString(doc.Entrypoint), jsonString(doc.Args), jsonString(doc.EnvSchema), jsonString(doc.DockerOptions), jsonString(map[string]interface{}{}), jsonString(doc.HealthCheck),
+		isBuiltin, isEditable, "", slug, source, source, "v1", checksumString(doc.ID+doc.BackendID+doc.BackendVersionID), "active", jsonString(doc.Verification),
+		doc.HardwareFamily, doc.AcceleratorAPI, doc.RuntimeDistribution, doc.RuntimeDistributionVersion,
+		jsonString(doc.Compatibility), jsonString(doc.ImageCandidates), doc.ImageNote,
+		jsonString(doc.Devices), jsonString(doc.Volumes), jsonString(doc.EnvSchema),
+		jsonString(doc.ArgsSchema), jsonString(doc.Ports), jsonString(doc.HighRiskFlags),
+		configHash, loadedFrom, now, now, now)
+	if err != nil {
+		return fmt.Errorf("upsert runtime %s: %w", doc.ID, err)
+	}
+	return nil
+}
+
+type backendCatalogDoc struct {
+	ID             string      `yaml:"id"`
+	Name           string      `yaml:"name"`
+	DisplayName    string      `yaml:"display_name,omitempty"`
+	Description    string      `yaml:"description,omitempty"`
+	ProtocolFamily interface{} `yaml:"protocol_family,omitempty"`
+	Protocols      interface{} `yaml:"protocols,omitempty"`
+	ManagedBy      string      `yaml:"managed_by,omitempty"`
+	Source         string      `yaml:"source,omitempty"`
+	Readonly       bool        `yaml:"readonly"`
+	Slug           string      `yaml:"slug,omitempty"`
+	Revision       string      `yaml:"revision,omitempty"`
+	ConfigHash     string      `yaml:"config_hash,omitempty"`
+}
+
+type backendRuntimeCatalogDoc struct {
+	ID                        string      `yaml:"id"`
+	Name                      string      `yaml:"name"`
+	DisplayName               string      `yaml:"display_name,omitempty"`
+	BackendID                 string      `yaml:"backend_id"`
+	BackendVersionID          string      `yaml:"backend_version_id"`
+	Source                    string      `yaml:"source,omitempty"`
+	ManagedBy                 string      `yaml:"managed_by,omitempty"`
+	Readonly                  bool        `yaml:"readonly"`
+	Slug                      string      `yaml:"slug,omitempty"`
+	Vendor                    string      `yaml:"vendor,omitempty"`
+	HardwareFamily            string      `yaml:"hardware_family,omitempty"`
+	AcceleratorAPI            string      `yaml:"accelerator_api,omitempty"`
+	RuntimeDistribution       string      `yaml:"runtime_distribution,omitempty"`
+	RuntimeDistributionVersion string     `yaml:"runtime_distribution_version,omitempty"`
+	Compatibility             interface{} `yaml:"compatibility,omitempty"`
+	ImageCandidates           interface{} `yaml:"image_candidates,omitempty"`
+	ImageNote                 string      `yaml:"image_note,omitempty"`
+	RunnerType                string      `yaml:"runner_type,omitempty"`
+	DockerOptions             interface{} `yaml:"docker_options,omitempty"`
+	Devices                   interface{} `yaml:"devices,omitempty"`
+	Volumes                   interface{} `yaml:"volumes,omitempty"`
+	EnvSchema                 interface{} `yaml:"env_schema,omitempty"`
+	Entrypoint                interface{} `yaml:"entrypoint,omitempty"`
+	Args                      interface{} `yaml:"args,omitempty"`
+	ArgsSchema                interface{} `yaml:"args_schema,omitempty"`
+	ArgsDefaults              interface{} `yaml:"args_defaults,omitempty"`
+	Ports                     interface{} `yaml:"ports,omitempty"`
+	HealthCheck               interface{} `yaml:"health_check,omitempty"`
+	HighRiskFlags             interface{} `yaml:"high_risk_flags,omitempty"`
+	Verification              interface{} `yaml:"verification,omitempty"`
+	SourceBackendVersionRevision string   `yaml:"source_backend_version_revision,omitempty"`
+	Revision                  string      `yaml:"revision,omitempty"`
+	ConfigHash                string      `yaml:"config_hash,omitempty"`
+}
+
+// reloadAllCatalogs reloads Backend, BackendVersion, and BackendRuntime
+// from system and user catalog files into DB projection tables.
+func (h *AgentHandler) reloadAllCatalogs() (map[string]int, error) {
+	result := make(map[string]int)
+	backends, err := h.reloadBackendCatalogs()
+	if err != nil {
+		return result, err
+	}
+	result["backends"] = backends
+	versions, err := h.reloadBackendVersionCatalogs()
+	if err != nil {
+		return result, err
+	}
+	result["versions"] = versions
+	runtimes, err := h.reloadBackendRuntimeCatalogs()
+	if err != nil {
+		return result, err
+	}
+	result["runtimes"] = runtimes
+	return result, nil
 }
 
 func (h *AgentHandler) upsertBackendVersionFromRequest(id, backendID string, req map[string]interface{}, creating bool) error {

@@ -1,0 +1,45 @@
+id: llamacpp-b9700-nvidia-cuda13
+name: llamacpp-b9700-nvidia-cuda13
+display_name: llama.cpp b9700 NVIDIA CUDA13
+slug: llamacpp-b9700-nvidia-cuda13
+backend_id: backend.llamacpp
+backend_version_id: llamacpp-b9700
+managed_by: system
+source: system
+readonly: true
+vendor: nvidia
+hardware_family: nvidia-gpu
+accelerator_api: cuda
+runtime_distribution: llama.cpp-server-cuda13
+image_candidates:
+  - ghcr.io/ggml-org/llama.cpp:server-cuda13
+  - ghcr.io/ggml-org/llama.cpp:server-cuda
+  - ghcr.io/ggml-org/llama.cpp:server
+runner_type: docker
+docker_options:
+  gpus: all
+env_schema:
+  - name: NVIDIA_VISIBLE_DEVICES
+    node_specific: true
+    optional: true
+entrypoint:
+  - llama-server
+args:
+  - -m
+  - "{{MODEL_CONTAINER_PATH}}"
+  - --host
+  - "0.0.0.0"
+  - --port
+  - "8080"
+args_defaults:
+  - name: --n-gpu-layers
+    value: "-1"
+    optional: true
+ports:
+  - container_port: 8080
+    protocol: tcp
+health_check:
+  type: http
+  path: /v1/models
+  success_status:
+    - 200

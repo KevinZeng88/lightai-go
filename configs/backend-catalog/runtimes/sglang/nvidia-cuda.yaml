@@ -1,0 +1,49 @@
+id: sglang-v0.5.12-nvidia-cuda
+name: sglang-v0.5.12-nvidia-cuda
+display_name: SGLang v0.5.12 NVIDIA CUDA
+slug: sglang-v0-5-12-nvidia-cuda
+backend_id: backend.sglang
+backend_version_id: sglang-v0.5.12.post1
+managed_by: system
+source: system
+readonly: true
+vendor: nvidia
+hardware_family: nvidia-gpu
+accelerator_api: cuda
+runtime_distribution: official-sglang
+image_candidates:
+  - lmsysorg/sglang:v0.5.12.post1
+  - lmsysorg/sglang:latest-runtime
+  - lmsysorg/sglang:latest
+runner_type: docker
+docker_options:
+  gpus: all
+  ipc_mode: host
+  shm_size: 32g
+  runtime: nvidia
+env_schema:
+  - name: HF_TOKEN
+    optional: true
+    secret: true
+  - name: NVIDIA_VISIBLE_DEVICES
+    node_specific: true
+    optional: true
+entrypoint:
+  - python3
+  - -m
+  - sglang.launch_server
+args:
+  - --model-path
+  - "{{MODEL_CONTAINER_PATH}}"
+  - --host
+  - "0.0.0.0"
+  - --port
+  - "30000"
+ports:
+  - container_port: 30000
+    protocol: tcp
+health_check:
+  type: http
+  path: /v1/models
+  success_status:
+    - 200

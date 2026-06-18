@@ -1,0 +1,44 @@
+id: vllm-v0.23.0-nvidia-cuda
+name: vllm-v0.23.0-nvidia-cuda
+display_name: vLLM v0.23.0 NVIDIA CUDA
+slug: vllm-v0-23-0-nvidia-cuda
+backend_id: backend.vllm
+backend_version_id: vllm-v0.23.0
+managed_by: system
+source: system
+readonly: true
+vendor: nvidia
+hardware_family: nvidia-gpu
+accelerator_api: cuda
+runtime_distribution: official-vllm-openai
+image_candidates:
+  - vllm/vllm-openai:v0.23.0
+  - vllm/vllm-openai:v0.23.0-cu129-ubuntu2404
+  - vllm/vllm-openai:latest
+runner_type: docker
+docker_options:
+  gpus: all
+  ipc_mode: host
+  shm_size: ""
+  runtime: nvidia
+env_schema:
+  - name: HF_TOKEN
+    optional: true
+    secret: true
+  - name: NVIDIA_VISIBLE_DEVICES
+    node_specific: true
+    optional: true
+entrypoint:
+  - vllm
+  - serve
+args:
+  - --model
+  - "{{MODEL_CONTAINER_PATH}}"
+ports:
+  - container_port: 8000
+    protocol: tcp
+health_check:
+  type: http
+  path: /v1/models
+  success_status:
+    - 200

@@ -1,0 +1,81 @@
+id: sglang-0.4.6-metax-macart
+name: sglang-0.4.6-metax-macart
+display_name: SGLang 0.4.6 MetaX MacaRT-SGLang
+slug: sglang-0-4-6-metax-macart
+backend_id: backend.sglang
+backend_version_id: sglang-0.4.6-compatible
+managed_by: system
+source: system
+readonly: true
+vendor: metax
+hardware_family: xiyun
+accelerator_api: mxmaca
+runtime_distribution: MacaRT-SGLang
+compatibility:
+  sglang: "0.4.6"
+  pytorch: "2.6"
+image_candidates:
+  - "<from Metax release package>"
+image_note: "Do not invent public image tag. MacaRT-SGLang image is obtained from Metax PDE AI release package."
+runner_type: docker
+docker_options:
+  privileged: true
+  network_mode: host
+  uts: host
+  ipc_mode: host
+  shm_size: 100gb
+  group_add:
+    - video
+  security_opt:
+    - seccomp=unconfined
+    - apparmor=unconfined
+  ulimits:
+    memlock: -1
+devices:
+  required:
+    - /dev/dri
+    - /dev/mxcd
+    - /dev/mem
+  optional:
+    - /dev/infiniband
+env_schema:
+  - name: MACA_SMALL_PAGESIZE_ENABLE
+    default: "1"
+  - name: PYTORCH_ENABLE_PG_HIGH_PRIORITY_STREAM
+    default: "1"
+  - name: TRITON_ENABLE_MAC_A_OPT_MOVE_DOT_OPERANDS_OUT_LOOP
+    default: "1"
+  - name: TRITON_ENABLE_MAC_A_CHAIN_DOT_OPT
+    default: "1"
+  - name: MACA_VISIBLE_DEVICE
+    node_specific: true
+    optional: true
+    note: "Set according to mx-smi topology on each node."
+  - name: GLOO_SOCKET_IFNAME
+    node_specific: true
+    optional: true
+entrypoint:
+  - python3
+  - -m
+  - sglang.launch_server
+args:
+  - --model-path
+  - "{{MODEL_CONTAINER_PATH}}"
+  - --host
+  - "0.0.0.0"
+  - --port
+  - "30000"
+ports:
+  - container_port: 30000
+    protocol: tcp
+health_check:
+  type: http
+  path: /v1/models
+  success_status:
+    - 200
+high_risk_flags:
+  privileged: true
+  host_network: true
+  host_ipc: true
+  unconfined_seccomp: true
+  unconfined_apparmor: true
