@@ -1,0 +1,75 @@
+[start-all] Mode: source
+[start-all] Observability: skipped
+[start-all] Starting server...
+WARNING: LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD not set.
+A random password will be generated and printed ONCE to stderr.
+Set it via: export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='...'
+=== LightAI Go Server ===
+Config: /home/kzeng/projects/ai-platform-study/lightai-go/configs/server.release.yaml
+Root:   /home/kzeng/projects/ai-platform-study/lightai-go
+
+Server started (PID 17169).
+  Health:  http://127.0.0.1:18080/healthz
+  Web:     http://127.0.0.1:18080/
+
+  Server stdout log: logs/server-stdout.log
+  Server main log:   logs/lightai-server.log
+  Initial credentials: runtime/initial-credentials.txt
+[start-all] Starting agent...
+=== LightAI Go Agent ===
+Config: /home/kzeng/projects/ai-platform-study/lightai-go/configs/agent.yaml
+Root:   /home/kzeng/projects/ai-platform-study/lightai-go
+
+Agent started (PID 17189).
+  Metrics: http://127.0.0.1:19091/metrics
+
+  Agent stdout log: logs/agent-stdout.log
+  Agent main log:   logs/lightai-agent.log
+[start-all] Health check: Server (http://127.0.0.1:18080/healthz)...
+[start-all]   Server: OK
+[start-all] Health check: Agent (http://127.0.0.1:19091/healthz)...
+[start-all]   Agent: OK
+[start-all] Done.
+[11:52:20] stage=login start
+[11:52:20] stage=login done duration_ms=57
+[11:52:20] stage=query_node start
+[11:52:20] node_id=node-70894186-093c-403d-87d1-08f17a690521
+[11:52:20] stage=query_node done duration_ms=25
+[11:52:20] stage=query_gpu start
+[11:52:20] gpu_id=28212356-3831-4f47-8693-fa6906e75a4c
+[11:52:20] stage=query_gpu done duration_ms=24
+[11:52:20] stage=negative_model_roots start
+[11:52:20] stage=negative_model_roots done duration_ms=25
+[11:52:20] stage=add_model_root start
+[11:52:20] root_id=ea73d735-279b-4273-91e9-f4dab23296b8 root_path=/home/kzeng/models
+[11:52:20] stage=add_model_root done duration_ms=25
+[11:52:20] stage=browse_files start
+[11:52:20] stage=browse_files done duration_ms=10
+[11:52:20] stage=scan_model start
+[11:52:20] scan result: huggingface Qwen3-0.6B-Instruct-2512
+[11:52:20] stage=scan_model done duration_ms=26
+[11:52:20] stage=create_model_artifact start
+[11:52:20] stage=create_model_artifact done duration_ms=31
+[11:52:20] stage=docker_images start
+[11:52:20] stage=docker_images done duration_ms=203
+[11:52:20] stage=enable_runtime start
+[11:52:20] stage=enable_runtime done duration_ms=10
+[11:52:20] stage=clone_runtime start
+[11:52:20] clone_id=b0de8b7e-4550-4317-9abc-14454e8d2c19
+[11:52:20] stage=clone_runtime done duration_ms=23
+[11:52:20] stage=preflight start
+[11:52:20] candidate nodes: 1
+[11:52:20] stage=preflight done duration_ms=23
+[11:52:20] stage=start_deployment start
+[11:52:20] instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8
+[11:52:20] stage=start_deployment done duration_ms=45
+[11:52:20] stage=health_check start
+[11:53:41] /v1/models PASS
+[11:53:41] stage=health_check done duration_ms=80324
+[11:53:41] stage=logs_api start
+[11:53:41] stage=logs_api done duration_ms=226
+[11:53:41] stage=stop_deployment start
+[11:53:45] stage=stop_deployment done duration_ms=4010
+[11:53:45] stage=cleanup_resources start
+[11:53:45] stage=cleanup_resources done duration_ms=173
+[11:53:45] PASS: model runtime wizard E2E completed

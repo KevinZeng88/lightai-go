@@ -82,12 +82,31 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
 		auth.RequirePermission("node:read"),
 	)
+	nodeModelRootWriteChain := chain(
+		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
+		auth.CSRFMiddleware(cfg.SessionCfg),
+		auth.RequirePermission("node_model_root:write"),
+	)
+	nodeFileReadChain := chain(
+		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
+		auth.RequirePermission("node_file:read"),
+	)
 	mux.Handle("GET /api/v1/nodes", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodes)))
 	mux.Handle("GET /api/v1/nodes/{id}", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNode)))
 	// PATCH /api/v1/nodes/{id}/tenant — platform admin only.
 	mux.Handle("PATCH /api/v1/nodes/{id}/tenant", platformChain(cfg, cfg.AgentHandler.HandlePatchNodeTenant))
 	mux.Handle("GET /api/v1/nodes/{id}/system", resourceChain(http.HandlerFunc(cfg.ResourceHandler.HandleGetNodeSystem)))
+	mux.Handle("GET /api/v1/nodes/{id}/model-browser/roots", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodeModelBrowserRoots)))
+	mux.Handle("POST /api/v1/nodes/{id}/model-browser/roots", nodeModelRootWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleAddNodeModelBrowserRoot)))
+	mux.Handle("DELETE /api/v1/nodes/{id}/model-browser/roots", nodeModelRootWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteNodeModelBrowserRoot)))
+	mux.Handle("GET /api/v1/nodes/{id}/model-roots", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodeModelRoots)))
+	mux.Handle("POST /api/v1/nodes/{id}/model-roots", nodeModelRootWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleAddNodeModelRoot)))
+	mux.Handle("PATCH /api/v1/nodes/{id}/model-roots/{root_id}", nodeModelRootWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchNodeModelRoot)))
+	mux.Handle("DELETE /api/v1/nodes/{id}/model-roots/{root_id}", nodeModelRootWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteNodeModelRoot)))
+
 	mux.Handle("GET /api/v1/nodes/{id}/docker-images", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeDockerImages)))
+	mux.Handle("GET /api/v1/nodes/{id}/files", nodeFileReadChain(http.HandlerFunc(cfg.AgentHandler.HandleProxyNodeFiles)))
+	mux.Handle("POST /api/v1/nodes/{id}/model-paths/scan", nodeFileReadChain(http.HandlerFunc(cfg.AgentHandler.HandleProxyNodeModelScan)))
 
 	// GPU routes (gpu:read permission).
 	gpuChain := chain(
@@ -130,6 +149,11 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("GET /api/v1/nodes/{id}/backend-runtimes", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodeBackendRuntimes)))
 	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/enable", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleEnableNodeBackendRuntime)))
 	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/check", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCheckNodeBackendRuntime)))
+	mux.Handle("PATCH /api/v1/nodes/{id}/backend-runtimes/{nbr_id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchNodeBackendRuntime)))
+	mux.Handle("DELETE /api/v1/nodes/{id}/backend-runtimes/{nbr_id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteNodeBackendRuntime)))
+
+	// BackendRuntime clone.
+	mux.Handle("POST /api/v1/backend-runtimes/{id}/clone", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCloneBackendRuntime)))
 
 	// ModelArtifact CRUD.
 	maReadChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.RequirePermission("model_artifact:read"))
@@ -143,6 +167,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("POST /api/v1/model-artifacts/{id}/locations", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCreateModelLocation)))
 	mux.Handle("POST /api/v1/model-artifacts/{id}/locations/{location_id}/rescan", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleRescanModelLocation)))
 	mux.Handle("POST /api/v1/model-artifacts/{id}/locations/{location_id}/attest", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleAttestModelLocation)))
+	mux.Handle("PATCH /api/v1/model-artifacts/{id}/locations/{location_id}", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchModelLocation)))
+	mux.Handle("DELETE /api/v1/model-artifacts/{id}/locations/{location_id}", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteModelLocation)))
 
 	// ModelDeployment CRUD + lifecycle.
 	mdReadChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.RequirePermission("model_deployment:read"))
@@ -155,6 +181,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("PATCH /api/v1/deployments/{id}", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchDeployment)))
 	mux.Handle("DELETE /api/v1/deployments/{id}", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteDeployment)))
 	mux.Handle("POST /api/v1/deployments/{id}/dry-run", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeploymentDryRun)))
+	mux.Handle("POST /api/v1/deployments/preflight", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePreflightDeployments)))
 	mux.Handle("POST /api/v1/deployments/{id}/start", mdStartChain(http.HandlerFunc(cfg.AgentHandler.HandleStartDeployment)))
 	mux.Handle("POST /api/v1/deployments/{id}/stop", mdStopChain(http.HandlerFunc(cfg.AgentHandler.HandleStopDeployment)))
 	mux.Handle("GET /api/v1/deployments/{id}/run-plan-groups", mdReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListRunPlanGroups)))

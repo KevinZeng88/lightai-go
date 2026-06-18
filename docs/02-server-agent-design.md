@@ -1,3 +1,8 @@
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Reference or historical compatibility document; not the current entrypoint
+> Read order: See `docs/CURRENT.md`
+
 # LightAI Go Server / Agent Design
 
 > Last updated: 2026-06-13. Covers Phase 0 through Phase 3W+. Current defaults are accurate.

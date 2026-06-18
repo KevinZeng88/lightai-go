@@ -1,3 +1,8 @@
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Reference or historical compatibility document; not the current entrypoint
+> Read order: See `docs/CURRENT.md`
+
 # LightAI Go Local Verification Runbook
 
 > Last updated: 2026-06-14

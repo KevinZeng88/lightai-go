@@ -1,3 +1,10 @@
+# Backend Runtime RunPlan Open Issues Closeout
+
+> Status: CURRENT_REPORT
+> Last reviewed: 2026-06-18
+> Scope: BackendRuntime / RunPlan formal blockers and closeout
+> Read order: See `docs/CURRENT.md`
+
 | ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
 | -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
 | BRR-BLOCKER-001 | Server API could not proxy Docker logs from Agent for `GET /api/v1/node-run-plans/{id}/logs?tail=200`. | Implemented `model_instance_logs` Agent task flow: Server resolves NodeRunPlan -> instance/node/container, dispatches an Agent task, Agent calls `DockerRuntimeDriver.Logs`, Server returns redacted stdout/stderr/logs. NVIDIA API E2E verified the logs API after vLLM reached `/v1/models`. | Fixed. Users can view Docker logs through Server/Web without Server shelling out to local Docker. | FIXED | `internal/server/api/deployment_lifecycle_handlers.go`, `internal/server/api/agent_handlers.go`, `cmd/agent/main.go`, `internal/agent/register/register.go`, `web/src/pages/ModelInstancesPage.vue` | `go test ./internal/server/api ./internal/server/db ./cmd/agent ./internal/agent/... -count=1`; `scripts/e2e-backend-runtime-nvidia-api.sh` returned `PASS: backend runtime NVIDIA API E2E completed`; final DB/Docker check showed `0` `e2e-nvidia-*` deployments/artifacts/instances and no `lightai-*` containers. | Closed in this round. |

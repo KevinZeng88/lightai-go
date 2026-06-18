@@ -1,3 +1,8 @@
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Reference document; not the current entrypoint
+> Read order: See `docs/CURRENT.md`
+
 # LightAI Go — Getting Started (Production)
 
 This guide helps you deploy LightAI Go for the first time.

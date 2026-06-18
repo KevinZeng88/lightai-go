@@ -1,127 +1,97 @@
 # LightAI Go Development Phase Status
 
-> Last updated: 2026-06-16
-> Current: RC2 — runtime env, run templates, model deploy, templates config, UI polish
+> Status: CURRENT
+> Last reviewed: 2026-06-18
+> Scope: Current phase status summary
+> Read order: See `docs/CURRENT.md`
 
-## Phase Summary
+## Current Baseline
 
-| Phase | Name | Status | Commit |
-|-------|------|--------|--------|
-| 0 | Server/Agent skeleton | Done | `afa14d9` |
-| 0.5 | Auth, tenant, RBAC | Done | `ab774d2` |
-| 1 | Agent register & heartbeat | Done | `d3e8edb` |
-| 2A | System/Registry/Mock | Done | `f259e42` |
-| 2B | NVIDIA Collector | Done | `7b0e039` |
-| 2B+ | node_id hardening | Done | `7649383` |
-| 2G | heartbeat/collection time fix + sweep SQL fix + web node visibility fix | Done | current |
-| 2H | web node visibility + sweep SQL param fix | Done | current |
-| 3W | Web Console MVP | Done | `5689c21` |
-| 2C | MetaX Collector | **Scripts Ready (mock verified, hardware pending)** | RC1 |
-| 3W | Web Console MVP | Done | `5689c21` |
-| 3W+ | Collector/Observability/Network | Done | `588e479` |
-| 3W+ hotfix | Agent/Server metrics snapshot | Done | `1a1e374` |
-| 3W+ hotfix | Web Observability pages | Done | `e870ba6` |
-| 3W+ finalization | Server gauges, API middleware | Done | `34a3ac5` |
-| 3W+ finalization | API metrics exclude /metrics | Done | `28dc77b` |
-| 3W+ closure | Documentation | Done | current |
-| 3W+ closure | Hotfix: GPU gauge panels + dashboard polish | Done | `2d06174` |
-| RC1 hotfix | v0.1.1 version-based cumulative patch system | Done | `832c9c5` |
-| RC1 hotfix | v0.1.2 nvidia default + stable node identity | Done | `40a1048` |
-| RC1 hotfix | v0.1.3 strict node_id, no agent_id fallback | Done | `c45e2af` |
-| RC1 hotfix | Persist credentials + reset password + detailed logs | Done | `063670c` |
-| RC1 hotfix | Standardize log files + protect credentials output | Done | `95710a0` |
-| RC1 hotfix | Fix patch manifest name/format mismatch | Done | `10a6d02` |
-| RC1 hotfix | Remove python3 dependency from patch apply | Done | `f629311` |
-| RC1 hotfix | Fix Grafana password reset (CLI flag order for v13+, credentials sync) | Done | current |
-| RC1 hotfix | GPU collector auto-detect (auto/explicit/disabled modes) | Done | current |
+```text
+Branch: phase-4-model-runtime-wizards
+Latest verified commit for Phase 4: 89bdf68
+```
 
-## Key Architecture Decisions (Current State)
+The detailed current entrypoint is `docs/CURRENT.md`.
 
-### GPU Collector
-- **Default**: ExternalCommandCollector (vendor scripts → protocol).
-- NVIDIA: `deploy/collectors/gpu/nvidia/discover.sh` + `metrics.sh`.
-- Built-in NvidiaCollector: deprecated, not default path.
-- MetaX: Scripts ready (mock verified, hardware pending). Scripts at `deploy/collectors/gpu/metax/`.
+## Completed Foundations
 
-### Metrics
-- Agent `/metrics`: `lightai_gpu_*`, `lightai_agent_*` from latest snapshot. Scrape never triggers nvidia-smi.
-- Server `/metrics`: `lightai_server_*` gauges from DB, API counters (only `/api/*`).
-- Verified: RTX 5090 data flowing correctly through both Agent and Server metrics.
+| Area | Status | Current evidence |
+| --- | --- | --- |
+| Server / Agent skeleton | Done | Early phase commits and current build/test |
+| Auth, tenant, RBAC | Done | `docs/RELEASE_NOTE_v0.1.9.md`, current API |
+| Agent registration and heartbeat | Done | Current node/agent APIs |
+| System / registry / mock collectors | Done | Current collector tests |
+| NVIDIA collector | Done | Current local NVIDIA validation evidence |
+| Stable node identity | Done | Current node registration behavior |
+| Web console MVP | Done | Current Vue console |
+| Observability pages and server metrics | Done | Current reports and scripts |
+| Credentials, password reset, file logging, patch tooling | Done | Current scripts and release notes |
 
-### Observability
-- Default: bundled mode. LightAI manages Prometheus/Grafana as subprocesses.
-- Also supports: external mode (customer's existing stack), disabled mode.
-- Prometheus `:19090`, Grafana `:13000` (admin/lightai dev default).
-- 3 Grafana dashboards auto-provisioned.
-- 7 alert rule templates.
-- Docker Compose is dev/demo helper, not the only path.
+## Runtime And Model Serving
 
-### Web
-- Vue 3 + Element Plus + vue-i18n (zh-CN default, en-US supported).
-- Pages: Dashboard, Nodes, GPUs, Metrics Targets, Observability Overview, Prometheus, Grafana.
-- Embedded via `-tags web`.
-- Dev: Vite at `:15173`, proxies to `:18080`.
+| Area | Status | Current evidence |
+| --- | --- | --- |
+| Backend catalog | Implemented | `configs/backend-catalog/`, `docs/design/backend-runtime-runplan-docker.md` |
+| Backend / BackendVersion / BackendRuntime | Implemented | `docs/reports/backend-runtime-runplan/acceptance-report.md` |
+| NodeBackendRuntime readiness | Implemented | BackendRuntime reports and E2E evidence |
+| RunPlan resolver and Server command preview | Implemented | BackendRuntime reports and Phase 4 E2E |
+| Agent Docker lifecycle | Implemented | Docker start/logs/stop/cleanup reports |
+| Docker logs through Server -> Agent | Implemented | `docs/reports/backend-runtime-runplan/open-issues-closeout.md` |
+| ModelArtifact / ModelLocation | Implemented | `docs/reports/model-runtime-node-wizard/acceptance-report.md` |
+| node_model_roots policy | Implemented | `docs/design/model-runtime-node-wizard.md` |
+| Model/runtime/deployment wizard | Accepted with P2 gaps | `docs/reports/model-runtime-node-wizard/full-run-chain-review.md` |
 
-### Ports
-- Server: `18080`, Agent metrics: `19091`, Prometheus: `19090`, Grafana: `13000`, Vite: `15173`.
+## Phase 4 Current State
 
-### Network
-- `127.0.0.1` for local dev; `0.0.0.0` for LAN deployment.
-- `metrics.advertise_addr` for Prometheus scrape targets.
+Phase 4 uses scheme B for model directory safety:
 
-## RC1 Hotfix Deliverables
+```text
+Server persists node_model_roots.
+Agent keeps denied_roots and path containment as final protection.
+allowed roots default to empty.
+Browse / scan / save use root_id + relative_path.
+```
 
-### Credentials
-- `runtime/initial-credentials.txt` (0600): auto-generated on first start, never overwritten.
-- `runtime/reset-credentials.txt` (0600): written on password reset.
-- Passwords never logged to stdout, stderr, or structured log files.
-- `scripts/reset-password.sh`: auto-generate / --password / --interactive modes.
-- `scripts/reset-grafana-password.sh`: Grafana-only, same modes.
+Validated local NVIDIA path:
 
-### Logging
-- Server main log: `logs/lightai-server.log`, Agent: `logs/lightai-agent.log`.
-- Dual-write: stdout (nohup wrapper) + dedicated file.
-- Configurable: level, dir, file, stdout, file_enabled, append, max_size_mb, max_files, retention_days.
-- Log rotation by size; retention-based cleanup on startup.
+```text
+model root -> browse -> scan -> ModelArtifact/Location
+-> Backend -> BackendVersion -> Runtime -> preflight
+-> Server RunPlan preview -> Docker start -> /v1/models
+-> logs -> stop -> cleanup
+```
 
-### Patch Tooling
-- `scripts/package-patch.sh --from X --to Y`: generates incremental patch tarball.
-- `apply-patch.sh`: shell-native (no python3 required). Uses `patch-files.tsv` (tab-separated).
-- SHA256 verification, permission restoration, backup before overwrite.
-- `patch-manifest.json` retained as optional audit metadata.
+E2E evidence:
 
-## Remaining Known Limitations
+```text
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/
+```
 
-1. Prometheus/Grafana binaries not included in dev repository (bundled mode needs download/preparation).
-2. Go Server does not yet have full Prometheus/Grafana supervisor (subprocess management is script-based).
-3. MetaX Phase 2C requires real MetaX hardware.
-4. TLS/HTTPS not yet implemented.
+## Formal Open Issues
 
-## Recent Additions (RC2)
+| Area | Status | Source |
+| --- | --- | --- |
+| MetaX real hardware validation | DOCUMENTED_BLOCKER | `docs/reports/backend-runtime-runplan/open-issues-closeout.md` |
+| Huawei vendor adapter | DOCUMENTED_BLOCKER | `docs/reports/backend-runtime-runplan/open-issues-closeout.md` |
+| Model consistency deep comparison | DOCUMENTED_BLOCKER | `docs/reports/model-runtime-node-wizard/open-issues-closeout.md` |
+| GPU auto/manual UX and lease display | DOCUMENTED_BLOCKER | `docs/reports/model-runtime-node-wizard/open-issues-closeout.md` |
+| Documentation governance findings | Tracked | `docs/reports/documentation-governance/open-issues.md` |
 
-### Templates Config (`configs/templates/`)
-- Vendor-specific presets for run templates and runtime environments (NVIDIA, MetaX, CPU)
-- Docker image recommendation list
-- Node container image query (Agent → Server proxy)
-- Deployment dry-run command preview with full Docker spec
-- See `docs/templates-config.md`
+## Current Limitations
 
-### Web UI
-- Runtime Environments, Run Templates, Model Artifacts, Model Deployments, Model Instances, Audit Logs
-- i18n coverage: 428 keys (zh-CN + en-US), all new pages translated
-- Relative time display: precise second-level (no more "刚刚")
-- Form presets: vendor-aware auto-fill for runtime env + run template create
-- Docker image autocomplete with suggestion list
-- Dry Run command preview in deployment page drawer
+1. MetaX real hardware validation is still required before marking MetaX runtime paths ready.
+2. Huawei/Ascend runtime remains template-only until a vendor adapter is implemented and verified.
+3. TLS/HTTPS is not implemented.
+4. Prometheus/Grafana bundled binary availability still depends on local preparation scripts.
 
-### Packaging
-- Glibc check now scoped to specific build directory (not entire dist/)
-- Sweep SQL param count fix (3 places)
+## Archive Rule
 
-## Next Steps
+Older phase reports and RC review artifacts were moved under:
 
-1. Phase 2C: MetaX real hardware adaptation.
-2. Phase 5-7: Instance lifecycle, Docker operations, health checks.
-3. Phase 8: Web UI enhancements.
-4. Phase 9: Server-managed Prometheus/Grafana lifecycle.
-5. TLS/HTTPS implementation.
+```text
+docs/archive/
+docs/reports/archive/
+```
+
+They are historical evidence only and must not override `docs/CURRENT.md`.

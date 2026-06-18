@@ -1,3 +1,8 @@
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Reference or historical compatibility document; not the current entrypoint
+> Read order: See `docs/CURRENT.md`
+
 # LightAI Go MVP 开发计划
 
 ## 1. 开发原则

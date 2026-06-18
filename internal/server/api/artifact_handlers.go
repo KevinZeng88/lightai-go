@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -293,24 +294,20 @@ func (h *AgentHandler) HandleCreateModelLocation(w http.ResponseWriter, r *http.
 		return
 	}
 	nodeID := strVal(req, "node_id", "")
-	absolutePath := strVal(req, "absolute_path", strVal(req, "path", ""))
-	if nodeID == "" || absolutePath == "" {
-		writeError(w, http.StatusBadRequest, "node_id and absolute_path are required")
+	if nodeID == "" {
+		writeError(w, http.StatusBadRequest, "node_id is required")
 		return
 	}
 	pathType := strVal(req, "path_type", "directory")
-	modelRoot := strVal(req, "model_root", "")
-	relativePath := strVal(req, "relative_path", "")
-	if modelRoot == "" {
-		modelRoot = filepath.Dir(absolutePath)
-	}
-	if relativePath == "" {
-		relativePath = filepath.Base(absolutePath)
+	modelRoot, relativePath, absolutePath, err := h.resolveModelLocationRequestPath(nodeID, req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	id := uuid.NewString()
 	tid := artifact["tenant_id"].(string)
 	now := time.Now().Format(time.RFC3339)
-	_, err := h.DB.Exec(`INSERT INTO model_locations
+	_, err = h.DB.Exec(`INSERT INTO model_locations
 		(id, model_artifact_id, node_id, path_type, model_root, relative_path, absolute_path, size_bytes, checksum, manifest_digest, discovered_metadata_json, match_status, verification_status, manual_override, tenant_id, last_scanned_at, created_at, updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, artifactID, nodeID, pathType, modelRoot, relativePath, absolutePath,
@@ -323,6 +320,47 @@ func (h *AgentHandler) HandleCreateModelLocation(w http.ResponseWriter, r *http.
 		return
 	}
 	writeJSON(w, http.StatusCreated, h.getModelLocationJSON(id))
+}
+
+func (h *AgentHandler) resolveModelLocationRequestPath(nodeID string, req map[string]interface{}) (string, string, string, error) {
+	rootID := strVal(req, "root_id", "")
+	rootPath := strVal(req, "model_root", strVal(req, "root", ""))
+	relativePath := strVal(req, "relative_path", "")
+	if rootID == "" && rootPath == "" {
+		absolutePath := filepath.Clean(strVal(req, "absolute_path", strVal(req, "path", "")))
+		if absolutePath == "." || absolutePath == "" {
+			return "", "", "", fmt.Errorf("root_id or model_root and relative_path are required")
+		}
+		roots, err := h.listNodeModelRoots(nodeID, false)
+		if err != nil {
+			return "", "", "", fmt.Errorf("root not allowed")
+		}
+		for _, root := range roots {
+			if pathWithinRoot(absolutePath, root.Path) {
+				rel, err := filepath.Rel(root.Path, absolutePath)
+				if err != nil {
+					return "", "", "", fmt.Errorf("path traversal blocked")
+				}
+				relativePath = rel
+				rootPath = root.Path
+				rootID = root.ID
+				break
+			}
+		}
+	}
+	root, err := h.resolveNodeModelRoot(nodeID, rootID, rootPath)
+	if err != nil {
+		return "", "", "", fmt.Errorf("root not allowed")
+	}
+	rel, err := safeRelativePath(relativePath)
+	if err != nil {
+		return "", "", "", err
+	}
+	abs := filepath.Clean(filepath.Join(root.Path, rel))
+	if !pathWithinRoot(abs, root.Path) {
+		return "", "", "", fmt.Errorf("path traversal blocked")
+	}
+	return root.Path, rel, abs, nil
 }
 
 func (h *AgentHandler) HandleRescanModelLocation(w http.ResponseWriter, r *http.Request) {

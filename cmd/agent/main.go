@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -294,9 +296,16 @@ func main() {
 		healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 		healthMux.HandleFunc("GET /docker-images", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			out, err := execCmd("docker", "images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}")
+			query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("query")))
+			limit := 100
+			if raw := r.URL.Query().Get("limit"); raw != "" {
+				if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 500 {
+					limit = n
+				}
+			}
+			out, err := execCmd("docker", "images", "--format", "{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Digest}}\t{{.CreatedAt}}\t{{.Size}}", "--no-trunc")
 			if err != nil {
-				json.NewEncoder(w).Encode([]map[string]interface{}{})
+				json.NewEncoder(w).Encode(map[string]interface{}{"images": []map[string]interface{}{}, "error": "docker daemon unavailable"})
 				return
 			}
 			lines := strings.Split(strings.TrimSpace(out), "\n")
@@ -306,23 +315,118 @@ func main() {
 				if line == "" {
 					continue
 				}
-				parts := strings.SplitN(line, "\t", 2)
-				if strings.Contains(parts[0], "<none>") {
+				parts := strings.SplitN(line, "\t", 6)
+				if len(parts) < 6 {
 					continue
 				}
-				size := ""
-				if len(parts) > 1 {
-					size = parts[1]
+				repo, tag, imageID, digest, createdAt, sz := parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
+				if query != "" && !strings.Contains(strings.ToLower(repo+":"+tag), query) && !strings.HasPrefix(strings.ToLower(imageID), query) {
+					continue
 				}
+				present := tag != "<none>"
 				images = append(images, map[string]interface{}{
-					"image": parts[0],
-					"size":  size,
+					"repository": repo, "tag": tag, "image_id": imageID, "digest": digest,
+					"created_at": createdAt, "size": sz, "image_ref": repo + ":" + tag, "image_present": present,
 				})
+				if len(images) >= limit {
+					break
+				}
 			}
 			if images == nil {
 				images = []map[string]interface{}{}
 			}
-			json.NewEncoder(w).Encode(images)
+			json.NewEncoder(w).Encode(map[string]interface{}{"images": images, "count": len(images)})
+		})
+
+		// File browser endpoint.
+		healthMux.HandleFunc("GET /files", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			root := strings.TrimSpace(r.URL.Query().Get("root"))
+			relPath := strings.TrimSpace(r.URL.Query().Get("path"))
+			modelBrowserCfg := cfg.ModelBrowser
+			if modelBrowserCfg.AllowRuntimeRootAdd {
+				modelBrowserCfg.AllowedRoots = append(modelBrowserCfg.AllowedRoots, parseExtraModelRoots(r.URL.Query().Get("extra_roots"))...)
+			}
+			if !cfg.ModelBrowser.Enabled {
+				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "model browser not enabled"})
+				return
+			}
+			// When no root is specified, return the list of allowed roots.
+			if root == "" {
+				var roots []map[string]interface{}
+				for _, ar := range agentAllowedModelRoots(modelBrowserCfg) {
+					roots = append(roots, map[string]interface{}{"root": ar, "label": ar})
+				}
+				json.NewEncoder(w).Encode(map[string]interface{}{"allowed_roots": roots, "entries": []map[string]interface{}{}})
+				return
+			}
+			absPath, err := agentValidateModelPath(modelBrowserCfg, root, relPath)
+			if err != nil {
+				if err.Error() == "path traversal blocked" {
+					json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "path traversal blocked"})
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "root_not_allowed"})
+				return
+			}
+			entries, err := os.ReadDir(absPath)
+			if err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "cannot read: " + err.Error()})
+				return
+			}
+			maxE := cfg.ModelBrowser.MaxEntries
+			if maxE <= 0 {
+				maxE = 1000
+			}
+			var result []map[string]interface{}
+			for _, e := range entries {
+				if len(result) >= maxE {
+					break
+				}
+				info, _ := e.Info()
+				isDir := e.IsDir()
+				et := "file"
+				if isDir {
+					et = "directory"
+				}
+				var sz int64
+				var mt string
+				if info != nil {
+					sz = info.Size()
+					mt = info.ModTime().UTC().Format(time.RFC3339)
+				}
+				result = append(result, map[string]interface{}{"name": e.Name(), "type": et, "size": sz, "mod_time": mt, "is_dir": isDir})
+			}
+			if result == nil {
+				result = []map[string]interface{}{}
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"entries": result, "count": len(result), "root": root, "path": relPath, "truncated": len(entries) > maxE})
+		})
+
+		// Model scanner endpoint.
+		healthMux.HandleFunc("POST /model-paths/scan", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			var req struct {
+				Root         string `json:"root"`
+				RelativePath string `json:"relative_path"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid request"})
+				return
+			}
+			if !cfg.ModelBrowser.Enabled {
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "model browser not enabled"})
+				return
+			}
+			modelBrowserCfg := cfg.ModelBrowser
+			if modelBrowserCfg.AllowRuntimeRootAdd {
+				modelBrowserCfg.AllowedRoots = append(modelBrowserCfg.AllowedRoots, parseExtraModelRoots(r.URL.Query().Get("extra_roots"))...)
+			}
+			if _, err := agentValidateModelPath(modelBrowserCfg, req.Root, req.RelativePath); err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "root not allowed"})
+				return
+			}
+			json.NewEncoder(w).Encode(collector.ScanModelPath(req.Root, req.RelativePath))
 		})
 
 		metricsAddr := fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port)
@@ -1022,6 +1126,104 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 	result.ContainerID = payload.ContainerID
 	result.DeploymentID = task.DeploymentID
 	result.NodeID = task.NodeID
+}
+
+func agentAllowedModelRoots(cfg config.ModelBrowserConfig) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	add := func(value string) {
+		clean := filepath.Clean(strings.TrimSpace(value))
+		if clean == "." || clean == "" || seen[clean] {
+			return
+		}
+		seen[clean] = true
+		out = append(out, clean)
+	}
+	for _, root := range cfg.AllowedRoots {
+		add(root)
+	}
+	if cfg.AllowRuntimeRootAdd {
+		for _, root := range strings.Split(os.Getenv("LIGHTAI_MODEL_BROWSER_EXTRA_ROOTS"), ",") {
+			add(root)
+		}
+	}
+	return out
+}
+
+func parseExtraModelRoots(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	out := []string{}
+	for _, root := range strings.Split(value, ",") {
+		root = strings.TrimSpace(root)
+		if root != "" {
+			out = append(out, root)
+		}
+	}
+	return out
+}
+
+func agentDeniedModelRoots(cfg config.ModelBrowserConfig) []string {
+	if len(cfg.DeniedRoots) > 0 {
+		return cfg.DeniedRoots
+	}
+	return []string{"/", "/etc", "/root", "/boot", "/proc", "/sys", "/dev", "/run", "/var/run", "/var/lib/docker"}
+}
+
+func agentValidateModelPath(cfg config.ModelBrowserConfig, root, relPath string) (string, error) {
+	cleanRoot := filepath.Clean(strings.TrimSpace(root))
+	if cleanRoot == "." || cleanRoot == "" || !filepath.IsAbs(cleanRoot) {
+		return "", fmt.Errorf("root not allowed")
+	}
+	for _, denied := range agentDeniedModelRoots(cfg) {
+		if agentPathWithinRoot(cleanRoot, denied) {
+			return "", fmt.Errorf("root not allowed")
+		}
+	}
+	if realRoot, err := filepath.EvalSymlinks(cleanRoot); err == nil {
+		for _, denied := range agentDeniedModelRoots(cfg) {
+			if agentPathWithinRoot(filepath.Clean(realRoot), denied) {
+				return "", fmt.Errorf("root not allowed")
+			}
+		}
+	}
+	rootOK := false
+	for _, allowed := range agentAllowedModelRoots(cfg) {
+		if filepath.Clean(allowed) == cleanRoot {
+			rootOK = true
+			break
+		}
+	}
+	if !rootOK {
+		return "", fmt.Errorf("root not allowed")
+	}
+	cleanRel := filepath.Clean(strings.TrimSpace(relPath))
+	if cleanRel == "." {
+		cleanRel = ""
+	}
+	if filepath.IsAbs(cleanRel) || cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path traversal blocked")
+	}
+	absPath := filepath.Clean(filepath.Join(cleanRoot, cleanRel))
+	if !agentPathWithinRoot(absPath, cleanRoot) {
+		return "", fmt.Errorf("path traversal blocked")
+	}
+	if !cfg.FollowSymlinks {
+		if realPath, err := filepath.EvalSymlinks(absPath); err == nil && !agentPathWithinRoot(filepath.Clean(realPath), cleanRoot) {
+			return "", fmt.Errorf("path traversal blocked")
+		}
+	}
+	return absPath, nil
+}
+
+func agentPathWithinRoot(path, root string) bool {
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(root)
+	if cleanRoot == string(os.PathSeparator) {
+		return cleanPath == cleanRoot
+	}
+	return cleanPath == cleanRoot || strings.HasPrefix(cleanPath, cleanRoot+string(os.PathSeparator))
 }
 
 // reconcileManagedContainers lists Docker containers with the LightAI naming prefix

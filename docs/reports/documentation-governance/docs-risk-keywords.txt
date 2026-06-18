@@ -1,0 +1,443 @@
+docs/REVIEW-GPUSTACK-AUDIT.md:65:LightAI Go Phase 1 不实现调度；Phase 2 只做资源采集；Phase 5 才实现实例生命周期。
+docs/REVIEW-GPUSTACK-AUDIT.md:172:1. **分布式 Coordinator**（Redis 选举、Leader 切换、`os._exit(1)`）：Phase 1 单实例即可
+docs/REVIEW-GPUSTACK-AUDIT.md:185:## 5. 对 Phase 0 到 Phase 2B 的开发启发
+docs/REVIEW-GPUSTACK-AUDIT.md:198:### Phase 1（Agent 注册/心跳）
+docs/REVIEW-GPUSTACK-AUDIT.md:204:### Phase 2A（System/Registry/Mock）
+docs/REVIEW-GPUSTACK-AUDIT.md:210:### Phase 2B（NVIDIA Collector）
+docs/GPU_COLLECTOR_ARCHITECTURE.md:13:│ ScriptGPUCollector (current RC1)                     │
+docs/GPU_COLLECTOR_ARCHITECTURE.md:97:Script collectors are the RC1 implementation. The architecture supports pluggable collectors:
+docs/REVIEW-GPUSTACK-UI.md:143:## 5. 后续 Phase 8 Web 页面建议
+docs/REVIEW-GPUSTACK-UI.md:158:/runtimes                       # 运行环境（Phase 3+）
+docs/archive/historical/rc1-codex-review-tracking.md:30:- **RC2**: Implement independent report cadence, or remove config key.
+docs/archive/historical/rc1-codex-review-tracking.md:35:- **RC2**: Use in HTTP SD target generation, or remove config key.
+docs/archive/historical/rc1-codex-review-tracking.md:57:- **RC2**: Built-in retention policy (configurable rows/hours), or switch to current-state-only for SQLite while Prometheus handles history.
+docs/archive/historical/rc1-codex-review-tracking.md:64:- **RC2**: Full transaction wrapper — all writes succeed or all rollback.
+docs/archive/historical/rc1-codex-review-tracking.md:70:- **RC2**: Register all table creation in `Migrate()`, track in `schema_version`.
+docs/archive/historical/rc1-codex-review-tracking.md:92:- **RC2**: Full API/Shell integration test suite.
+docs/archive/historical/rc1-codex-review-tracking.md:101:- **RC2**: Consistent Chinese startup messages in all scripts, or document English-only policy.
+docs/archive/historical/rc1-codex-review-tracking.md:117:- **Note**: Vite build shows "chunk size warning" — acceptable for RC1. RC2 may add manualChunks config.
+docs/archive/historical/rc1-patch-test.md:6:# RC1 Patch Test
+docs/archive/historical/rc1-patch-test.md:8:Created for RC1 verification.
+docs/archive/historical/rc1-review-fix-plan.md:6:# LightAI Go RC1 — 主台账
+docs/archive/historical/rc1-review-fix-plan.md:15:## 当前 RC1 状态
+docs/archive/historical/rc1-review-fix-plan.md:21:| P1 deferred | 4/12 **DEFERRED** with risk/mitigation/RC2 plan |
+docs/archive/historical/rc1-review-fix-plan.md:28:**交付口径**: P0 全部 VERIFIED。关键 P1 已修复，剩余 P1 已记录风险、规避方式和 RC2 计划。可以进入 v0.1.7-rc1 tag。该版本仍需在 MetaX 现场验证 Web 是否显示 8 张 MetaX C500。
+docs/archive/historical/rc1-review-fix-plan.md:71:| P1-001 | report_interval unused | **DOCUMENTED** | Comment added to config; RC2: implement or remove |
+docs/archive/historical/rc1-review-fix-plan.md:72:| P1-002 | advertise_addr unused | **DOCUMENTED** | Comment added to config; RC2: implement or remove |
+docs/archive/historical/rc1-review-fix-plan.md:76:| P1-006 | SQLite snapshot growth | **DEFERRED** | Risk: ~17K rows/day/node. Mitigation: cron DELETE. RC2: built-in retention |
+docs/archive/historical/rc1-review-fix-plan.md:77:| P1-007 | Write errors ignored | **DEFERRED** | Errors logged, not silent. Full transaction hardening in RC2 |
+docs/archive/historical/rc1-review-fix-plan.md:78:| P1-008 | Migration incomplete | **DEFERRED** | New tables in handler init, not Migrate(). RC2: all tables registered |
+docs/archive/historical/rc1-review-fix-plan.md:82:| P1-012 | Missing critical tests | **DEFERRED** | 14 API tests + 4 Vitest tests added this round. Full suite in RC2 |
+docs/archive/historical/rc1-review-fix-plan.md:86:**P1-006**: Risk: node_system_snapshots grows ~17K rows/day per node. Workaround: `DELETE FROM node_system_snapshots WHERE collected_at < datetime('now','-7 days')`. RC2: configurable retention.
+docs/archive/historical/rc1-review-fix-plan.md:88:**P1-007**: Risk: system/disk/network write failures don't block GPU writes. Errors are logged. Workaround: monitor logs for "save system snapshot error". RC2: full transaction wrapper.
+docs/archive/historical/rc1-review-fix-plan.md:90:**P1-008**: Risk: gpu_devices/node_system_snapshots created in handler init, not via Migrate(). Workaround: manual schema review before upgrade. RC2: migrate all tables through Migrate().
+docs/archive/historical/rc1-review-fix-plan.md:92:**P1-012**: Risk: untested edge cases. Workaround: manual verification checklist. RC2: API/Shell/Patch integration test suite.
+docs/archive/historical/rc1-review-fix-plan.md:104:| P2-005 | Frontend bundle size | **ACKNOWLEDGED** (no action for RC1) |
+docs/archive/historical/rc1-review-fix-plan.md:175:| `docs/RC1_REVIEW_FIX_PLAN.md` | **主台账** — 唯一权威状态 |
+docs/archive/historical/rc1-review-fix-plan.md:176:| `docs/RC1_CODEX_REVIEW_TRACKING.md` | Codex Review 详细问题清单和验证记录 |
+docs/archive/historical/rc1-review-fix-plan.md:178:| `docs/archive/RC1_PATCH_TEST.md` | 已归档 — patch 测试临时文件 |
+docs/archive/historical/rc1-review-fix-plan.md:179:| `docs/REVIEW-GPUSTACK-AUDIT.md` | 独立 — GPUStack 审计（非 RC1） |
+docs/archive/historical/rc1-review-fix-plan.md:180:| `docs/REVIEW-GPUSTACK-UI.md` | 独立 — GPUStack UI 参考（非 RC1） |
+docs/archive/old-plans/phase-2g-full-review-fix-all-plan.md:6:# Phase 2G Full Review Fix-All Plan — CLOSED
+docs/archive/old-plans/phase-2h-web-node-visibility-investigation.md:6:# Phase 2H: Web Node Visibility Investigation
+docs/archive/old-plans/12-phase-4-gateway-api-key-usage.md:8:> 依赖：Phase 3（Web 页面可用，模型实例可正常运行）
+docs/archive/old-plans/12-phase-4-gateway-api-key-usage.md:45:| weight | int | 权重（后续 weighted 策略使用） |
+docs/archive/old-plans/12-phase-4-gateway-api-key-usage.md:85:| cost | decimal | 费用（Phase 4 固定为 0，后续启用） |
+docs/archive/old-plans/phase-2f-tenant-rbac-resource-ownership-plan.md:6:# Phase 2F: Tenant, User, Role, RBAC & Resource Ownership Productization
+docs/archive/old-plans/phase-2f-tenant-rbac-resource-ownership-plan.md:10:Phase 0.5 delivered auth, tenant, RBAC skeleton. Phase 2E delivered model runtime operations hardening.
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:6:# Phase 1：数据模型与 Dry Run
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:69:Phase 1 不新建 ModelEvent 表。关键状态变更写入现有 `audit_logs`：
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:76:ModelEvent 作为逻辑概念保留，后续如需要 event-specific 字段再独立建表。
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:133:Phase 1 不提供手动创建实例的 API。实例由系统在 start 时自动创建（Phase 2）。
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:250:- Dry Run 校验规则的完整性直接影响后续 Agent 启动成功率。遗漏的校验会在 Phase 2 暴露
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:252:- RunTemplate 的 `${VAR}` 替换逻辑如果过于灵活，可能导致注入风险。Phase 1 只支持已知变量名
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:254:## 11. 与 Phase 2 的接口约定
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:256:Phase 1 必须向 Phase 2 提供：
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:262:5. Agent Task payload 结构定义（即使 Phase 1 不下发）
+docs/archive/old-plans/12-phase-1-model-runtime-foundation.md:264:Phase 2 不需要关心：
+docs/archive/old-plans/phase-3-backend-runplan-refactor.md:6:# LightAI Go Phase 3：模型运行链路重构计划
+docs/archive/old-plans/phase-3-backend-runplan-refactor.md:143:### Phase 1：删除旧代码 + 建新表
+docs/archive/old-plans/phase-3-backend-runplan-refactor.md:158:### Phase 2：RunPlan Resolver
+docs/archive/old-plans/phase-3-backend-runplan-refactor.md:175:### Phase 3：Docker Executor
+docs/archive/old-plans/phase-2f-continuation-steps.md:6:# Phase 2F Continuation Steps
+docs/archive/old-plans/phase-2f-continuation-steps.md:26:| 10 | RBAC tests | pending |
+docs/archive/old-plans/phase-2f-continuation-steps.md:27:| 11 | Docs | pending |
+docs/archive/old-plans/phase-2f-continuation-steps.md:28:| 12 | Final regression | pending |
+docs/archive/old-plans/phase-2f-continuation-steps.md:37:Phase 2F is closed after all 12 review findings were fixed and validated.
+docs/archive/old-plans/12-phase-3-web-model-serving.md:6:# Phase 3：Web 模型服务
+docs/archive/old-plans/12-phase-3-web-model-serving.md:8:> 依赖：Phase 2（Agent Docker Runtime + Start/Stop/Logs API）
+docs/archive/old-plans/12-phase-3-web-model-serving.md:160:- GPU 占用关系查询需要高效（Phase 2 需确认 API 查询性能）
+docs/archive/old-plans/phase-2g-heartbeat-collection-time-investigation.md:6:# Phase 2G: Heartbeat / Collection Time Investigation
+docs/archive/old-plans/phase-2g-heartbeat-collection-time-investigation.md:342:1. **Server time vs Agent time**: Using server `now` for `collected_at` loses the distinction between "when Agent collected" and "when Server received." If future requirements need fine-grained timing analysis, a separate `agent_collected_at` field could be added.
+docs/archive/old-plans/phase-2g-heartbeat-collection-time-investigation.md:344:2. **Heartbeat interval not adjusted**: The heartbeat interval remains 2s (default). With resource report also updating `last_heartbeat_at` (every 5s), the 2s heartbeat is redundant for freshness but still serves task assignment. Consider adjusting to 5s in a future update to reduce unnecessary traffic.
+docs/archive/old-plans/phase-2g-heartbeat-collection-time-investigation.md:346:3. **No additional `collected_at` on nodes**: Host system snapshots have `collected_at` in the `node_system_snapshots` table but there is no top-level `collected_at` on the `nodes` API response. If users want to see "host metrics last collected" at a glance, this could be added in a future update.
+docs/archive/old-plans/phase-3-step-by-step-execution.md:6:# LightAI Go Phase 3 Step-by-Step Execution Manual
+docs/archive/old-plans/phase-3-step-by-step-execution.md:12:**重要：此文件是 Claude 在执行 Phase 1-6 时的强制操作手册。每一步都必须严格遵循。不允许跳过任何步骤或验证。**
+docs/archive/old-plans/phase-3-step-by-step-execution.md:15:> 如果用户明确要求 Phase 2-6 一次性自动完成，则必须同时遵循
+docs/archive/old-plans/phase-3-step-by-step-execution.md:31:- [x] 编写 Phase 3 重构计划
+docs/archive/old-plans/phase-3-step-by-step-execution.md:40:## Phase 1: 删除旧代码 + 建新表
+docs/archive/old-plans/phase-3-step-by-step-execution.md:66:删除所有 Phase 1 model runtime serving 路由（model-artifacts, runtime-environments, run-templates, model-deployments, model-instances, gpu-leases, agent tasks）。
+docs/archive/old-plans/phase-3-step-by-step-execution.md:159:### Step 1.11: Phase 1 验证
+docs/archive/old-plans/phase-3-step-by-step-execution.md:170:### 🛑 Phase 1 停止点
+docs/archive/old-plans/phase-3-step-by-step-execution.md:174:## Phase 2: RunPlan Resolver
+docs/archive/old-plans/phase-3-step-by-step-execution.md:212:### Step 2.4: Phase 2 验证
+docs/archive/old-plans/phase-3-step-by-step-execution.md:218:### 🛑 Phase 2 停止点
+docs/archive/old-plans/phase-3-step-by-step-execution.md:222:## Phase 3: Docker Executor
+docs/archive/old-plans/phase-3-step-by-step-execution.md:242:### 🛑 Phase 3 停止点
+docs/archive/old-plans/12-phase-5-basic-scheduler.md:8:> 依赖：Phase 2（Agent Docker Runtime + GpuLease 流转）
+docs/archive/old-plans/12-phase-5-basic-scheduler.md:142:# → 行为与 Phase 1 完全一致
+docs/archive/old-plans/12-phase-5-basic-scheduler.md:147:- best-fit 可能导致某张 GPU 的显存碎片化（每次选余量最小的，剩余显存越来越小）。后续 Phase 需加入 binpack/spread
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:6:# Phase 2F Review Fix-All Plan
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:12:| 1 | Node transfer no active gpu_lease check | P0 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:13:| 2 | Node transfer no active deployment_instance check | P0 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:14:| 3 | audit:read not assigned to any built-in role | P0 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:15:| 4 | model_instances handlers lack tenant_id scope | P0 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:16:| 5 | 9 entire i18n key sections missing | P1 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:17:| 6 | API URL prefix inconsistency | P1 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:18:| 7 | Personal paths hardcoded in production code | P1 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:19:| 8 | Prometheus/Grafana pages hardcoded English | P1 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:20:| 9 | Empty UsersPage create stub | P2 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:21:| 10 | Format utilities not localized | P2 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:22:| 11 | Orphan gpuLeases.ts API client | P2 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:23:| 12 | GPU vendor filter hardcoded | P2 | pending |
+docs/archive/old-plans/phase-2f-review-fix-all-plan.md:36:- Fix: Add query for running/starting/pending/stopping instances on node before transfer
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:16:| 2 | Agent Docker Runtime | 2-3 周 | DockerRuntimeDriver + Start/Stop/Logs + GpuLease 流转 | Phase 1 |
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:17:| 3 | Web 模型服务 | 2-3 周 | 模型库/环境/模板/部署/实例页面 + GPU 占用展示 | Phase 2 |
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:18:| 4 | Gateway + API Key + Usage | 3-4 周 | OpenAI-compatible API + API Key + 调用审计 | Phase 3 |
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:19:| 5 | 基础自动调度 | 3-4 周 | auto schedule_mode + vendor/显存过滤 + best-fit | Phase 2 |
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:23:- [Phase 1：数据模型与 Dry Run](./12-phase-1-model-runtime-foundation.md)
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:24:- [Phase 2：Agent Docker Runtime](./12-phase-2-agent-docker-runtime.md)
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:25:- [Phase 3：Web 模型服务](./12-phase-3-web-model-serving.md)
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:31:1. RunTemplate 保留独立 CRUD，Phase 1 简化（结构化，无通用模板引擎）
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:36:6. Phase 1 复用 audit_logs，不新增 ModelEvent 表
+docs/archive/old-plans/12-model-runtime-serving-implementation-plan.md:37:7. Phase 1 不建 ModelRoute 和 ModelUsageRecord 表
+docs/archive/old-plans/phase-3-auto-execution-guard.md:6:# LightAI Go Phase 3 自动连续执行守则
+docs/archive/old-plans/phase-3-auto-execution-guard.md:9:> 适用于: Phase 2-6 自动连续执行
+docs/archive/old-plans/phase-3-auto-execution-guard.md:13:本守则适用于 Phase 2-6 自动连续执行场景。
+docs/archive/old-plans/phase-3-auto-execution-guard.md:15:Phase 1 + Phase 1.1 已完成并通过验收：
+docs/archive/old-plans/phase-3-auto-execution-guard.md:22:后续执行目标是自动完成：
+docs/archive/old-plans/phase-3-auto-execution-guard.md:23:- Phase 2: RunPlan Resolver
+docs/archive/old-plans/phase-3-auto-execution-guard.md:24:- Phase 3: Docker Executor
+docs/archive/old-plans/phase-3-auto-execution-guard.md:83:## 5. Phase 2-6 自动推进规则
+docs/archive/old-plans/phase-3-auto-execution-guard.md:85:### Phase 2 完成条件
+docs/archive/old-plans/phase-3-auto-execution-guard.md:95:- 通过后自动进入 Phase 3。
+docs/archive/old-plans/phase-3-auto-execution-guard.md:97:### Phase 3 完成条件
+docs/archive/old-plans/phase-3-auto-execution-guard.md:210:# Phase 2-6 自动完成最终报告
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:6:# Phase 2：Agent Docker Runtime
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:8:> 依赖：Phase 1（数据模型 + Dry Run + ResolvedRunSpec 生成器）
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:34:## 4. 数据模型（Phase 1 已建表，Phase 2 启用状态流转）
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:50:pending → starting → loading → running
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:119:`docker logs --tail N`。Phase 2 不要求 follow。
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:131:2. 创建 ModelInstance（actual_state=pending）
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:204:## 11. 与 Phase 3 的接口约定
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:206:Phase 2 必须向 Phase 3 提供：
+docs/archive/old-plans/12-phase-2-agent-docker-runtime.md:209:2. ModelInstance 状态实时更新（Web 轮询或后续 WebSocket）
+docs/archive/superseded/13-backend-runplan-runtime-design.md:8:> Phase 0.1 修订版 — 后续 Phase 1-6 实施的唯一参考。
+docs/archive/superseded/13-backend-runplan-runtime-design.md:648:replicas                      -- Phase 1 固定为 1
+docs/archive/superseded/13-backend-runplan-runtime-design.md:669:  mode: manual              # "manual" | "auto"（Phase 1: manual only）
+docs/archive/superseded/13-backend-runplan-runtime-design.md:674:  allowMultiNodeSingleReplica: false  # Phase 1: false
+docs/archive/superseded/13-backend-runplan-runtime-design.md:731:actual_state                  -- "pending" | "initializing" | "starting" | "running" | "stopped" | "error"
+docs/archive/superseded/13-backend-runplan-runtime-design.md:1113:    actual_state TEXT NOT NULL DEFAULT 'pending',
+docs/archive/superseded/13-backend-runplan-runtime-design.md:1407:pending → initializing → starting → running → stopped
+docs/archive/superseded/13-backend-runplan-runtime-design.md:1412:简化版（Phase 1，与 GPUStack 对比去掉 ANALYZING、DOWNLOADING、UNREACHABLE）。
+docs/archive/superseded/12-model-runtime-serving-design.md:29:本设计文档的目标不是立即开发全部功能，而是先固定抽象、边界和演进路线。后续应先审核本设计，再拆分成阶段实施文档，最后逐步开发。
+docs/archive/superseded/12-model-runtime-serving-design.md:62:| GPUStack 思路 | LightAI Go 对应 | Phase 1 | 说明 |
+docs/archive/superseded/12-model-runtime-serving-design.md:81:→ [Phase 2] Agent 启动 Docker 容器
+docs/archive/superseded/12-model-runtime-serving-design.md:82:→ [Phase 2] Server 更新 ModelInstance
+docs/archive/superseded/12-model-runtime-serving-design.md:83:→ [Phase 2] GPU 页面显示占用
+docs/archive/superseded/12-model-runtime-serving-design.md:84:→ [Phase 3] Web 完整操作路径
+docs/archive/superseded/12-model-runtime-serving-design.md:140:runtime_type 第一阶段实际只使用 `docker`。`process`、`remote`、`systemd`、`k8s` 保留 enum 值，Phase 2+ 逐步支持。
+docs/archive/superseded/12-model-runtime-serving-design.md:153:| image_pull_policy | enum | never / if_not_present / always（Phase 1 默认 never） |
+docs/archive/superseded/12-model-runtime-serving-design.md:172:Phase 1 只保留数据结构定义，不做执行。
+docs/archive/superseded/12-model-runtime-serving-design.md:180:其余字段（stdout_log_path、stderr_log_path、pid_file、stop_signal、stop_timeout_seconds、run_as_user）注释预留，Phase 2+ 实现。
+docs/archive/superseded/12-model-runtime-serving-design.md:186:Phase 1 只保留数据结构定义，不做执行。
+docs/archive/superseded/12-model-runtime-serving-design.md:202:Phase 1 **不实现通用字符串模板引擎**。只保存结构化启动模板：
+docs/archive/superseded/12-model-runtime-serving-design.md:244:| replicas | int | 副本数（Phase 1 固定 1） |
+docs/archive/superseded/12-model-runtime-serving-design.md:246:| status | enum | pending / starting / running / stopped / failed / unknown |
+docs/archive/superseded/12-model-runtime-serving-design.md:259:| schedule_mode | enum | manual / auto（Phase 1 只允许 manual） |
+docs/archive/superseded/12-model-runtime-serving-design.md:260:| placement_strategy | enum | manual / binpack / spread（Phase 1 只允许 manual，后续预留） |
+docs/archive/superseded/12-model-runtime-serving-design.md:268:Phase 1 限制：`schedule_mode=manual`、`replicas=1`、`placement_strategy=manual`。
+docs/archive/superseded/12-model-runtime-serving-design.md:287:| actual_state | enum | pending / starting / loading / running / unhealthy / stopping / stopped / failed / unknown |
+docs/archive/superseded/12-model-runtime-serving-design.md:305:- `pending`：已创建，等待分配/下发（Phase 1 手动绑定时与 assigned 合并）
+docs/archive/superseded/12-model-runtime-serving-design.md:334:GpuLease 不存储 `reserved_memory_bytes` 和 `reserved_gpu_count`（Phase 1 冗余字段，从 gpu_devices JOIN 获取）。
+docs/archive/superseded/12-model-runtime-serving-design.md:348:以下对象 Phase 1 只定义 struct，不建表，不实现 API：
+docs/archive/superseded/12-model-runtime-serving-design.md:352:- **ModelEvent**（Phase 1 复用 `audit_logs` 表，逻辑概念保留）
+docs/archive/superseded/12-model-runtime-serving-design.md:395:    Process      *ProcessSpec  `json:"process"`  // Phase 2+
+docs/archive/superseded/12-model-runtime-serving-design.md:404:## 7. RuntimeDriver（Phase 2）
+docs/archive/superseded/12-model-runtime-serving-design.md:417:Phase 2 只实现 `DockerRuntimeDriver`。`ProcessRuntimeDriver` 和 `RemoteRuntimeDriver` 提供 stub。
+docs/archive/superseded/12-model-runtime-serving-design.md:421:## 8. Agent Task 设计（Phase 2）
+docs/archive/superseded/12-model-runtime-serving-design.md:432:用户 start → Server 校验 → 创建 ModelInstance(pending) → 创建 GpuLease(reserved)
+docs/archive/superseded/12-model-runtime-serving-design.md:454:Phase 2+ 增加离线超时自动释放策略。
+docs/archive/superseded/12-model-runtime-serving-design.md:491:POST   /api/v1/model-deployments/{id}/start       # Phase 2
+docs/archive/superseded/12-model-runtime-serving-design.md:492:POST   /api/v1/model-deployments/{id}/stop        # Phase 2
+docs/archive/superseded/12-model-runtime-serving-design.md:497:GET    /api/v1/model-instances/{id}/logs           # Phase 2
+docs/archive/superseded/12-model-runtime-serving-design.md:529:## 13. 指标（Phase 2+）
+docs/archive/superseded/12-model-runtime-serving-design.md:542:1. ✅ RunTemplate 保留独立 CRUD，Phase 1 简化（结构化，无通用模板引擎）
+docs/archive/superseded/12-model-runtime-serving-design.md:547:6. ✅ Phase 1 复用 audit_logs，不新增 ModelEvent 表；ModelEvent 作为逻辑概念保留
+docs/archive/superseded/12-model-runtime-serving-design.md:548:7. ✅ Phase 1 不建 ModelRoute 表，不建 ModelUsageRecord 表
+docs/archive/superseded/12-model-runtime-serving-design.md:569:第一阶段应实现：模型可登记、运行环境可配置、启动模板可复用、资源可手动绑定、启动前可 Dry Run。同时通过 RuntimeEnvironment / RunTemplate / ResolvedRunSpec / RuntimeDriver / GpuLease 等抽象为后续调度和 Gateway 留出空间。
+docs/00-project-scope.md:59:这些能力放到后续阶段，不允许提前污染第一阶段架构。
+docs/02-server-agent-design.md:8:> Last updated: 2026-06-13. Covers Phase 0 through Phase 3W+. Current defaults are accurate.
+docs/02-server-agent-design.md:69:- MetaX: Scripts ready (mock verified, hardware pending). Scripts at `deploy/collectors/gpu/metax/`.
+docs/CURRENT.md:146:Known external/future items:
+docs/CURRENT.md:150:Huawei vendor adapter remains template-only / future adapter work.
+docs/04-observability-design.md:8:> Last updated: 2026-06-13. Covers Phase 0 through Phase 3W+.
+docs/04-observability-design.md:124:- TLS/HTTPS is a future enhancement.
+docs/05-runtime-environment-design.md:31:2. 后续可以扩展为 Docker、裸进程、Kubernetes、其他 runtime；
+docs/05-runtime-environment-design.md:51:后续预留：
+docs/05-runtime-environment-design.md:169:1. 敏感环境变量后续要支持脱敏；
+docs/05-runtime-environment-design.md:304:5. 厂商差异可以后续放入 RuntimePreset 或 GPUVendorAdapter。
+docs/05-runtime-environment-design.md:552:后续可以提供 Runtime Preset。
+docs/05-runtime-environment-design.md:644:后续再做操作审计表。
+docs/05-runtime-environment-design.md:674:## 17. MVP 完成标准
+docs/reports/archive/full-project-review/full-project-review-report.md:23:| Web Console | Usable MVP, but test wiring and API/docs consistency lag implementation. |
+docs/reports/archive/full-project-review/project-understanding-summary.md:107:- model serving gateway/API key future path,
+docs/reports/archive/full-project-review/recommended-hardening-plan.md:44:| API key / gateway foundation | Server API, models, future proxy | Add after runtime stability; keep Agent token/User session/API key strictly separated. | Gateway/API key integration tests. | Premature gateway can destabilize core resource platform. |
+docs/reports/archive/full-project-review/recommended-hardening-plan.md:45:| Scheduling | Server scheduler, leases, resource pools | Start with manual placement plus validations; add binpack/spread later. | Simulated multi-node scheduling tests. | Overbuilding too early. |
+docs/reports/archive/full-project-review/recommended-hardening-plan.md:47:| High availability | Server DB/deployment | Document single-node control plane limits first; consider external DB later. | Failover design review. | Complexity exceeds lightweight target. |
+docs/reports/archive/full-project-review/gpustack-gap-analysis.md:14:| Runtime Model | GPUStack has inference backends, model instances, model routes, and gateway proxy. | LightAI recently moved to Backend/Runtime/RunPlan objects. | The current Server->Agent runtime payload is inconsistent with Docker execution, and old docs still reference removed APIs. | Stabilize one runtime object model, update docs/scripts/Web/API, then add gateway/API key later. |
+docs/reports/archive/full-project-review/log-traceability-followup.md:67:### Phase 1: Missing Logs (Server)
+docs/reports/archive/full-project-review/log-traceability-followup.md:76:### Phase 2: Missing Logs (Agent)
+docs/reports/archive/full-project-review/log-traceability-followup.md:82:### Phase 3: Audit Log Writer
+docs/reports/archive/full-project-review/issue-register.md:13:| REVIEW-004 | High | Reliability | Agent task claim is not a full lease/generation/idempotency implementation | `internal/server/api/agent_handlers.go:262-357` selects pending tasks then updates by ID without status/lease predicates; `agent_tasks` schema lacks `lease_owner`, `lease_expires_at`, `operation_id`, `attempt`, `max_attempts`; `docs/08-engineering-contracts.md:9-10` requires these semantics. | Concurrent heartbeats, delayed reports, retries, or restarted agents can produce duplicated or stale state transitions. | Implement contract-level task lease, generation, operation ID, and idempotent result acceptance. | Open |
+docs/reports/archive/full-project-review/issue-register.md:23:| REVIEW-014 | High | Security | TLS/HTTPS is not implemented | `docs/PHASE-STATUS.md` lists TLS/HTTPS as a remaining limitation; release config binds `0.0.0.0`. | Session cookies, CSRF tokens, and admin actions travel over cleartext if deployed directly on LAN. | Add reverse-proxy reference deployment and TLS-ready config before pilot; implement native TLS later if needed. | Open |
+docs/reports/archive/full-project-review/issue-register.md:27:| REVIEW-018 | Medium | GPU | MetaX real hardware validation remains incomplete | `docs/PHASE-STATUS.md` and `docs/RC1_REVIEW_FIX_PLAN.md` mark MetaX hardware pending. | MetaX delivery claims remain unproven for real 8-card hosts and field driver/tool output. | Run signed MetaX hardware verification and store sanitized evidence in reports/vendor samples. | Not Verified |
+docs/reports/archive/full-project-review/issue-register.md:31:| REVIEW-022 | Medium | Product | Create deployment accepts weak references and defers validation to start | `internal/server/api/deployment_lifecycle_handlers.go:35-61` inserts IDs and JSON without checking artifact/runtime/node/GPU existence. | Users can create invalid deployments that only fail later, reducing UX clarity and API predictability. | Validate references and JSON schema at create/update; reserve deep runtime checks for dry-run/start. | Open |
+docs/reports/archive/full-project-review/issue-register.md:34:| REVIEW-025 | Low | Documentation | Release/docs versions are inconsistent | `VERSION` was not asserted in docs; `docs/api/openapi.yaml` says `0.1.14`, `README-RELEASE.md` says `<version> (RC1)`, `docs/PHASE-STATUS.md` says RC2. | Support and upgrade discussions can reference the wrong artifact/version. | Maintain one release status source and update generated docs during packaging. | Open |
+docs/reports/archive/full-project-review/rc3-issue-closeout-register.md:28:| REVIEW-019 | Medium | **Blocked - Explicit Product Decision** — Privileged runtime profiles are explicit in YAML config; product decision on least-privilege defaults pending | — |
+docs/reports/archive/phase-3/operation-lifecycle-logging-plan.md:8:> Phase 3 — 全操作链路可观测性规范
+docs/reports/archive/phase-3/phase-3-report.md:6:# Phase 3 完成报告
+docs/reports/archive/phase-3/final-report.md:6:# Phase 3 Final Review Report
+docs/reports/archive/phase-3/logging-hardening-final-report.md:6:# Logging Hardening Final Report — Phase 3 Round 4 Runtime Closeout
+docs/reports/archive/phase-3/logging-hardening-final-report.md:50:| Task result | ✅ Failed reported | Server received StateTransition pending→failed |
+docs/reports/archive/phase-3/logging-hardening-final-report.md:75:Server: state_transition          operation_id=61921205... state_from=pending state_to=failed
+docs/reports/archive/phase-3/phase-5-report.md:20:Phase 5 页面待后续 PR 实现：
+docs/reports/archive/phase-3/logging-coverage-audit.md:8:> Updated: 2026-06-17 — Phase 3 hardening round
+docs/reports/archive/phase-3/logging-coverage-audit.md:155:4. **Wait helpers not wired into actual wait loops** — No active polling loops exist in current code. Task claim is piggybacked on heartbeat; Docker start is synchronous. Wait helpers are available for future use.
+docs/reports/archive/phase-3/open-issues-closeout.md:6:# Open Issues Closeout — Phase 3
+docs/reports/archive/phase-3/phase-2-report.md:6:# Phase 2 完成报告
+docs/reports/archive/phase-3/phase-2-report.md:45:Phase 3: Docker Executor。
+docs/reports/archive/phase-3/phase-1-report.md:6:# Phase 1 完成报告
+docs/reports/archive/phase-3/phase-1-report.md:79:## 10. 是否建议进入 Phase 2
+docs/reports/archive/phase-3/phase-1-report.md:81:是 — Phase 1 删除和新表建设已完成，可以进入 RunPlan Resolver。
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:6:# Working Tree Reconciliation Report — Phase 3 Final
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:147:`internal/server/api/router.go` — Phase 3 routes
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:220:1. **Phase 3 RunPlan/backend model/API refactor**
+docs/reports/archive/phase-3/working-tree-reconciliation-report.md:242:   - Message: `docs: add Phase 3 logging audit, coverage audit, final reports, verification records`
+docs/reports/archive/phase-3/logging-hardening-progress.md:8:> Internal execution record — Phase 3 full-chain observability hardening
+docs/reports/archive/phase-3/phase-4-report.md:43:## 4. 后续待完成
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:15:[16:34:24] [WAIT] wait_progress elapsed_ms=2000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:16:[16:34:26] [WAIT] wait_progress elapsed_ms=4000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:17:[16:34:28] [WAIT] wait_progress elapsed_ms=6000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:18:[16:34:30] [WAIT] wait_progress elapsed_ms=8000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:19:[16:34:32] [WAIT] wait_progress elapsed_ms=10000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:20:[16:34:36] [WAIT] wait_progress elapsed_ms=12000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:21:[16:34:38] [WAIT] wait_progress elapsed_ms=14000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:22:[16:34:40] [WAIT] wait_progress elapsed_ms=16000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:23:[16:34:42] [WAIT] wait_progress elapsed_ms=18000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:24:[16:34:44] [WAIT] wait_progress elapsed_ms=20000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:25:[16:34:46] [WAIT] wait_progress elapsed_ms=22000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:26:[16:34:48] [WAIT] wait_progress elapsed_ms=24000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:27:[16:34:50] [WAIT] wait_progress elapsed_ms=26000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:28:[16:34:52] [WAIT] wait_progress elapsed_ms=28000 state=pending
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:29:[16:34:54]   llamacpp: pending (30s)...
+docs/reports/archive/phase-3/verification/16-api-e2e-llamacpp.txt:30:[16:34:54] [WAIT] wait_progress elapsed_ms=30000 state=pending
+docs/reports/archive/phase-3/verification/03-db-migration.txt:33:1|RC1 schema: tenants(slug), users, memberships, roles, permissions, sessions, nodes, audit_logs
+docs/reports/archive/phase-3/verification/03-db-migration.txt:35:3|V3: model runtime serving Phase 1 tables
+docs/reports/archive/phase-3/verification/03-db-migration.txt:37:5|V5: agent tasks for Phase 2B task dispatch
+docs/reports/archive/phase-3/verification/03-db-migration.txt:42:10|V10: Phase 3 backend/runplan/runtime new tables (replaces old Phase 1 model runtime)
+docs/reports/archive/phase-3/verification/17-api-e2e-api-only.txt:14:[15:54:36]   State: pending
+docs/reports/archive/phase-3/verification/17-api-e2e-api-only.txt:15:[15:54:36] PASS: start-vllm: instance=d5dcd7f3-e94e-4c51-92f8-ea6173a4283b state=pending
+docs/reports/archive/phase-3/verification/17-api-e2e-api-only.txt:25:[15:54:41]   State: pending
+docs/reports/archive/phase-3/verification/17-api-e2e-api-only.txt:26:[15:54:41] PASS: start-sglang: instance=16ed5ae5-79bd-49b8-994c-bf9b29d7ef6d state=pending
+docs/reports/archive/phase-3/verification/17-api-e2e-api-only.txt:36:[15:54:47]   State: pending
+docs/reports/archive/phase-3/verification/17-api-e2e-api-only.txt:37:[15:54:47] PASS: start-llamacpp: instance=7316535a-f3a4-4446-9d46-b8139cf56787 state=pending
+docs/reports/archive/phase-3/verification/05-final-checks.txt:34:=== Phase 3 test summary ===
+docs/reports/archive/rc2-audit-open-issues-closeout.md:6:# RC2 Audit — Open Issues Closeout
+docs/reports/archive/rc2/rc2-audit-verification-matrix.md:6:# RC2 Audit Verification Matrix (Final)
+docs/reports/archive/rc2/rc2-audit-verification-plan.md:6:# RC2 Audit Verification Plan
+docs/reports/archive/rc2/rc2-audit-remediation-report.md:6:# RC2 Audit Remediation Report
+docs/reports/backend-runtime-runplan/claude-review-20260618.md:153:- **Recommendation:** Add a smoke check comment in the code noting the assumption that `gpu_devices.gpu_index` matches NVIDIA toolkit index ordering. In a future phase, consider Agent-side validation of GPU index mapping before container create.
+docs/reports/backend-runtime-runplan/claude-review-20260618.md:193:- **Recommendation:** Document this as a known scaling limitation. For future multi-instance deployments, consider async stop with polling from the Web client.
+docs/reports/backend-runtime-runplan/claude-review-20260618.md:398:- Instance state transitions: `pending → running | failed`
+docs/reports/backend-runtime-runplan/claude-review-20260618.md:474:3. **Multi-GPU deployment:** The current implementation creates a single instance per deployment with auto-assigned single GPU. Is the `replicas` field intended to be used in this phase, or is it reserved for future multi-instance deployments?
+docs/reports/backend-runtime-runplan/claude-review-20260618.md:509:| BRR-RV-007 (async task polling) | Retained as future scaling note. | DOCUMENTED |
+docs/reports/backend-runtime-runplan/open-issues-closeout.md:11:| BRR-BLOCKER-002 | MetaX real hardware validation remains unavailable in this workspace. | Existing project status says MetaX scripts are mock verified and real hardware pending; this task cannot create MetaX hardware. | MetaX runtime template is generated and previewable, but runtime status must not claim hardware validation. | DOCUMENTED_BLOCKER | Validate on real MetaX node; keep `verification.status=requires_hardware_validation` until then. | On MetaX host, enable runtime, check NodeBackendRuntime, start vLLM, verify `/v1/models`, logs, stop, and lease release. | Template implemented; readiness must remain conservative. |
+docs/reports/backend-runtime-runplan/open-issues-closeout.md:19:| BRR-RV-007 | `HandleStopDeployment` and `HandleGetNodeRunPlanLogs` block HTTP handlers during agent task wait. | Stop waits up to 90s; logs wait up to 30s. | Acceptable at current single-instance scale; future multi-instance needs async pattern. | FUTURE_SCALING | Documented in code and review report as known scaling limitation. | N/A | Future optimization; not blocking current phase. |
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-this-run.log:68:2026-06-18 00:42:53.353 INFO  state_transition request_id=27ccc5fa6fce4346bb4090bc3dfdea5e operation=task.result stage=state_transition entity_type=instance entity_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 state_from=pending state_to=failed task_id=ed2e5a4f-d623-4b00-bbd2-b902a380b4b8 deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id= duration_ms=0
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-this-run.log:69:2026-06-18 00:42:53.353 INFO  instance.state.updated operation_id=b0611c21-79a9-4f97-8313-c7376531891c instance_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 old_state=pending new_state=failed container_id= endpoint_url=
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/e2e-output.log:53:(EngineCore pid=112) INFO 06-17 16:41:18 [backends.py:376] Cache the graph of compile range (1, 2048) for later use
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-observability-review.md:35:  - `stage=state_transition` for GPU lease ("" → "reserved"), instance ("pending" → "failed", "failed" → "stopped")
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/log-observability-review.md:85:| Instance state transition | state_transition (pending→failed) | — | — | instance_id, task_id |
+docs/reports/backend-runtime-runplan/final-verification-20260618-004001/server-e2e-filtered.log:55:2026-06-18 00:42:53.353 INFO  state_transition request_id=27ccc5fa6fce4346bb4090bc3dfdea5e operation=task.result stage=state_transition entity_type=instance entity_id=2fbb7c63-f59d-4303-a525-2957cfaf0641 state_from=pending state_to=failed task_id=ed2e5a4f-d623-4b00-bbd2-b902a380b4b8 deployment_id=495a17f3-d631-4822-b526-6fd8d036aae5 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id= duration_ms=0
+docs/reports/backend-runtime-runplan/current-state-audit.md:40:Current model runtime tables are created by `migrateV10` and later adjusted by `migrateV11`/`migrateV12`:
+docs/reports/backend-runtime-runplan/final-verification-20260618-005313/server-this-run.log:65:2026-06-18 00:54:50.243 INFO  state_transition request_id=ab2559d272b347638d502ca98dfb52e7 operation=task.result stage=state_transition entity_type=instance entity_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e state_from=pending state_to=running task_id=2eb94907-aada-4c58-9982-99c42773ba1d deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac duration_ms=0
+docs/reports/backend-runtime-runplan/final-verification-20260618-005313/server-this-run.log:66:2026-06-18 00:54:50.243 INFO  instance.state.updated operation_id=74e3777e-2743-4195-a464-16ef91807951 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e old_state=pending new_state=running container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac endpoint_url=http://127.0.0.1:8004
+docs/reports/backend-runtime-runplan/final-verification-20260618-005313/server-e2e-filtered.log:49:2026-06-18 00:54:50.243 INFO  state_transition request_id=ab2559d272b347638d502ca98dfb52e7 operation=task.result stage=state_transition entity_type=instance entity_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e state_from=pending state_to=running task_id=2eb94907-aada-4c58-9982-99c42773ba1d deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac duration_ms=0
+docs/reports/backend-runtime-runplan/final-verification-20260618-005313/server-e2e-filtered.log:50:2026-06-18 00:54:50.243 INFO  instance.state.updated operation_id=74e3777e-2743-4195-a464-16ef91807951 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e old_state=pending new_state=running container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac endpoint_url=http://127.0.0.1:8004
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/server-this-run.log:65:2026-06-18 00:54:50.243 INFO  state_transition request_id=ab2559d272b347638d502ca98dfb52e7 operation=task.result stage=state_transition entity_type=instance entity_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e state_from=pending state_to=running task_id=2eb94907-aada-4c58-9982-99c42773ba1d deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac duration_ms=0
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/server-this-run.log:66:2026-06-18 00:54:50.243 INFO  instance.state.updated operation_id=74e3777e-2743-4195-a464-16ef91807951 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e old_state=pending new_state=running container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac endpoint_url=http://127.0.0.1:8004
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/server-this-run.log:202:2026-06-18 11:45:02.541 INFO  state_transition request_id=cd919ec9b8b84c67ad95560cb8b8d736 operation=task.result stage=state_transition entity_type=instance entity_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad state_from=pending state_to=running task_id=f93beb4e-67a4-4ca0-9208-73a5584ebb1b deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id=abb1375c3880d5c1ff4f5c3249f653b865addf6fa64f7d5c0c4315d0193dd650 duration_ms=0
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/server-this-run.log:203:2026-06-18 11:45:02.541 INFO  instance.state.updated operation_id=4df8dbd3-7ad8-4d20-9b9f-991e41495cdf instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad old_state=pending new_state=running container_id=abb1375c3880d5c1ff4f5c3249f653b865addf6fa64f7d5c0c4315d0193dd650 endpoint_url=http://127.0.0.1:8004
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/server-this-run.log:319:2026-06-18 11:53:39.861 INFO  state_transition request_id=7191c18c8222417a8c20b4334b9c238a operation=task.result stage=state_transition entity_type=instance entity_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 state_from=pending state_to=running task_id=ef6537e2-dbb6-4a12-a7e7-a3e61da57fe8 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id=9914a48cd8bf6d6fba531ce25f35a0f23becbd5d6102e1d4eb9b97d709aaad8d duration_ms=0
+docs/reports/model-runtime-node-wizard/e2e-run-20260618-115214/server-this-run.log:320:2026-06-18 11:53:39.861 INFO  instance.state.updated operation_id=d0b14f70-94be-4c36-8f69-bccb8c3713aa instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 old_state=pending new_state=running container_id=9914a48cd8bf6d6fba531ce25f35a0f23becbd5d6102e1d4eb9b97d709aaad8d endpoint_url=http://127.0.0.1:8004
+docs/design/model-runtime-node-wizard.md:227:本轮采用方案 B：Server 持久化节点模型目录策略，Agent 保留最终 denied_roots 和路径归属校验。前端不能只维护临时 root，也不能把任意绝对路径直接提交给 scan/save。
+docs/design/model-runtime-node-wizard.md:747:2. 是否有 running/pending/starting instance 引用。
+docs/design/model-runtime-node-wizard.md:765:1. 是否有 running/pending/starting instance 正在使用该 location。
+docs/design/model-runtime-node-wizard.md:958:1. 是否有 running/pending/starting instance 使用该 NodeBackendRuntime。
+docs/design/model-runtime-node-wizard.md:1440:### Phase 1：后端能力和 API
+docs/design/model-runtime-node-wizard.md:1454:### Phase 2：Web 向导
+docs/design/model-runtime-node-wizard.md:1465:### Phase 3：测试与收口
+docs/design/tenant-rbac-resource-ownership-design.md:6:# Tenant, RBAC & Resource Ownership Design (Phase 2F)
+docs/design/tenant-rbac-resource-ownership-design.md:78:Minimal implementation (Phase 2F):
+docs/design/backend-runtime-runplan-docker.md:17:LightAI Go 后续模型运行链路应从旧的 `RuntimeEnv / RuntimeTemplate` 口径切换到：
+docs/design/backend-runtime-runplan-docker.md:1457:pending
+docs/design/backend-runtime-runplan-docker.md:1473:pending → resolving → reserved → claimed → starting → health_checking → running
+docs/design/backend-runtime-runplan-docker.md:1488:failed / starting / pending / unknown 状态必须可 stop、delete、cleanup。
+docs/design/backend-runtime-runplan-docker.md:1766:  status TEXT NOT NULL DEFAULT 'pending',
+docs/design/backend-runtime-runplan-docker.md:1781:  status TEXT NOT NULL DEFAULT 'pending',
+docs/design/backend-runtime-runplan-docker.md:1810:  status TEXT NOT NULL DEFAULT 'pending',
+docs/design/backend-runtime-runplan-docker.md:2043:5. Gateway/endpoint 后续接入。
+docs/design/backend-runtime-runplan-docker.md:2106:8. failed / pending / starting / unknown 均可 cleanup。
+docs/design/backend-runtime-runplan-docker.md:2181:4. Cleanup 必须能处理 failed / pending / starting / unknown 状态。
+docs/design/backend-runtime-runplan-docker.md:2263:请求指标，后续接入网关后展示
+docs/design/backend-runtime-runplan-docker.md:2266:第一阶段可以先展示节点/GPU 指标与实例状态关联；后续再接入容器级 cgroup 指标和网关请求指标。
+docs/design/backend-runtime-runplan-docker.md:2394:必须提供 Custom 参数区，解决不同镜像、不同版本、不同现场的临时差异。
+docs/design/backend-runtime-runplan-docker.md:2415:第一阶段可以按“一行一个参数片段”处理，原样追加到 args 尾部；后续可升级为结构化表格。
+docs/design/backend-runtime-runplan-docker.md:2743:  status: pending_verification
+docs/design/backend-runtime-runplan-docker.md:3473:后续文档、代码注释、开发 prompt 和审查报告统一使用以下口径：
+docs/06-model-design.md:116:5. 后续可以作为 API model name。
+docs/06-model-design.md:256:为后续 RuntimeCollector 预留。
+docs/06-model-design.md:508:但模型名称后续可能用于：
+docs/06-model-design.md:516:因此模型 `name` 一旦被实例或用量引用，后续不建议随意修改。
+docs/06-model-design.md:518:`Model.TenantID` 是后续 API Key model access、Token usage 和成本聚合的归属依据。第一阶段只写入归属字段，不实现这些功能。
+docs/06-model-design.md:537:后续再做操作审计表。
+docs/06-model-design.md:562:## 15. MVP 完成标准
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:9:> 用途：Phase 1 / Phase 2 / Phase 4 本机 NVIDIA 验证参考
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:20:7. [对 Phase 1 的测试意义](#7-对-phase-1-的测试意义)
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:21:8. [对 Phase 2 的测试意义](#8-对-phase-2-的测试意义)
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:199:**后续请求建议使用实际返回的 id：`Qwen3.5-9B-Q4_K_M.gguf`**。
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:277:以下对象可直接用于 Phase 1 API 测试。
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:382:## 7. 对 Phase 1 的测试意义
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:384:Phase 1 不启动容器，不实现 Agent DockerRuntimeDriver，不实现 Gateway。
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:386:但 Phase 1 的 `render-preview` 和 `dry-run` 可以使用本样例，验证：
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:414:Agent 后续执行必须使用结构化 ResolvedRunSpec。
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:420:## 8. 对 Phase 2 的测试意义
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:422:Phase 2 实现 Agent DockerRuntimeDriver 后，应使用本样例作为本机 NVIDIA 验证用例。
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:438:### Phase 2 测试流程
+docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md:456:后续 Gateway 阶段使用本样例验证时，应注意以下 llama.cpp 特性：
+docs/CHANGELOG.md:43:- Phase 2F: tenant switching API and Web UI, audit log page, V7 migration
+docs/CHANGELOG.md:46:- Phase 2F: tenant RBAC hardening, 12 review fixes
+docs/CHANGELOG.md:62:- Phase 1: Agent register & heartbeat
+docs/CHANGELOG.md:63:- Phase 2: GPU collectors (NVIDIA, MetaX), resource reporting
+docs/CHANGELOG.md:64:- Phase 3W: Web Console MVP
+docs/08-engineering-contracts.md:14:当前开发窗口为 Phase 0、Phase 0.5、Phase 1、Phase 2。Phase 2 必须打通 System、NVIDIA、MetaX 三条真实采集链路；Mock 只用于开发和自动化测试。
+docs/08-engineering-contracts.md:202:1. claim 时原子地把 `pending` 或 lease 已过期的可重试任务更新为 `running`；
+docs/08-engineering-contracts.md:302:13. Future API Key 只用于后续模型服务调用，不用于 Agent 或用户管理登录；
+docs/08-engineering-contracts.md:336:1. `01/02/03/10` 对 Phase 2 范围一致；
+docs/10-mvp-development-plan.md:6:# LightAI Go MVP 开发计划
+docs/10-mvp-development-plan.md:10:MVP 开发必须按阶段推进，每个阶段都要能运行、能验证、能提交。
+docs/10-mvp-development-plan.md:12:Claude 只允许根据 docs 文档开发，不允许自行研究 GPUStack，不允许扩大范围，不允许提前实现 Token、计费、复杂网关等后续功能。
+docs/10-mvp-development-plan.md:192:## 4. Phase 1：Agent 注册与心跳
+docs/10-mvp-development-plan.md:251:## 5. Phase 2：OS / NVIDIA / MetaX 资源采集与上报
+docs/10-mvp-development-plan.md:266:Phase 2A：System / Registry / Mock
+docs/10-mvp-development-plan.md:292:Phase 2A 验收：
+docs/10-mvp-development-plan.md:306:Phase 2B：NVIDIA
+docs/10-mvp-development-plan.md:318:Phase 2B 验收：
+docs/10-mvp-development-plan.md:325:Phase 2C：MetaX
+docs/10-mvp-development-plan.md:337:Phase 2C 验收：
+docs/10-mvp-development-plan.md:344:Phase 2 完成标准：Phase 2A、2B、2C 全部通过。Mock 不能替代任一真实设备验收。
+docs/10-mvp-development-plan.md:361:## 6. Phase 3：运行环境管理
+docs/10-mvp-development-plan.md:519:5. 后续可以把实例健康状态暴露到 Prometheus；
+docs/review/phase-2g-full-review-fix-all-final-report.md:6:# Phase 2G Full Review Fix-All Final Report
+docs/review/phase-2g-full-review-fix-all-final-report.md:10:Phase 2G addresses ALL 50 review findings from `docs/review/claude-full-project-review-20260616.md`. Every Critical, High, Medium, and Low item has been explicitly closed through code changes, test additions, documentation updates, or verified evidence of prior fix.
+docs/review/phase-2g-full-review-fix-all-final-report.md:38:| 21 | B17 | Low | Timestamp type inconsistency | Accepted: Phase 1 models use string for SQLite compat | `models.go` |
+docs/review/phase-2g-full-review-fix-all-final-report.md:57:| 40 | M21 | Medium | Resource pool tables schema-only | Accepted: V7 tables are future work, handlers in Phase 3 | `db.go:migrateV7` |
+docs/review/phase-2g-full-review-fix-all-final-report.md:106:**Phase 2G Full Review Fix-All: CLOSED** ✅
+docs/review/phase-2g-full-review-fix-all-final-report.md:154:**Phase 2G Full Review Fix-All: CLOSED** ✅
+docs/review/full-project-review-20260616.md:10:**Overall Status:** Phase 2F core deliverables (tenant type, audit API, tenant switching, Web management pages) are implemented. However, the review reveals **4 P0 gaps** that must be fixed before declaring Phase 2F closed:
+docs/review/full-project-review-20260616.md:17:**Recommended:** Do NOT close Phase 2F yet. Fix the 4 P0 items first. The remaining findings (Web i18n, API URL consistency) are P1 and can be addressed in a follow-up hardening phase.
+docs/review/full-project-review-20260616.md:38:## 3. Phase 2F Requirement Matrix
+docs/review/full-project-review-20260616.md:173:## Phase 2F Final Closure
+docs/review/full-project-review-20260616.md:177:Phase 2F is **closed** after all 12 review findings were fixed and validated.
+docs/review/gpustack-runtime-reference-review.md:239:1. Enqueues pending instances (periodic full scan every 180s + event-driven for CREATED)
+docs/review/gpustack-runtime-reference-review.md:255:- Distributed inference (Phase 1 is single-node)
+docs/review/gpustack-runtime-reference-review.md:335:LightAI Go should NOT implement these (Phase 1 scope):
+docs/review/gpustack-runtime-reference-review.md:343:GPUStack supports multi-node distributed inference (Ray, MP). LightAI Go Phase 1 is single-node only.
+docs/review/gpustack-runtime-reference-review.md:425:### 12.2 Single-Node Multi-GPU Only (Phase 1)
+docs/review/gpustack-runtime-reference-review.md:430:- **Scenario B (reserved)**: Multi-node multi-replica (independent copies on different nodes, load-balanced by future gateway)
+docs/review/gpustack-runtime-reference-review.md:431:- **Scenario C (reserved)**: Multi-node single-model distributed parallel (Ray/torchrun across nodes — complex, future)
+docs/review/gpustack-runtime-reference-review.md:458:| Worker scheduling | Filter chain + resource fit + scoring | Manual node/GPU selection (Phase 1) |
+docs/review/gpustack-runtime-reference-review.md:462:| Multi-node | Supported (Ray/MP) | Reserved (not implemented in Phase 1) |
+docs/review/claude-full-project-review-20260616.md:20:LightAI Go at v0.1.14 is a **remarkably solid early-stage project**. It has working Server/Agent binaries, multi-tenant RBAC, GPU auto-discovery for NVIDIA and MetaX (scripts ready), comprehensive Web UI, Prometheus/Grafana integration, model runtime lifecycle management (start/stop/logs/sweep), and a clean patch/upgrade system. The codebase is well-organized, documentation is extensive, and the Phase 2F RBAC/tenant hardening was executed with discipline.
+docs/review/claude-full-project-review-20260616.md:38:2. **Login metrics counters never incremented** — `auth/handlers.go:216`: Auth metrics (login total, failed login count) have a TODO and are unimplemented. This blinds operators to brute-force attacks.
+docs/review/claude-full-project-review-20260616.md:45:**Yes, with caveats.** The foundation is strong enough to proceed, but the 5 critical bugs above and several high-priority issues should be fixed before Phase 2G (model serving hardening). Entering model gateway/API key/billing without fixing these would compound risk.
+docs/review/claude-full-project-review-20260616.md:124:- MetaX real hardware validation pending — scripts are mock-verified only
+docs/review/claude-full-project-review-20260616.md:188:| **Instance State Machine** | PENDING→ANALYZING→SCHEDULED→RUNNING→ERROR | pending→running→stopped→failed | GPUStack's ANALYZING and SCHEDULED states add clarity; LightAI could benefit | Separate controller per entity type |
+docs/review/claude-full-project-review-20260616.md:191:| **API Key** | access_key + hashed_secret_key, model scope, expiry | Not implemented (deferred) | Schema design is worth studying for future | Full API key management now |
+docs/review/claude-full-project-review-20260616.md:192:| **Usage Tracking** | ModelUsage, MeteredUsage, ModelUsageDetails with archiving | Not implemented (deferred) | Study the data model for future | Usage/archiving system |
+docs/review/claude-full-project-review-20260616.md:225:### 4.1 Phase 2F Closure Check
+docs/review/claude-full-project-review-20260616.md:227:The latest commit `e98816a` closes Phase 2F. Verification:
+docs/review/claude-full-project-review-20260616.md:255:| `PHASE-STATUS.md` | Updated 2026-06-14 | MetaX noted as "hardware pending" — accurate |
+docs/review/claude-full-project-review-20260616.md:256:| `RC1_REVIEW_FIX_PLAN.md` | Updated 2026-06-14 | P0-P2 status current. glibc note says 2.28 but VERSION shows 0.1.14 |
+docs/review/claude-full-project-review-20260616.md:258:| `README.md` / `docs/README.md` | Original Phase 0-2B window | Does not mention Phase 2F, model runtime, or tenant hardening |
+docs/review/claude-full-project-review-20260616.md:277:| B3 | **Critical** | `auth/handlers.go:216` | Login metrics (`AuthLoginTotal`, `AuthLoginFailed`) never incremented — TODO never implemented. Operators blind to brute-force attacks. |
+docs/review/claude-full-project-review-20260616.md:291:| B17 | **Low** | `models/models.go` | Timestamp type inconsistency: old models use `time.Time`, new models (Phase 1) use `string`. |
+docs/review/claude-full-project-review-20260616.md:360:| M5 | **Medium** | `api/model_handlers.go:1142-1150` | Phase 1 guard checks (replicas==1, schedule_mode=="manual") in Go code only — no DB CHECK constraints. |
+docs/review/claude-full-project-review-20260616.md:379:| pending → running | ✅ via `StartDeployment` | Already running returns 409 |
+docs/review/claude-full-project-review-20260616.md:380:| pending → failed | ✅ via sweep (timeout) | Stopped already returns success (idempotent) |
+docs/review/claude-full-project-review-20260616.md:475:| Server | API counters (by method, path, status), node/GPU counts, DB stats | No auth metrics implemented (TODO) |
+docs/review/claude-full-project-review-20260616.md:596:| `docs/RC1_REVIEW_FIX_PLAN.md` | ✅ | ✅ | RC1 tracking |
+docs/review/claude-full-project-review-20260616.md:597:| `docs/RC1_CODEX_REVIEW_TRACKING.md` | ✅ | ✅ | Codex review |
+docs/review/claude-full-project-review-20260616.md:631:| **Server API: Model** | CRUD round-trip, dry-run, deployment start/stop, lease conflict, tenant isolation | 38 | Concurrent start, sweep with mixed states, Docker spec update concurrency | Test parallel deployment starts; test sweep behavior with pending + running instances |
+docs/review/claude-full-project-review-20260616.md:696:**Next (Phase 2G):**
+docs/review/claude-full-project-review-20260616.md:704:**Soon (Phase 2H):**
+docs/review/claude-full-project-review-20260616.md:712:**Later (Phase 3):**
+docs/review/claude-full-project-review-20260616.md:761:| C3 | Login metrics never incremented | `auth/handlers.go:216` | Operators blind to brute-force attacks | Implement the TODO: pass ServerMetrics to AuthHandler, increment counters in HandleLogin | No | S | Yes | No |
+docs/review/claude-full-project-review-20260616.md:802:| M21 | Resource pool tables schema-only | V7 migration | Unused tables in DB | Add handlers or add comment marking as future work | No | L | No | Yes |
+docs/review/claude-full-project-review-20260616.md:829:### Phase 2G: Stability & Bug Fix (Suggested: 1–2 weeks)
+docs/review/claude-full-project-review-20260616.md:851:### Phase 2H: Production Readiness (Suggested: 2–3 weeks)
+docs/review/claude-full-project-review-20260616.md:880:### Phase 3: Basic Scheduling & Model Operations (Suggested: 3–4 weeks)
+docs/review/claude-full-project-review-20260616.md:908:### What NOT to Do in Phase 3
+docs/review/claude-full-project-review-20260616.md:922:**Yes.** LightAI Go is in a surprisingly healthy state for a project of its scope and maturity. The foundation is solid: clean architecture, well-defined contracts, good test coverage, comprehensive documentation, and a functional Web UI. The engineering discipline shown in Phase 2F (RBAC hardening, tenant isolation, 12 review fixes, E2E cleanup) is commendable.
+docs/review/claude-full-project-review-20260616.md:943:After these, proceed to Phase 2G (stability), then Phase 2H (production readiness). Only after the system handles multi-node model serving reliably should API keys and billing be considered.
+docs/review/claude-full-project-review-20260616.md:949:2. **Instance state machine with health checks** — GPUStack's `PENDING→ANALYZING→SCHEDULED→RUNNING→ERROR` flow is clearer than LightAI's `pending→running→stopped→failed`. Adding an `analyzing` state (validating Docker image, checking model files) and `scheduled` state (node selected, waiting for agent) would improve visibility.
+docs/review/claude-full-project-review-plan-20260616.md:63:grep -rn "TODO\|FIXME" --include='*.go' internal/ cmd/
+docs/review/claude-full-project-review-plan-20260616.md:64:grep -rn "TODO\|FIXME" --include='*.vue' --include='*.ts' web/src/
+docs/review/claude-full-project-review-plan-20260616.md:83:6. What should Phase 2G/2H/3 do, and what should be deferred?
+docs/ops/model-runtime-troubleshooting.md:61:### Logs task pending indefinitely
+docs/09-auth-tenant-design.md:18:7. 支持后续 API Key、Token 统计、额度和成本核算；
+docs/09-auth-tenant-design.md:19:8. 避免 RuntimeEnvironment、Model、ModelInstance、AgentTask 等核心对象后续大改表结构；
+docs/09-auth-tenant-design.md:103:2. 后续可以按部门、业务线或项目创建多个 Tenant；
+docs/09-auth-tenant-design.md:455:4. 后续启动不得再次输出；
+docs/09-auth-tenant-design.md:621:8. 后续可以增加短 TTL cache，但不能改变实时撤权语义。
+docs/09-auth-tenant-design.md:664:| Future API Key | 后续模型服务调用 | tenant_id / user_id / api_key_id |
+docs/09-auth-tenant-design.md:670:3. Future API Key 后续只用于模型服务网关；
+docs/09-auth-tenant-design.md:880:第一阶段可以先写 Server 结构化日志，不要求建立 audit_log 表。后续可以扩展独立 audit_log 表。
+docs/09-auth-tenant-design.md:893:## 18. 后续 API Key / Token / 计费扩展
+docs/09-auth-tenant-design.md:930:后续再考虑 tenant quota、model quota、token quota、cost policy、billing period、tenant bill 和 project/workspace。
+docs/09-auth-tenant-design.md:932:第一阶段的 TenantID、OwnerID、CreatedBy 和 API 身份上下文将作为后续模型访问、Token usage 和成本聚合基础。
+docs/09-auth-tenant-design.md:1028:## 16. 后续扩展：API Key / Token / 计费预留
+docs/PHASE-STATUS.md:27:| Web console MVP | Done | Current Vue console |
+docs/03-resource-monitoring-design.md:8:> Last updated: 2026-06-13. Covers Phase 0 through Phase 3W+.
+docs/03-resource-monitoring-design.md:38:### MetaX — Scripts Ready (mock verified, hardware pending)
+docs/RUNBOOK-LOCAL-VERIFY.md:9:> Applicable: Phase 0 through RC1 Hotfix
+docs/RUNBOOK-LOCAL-VERIFY.md:18:| Prometheus (future) | `http://127.0.0.1:19090` |
+docs/RUNBOOK-LOCAL-VERIFY.md:19:| Grafana (future) | `http://127.0.0.1:13000` |
+docs/RUNBOOK-LOCAL-VERIFY.md:298:Use VPN, bastion host, or reverse proxy. TLS/HTTPS is a future enhancement.
+docs/RELEASE_NOTE_v0.1.9.md:24:- GPUDevice independent tenant assignment (RC2)
+docs/01-architecture.md:158:后续可以增加：
+docs/01-architecture.md:334:后续请求从 Session 获取 current_user_id / current_tenant_id
+docs/01-architecture.md:348:后续模型调用：Future API Key
+docs/01-architecture.md:418:Phase 2 实现：
+docs/01-architecture.md:429:DockerCollector 和 RuntimeCollector 作为第二阶段或后续阶段实现。
+docs/01-architecture.md:443:5. 后续可以迁移到 PostgreSQL。
+docs/01-architecture.md:526:第一阶段默认提供 Grafana 链接；具备同源代理或明确启用匿名 Viewer 时才使用 iframe，后续再做统一鉴权增强。
+docs/01-architecture.md:530:## 12. 后续扩展方向
+docs/01-architecture.md:549:Tenant、User、Membership、TenantMembershipRole、built-in/custom Role、系统 Permission catalog、RolePermission、Session 和基础 RBAC 已属于第一阶段，不列为后续扩展。用户自定义 Permission code、资源级 ACL、API Key、Token 和成本仍保持后续范围。
+docs/plan/README.md:5:> Scope: Current implementation plans and future roadmap
+docs/plan/README.md:15:| `future-roadmap.md` | Current roadmap and formal links to open issues |
+docs/plan/future-roadmap.md:23:| Huawei vendor adapter | Template-only; future adapter required |
+docs/plan/phase-4-model-runtime-wizard-implementation.md:10:## Phase 1: Agent Capabilities ✅
+docs/plan/phase-4-model-runtime-wizard-implementation.md:19:## Phase 2: Server API ✅
+docs/plan/phase-4-model-runtime-wizard-implementation.md:32:## Phase 3: Web Wizards ✅

@@ -52,6 +52,25 @@ collectors:
     #       metrics_cmd: "deploy/collectors/gpu/metax/metrics.sh"
   report_interval: 5s
 
+model_browser:
+  enabled: true
+  allowed_roots: []
+  denied_roots:
+    - /
+    - /etc
+    - /root
+    - /boot
+    - /proc
+    - /sys
+    - /dev
+    - /run
+    - /var/run
+    - /var/lib/docker
+  max_entries: 1000
+  max_scan_depth: 2
+  follow_symlinks: false
+  allow_runtime_root_add: true
+
 logging:
   format: text
   level: info

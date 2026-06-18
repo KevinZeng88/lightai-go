@@ -1,3 +1,8 @@
+> Status: REFERENCE
+> Last reviewed: 2026-06-18
+> Scope: Reference document; not the current entrypoint
+> Read order: See `docs/CURRENT.md`
+
 # LightAI Go 模型运行链路 / RunPlan 测试计划
 
 > Phase 0.1 修订版 — 根据人工审核意见更新。

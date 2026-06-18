@@ -1,3 +1,8 @@
+> Status: CURRENT_REPORT
+> Last reviewed: 2026-06-18
+> Scope: Current report or evidence summary
+> Read order: See `docs/CURRENT.md`
+
 # Backend Runtime RunPlan Review
 
 **Date:** 2026-06-18

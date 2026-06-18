@@ -129,7 +129,7 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
-	for _, f := range []string{"display_name", "image_name", "image_pull_policy", "vendor", "default_env_json", "docker_json", "model_mount_json", "health_check_override_json", "args_override_json", "entrypoint_override_json"} {
+	for _, f := range []string{"name", "display_name", "image_name", "image_pull_policy", "vendor", "default_env_json", "docker_json", "model_mount_json", "health_check_override_json", "args_override_json", "entrypoint_override_json"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
 			if strings.HasSuffix(f, "_json") || f == "docker_json" {
