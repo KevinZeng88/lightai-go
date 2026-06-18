@@ -165,6 +165,11 @@ func main() {
 	serverMetrics := srvmetrics.New(reg, database.DB)
 
 	agentHandler := api.NewAgentHandler(database, serverMetrics)
+	if count, err := agentHandler.ReloadBackendCatalogProjection(); err != nil {
+		log.Warn("backend catalog reload failed", "error", err)
+	} else {
+		log.Info("backend catalog reloaded", "versions", count)
+	}
 	resourceHandler := api.NewResourceHandler(database, serverMetrics)
 
 	mux := http.NewServeMux()

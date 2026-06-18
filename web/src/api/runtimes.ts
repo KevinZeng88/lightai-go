@@ -6,6 +6,8 @@ export interface BackendRuntime {
   vendor: string; runtime_type: string; image_name: string; image_pull_policy: string
   entrypoint_override_json: any; args_override_json: any; default_env_json: any
   docker_json: any; model_mount_json: any; health_check_override_json: any
+  source_backend_id?: string; source_backend_version_id?: string; source_version_revision?: string; version_snapshot_json?: any
+  node_count?: number; ready_count?: number
   is_builtin: boolean; is_editable: boolean; tenant_id: string
   created_at: string; updated_at: string
 }

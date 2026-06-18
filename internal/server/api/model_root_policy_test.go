@@ -69,6 +69,19 @@ func TestNodeModelRootCRUDUsesPersistentRows(t *testing.T) {
 		t.Fatalf("unexpected root: %#v", root)
 	}
 
+	wAddAgain := httptest.NewRecorder()
+	h.HandleAddNodeModelRoot(wAddAgain, newReq("POST", "/api/v1/nodes/node-root-1/model-roots", `{"path":"`+allowed+`","description":"test models again"}`, adminSession(), map[string]string{"id": "node-root-1"}))
+	if wAddAgain.Code != 200 {
+		t.Fatalf("duplicate add code=%d body=%s", wAddAgain.Code, wAddAgain.Body.String())
+	}
+	var rootAgain map[string]interface{}
+	if err := json.Unmarshal(wAddAgain.Body.Bytes(), &rootAgain); err != nil {
+		t.Fatalf("decode duplicate add: %v", err)
+	}
+	if rootAgain["id"] != rootID || rootAgain["status"] != "enabled" {
+		t.Fatalf("duplicate root did not reuse existing row: %#v", rootAgain)
+	}
+
 	wList := httptest.NewRecorder()
 	h.HandleListNodeModelRoots(wList, newReq("GET", "/api/v1/nodes/node-root-1/model-roots", "", adminSession(), map[string]string{"id": "node-root-1"}))
 	var list []map[string]interface{}

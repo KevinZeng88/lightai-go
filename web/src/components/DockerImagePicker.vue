@@ -9,13 +9,18 @@
       <el-button :icon="Refresh" size="small" @click="search" :loading="loading">{{ $t('common.refresh') }}</el-button>
       <span class="picker-manual">
         <el-input v-model="manualRef" :placeholder="$t('dockerImages.manualInput')" size="small" style="width: 240px" clearable />
-        <el-button size="small" type="primary" :disabled="!manualRef" @click="$emit('select', { image_ref: manualRef, image_present: false })">
+        <el-button size="small" type="primary" :disabled="!manualRef" @click="selectManual">
           {{ $t('dockerImages.select') }}
         </el-button>
       </span>
     </div>
 
-    <el-table :data="images" v-loading="loading" stripe max-height="350" @row-click="onRowClick" highlight-current-row>
+    <el-alert v-if="selectedRef" class="selected-alert" type="success" :title="$t('dockerImages.selectedImage')" :description="selectedRef" show-icon :closable="false" />
+
+    <el-table :data="images" v-loading="loading" stripe max-height="350" @row-click="selectRow" highlight-current-row :row-class-name="rowClassName">
+      <el-table-column width="54">
+        <template #default="{ row }"><el-icon v-if="imageRef(row) === selectedRef" color="var(--el-color-success)"><Check /></el-icon></template>
+      </el-table-column>
       <el-table-column prop="repository" :label="$t('dockerImages.repository')" min-width="160" />
       <el-table-column prop="tag" :label="$t('dockerImages.tag')" width="120" />
       <el-table-column :label="$t('dockerImages.imageId')" width="140" show-overflow-tooltip>
@@ -25,7 +30,7 @@
       <el-table-column prop="size" :label="$t('dockerImages.size')" width="100" />
       <el-table-column :label="$t('common.actions')" width="80">
         <template #default="{ row }">
-          <el-button size="small" type="primary" @click.stop="$emit('select', row)">{{ $t('dockerImages.select') }}</el-button>
+          <el-button size="small" type="primary" @click.stop="selectRow(row)">{{ $t('dockerImages.select') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -38,17 +43,18 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { Check, Refresh } from '@element-plus/icons-vue'
 import { apiClient } from '@/api/client'
 
 const props = defineProps<{ nodeId: string }>()
-defineEmits<{ select: [image: any] }>()
+const emit = defineEmits<{ select: [image: any] }>()
 
 const loading = ref(false)
 const images = ref<any[]>([])
 const error = ref('')
 const query = ref('')
 const manualRef = ref('')
+const selectedRef = ref('')
 
 async function search() {
   if (!props.nodeId) return
@@ -65,7 +71,27 @@ async function search() {
   } finally { loading.value = false }
 }
 
-function onRowClick(row: any) { /* highlight only */ }
+function imageRef(row: any) {
+  if (row.image_ref) return row.image_ref
+  if (row.repository && row.tag) return `${row.repository}:${row.tag}`
+  return row.repository || row.image_id || ''
+}
+
+function selectRow(row: any) {
+  const ref = imageRef(row)
+  selectedRef.value = ref
+  manualRef.value = ref
+  emit('select', { ...row, image_ref: ref, image_present: true })
+}
+
+function selectManual() {
+  selectedRef.value = manualRef.value
+  emit('select', { image_ref: manualRef.value, image_present: false })
+}
+
+function rowClassName({ row }: { row: any }) {
+  return imageRef(row) === selectedRef.value ? 'selected-image-row' : ''
+}
 
 onMounted(() => { if (props.nodeId) search() })
 </script>
@@ -75,5 +101,7 @@ onMounted(() => { if (props.nodeId) search() })
 .picker-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .picker-manual { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .picker-error { margin-bottom: 8px; }
+.selected-alert { margin-bottom: 8px; }
 .picker-empty { text-align: center; padding: 24px; color: var(--el-text-color-secondary); }
+:deep(.selected-image-row) { background: var(--el-color-success-light-9); }
 </style>

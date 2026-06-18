@@ -1,6 +1,6 @@
 id: runtime.llamacpp.huawei-docker
 backend_id: backend.llamacpp
-backend_version_id: backend-version.llamacpp.server
+backend_version_id: llamacpp-b9700
 slug: llamacpp-huawei-docker
 managed_by: system
 runner_type: docker

@@ -1,9 +1,0 @@
-id: backend-version.llamacpp.server-metax
-backend_id: backend.llamacpp
-slug: llama-cpp-server-metax
-version: server-metax
-managed_by: system
-default_container_port: 8080
-default_args: ["-m", "{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}"]
-default_images:
-  metax: llamacpp-metax:latest

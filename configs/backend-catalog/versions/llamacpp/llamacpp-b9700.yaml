@@ -1,0 +1,68 @@
+id: llamacpp-b9700
+backend_id: backend.llamacpp
+slug: llamacpp-b9700
+version: b9700
+managed_by: system
+source: system
+readonly: true
+protocol: openai-compatible-subset
+image_candidates:
+  - ghcr.io/ggml-org/llama.cpp:server
+  - ghcr.io/ggml-org/llama.cpp:server-cuda
+  - ghcr.io/ggml-org/llama.cpp:server-cuda13
+default_port: 8080
+default_host: 0.0.0.0
+default_model_mount:
+  container_path: /models
+  readonly: true
+default_endpoints:
+  models: /v1/models
+  chat_completions: /v1/chat/completions
+  completions: /v1/completions
+  embeddings: /v1/embeddings
+capabilities:
+  - gguf
+  - models
+  - chat_completions
+  - completions
+  - embeddings
+  - openai_compatible
+  - web_ui
+default_args:
+  - -m
+  - "{{model_container_path}}"
+  - --host
+  - 0.0.0.0
+  - --port
+  - "{{container_port}}"
+default_args_schema:
+  - name: -m
+    alias: --model
+    required: true
+    value: "{{MODEL_CONTAINER_PATH}}"
+  - name: --host
+    default: "0.0.0.0"
+  - name: --port
+    default: "8080"
+  - name: --ctx-size
+    alias: -c
+    optional: true
+  - name: --n-gpu-layers
+    alias: -ngl
+    optional: true
+  - name: --threads
+    alias: -t
+    optional: true
+  - name: --threads-batch
+    alias: -tb
+    optional: true
+health_check:
+  type: http
+  path: /v1/models
+  success_status:
+    - 200
+official_reference_note:
+  - llama.cpp tools/server README: llama-server is HTTP server with REST APIs and Web UI.
+  - llama.cpp server README: supports OpenAI API-compatible chat completions, responses, embeddings routes.
+  - llama.cpp Docker docs: ghcr.io/ggml-org/llama.cpp:server contains llama-server only.
+  - llama.cpp releases use build tags such as b9700 rather than stable semver.

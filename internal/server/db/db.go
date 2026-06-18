@@ -153,6 +153,21 @@ func (db *DB) Migrate() error {
 			return fmt.Errorf("migrate v16: %w", err)
 		}
 	}
+	if currentVersion < 17 {
+		if err := db.migrateV17(); err != nil {
+			return fmt.Errorf("migrate v17: %w", err)
+		}
+	}
+	if currentVersion < 18 {
+		if err := db.migrateV18(); err != nil {
+			return fmt.Errorf("migrate v18: %w", err)
+		}
+	}
+	if currentVersion < 19 {
+		if err := db.migrateV19(); err != nil {
+			return fmt.Errorf("migrate v19: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -1311,36 +1326,52 @@ func (db *DB) seedTargetBackendCatalog() {
 	}
 
 	versions := []struct {
-		id, backendID, slug, version, display, entrypoint, args, params, paramDefs, hc string
-		port                                                                           int
-		images, env                                                                    string
-		isDefault                                                                      int
+		id, backendID, slug, version, display, protocol, entrypoint, args, params, paramDefs, hc string
+		port                                                                                     int
+		images, imageCandidates, env, endpoints, caps, mount, refs, revision                     string
+		isDefault                                                                                int
 	}{
-		{"backend-version.llamacpp.server", "backend.llamacpp", "llama-cpp-server", "server", "llama.cpp Server", `[]`, `["-m","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","-ngl","99"]`, `[]`, `[{"name":"served_model_name","cli_name":"--alias","type":"string","required":false}]`, `{"path":"/health","expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 8080, `{"nvidia":"ghcr.io/ggml-org/llama.cpp:server-cuda13","cpu":"ghcr.io/ggml-org/llama.cpp:server"}`, `{}`, 1},
-		{"backend-version.llamacpp.server-metax", "backend.llamacpp", "llama-cpp-server-metax", "server-metax", "llama.cpp Server MetaX", `[]`, `["-m","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[]`, `{"path":"/health","expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 8080, `{"metax":"llamacpp-metax:latest"}`, `{}`, 0},
-		{"backend-version.vllm.openai-latest", "backend.vllm", "vllm-openai-latest", "openai-latest", "vLLM OpenAI Latest", `["vllm","serve"]`, `["{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}","--served-model-name","{{served_model_name}}","--max-model-len","{{max_model_len}}","--gpu-memory-utilization","{{gpu_memory_utilization}}"]`, `[]`, `[{"name":"served_model_name","cli_name":"--served-model-name","type":"string","required":true},{"name":"max_model_len","cli_name":"--max-model-len","type":"integer","default":4096,"required":false},{"name":"gpu_memory_utilization","cli_name":"--gpu-memory-utilization","type":"number","default":0.9,"required":false},{"name":"tensor_parallel_size","cli_name":"--tensor-parallel-size","type":"integer","default":1,"required":false}]`, `{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 8000, `{"nvidia":"vllm/vllm-openai:latest","metax":"0d307f1665d3","huawei":"template-only"}`, `{}`, 1},
-		{"backend-version.vllm.openai-0.9", "backend.vllm", "vllm-openai-0.9", "0.9", "vLLM OpenAI 0.9", `["vllm","serve"]`, `["{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[]`, `{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 8000, `{"nvidia":"vllm/vllm-openai:v0.9.0"}`, `{}`, 0},
-		{"backend-version.sglang.openai-latest", "backend.sglang", "sglang-openai-latest", "openai-latest", "SGLang OpenAI Latest", `["python3","-m","sglang.launch_server"]`, `["--model-path","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"served_model_name","cli_name":"--served-model-name","type":"string","required":false}]`, `{"path":"/v1/models","expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 30000, `{"nvidia":"lmsysorg/sglang:latest","metax":"sglang-metax:latest","huawei":"template-only"}`, `{}`, 1},
-		{"backend-version.ollama.latest", "backend.ollama", "ollama-latest", "latest", "Ollama Latest", `["ollama","serve"]`, `[]`, `[]`, `[]`, `{"path":"/api/tags","expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 11434, `{"nvidia":"ollama/ollama:latest","cpu":"ollama/ollama:latest"}`, `{}`, 1},
+		{"vllm-v0.23.0", "backend.vllm", "vllm-v0-23-0", "v0.23.0", "vLLM v0.23.0", "openai-compatible", `["vllm","serve"]`, `["--model","{{model_container_path}}"]`, `[]`, `[{"name":"--model","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"8000"},{"name":"--served-model-name","optional":true},{"name":"--tensor-parallel-size","optional":true},{"name":"--max-model-len","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 8000, `{"default":"vllm/vllm-openai:v0.23.0"}`, `["vllm/vllm-openai:v0.23.0","vllm/vllm-openai:v0.23.0-cu129-ubuntu2404","vllm/vllm-openai:latest"]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions","embeddings":"/v1/embeddings"}`, `["models","chat_completions","completions","embeddings","openai_compatible"]`, `{"container_path":"/models","readonly":true}`, `["vLLM official Docker docs: vllm/vllm-openai runs OpenAI-compatible server.","vLLM online serving docs: supports /v1/completions, /v1/chat/completions, /v1/embeddings.","vLLM v0.23.0 release line used as current system version baseline."]`, "v0.23.0", 1},
+		{"sglang-v0.5.12.post1", "backend.sglang", "sglang-v0-5-12-post1", "v0.5.12.post1", "SGLang v0.5.12.post1", "openai-compatible", `["python3","-m","sglang.launch_server"]`, `["--model-path","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"--model-path","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"30000"},{"name":"--tp","optional":true},{"name":"--tensor-parallel-size","optional":true},{"name":"--dp","optional":true},{"name":"--enable-metrics","optional":true},{"name":"--log-level","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 30000, `{"default":"lmsysorg/sglang:v0.5.12.post1"}`, `["lmsysorg/sglang:v0.5.12.post1","lmsysorg/sglang:latest-runtime","lmsysorg/sglang:latest","lmsysorg/sglang:v0.5.13.post1-cu129-runtime","lmsysorg/sglang:v0.5.13.post1-cu130-runtime"]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions","embeddings":"/v1/embeddings"}`, `["models","chat_completions","completions","embeddings","openai_compatible"]`, `{"container_path":"/models","readonly":true}`, `["SGLang install docs: Docker images are lmsysorg/sglang and lmsysorg/sglang:latest-runtime.","SGLang launch command: python3 -m sglang.launch_server --model-path ... --host ... --port ...","SGLang OpenAI API docs: supports chat/completions and completions.","SGLang server arguments docs: server args are available from python3 -m sglang.launch_server --help."]`, "v0.5.12.post1", 1},
+		{"sglang-v0.5.13.post1", "backend.sglang", "sglang-v0-5-13-post1", "v0.5.13.post1", "SGLang v0.5.13.post1", "openai-compatible", `["python3","-m","sglang.launch_server"]`, `["--model-path","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"--model-path","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"30000"},{"name":"--tp","optional":true},{"name":"--tensor-parallel-size","optional":true},{"name":"--dp","optional":true},{"name":"--enable-metrics","optional":true},{"name":"--log-level","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":120,"intervalSeconds":2,"timeoutSeconds":5}`, 30000, `{"default":"lmsysorg/sglang:v0.5.13.post1-cu129-runtime"}`, `["lmsysorg/sglang:v0.5.13.post1-cu129-runtime","lmsysorg/sglang:v0.5.13.post1-cu130-runtime","lmsysorg/sglang:latest-runtime","lmsysorg/sglang:latest"]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions","embeddings":"/v1/embeddings"}`, `["models","chat_completions","completions","embeddings","openai_compatible"]`, `{"container_path":"/models","readonly":true}`, `["SGLang v0.5.13.post1 tag verified with git ls-remote against github.com/sgl-project/sglang.git.","SGLang install docs: Docker images are lmsysorg/sglang and lmsysorg/sglang:latest-runtime."]`, "v0.5.13.post1", 0},
+		{"llamacpp-b9700", "backend.llamacpp", "llamacpp-b9700", "b9700", "llama.cpp b9700", "openai-compatible-subset", `[]`, `["-m","{{model_container_path}}","--host","0.0.0.0","--port","{{container_port}}"]`, `[]`, `[{"name":"-m","alias":"--model","required":true,"value":"{{MODEL_CONTAINER_PATH}}"},{"name":"--host","default":"0.0.0.0"},{"name":"--port","default":"8080"},{"name":"--ctx-size","alias":"-c","optional":true},{"name":"--n-gpu-layers","alias":"-ngl","optional":true},{"name":"--threads","alias":"-t","optional":true},{"name":"--threads-batch","alias":"-tb","optional":true}]`, `{"type":"http","path":"/v1/models","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 8080, `{"default":"ghcr.io/ggml-org/llama.cpp:server"}`, `["ghcr.io/ggml-org/llama.cpp:server","ghcr.io/ggml-org/llama.cpp:server-cuda","ghcr.io/ggml-org/llama.cpp:server-cuda13"]`, `{}`, `{"models":"/v1/models","chat_completions":"/v1/chat/completions","completions":"/v1/completions","embeddings":"/v1/embeddings"}`, `["gguf","models","chat_completions","completions","embeddings","openai_compatible","web_ui"]`, `{"container_path":"/models","readonly":true}`, `["llama.cpp tools/server README: llama-server is HTTP server with REST APIs and Web UI.","llama.cpp server README: supports OpenAI API-compatible chat completions, responses, embeddings routes.","llama.cpp Docker docs: ghcr.io/ggml-org/llama.cpp:server contains llama-server only.","llama.cpp releases use build tags such as b9700 rather than stable semver."]`, "b9700", 1},
+		{"backend-version.ollama.latest", "backend.ollama", "ollama-latest", "latest", "Ollama Latest", "ollama", `["ollama","serve"]`, `[]`, `[]`, `[]`, `{"type":"http","path":"/api/tags","success_status":[200],"expectedStatus":200,"startupTimeoutSeconds":60,"intervalSeconds":2,"timeoutSeconds":5}`, 11434, `{"default":"ollama/ollama:latest"}`, `["ollama/ollama:latest"]`, `{}`, `{"models":"/api/tags"}`, `["ollama"]`, `{}`, `[]`, "latest", 1},
 	}
 	for _, v := range versions {
 		db.Exec(`INSERT OR IGNORE INTO backend_versions
-			(id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated, slug, managed_by, source, catalog_version, checksum, status, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			(id, backend_id, version, display_name, is_default, default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, is_deprecated, slug, managed_by, source, catalog_version, checksum, status, description, capabilities_json, docker_options_json, model_mount_json, vendor_options_json, readonly, protocol, image_candidates_json, default_host, default_endpoints_json, default_args_schema_json, default_env_schema_json, default_health_check_json, official_reference_json, revision, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			v.id, v.backendID, v.version, v.display, v.isDefault, v.entrypoint, v.args, v.params, v.paramDefs, v.hc, v.port, v.images, v.env, 0,
-			v.slug, "system", "embedded", "v1", catalogChecksum(v.id+v.args+v.images), "active", now, now)
+			v.slug, "system", "embedded", "v1", catalogChecksum(v.id+v.args+v.images), "active", v.display+" system software version", v.caps, "{}", v.mount, "{}", 1, v.protocol, v.imageCandidates, "0.0.0.0", v.endpoints, v.paramDefs, "[]", v.hc, v.refs, v.revision, now, now)
+		db.Exec(`UPDATE backend_versions SET
+			version=?, display_name=?, is_default=?, default_entrypoint_json=?, default_args_json=?, default_backend_params_json=?,
+			parameter_defs_json=?, health_check_json=?, default_container_port=?, default_images_json=?, env_json=?, is_deprecated=0,
+			slug=?, managed_by='system', source='embedded', catalog_version='v1', checksum=?, status='active',
+			description=?, capabilities_json=?, docker_options_json='{}', model_mount_json=?, vendor_options_json='{}',
+			readonly=1, protocol=?, image_candidates_json=?, default_host='0.0.0.0', default_endpoints_json=?,
+			default_args_schema_json=?, default_env_schema_json='[]', default_health_check_json=?, official_reference_json=?, revision=?, updated_at=?
+			WHERE id=?`,
+			v.version, v.display, v.isDefault, v.entrypoint, v.args, v.params, v.paramDefs, v.hc, v.port, v.images, v.env,
+			v.slug, catalogChecksum(v.id+v.args+v.images), v.display+" system software version", v.caps, v.mount, v.protocol,
+			v.imageCandidates, v.endpoints, v.paramDefs, v.hc, v.refs, v.revision, now, v.id)
 	}
+	db.Exec(`UPDATE backend_versions SET status='deprecated', is_deprecated=1
+		WHERE id IN (
+			'bver-vllm-0.8.5','bver-vllm-0.10.0','bver-sglang-0.4.6','bver-sglang-0.5.0','bver-llamacpp-b4817',
+			'backend-version.vllm.openai-latest','backend-version.vllm.openai-0.9',
+			'backend-version.sglang.openai-latest','backend-version.llamacpp.server','backend-version.llamacpp.server-metax'
+		)`)
 
 	type runtimeSeed struct {
 		id, name, display, backendID, versionID, slug, vendor, image, env, docker, mount, verification string
 	}
 	runtimes := []runtimeSeed{
-		{"runtime.vllm.nvidia-docker", "vllm-nvidia-docker", "vLLM NVIDIA Docker", "backend.vllm", "backend-version.vllm.openai-latest", "vllm-nvidia-docker", "nvidia", "vllm/vllm-openai:latest", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","privileged":false,"ipc_mode":"host","shm_size":"16gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
-		{"runtime.vllm.metax-docker", "vllm-metax-docker", "vLLM MetaX Docker", "backend.vllm", "backend-version.vllm.openai-latest", "vllm-metax-docker", "metax", "0d307f1665d3", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","privileged":true,"ipc_mode":"host","uts_mode":"host","shm_size":"100gb","devices":[{"host_path":"/dev/dri","container_path":"/dev/dri"},{"host_path":"/dev/mxcd","container_path":"/dev/mxcd"},{"host_path":"/dev/infiniband","container_path":"/dev/infiniband"}],"group_add":["video"],"security_options":["seccomp=unconfined","apparmor=unconfined"],"ulimits":{"memlock":"-1"}}`, `{"container_path":"/models","readonly":true}`, `{"status":"requires_hardware_validation","optional_high_risk_devices":["/dev/mem"]}`},
-		{"runtime.vllm.huawei-docker", "vllm-huawei-docker", "vLLM Huawei Docker", "backend.vllm", "backend-version.vllm.openai-latest", "vllm-huawei-docker", "huawei", "template-only", `{"ASCEND_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"ASCEND_VISIBLE_DEVICES","devices":[{"host_path":"/dev/davinci_manager","container_path":"/dev/davinci_manager"},{"host_path":"/dev/devmm_svm","container_path":"/dev/devmm_svm"},{"host_path":"/dev/hisi_hdc","container_path":"/dev/hisi_hdc"},{"host_path":"/usr/local/dcmi","container_path":"/usr/local/dcmi"},{"host_path":"/usr/local/bin/npu-smi","container_path":"/usr/local/bin/npu-smi"},{"host_path":"/usr/local/Ascend/driver/lib64","container_path":"/usr/local/Ascend/driver/lib64"},{"host_path":"/usr/local/Ascend/driver/version.info","container_path":"/usr/local/Ascend/driver/version.info"},{"host_path":"/etc/ascend_install.info","container_path":"/etc/ascend_install.info"}]}`, `{"container_path":"/models","readonly":true}`, `{"status":"template_only"}`},
-		{"runtime.llamacpp.nvidia-docker", "llamacpp-nvidia-docker", "llama.cpp NVIDIA Docker", "backend.llamacpp", "backend-version.llamacpp.server", "llamacpp-nvidia-docker", "nvidia", "ghcr.io/ggml-org/llama.cpp:server-cuda13", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","ipc_mode":"host","shm_size":"8gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
-		{"runtime.llamacpp.cpu-docker", "llamacpp-cpu-docker", "llama.cpp CPU Docker", "backend.llamacpp", "backend-version.llamacpp.server", "llamacpp-cpu-docker", "cpu", "ghcr.io/ggml-org/llama.cpp:server", `{}`, `{}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
-		{"runtime.sglang.nvidia-docker", "sglang-nvidia-docker", "SGLang NVIDIA Docker", "backend.sglang", "backend-version.sglang.openai-latest", "sglang-nvidia-docker", "nvidia", "lmsysorg/sglang:latest", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","ipc_mode":"host","shm_size":"32gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.vllm.nvidia-docker", "vllm-nvidia-docker", "vLLM NVIDIA Docker", "backend.vllm", "vllm-v0.23.0", "vllm-nvidia-docker", "nvidia", "vllm/vllm-openai:v0.23.0", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","privileged":false,"ipc_mode":"host","shm_size":"16gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.vllm.metax-docker", "vllm-metax-docker", "vLLM MetaX Docker", "backend.vllm", "vllm-v0.23.0", "vllm-metax-docker", "metax", "vllm/vllm-openai:v0.23.0", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","privileged":true,"ipc_mode":"host","uts_mode":"host","shm_size":"100gb","devices":[{"host_path":"/dev/dri","container_path":"/dev/dri"},{"host_path":"/dev/mxcd","container_path":"/dev/mxcd"},{"host_path":"/dev/infiniband","container_path":"/dev/infiniband"}],"group_add":["video"],"security_options":["seccomp=unconfined","apparmor=unconfined"],"ulimits":{"memlock":"-1"}}`, `{"container_path":"/models","readonly":true}`, `{"status":"requires_hardware_validation","optional_high_risk_devices":["/dev/mem"]}`},
+		{"runtime.vllm.huawei-docker", "vllm-huawei-docker", "vLLM Huawei Docker", "backend.vllm", "vllm-v0.23.0", "vllm-huawei-docker", "huawei", "vllm/vllm-openai:v0.23.0", `{"ASCEND_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"ASCEND_VISIBLE_DEVICES","devices":[{"host_path":"/dev/davinci_manager","container_path":"/dev/davinci_manager"},{"host_path":"/dev/devmm_svm","container_path":"/dev/devmm_svm"},{"host_path":"/dev/hisi_hdc","container_path":"/dev/hisi_hdc"},{"host_path":"/usr/local/dcmi","container_path":"/usr/local/dcmi"},{"host_path":"/usr/local/bin/npu-smi","container_path":"/usr/local/bin/npu-smi"},{"host_path":"/usr/local/Ascend/driver/lib64","container_path":"/usr/local/Ascend/driver/lib64"},{"host_path":"/usr/local/Ascend/driver/version.info","container_path":"/usr/local/Ascend/driver/version.info"},{"host_path":"/etc/ascend_install.info","container_path":"/etc/ascend_install.info"}]}`, `{"container_path":"/models","readonly":true}`, `{"status":"template_only"}`},
+		{"runtime.llamacpp.nvidia-docker", "llamacpp-nvidia-docker", "llama.cpp NVIDIA Docker", "backend.llamacpp", "llamacpp-b9700", "llamacpp-nvidia-docker", "nvidia", "ghcr.io/ggml-org/llama.cpp:server-cuda13", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","ipc_mode":"host","shm_size":"8gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.llamacpp.cpu-docker", "llamacpp-cpu-docker", "llama.cpp CPU Docker", "backend.llamacpp", "llamacpp-b9700", "llamacpp-cpu-docker", "cpu", "ghcr.io/ggml-org/llama.cpp:server", `{}`, `{}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
+		{"runtime.sglang.nvidia-docker", "sglang-nvidia-docker", "SGLang NVIDIA Docker", "backend.sglang", "sglang-v0.5.13.post1", "sglang-nvidia-docker", "nvidia", "lmsysorg/sglang:v0.5.13.post1-cu129-runtime", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES","ipc_mode":"host","shm_size":"32gb"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
 		{"runtime.ollama.nvidia-docker", "ollama-nvidia-docker", "Ollama NVIDIA Docker", "backend.ollama", "backend-version.ollama.latest", "ollama-nvidia-docker", "nvidia", "ollama/ollama:latest", `{"CUDA_VISIBLE_DEVICES":"{{vendor_visible_devices}}"}`, `{"gpu_visible_env_key":"CUDA_VISIBLE_DEVICES"}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
 		{"runtime.ollama.cpu-docker", "ollama-cpu-docker", "Ollama CPU Docker", "backend.ollama", "backend-version.ollama.latest", "ollama-cpu-docker", "cpu", "ollama/ollama:latest", `{}`, `{}`, `{"container_path":"/models","readonly":true}`, `{"status":"verified"}`},
 	}
@@ -1382,7 +1413,6 @@ func catalogChecksum(s string) string {
 	return fmt.Sprintf("checksum:%08x", h)
 }
 
-
 // migrateV16 adds config_snapshot_json to node_backend_runtimes so each
 // NodeBackendRuntime captures a frozen copy of the resolved runtime
 // configuration at enable/check time, decoupling node runs from future
@@ -1400,6 +1430,91 @@ func (db *DB) migrateV16() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (16, 'V16: node_backend_runtimes config snapshot')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV17 adds user-managed BackendVersion metadata and BackendRuntime
+// source version snapshots. This preserves the rule that BackendVersion
+// changes do not silently mutate existing BackendRuntime templates.
+func (db *DB) migrateV17() error {
+	alterStatements := []string{
+		`ALTER TABLE backend_versions ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_versions ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_versions ADD COLUMN docker_options_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_versions ADD COLUMN model_mount_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_versions ADD COLUMN vendor_options_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_runtimes ADD COLUMN source_backend_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN source_backend_version_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN source_version_revision TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_runtimes ADD COLUMN version_snapshot_json TEXT NOT NULL DEFAULT '{}'`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			// Columns may already exist from a partially applied development DB.
+		}
+	}
+	db.Exec(`UPDATE backend_runtimes
+		SET source_backend_id = CASE WHEN source_backend_id = '' THEN backend_id ELSE source_backend_id END,
+		    source_backend_version_id = CASE WHEN source_backend_version_id = '' THEN backend_version_id ELSE source_backend_version_id END,
+		    source_version_revision = CASE WHEN source_version_revision = '' THEN updated_at ELSE source_version_revision END`)
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (17, 'V17: backend version user catalog and runtime version snapshots')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV18 expands BackendVersion to represent the software capability layer
+// explicitly. Hardware, node, image presence, and readiness remain outside
+// BackendVersion.
+func (db *DB) migrateV18() error {
+	alterStatements := []string{
+		`ALTER TABLE backend_versions ADD COLUMN readonly INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE backend_versions ADD COLUMN protocol TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_versions ADD COLUMN image_candidates_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE backend_versions ADD COLUMN default_host TEXT NOT NULL DEFAULT '0.0.0.0'`,
+		`ALTER TABLE backend_versions ADD COLUMN default_endpoints_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_versions ADD COLUMN default_args_schema_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE backend_versions ADD COLUMN default_env_schema_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE backend_versions ADD COLUMN default_health_check_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE backend_versions ADD COLUMN official_reference_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE backend_versions ADD COLUMN revision TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			// Columns may already exist from a partially applied development DB.
+		}
+	}
+	db.Exec(`UPDATE backend_versions
+		SET readonly = CASE WHEN managed_by = 'system' THEN 1 ELSE 0 END,
+		    protocol = CASE WHEN protocol = '' THEN 'openai-compatible' ELSE protocol END,
+		    image_candidates_json = CASE WHEN image_candidates_json = '[]' THEN
+		      CASE WHEN default_images_json = '{}' THEN '[]' ELSE json_array(default_images_json) END
+		      ELSE image_candidates_json END,
+		    default_health_check_json = CASE WHEN default_health_check_json = '{}' THEN health_check_json ELSE default_health_check_json END,
+		    revision = CASE WHEN revision = '' THEN checksum ELSE revision END`)
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (18, 'V18: backend version software catalog fields')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (db *DB) migrateV19() error {
+	alterStatements := []string{
+		`ALTER TABLE backend_versions ADD COLUMN config_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_versions ADD COLUMN loaded_from TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE backend_versions ADD COLUMN loaded_at TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			// Columns may already exist from a partially applied development DB.
+		}
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (19, 'V19: backend catalog file projection metadata')`); err != nil {
 		return err
 	}
 	return nil

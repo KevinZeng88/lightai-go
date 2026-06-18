@@ -927,10 +927,9 @@ configs/backend-catalog/
 现场覆盖：
 
 ```text
-configs/backend-catalog.d/
-  custom-backends/
-  custom-versions/
-  custom-runtimes/
+data/backend-catalog.d/user/
+  <backend>/
+    user-version.yaml
 ```
 
 ### 7.3 Seed 策略
@@ -938,11 +937,11 @@ configs/backend-catalog.d/
 采用：
 
 ```text
-Go embed 内置默认 Backend Catalog
+内置 system Backend Catalog 文件
         ↓
-首次启动 seed 到数据库
+启动 / reload 读取 system + user catalog 文件
         ↓
-读取 configs/backend-catalog.d/ 自定义配置
+upsert 到 DB projection
         ↓
 按稳定 slug / id 合并
 ```

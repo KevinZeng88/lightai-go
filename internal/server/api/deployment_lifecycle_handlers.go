@@ -268,13 +268,13 @@ type PreflightError struct {
 // preflightResult holds the output of the shared pre-start validation and
 // resolution logic used by both dry-run and real start.
 type preflightResult struct {
-	deploy     map[string]interface{}
-	artifactID string
-	artifact   map[string]interface{}
-	runtimeID  string
+	deploy      map[string]interface{}
+	artifactID  string
+	artifact    map[string]interface{}
+	runtimeID   string
 	nbrSnapshot string // config_snapshot_json from NodeBackendRuntime
 	nbrImageRef string // image_ref from NodeBackendRuntime
-	placement  struct {
+	placement   struct {
 		NodeID string
 		GPUIds []string
 	}
@@ -292,6 +292,7 @@ type preflightResult struct {
 	rtBackendID       string
 	rtVersionID       string
 	rtModelMount      string
+	rtVersionSnapshot string
 	backendName       string
 	backendDefaultEnv string
 	bvEntrypoint      string
@@ -383,9 +384,10 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	}
 
 	// Fetch runtime chain: backend_runtime → inference_backend → backend_version.
-	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json FROM backend_runtimes WHERE id = ?`, pf.runtimeID).Scan(&pf.rtVendor, &pf.rtImage, &pf.rtDockerJSON, &pf.rtArgsOverride, &pf.rtEntryOverride, &pf.rtDefaultEnv, &pf.rtBackendID, &pf.rtVersionID, &pf.rtModelMount)
+	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json, COALESCE(version_snapshot_json,'{}') FROM backend_runtimes WHERE id = ?`, pf.runtimeID).Scan(&pf.rtVendor, &pf.rtImage, &pf.rtDockerJSON, &pf.rtArgsOverride, &pf.rtEntryOverride, &pf.rtDefaultEnv, &pf.rtBackendID, &pf.rtVersionID, &pf.rtModelMount, &pf.rtVersionSnapshot)
 	h.DB.QueryRow(`SELECT name, default_env_json FROM inference_backends WHERE id = ?`, pf.rtBackendID).Scan(&pf.backendName, &pf.backendDefaultEnv)
 	h.DB.QueryRow(`SELECT default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json FROM backend_versions WHERE id = ?`, pf.rtVersionID).Scan(&pf.bvEntrypoint, &pf.bvArgs, &pf.bvBackendParams, &pf.bvParamDefs, &pf.bvHC, &pf.bvPort, &pf.bvDefaultImages, &pf.bvEnv)
+	pf.applyRuntimeVersionSnapshot()
 
 	// Fetch node IP.
 	pf.nodeIP = "127.0.0.1"
@@ -522,15 +524,15 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 
 	// Call the real RunPlan resolver with snapshot-based RuntimeInfo.
 	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
-		Backend:            &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
-		BackendVersion:     &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
-		BackendRuntime:     &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
+		Backend:             &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
+		BackendVersion:      &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
+		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount},
 		NodeRuntimeOverride: nbrOverride,
-		Artifact:           &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
-		Deployment:         &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
-		InstanceID:         instanceID,
-		Node:               &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
-		AssignedGPUs:       pf.gpuInfos,
+		Artifact:            &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
+		Deployment:          &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
+		InstanceID:          instanceID,
+		Node:                &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
+		AssignedGPUs:        pf.gpuInfos,
 	})
 	for _, e := range resolveErrs {
 		pf.addErr("unknown", e.Error(), nil)
@@ -547,6 +549,45 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	}
 
 	return pf
+}
+
+func (pf *preflightResult) applyRuntimeVersionSnapshot() {
+	if pf.rtVersionSnapshot == "" || pf.rtVersionSnapshot == "{}" {
+		return
+	}
+	var snap map[string]interface{}
+	if err := json.Unmarshal([]byte(pf.rtVersionSnapshot), &snap); err != nil {
+		return
+	}
+	if v, ok := snap["default_entrypoint_json"]; ok {
+		pf.bvEntrypoint = rawJSONString(v, pf.bvEntrypoint)
+	}
+	if v, ok := snap["default_args_json"]; ok {
+		pf.bvArgs = rawJSONString(v, pf.bvArgs)
+	}
+	if v, ok := snap["default_backend_params_json"]; ok {
+		pf.bvBackendParams = rawJSONString(v, pf.bvBackendParams)
+	}
+	if v, ok := snap["parameter_defs_json"]; ok {
+		pf.bvParamDefs = rawJSONString(v, pf.bvParamDefs)
+	}
+	if v, ok := snap["health_check_json"]; ok {
+		pf.bvHC = rawJSONString(v, pf.bvHC)
+	}
+	if v, ok := snap["default_images_json"]; ok {
+		pf.bvDefaultImages = rawJSONString(v, pf.bvDefaultImages)
+	}
+	if v, ok := snap["env_json"]; ok {
+		pf.bvEnv = rawJSONString(v, pf.bvEnv)
+	}
+	if v, ok := snap["default_container_port"]; ok {
+		switch n := v.(type) {
+		case float64:
+			pf.bvPort = int(n)
+		case int:
+			pf.bvPort = n
+		}
+	}
 }
 
 func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Request) {
@@ -1236,8 +1277,14 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 
 	valid := len(pf.errs) == 0
 	result := map[string]interface{}{
-		"valid":    valid,
-		"errors":   pf.errs, "error_details": func() []string { var s []string; for _, e := range pf.errs { s = append(s, e.Message) }; return s }(),
+		"valid":  valid,
+		"errors": pf.errs, "error_details": func() []string {
+			var s []string
+			for _, e := range pf.errs {
+				s = append(s, e.Message)
+			}
+			return s
+		}(),
 		"warnings": pf.warns,
 	}
 	if pf.plan != nil {
@@ -1314,7 +1361,6 @@ func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]ma
 	return out, nil
 }
 
-
 // ==========================================================================
 // Model Instance Smoke Test
 // ==========================================================================
@@ -1382,7 +1428,7 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 	if modelName == "" {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"ok": false, "reason_code": "model_id_not_resolved",
-			"message":               "could not resolve model id from /v1/models or artifact",
+			"message":                 "could not resolve model id from /v1/models or artifact",
 			"model_resolution_method": resolutionMethod,
 			"checked_at":              checkedAt,
 		})
@@ -1508,8 +1554,8 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 	// Try chat/completions.
 	chatURL := strings.TrimRight(endpoint, "/") + "/v1/chat/completions"
 	chatBody, _ := json.Marshal(map[string]interface{}{
-		"model": modelName,
-		"messages": []map[string]string{{"role": "user", "content": "ping"}},
+		"model":      modelName,
+		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
 		"max_tokens": 8, "temperature": 0,
 	})
 
@@ -1548,7 +1594,7 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 	if isEndpointErr {
 		compURL := strings.TrimRight(endpoint, "/") + "/v1/completions"
 		compBody, _ := json.Marshal(map[string]interface{}{
-			"model": modelName,
+			"model":  modelName,
 			"prompt": "ping", "max_tokens": 8, "temperature": 0,
 		})
 		compStart := time.Now()
@@ -1585,7 +1631,9 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 	json.Unmarshal(bodyBytes, &respData)
 	errMsg := fmt.Sprintf("HTTP %d", resp.StatusCode)
 	if em, ok := respData["error"].(map[string]interface{}); ok {
-		if m, ok := em["message"].(string); ok { errMsg = m }
+		if m, ok := em["message"].(string); ok {
+			errMsg = m
+		}
 	}
 	return map[string]interface{}{"ok": false, "reason_code": "chat_endpoint_failed", "message": errMsg, "endpoint": chatURL, "latency_ms": latencyMs}
 }

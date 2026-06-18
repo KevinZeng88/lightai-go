@@ -11,7 +11,7 @@ Current branch and commit verified during 2026-06-18 real-machine verification:
 
 ```text
 Branch: main
-Commit: 48ee190 fix: harden model smoke test resolution and fallback
+Baseline before this round: 13698f3 chore: ignore runtime pid files
 ```
 
 ## Accepted Runtime Chain
@@ -122,15 +122,48 @@ Key rules:
 
 ```text
 BackendRuntime = template (no node binding).
+Backend / BackendVersion = software capability layer; keep hardware/node state outside BackendVersion.
+System Backend / BackendVersion rows are read-only catalog entries.
+System BackendVersion can be cloned to user BackendVersion; user BackendVersion can be added, edited, deleted, and synced.
+BackendVersion -> BackendRuntime copies defaults at creation; later BackendVersion edits do NOT mutate existing BackendRuntime.
+BackendRuntime stores source_backend_id/source_backend_version_id/source_version_revision and version_snapshot_json.
 NodeBackendRuntime = node-level config with frozen config_snapshot_json.
 NBR snapshot captured at enable/check time (args, env, docker, mounts, health_check).
-RunPlan resolver reads NBR snapshot, not live BackendRuntime.
+BackendRuntime -> NodeBackendRuntime copies config at creation/check; later BackendRuntime edits do NOT mutate existing NodeBackendRuntime.
+RunPlan resolver reads BackendRuntime version_snapshot_json and NBR config_snapshot_json, not live mutable defaults.
 BackendRuntime template edits do NOT affect existing NodeBackendRuntime RunPlans.
 Editing NodeBackendRuntime image/snapshot fields invalidates ready status → needs_check.
 Model mount resolved per-node: host = model_root + / + relative_path.
 Container model path standardized: /models/<relative_path>.
 Template list shows BackendRuntime only; RunnerConfigsPage shows NodeBackendRuntime.
+BackendRuntimesPage only manages templates; RunnerConfigsPage manages add/edit/check/delete for NodeBackendRuntime.
+Backend / BackendVersion catalog files are the source of truth.
+DB backend catalog rows are reload/sync projections for query and references.
+System BackendVersion catalog files live under `configs/backend-catalog/versions/` and are read-only at runtime.
+User BackendVersion catalog files live under `data/backend-catalog.d/user/` by default, or `LIGHTAI_BACKEND_CATALOG_USER_DIR` when configured.
+BackendVersion add/edit/clone/delete writes user catalog files first, then reloads/syncs DB projection.
+Catalog reload/sync never mutates existing BackendRuntime or NodeBackendRuntime snapshots.
 ```
+
+## Backend Catalog Baseline
+
+Current system BackendVersion baseline follows the official software-version boundary:
+
+```text
+vLLM: v0.23.0, OpenAI-compatible, image candidates vllm/vllm-openai:v0.23.0, v0.23.0-cu129-ubuntu2404, latest.
+SGLang: v0.5.12.post1 and v0.5.13.post1, OpenAI-compatible, launch module python3 -m sglang.launch_server.
+llama.cpp: b9700 build tag, OpenAI-compatible subset, GGUF focused, llama-server.
+```
+
+SGLang `v0.5.13.post1` was verified with:
+
+```bash
+git ls-remote --tags https://github.com/sgl-project/sglang.git | grep 'refs/tags/v0.5.13'
+```
+
+BackendVersion must not store node IDs, GPU indexes, `image_present`, `ready` / `needs_check`, host model paths, device mounts, or vendor runtime checks. Those belong to BackendRuntime presets, NodeBackendRuntime, Node/GPU discovery, or RunPlan.
+
+User catalog files can be added by scripts by writing YAML under `data/backend-catalog.d/user/<backend>/` and calling `POST /api/v1/backend-catalog/reload`. Export/share is file-based: copy the YAML files from that user directory to another LightAI Go deployment's user catalog directory and reload there.
 
 ## E2E Evidence
 
@@ -167,7 +200,7 @@ MetaX real hardware validation remains external validation required.
 Huawei vendor adapter remains template-only / future adapter work.
 Model consistency deep comparison is documented as P2.
 GPU index mapping real multi-GPU validation is documented as product/runtime validation work.
-Runtime edit UX, Backend Catalog productization, and Node Runtime tab depth are documented as P2.
+Advanced node detail Docker readiness, GPU lease picker, and non-Docker runners remain formal documented blockers.
 ```
 
 ## Archive Rule

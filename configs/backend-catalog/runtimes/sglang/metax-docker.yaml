@@ -1,6 +1,6 @@
 id: runtime.sglang.metax-docker
 backend_id: backend.sglang
-backend_version_id: backend-version.sglang.openai-latest
+backend_version_id: sglang-v0.5.13.post1
 slug: sglang-metax-docker
 managed_by: system
 runner_type: docker

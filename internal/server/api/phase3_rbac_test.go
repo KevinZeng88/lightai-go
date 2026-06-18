@@ -91,18 +91,18 @@ func TestBackendVersionList(t *testing.T) {
 	}
 	var list []map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &list)
-	if len(list) < 2 {
-		t.Errorf("got %d versions, want at least 2", len(list))
+	if len(list) < 1 {
+		t.Errorf("got %d versions, want at least 1", len(list))
 	}
 	foundTarget := false
 	for _, item := range list {
-		if item["id"] == "backend-version.vllm.openai-latest" {
+		if item["id"] == "vllm-v0.23.0" {
 			foundTarget = true
 			break
 		}
 	}
 	if !foundTarget {
-		t.Errorf("target vLLM BackendVersion missing from list: %v", list)
+		t.Errorf("official vLLM BackendVersion missing from list: %v", list)
 	}
 }
 

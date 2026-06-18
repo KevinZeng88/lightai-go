@@ -65,6 +65,22 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 			needsRecheck = true
 		}
 	}
+	for _, f := range []string{"config_snapshot_json", "device_check_json"} {
+		if v, ok := req[f]; ok {
+			sets = append(sets, f+" = ?")
+			args = append(args, jsonString(v))
+			if f == "config_snapshot_json" {
+				needsRecheck = true
+			}
+		}
+	}
+	if v, ok := req["docker_available"]; ok {
+		if b, ok := v.(bool); ok {
+			sets = append(sets, "docker_available = ?")
+			args = append(args, boolInt(b))
+			needsRecheck = true
+		}
+	}
 	if v, ok := req["disabled"]; ok {
 		if b, ok := v.(bool); ok && b {
 			sets = append(sets, "status = 'disabled'")

@@ -1,0 +1,57 @@
+id: vllm-v0.23.0
+backend_id: backend.vllm
+slug: vllm-v0-23-0
+version: v0.23.0
+managed_by: system
+source: system
+readonly: true
+protocol: openai-compatible
+image_candidates:
+  - vllm/vllm-openai:v0.23.0
+  - vllm/vllm-openai:v0.23.0-cu129-ubuntu2404
+  - vllm/vllm-openai:latest
+default_port: 8000
+default_host: 0.0.0.0
+default_model_mount:
+  container_path: /models
+  readonly: true
+default_endpoints:
+  models: /v1/models
+  chat_completions: /v1/chat/completions
+  completions: /v1/completions
+  embeddings: /v1/embeddings
+capabilities:
+  - models
+  - chat_completions
+  - completions
+  - embeddings
+  - openai_compatible
+default_entrypoint:
+  - vllm
+  - serve
+default_command:
+  - --model
+  - "{{model_container_path}}"
+default_args_schema:
+  - name: --model
+    required: true
+    value: "{{MODEL_CONTAINER_PATH}}"
+  - name: --host
+    default: "0.0.0.0"
+  - name: --port
+    default: "8000"
+  - name: --served-model-name
+    optional: true
+  - name: --tensor-parallel-size
+    optional: true
+  - name: --max-model-len
+    optional: true
+health_check:
+  type: http
+  path: /v1/models
+  success_status:
+    - 200
+official_reference_note:
+  - vLLM official Docker docs: vllm/vllm-openai runs OpenAI-compatible server.
+  - vLLM online serving docs: supports /v1/completions, /v1/chat/completions, /v1/embeddings.
+  - vLLM v0.23.0 release line used as current system version baseline.

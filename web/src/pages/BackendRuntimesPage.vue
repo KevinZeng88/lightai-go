@@ -9,8 +9,12 @@
 
     <el-table :data="runtimes" v-loading="loading" stripe>
       <el-table-column prop="name" :label="$t('runtimes.name')" min-width="180" />
+      <el-table-column prop="backend_id" :label="$t('runtimes.backend')" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="backend_version_id" :label="$t('runtimes.backendVersion')" min-width="180" show-overflow-tooltip />
       <el-table-column prop="vendor" :label="$t('runtimes.vendor')" width="100" />
       <el-table-column prop="image_name" :label="$t('runtimes.image')" min-width="220" />
+      <el-table-column prop="node_count" :label="$t('runtimes.nodeCount')" width="90" />
+      <el-table-column prop="ready_count" :label="$t('runtimes.readyCount')" width="90" />
       <el-table-column :label="$t('runtimes.managedBy')" width="120">
         <template #default="{ row }">
           <el-tag :type="row.is_editable ? 'success' : 'info'">
@@ -31,6 +35,16 @@
     <!-- Create-from-template dialog (preserved) -->
     <el-dialog v-model="createVisible" :title="$t('runtimes.createFromTemplate')" width="560px">
       <el-form :model="createForm" label-width="150px">
+        <el-form-item :label="$t('runtimes.backend')">
+          <el-select v-model="createForm.backend_id" :placeholder="$t('backends.title')" style="width:100%" @change="onCreateBackendSelected">
+            <el-option v-for="b in backends" :key="b.id" :label="b.display_name || b.name" :value="b.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="$t('runtimes.backendVersion')">
+          <el-select v-model="createForm.backend_version_id" :placeholder="$t('backends.versions')" style="width:100%" @change="onCreateVersionSelected">
+            <el-option v-for="v in createVersions" :key="v.id" :label="v.display_name || v.version" :value="v.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item :label="$t('runtimes.templateName')">
           <el-select v-model="createForm.template_name" :placeholder="$t('runtimes.selectTemplate')" @change="onCreateTemplateSelected">
             <el-option v-for="t in templates" :key="t.name" :label="t.name" :value="t.name" />
@@ -71,7 +85,7 @@
       <template #footer><el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doEdit" :loading="editing" :disabled="selected && !selected.is_editable">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
 
-    <!-- Detail drawer with node management -->
+    <!-- Detail drawer with read-only usage references -->
     <el-drawer v-model="detailVisible" :title="$t('common.detail')" size="65%">
       <template v-if="selected">
         <el-descriptions :column="2" border size="small">
@@ -81,8 +95,8 @@
           <el-descriptions-item :label="$t('runtimes.image')">{{ selected.image_name }}</el-descriptions-item>
         </el-descriptions>
 
-        <h4 style="margin-top:16px">{{ $t('nodeRuntime.title') }}</h4>
-        <el-button size="small" type="primary" @click="showAddNode" style="margin-bottom:8px">{{ $t('nodeRuntime.addNode') }}</el-button>
+        <h4 style="margin-top:16px">{{ $t('runtimes.usageRefs') }}</h4>
+        <el-alert :title="$t('runtimes.usageRefsReadonly')" type="info" show-icon :closable="false" style="margin-bottom:8px" />
         <el-table :data="nodeRuntimes" stripe size="small" v-loading="nrLoading">
           <el-table-column :label="$t('modelLocations.node')" width="240" show-overflow-tooltip><template #default="{ row }">{{ nodeLabel(row.node_id) }}</template></el-table-column>
           <el-table-column :label="$t('nodeRuntime.imageRef')" min-width="180" show-overflow-tooltip>
@@ -94,27 +108,9 @@
           <el-table-column prop="status" :label="$t('nodeRuntime.status')" width="100">
             <template #default="{ row }"><el-tag :type="row.status==='ready'?'success':row.status==='missing_image'?'warning':'info'" size="small">{{ translateStatus(row.status, t) }}</el-tag></template>
           </el-table-column>
-          <el-table-column :label="$t('common.actions')" width="150">
-            <template #default="{ row: nr }">
-              <el-button size="small" @click="doCheckNode(nr)">{{ $t('nodeRuntime.recheck') }}</el-button>
-              <el-button size="small" type="danger" @click="doDeleteNode(nr)">{{ $t('common.delete') }}</el-button>
-            </template>
-          </el-table-column>
         </el-table>
       </template>
     </el-drawer>
-
-    <!-- Add node dialog -->
-    <el-dialog v-model="addNodeVisible" :title="$t('nodeRuntime.addNode')" width="700px">
-      <el-select v-model="addNodeId" :placeholder="$t('runtimeWizard.selectNode')" style="width:100%;margin-bottom:8px" filterable>
-        <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
-      </el-select>
-      <DockerImagePicker v-if="addNodeId" :node-id="addNodeId" @select="(img:any) => addNodeImage = img.image_ref || img.image_ref" />
-      <template #footer>
-        <el-button @click="addNodeVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" :disabled="!addNodeId||!addNodeImage" @click="doAddNode" :loading="addNodeSaving">{{ $t('common.save') }}</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -122,11 +118,10 @@
 import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { ElCheckbox, ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { listRuntimes, createRuntimeFromTemplate, patchRuntime, deleteRuntime, type BackendRuntime } from '@/api/runtimes'
-import { listRuntimeTemplates, type BackendRuntimeTemplate } from '@/api/backends'
+import { listBackends, listBackendVersions, listRuntimeTemplates, type BackendRuntimeTemplate } from '@/api/backends'
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
-import DockerImagePicker from '@/components/DockerImagePicker.vue'
-import { translateStatus, translateStatusReason } from '@/utils/status'
+import { translateStatus } from '@/utils/status'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
 import { useI18n } from 'vue-i18n'
 
@@ -155,9 +150,10 @@ const RuntimeTextarea = defineComponent({
 const { t } = useI18n()
 const loading = ref(false); const creating = ref(false); const editing = ref(false)
 const runtimes = ref<BackendRuntime[]>([]); const templates = ref<BackendRuntimeTemplate[]>([]); const nodes = ref<any[]>([]); const backends = ref<any[]>([])
+const createVersions = ref<any[]>([])
 const selected = ref<BackendRuntime | null>(null)
 const createVisible = ref(false); const editVisible = ref(false); const detailVisible = ref(false)
-const createForm = ref({ template_name: 'vllm-nvidia-docker', name: '', vendor: 'nvidia', image_name: '', backend_name: 'vllm', backend_version: 'openai-latest', display_name: '' })
+const createForm = ref({ template_name: 'vllm-nvidia-docker', name: '', vendor: 'nvidia', image_name: '', backend_id: '', backend_version_id: '', display_name: '' })
 const editForm = reactive({ display_name: '', image_name: '', vendor: '' }); let editingId = ''
 
 const scalarOptions = reactive([
@@ -184,17 +180,29 @@ const customArgs = reactive({ enabled: false, value: '' }); const customEnv = re
 
 // Node runtime management state
 const nodeRuntimes = ref<any[]>([]); const nrLoading = ref(false)
-const addNodeVisible = ref(false); const addNodeId = ref(''); const addNodeImage = ref(''); const addNodeSaving = ref(false)
 
 // Wizard state
 onMounted(async () => { await refresh(); await loadRefs() })
 async function refresh() { loading.value = true; try { runtimes.value = await listRuntimes() } finally { loading.value = false } }
 async function loadRefs() {
   try { templates.value = await listRuntimeTemplates() } catch { templates.value = [] }
+  try { backends.value = await listBackends() } catch { backends.value = [] }
   loadNodes()
 }
 
-function showCreate() { createForm.value.template_name = 'vllm-nvidia-docker'; createForm.value.name = ''; createVisible.value = true }
+function showCreate() { createForm.value.template_name = 'vllm-nvidia-docker'; createForm.value.name = ''; createForm.value.backend_id = ''; createForm.value.backend_version_id = ''; createVisible.value = true; loadRefs() }
+async function onCreateBackendSelected(backendId: string) {
+  createForm.value.backend_version_id = ''
+  createVersions.value = await listBackendVersions(backendId)
+}
+function onCreateVersionSelected(versionId: string) {
+  const version = createVersions.value.find((v: any) => v.id === versionId)
+  if (!version) return
+  const candidates = Array.isArray(version.image_candidates_json) ? version.image_candidates_json : []
+  const image = candidates[0] || version.default_images_json?.default || ''
+  if (image) createForm.value.image_name = image
+  if (!createForm.value.name) createForm.value.name = `${version.version}-${createForm.value.vendor}-template`
+}
 function onCreateTemplateSelected(templateName: string) {
   const template = templates.value.find((t: any) => t.name === templateName)
   if (!template) return
@@ -225,29 +233,6 @@ async function doClone(row: BackendRuntime) {
 // Detail + node management
 async function showDetail(row: BackendRuntime) { selected.value = row; await loadNodeRuntimes(row.id); detailVisible.value = true }
 async function loadNodeRuntimes(runtimeID: string) { nrLoading.value = true; try { const all: any[] = []; for (const n of nodeItems.value) { try { const nrs = await apiClient.get(`/nodes/${n.id}/backend-runtimes`); if (Array.isArray(nrs)) for (const nr of nrs) { if (nr.backend_runtime_id === runtimeID) all.push(nr) } } catch {} }; nodeRuntimes.value = all } catch { nodeRuntimes.value = [] }; nrLoading.value = false }
-
-function showAddNode() { addNodeVisible.value = true; addNodeId.value = ''; addNodeImage.value = '' }
-async function doAddNode() {
-  if (!selected.value || !addNodeId.value || !addNodeImage.value) return; addNodeSaving.value = true
-  try {
-    await apiClient.post(`/nodes/${addNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: selected.value.id, image_ref: addNodeImage.value, image_present: true, docker_available: true })
-    ElMessage.success(t('nodeRuntime.added')); addNodeVisible.value = false; await loadNodeRuntimes(selected.value.id)
-  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
-  addNodeSaving.value = false
-}
-async function doCheckNode(nr: any) {
-  try {
-    await apiClient.post(`/nodes/${nr.node_id}/backend-runtimes/check`, { backend_runtime_id: nr.backend_runtime_id })
-    ElMessage.success(t('nodeRuntime.checked')); await loadNodeRuntimes(selected.value!.id)
-  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
-}
-async function doDeleteNode(nr: any) {
-  try {
-    await ElMessageBox.confirm(t('nodeRuntime.deleteConfirm'), t('common.confirm'), { type: 'warning' })
-    await apiClient.delete(`/nodes/${nr.node_id}/backend-runtimes/${nr.id}`)
-    ElMessage.success(t('nodeRuntime.deleted')); await loadNodeRuntimes(selected.value!.id)
-  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
-}
 
 // Wizard
 // Ported from original (loadDockerJson, buildPayload, commandPreview, parseLines, etc.)

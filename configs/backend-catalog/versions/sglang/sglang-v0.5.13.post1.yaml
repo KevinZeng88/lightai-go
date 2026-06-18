@@ -1,0 +1,66 @@
+id: sglang-v0.5.13.post1
+backend_id: backend.sglang
+slug: sglang-v0-5-13-post1
+version: v0.5.13.post1
+managed_by: system
+source: system
+readonly: true
+protocol: openai-compatible
+image_candidates:
+  - lmsysorg/sglang:v0.5.13.post1-cu129-runtime
+  - lmsysorg/sglang:v0.5.13.post1-cu130-runtime
+  - lmsysorg/sglang:latest-runtime
+  - lmsysorg/sglang:latest
+default_port: 30000
+default_host: 0.0.0.0
+default_model_mount:
+  container_path: /models
+  readonly: true
+default_endpoints:
+  models: /v1/models
+  chat_completions: /v1/chat/completions
+  completions: /v1/completions
+  embeddings: /v1/embeddings
+capabilities:
+  - models
+  - chat_completions
+  - completions
+  - embeddings
+  - openai_compatible
+default_entrypoint:
+  - python3
+  - -m
+  - sglang.launch_server
+default_args:
+  - --model-path
+  - "{{model_container_path}}"
+  - --host
+  - 0.0.0.0
+  - --port
+  - "{{container_port}}"
+default_args_schema:
+  - name: --model-path
+    required: true
+    value: "{{MODEL_CONTAINER_PATH}}"
+  - name: --host
+    default: "0.0.0.0"
+  - name: --port
+    default: "30000"
+  - name: --tp
+    optional: true
+  - name: --tensor-parallel-size
+    optional: true
+  - name: --dp
+    optional: true
+  - name: --enable-metrics
+    optional: true
+  - name: --log-level
+    optional: true
+health_check:
+  type: http
+  path: /v1/models
+  success_status:
+    - 200
+official_reference_note:
+  - SGLang v0.5.13.post1 tag verified with git ls-remote against github.com/sgl-project/sglang.git.
+  - SGLang install docs: Docker images are lmsysorg/sglang and lmsysorg/sglang:latest-runtime.

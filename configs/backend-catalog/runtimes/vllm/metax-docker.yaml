@@ -1,6 +1,6 @@
 id: runtime.vllm.metax-docker
 backend_id: backend.vllm
-backend_version_id: backend-version.vllm.openai-latest
+backend_version_id: vllm-v0.23.0
 slug: vllm-metax-docker
 managed_by: system
 runner_type: docker

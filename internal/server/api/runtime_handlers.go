@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -66,22 +67,15 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 		return
 	}
 	templateName := strVal(req, "template_name", "")
-	if templateName == "" {
-		log.OpWarn("backend_runtime.create", "input_validated", "error", "template_name required")
-		writeError(w, http.StatusBadRequest, "template_name is required")
-		return
-	}
-	// Read template from config file.
-	// BRR-RV-004: Try new catalog path first, fall back to old path for
-	// backward compatibility. Template names like "vllm-nvidia-docker" map
-	// to "configs/backend-catalog/runtimes/vllm/nvidia-docker.yaml" in the
-	// new layout, or "configs/model-runtime/backend-runtime-templates/vllm-nvidia-docker.yaml"
-	// in the old flat layout.
-	path := resolveTemplatePath(templateName)
-	_, err := osReadFile(path)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "template not found: "+templateName)
-		return
+	if templateName != "" {
+		// Read template from config file for backward compatibility with the
+		// older clone-from-template flow.
+		path := resolveTemplatePath(templateName)
+		_, err := osReadFile(path)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "template not found: "+templateName)
+			return
+		}
 	}
 
 	id := uuid.NewString()
@@ -89,19 +83,53 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 	tid := tenantID(r)
 	now := time.Now().Format(time.RFC3339)
 	name := strVal(req, "name", templateName+"-"+id[:8])
+	if name == "-"+id[:8] {
+		name = "runtime-" + id[:8]
+	}
 
-	// Get backend and version IDs from the seeded data.
-	var backendID, versionID string
-	h.DB.QueryRow(`SELECT id FROM inference_backends WHERE name = ?`, strVal(req, "backend_name", "")).Scan(&backendID)
-	h.DB.QueryRow(`SELECT id FROM backend_versions WHERE backend_id = ? AND version = ?`, backendID, strVal(req, "backend_version", "")).Scan(&versionID)
+	backendID := strVal(req, "backend_id", "")
+	if backendID == "" {
+		h.DB.QueryRow(`SELECT id FROM inference_backends WHERE name = ?`, strVal(req, "backend_name", "")).Scan(&backendID)
+	}
+	versionID := strVal(req, "backend_version_id", "")
+	if versionID == "" {
+		h.DB.QueryRow(`SELECT id FROM backend_versions WHERE backend_id = ? AND version = ?`, backendID, strVal(req, "backend_version", "")).Scan(&versionID)
+	}
+	version := h.getBackendVersionJSON(versionID)
+	if backendID == "" || version == nil {
+		writeError(w, http.StatusBadRequest, "backend_id and backend_version_id are required")
+		return
+	}
+	vendor := strVal(req, "vendor", "custom")
+	defaultImages := jsonToStringMap(rawJSONString(version["default_images_json"], "{}"))
+	imageCandidates := jsonToStringSlice(rawJSONString(version["image_candidates_json"], "[]"))
+	imageName := strVal(req, "image_name", "")
+	if imageName == "" {
+		imageName = defaultImages[vendor]
+	}
+	if imageName == "" {
+		imageName = defaultImages["default"]
+	}
+	if imageName == "" && len(imageCandidates) > 0 {
+		imageName = imageCandidates[0]
+	}
+	versionSnapshot := backendVersionSnapshot(version)
+	sourceRevision := strVal(version, "checksum", "")
+	if sourceRevision == "" {
+		sourceRevision = strVal(version, "updated_at", "")
+	}
+	dockerJSON := jsonField(req, "docker_json", rawJSONString(version["docker_options_json"], "{}"))
+	modelMountJSON := jsonField(req, "model_mount_json", rawJSONString(version["model_mount_json"], "{}"))
+	defaultEnvJSON := jsonField(req, "default_env_json", rawJSONString(version["env_json"], "{}"))
 
-	_, err = h.DB.Exec(
-		`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, created_at, updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := h.DB.Exec(
+		`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, source_backend_id, source_backend_version_id, source_version_revision, version_snapshot_json, created_at, updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), backendID, versionID, templateName,
-		strVal(req, "vendor", "custom"), "docker",
-		strVal(req, "image_name", ""), strVal(req, "image_pull_policy", "if_not_present"),
-		"[]", "[]", "{}", "{}", "{}", "{}", 0, 1, tid, now, now,
+		vendor, "docker",
+		imageName, strVal(req, "image_pull_policy", "if_not_present"),
+		jsonField(req, "entrypoint_override_json", "[]"), jsonField(req, "args_override_json", "[]"), defaultEnvJSON, dockerJSON, modelMountJSON, jsonField(req, "health_check_override_json", "{}"),
+		0, 1, tid, backendID, versionID, sourceRevision, jsonString(versionSnapshot), now, now,
 	)
 	if err != nil {
 		log.OperationFailed(ctx, "backend_runtime.create", "db_write", opStart, err,
@@ -203,7 +231,7 @@ func (h *AgentHandler) HandleDeleteBackendRuntime(w http.ResponseWriter, r *http
 
 func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
-	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, br.name, br.display_name, br.vendor
+	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, COALESCE(nbr.config_snapshot_json,'{}'), br.name, br.display_name, br.vendor
 		FROM node_backend_runtimes nbr
 		JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id
 		WHERE nbr.node_id = ?
@@ -215,9 +243,9 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var id, runtimeID, nid, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, rtName, rtDisplay, vendor string
+		var id, runtimeID, nid, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, snapshotJSON, rtName, rtDisplay, vendor string
 		var imagePresent, dockerAvailable int
-		if err := rows.Scan(&id, &runtimeID, &nid, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &rtName, &rtDisplay, &vendor); err != nil {
+		if err := rows.Scan(&id, &runtimeID, &nid, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &snapshotJSON, &rtName, &rtDisplay, &vendor); err != nil {
 			continue
 		}
 		out = append(out, map[string]interface{}{
@@ -227,7 +255,8 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 			"driver_version": driver, "toolkit_version": toolkit, "device_check_json": json.RawMessage(checkJSON),
 			"status": status, "status_reason": reason, "last_checked_at": checked, "tenant_id": tid,
 			"created_at": ca, "updated_at": ua,
-			"backend_runtime": map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
+			"config_snapshot_json": json.RawMessage(snapshotJSON),
+			"backend_runtime":      map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
 		})
 	}
 	if out == nil {
@@ -274,21 +303,22 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 	// This freezes the runtime configuration so future template edits do not
 	// silently change the behavior of existing NodeBackendRuntime records.
 	snapshot := map[string]interface{}{
-		"source_runtime_id":        runtimeID,
-		"source_runtime_name":      strVal(rt, "name", ""),
-		"source_runtime_revision":  strVal(rt, "updated_at", ""),
-		"backend_id":               strVal(rt, "backend_id", ""),
-		"backend_version_id":       strVal(rt, "backend_version_id", ""),
-		"vendor":                   strVal(rt, "vendor", ""),
-		"runtime_type":             strVal(rt, "runtime_type", "docker"),
-		"image_name":               strVal(rt, "image_name", ""),
-		"image_pull_policy":        strVal(rt, "image_pull_policy", "if_not_present"),
-		"entrypoint_override_json": rt["entrypoint_override_json"],
-		"args_override_json":       rt["args_override_json"],
-		"default_env_json":         rt["default_env_json"],
-		"docker_json":              rt["docker_json"],
-		"model_mount_json":         rt["model_mount_json"],
+		"source_runtime_id":          runtimeID,
+		"source_runtime_name":        strVal(rt, "name", ""),
+		"source_runtime_revision":    strVal(rt, "updated_at", ""),
+		"backend_id":                 strVal(rt, "backend_id", ""),
+		"backend_version_id":         strVal(rt, "backend_version_id", ""),
+		"vendor":                     strVal(rt, "vendor", ""),
+		"runtime_type":               strVal(rt, "runtime_type", "docker"),
+		"image_name":                 strVal(rt, "image_name", ""),
+		"image_pull_policy":          strVal(rt, "image_pull_policy", "if_not_present"),
+		"entrypoint_override_json":   rt["entrypoint_override_json"],
+		"args_override_json":         rt["args_override_json"],
+		"default_env_json":           rt["default_env_json"],
+		"docker_json":                rt["docker_json"],
+		"model_mount_json":           rt["model_mount_json"],
 		"health_check_override_json": rt["health_check_override_json"],
+		"version_snapshot_json":      rt["version_snapshot_json"],
 	}
 	snapshotJSON := jsonString(snapshot)
 
@@ -328,6 +358,10 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 }
 
 func (h *AgentHandler) evaluateNodeBackendRuntime(nodeID, vendor, imageRef string, imagePresent, dockerAvailable bool) (string, string) {
+	var nodeStatus string
+	if err := h.DB.QueryRow(`SELECT status FROM nodes WHERE id=?`, nodeID).Scan(&nodeStatus); err != nil || nodeStatus != "online" {
+		return "failed", "node is offline"
+	}
 	if vendor == "huawei" || vendor == "ascend" {
 		return "template_only", "Huawei/Ascend runtime is a template only until an adapter and hardware validation are available"
 	}
@@ -355,10 +389,10 @@ func boolInt(v bool) int {
 }
 
 func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, created_at, updated_at FROM backend_runtimes WHERE id = ?`, id)
-	var rid, name, dn, bid, bvid, stn, vendor, rt, img, ipp, eoj, aoj, defEnv, dj, mmj, hcoj, tid, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, source_backend_id, source_backend_version_id, source_version_revision, version_snapshot_json, created_at, updated_at FROM backend_runtimes WHERE id = ?`, id)
+	var rid, name, dn, bid, bvid, stn, vendor, rt, img, ipp, eoj, aoj, defEnv, dj, mmj, hcoj, tid, sourceBID, sourceBVID, sourceRevision, versionSnapshot, ca, ua string
 	var isB, isE int
-	if err := row.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &img, &ipp, &eoj, &aoj, &defEnv, &dj, &mmj, &hcoj, &isB, &isE, &tid, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &img, &ipp, &eoj, &aoj, &defEnv, &dj, &mmj, &hcoj, &isB, &isE, &tid, &sourceBID, &sourceBVID, &sourceRevision, &versionSnapshot, &ca, &ua); err != nil {
 		return nil
 	}
 	return map[string]interface{}{
@@ -369,6 +403,8 @@ func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {
 		"default_env_json": redactRawJSON(defEnv), "docker_json": json.RawMessage(dj),
 		"model_mount_json": json.RawMessage(mmj), "health_check_override_json": json.RawMessage(hcoj),
 		"is_builtin": isB == 1, "is_editable": isE == 1, "tenant_id": tid,
+		"source_backend_id": sourceBID, "source_backend_version_id": sourceBVID,
+		"source_version_revision": sourceRevision, "version_snapshot_json": json.RawMessage(versionSnapshot),
 		"created_at": ca, "updated_at": ua,
 	}
 }
@@ -401,6 +437,64 @@ func (h *AgentHandler) queryBackendRuntimes(query string, args ...interface{}) (
 		out = []map[string]interface{}{}
 	}
 	return out, nil
+}
+
+func backendVersionSnapshot(version map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"id":                          strVal(version, "id", ""),
+		"backend_id":                  strVal(version, "backend_id", ""),
+		"version":                     strVal(version, "version", ""),
+		"display_name":                strVal(version, "display_name", ""),
+		"default_entrypoint_json":     version["default_entrypoint_json"],
+		"default_args_json":           version["default_args_json"],
+		"default_backend_params_json": version["default_backend_params_json"],
+		"parameter_defs_json":         version["parameter_defs_json"],
+		"health_check_json":           version["health_check_json"],
+		"default_container_port":      intVal(version, "default_container_port", 8000),
+		"default_images_json":         version["default_images_json"],
+		"image_candidates_json":       version["image_candidates_json"],
+		"protocol":                    strVal(version, "protocol", ""),
+		"default_host":                strVal(version, "default_host", "0.0.0.0"),
+		"default_endpoints_json":      version["default_endpoints_json"],
+		"default_args_schema_json":    version["default_args_schema_json"],
+		"default_env_schema_json":     version["default_env_schema_json"],
+		"default_health_check_json":   version["default_health_check_json"],
+		"official_reference_json":     version["official_reference_json"],
+		"revision":                    strVal(version, "revision", ""),
+		"env_json":                    version["env_json"],
+		"capabilities_json":           version["capabilities_json"],
+		"docker_options_json":         version["docker_options_json"],
+		"model_mount_json":            version["model_mount_json"],
+		"vendor_options_json":         version["vendor_options_json"],
+		"source_revision":             strVal(version, "checksum", strVal(version, "updated_at", "")),
+	}
+}
+
+func jsonToStringMap(raw string) map[string]string {
+	var src map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &src); err != nil {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(src))
+	for k, v := range src {
+		out[k] = strings.TrimSpace(strings.Trim(fmt.Sprint(v), `"`))
+	}
+	return out
+}
+
+func jsonToStringSlice(raw string) []string {
+	var arr []interface{}
+	if err := json.Unmarshal([]byte(raw), &arr); err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, v := range arr {
+		s := strings.TrimSpace(fmt.Sprint(v))
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func joinSets(sets []string) string {

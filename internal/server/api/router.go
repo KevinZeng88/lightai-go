@@ -117,15 +117,25 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("GET /api/v1/gpus/{id}", gpuChain(http.HandlerFunc(cfg.ResourceHandler.HandleGetGPU)))
 
 	// Phase 4: Model runtime serving APIs.
-	// Backend / BackendVersion (read-only).
+	// Backend / BackendVersion.
 	backendReadChain := chain(
 		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
 		auth.RequirePermission("backend:read"),
 	)
+	backendWriteChain := chain(
+		auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg),
+		auth.CSRFMiddleware(cfg.SessionCfg),
+		auth.RequirePermission("backend_runtime:write"),
+	)
 	mux.Handle("GET /api/v1/backends", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListBackends)))
 	mux.Handle("GET /api/v1/backends/{id}", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetBackend)))
 	mux.Handle("GET /api/v1/backends/{id}/versions", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListBackendVersions)))
+	mux.Handle("POST /api/v1/backends/{id}/versions", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCreateBackendVersion)))
 	mux.Handle("GET /api/v1/backend-versions", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListAllBackendVersions)))
+	mux.Handle("PATCH /api/v1/backend-versions/{version_id}", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchBackendVersion)))
+	mux.Handle("POST /api/v1/backend-versions/{version_id}/clone", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCloneBackendVersion)))
+	mux.Handle("DELETE /api/v1/backend-versions/{version_id}", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteBackendVersion)))
+	mux.Handle("POST /api/v1/backend-catalog/reload", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleReloadBackendCatalog)))
 
 	// BackendRuntimeTemplate (read-only from config files).
 	mux.Handle("GET /api/v1/backend-runtime-templates", backendReadChain(http.HandlerFunc(HandleListRuntimeTemplates)))
@@ -142,6 +152,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 		auth.RequirePermission("backend_runtime:write"),
 	)
 	mux.Handle("GET /api/v1/backend-runtimes", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListBackendRuntimes)))
+	mux.Handle("POST /api/v1/backend-runtimes", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCreateBackendRuntimeFromTemplate)))
 	mux.Handle("POST /api/v1/backend-runtimes/from-template", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCreateBackendRuntimeFromTemplate)))
 	mux.Handle("GET /api/v1/backend-runtimes/{id}", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetBackendRuntime)))
 	mux.Handle("PATCH /api/v1/backend-runtimes/{id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchBackendRuntime)))
@@ -190,7 +201,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	miReadChain := chain(auth.SessionMiddleware(cfg.SessionStore, cfg.DB, cfg.SessionCfg), auth.RequirePermission("model_instance:read"))
 	mux.Handle("GET /api/v1/model-instances", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListInstances)))
 	mux.Handle("GET /api/v1/model-instances/{id}", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetInstance)))
-		mux.Handle("POST /api/v1/model-instances/{id}/test", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleModelInstanceTest)))
+	mux.Handle("POST /api/v1/model-instances/{id}/test", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleModelInstanceTest)))
 	mux.Handle("GET /api/v1/node-run-plans/{id}", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeRunPlan)))
 	mux.Handle("GET /api/v1/node-run-plans/{id}/command-preview", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeRunPlanPreview)))
 	mux.Handle("GET /api/v1/node-run-plans/{id}/logs", miReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeRunPlanLogs)))

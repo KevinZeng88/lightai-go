@@ -1,6 +1,6 @@
 id: runtime.llamacpp.cpu-docker
 backend_id: backend.llamacpp
-backend_version_id: backend-version.llamacpp.server
+backend_version_id: llamacpp-b9700
 slug: llamacpp-cpu-docker
 managed_by: system
 runner_type: docker

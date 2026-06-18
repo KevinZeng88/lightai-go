@@ -9,15 +9,14 @@ LightAI Go now uses the target catalog path:
 
 ```text
 configs/backend-catalog/
-configs/backend-catalog.d/
+data/backend-catalog.d/user/
 ```
 
-Built-in catalog entries are system-managed. Add site-specific entries under:
+Built-in catalog entries are system-managed under `configs/backend-catalog/`. Add user/site-specific BackendVersion files under the user catalog directory:
 
 ```text
-configs/backend-catalog.d/custom-backends/
-configs/backend-catalog.d/custom-versions/
-configs/backend-catalog.d/custom-runtimes/
+data/backend-catalog.d/user/
+LIGHTAI_BACKEND_CATALOG_USER_DIR
 ```
 
 ## Runtime Boundary
@@ -92,7 +91,7 @@ The runtime template reserves:
 
 ## Adding A New Vendor
 
-1. Add a runtime YAML under `configs/backend-catalog.d/custom-runtimes/`.
+1. Add a runtime YAML under a user catalog runtime directory if the deployment enables one; BackendVersion user files use `data/backend-catalog.d/user/` or `LIGHTAI_BACKEND_CATALOG_USER_DIR`.
 2. Use stable `id` and `slug`.
 3. Keep node-specific image or readiness in NodeBackendRuntime, not BackendRuntime.
 4. Add a vendor adapter only when device discovery, visible-device mapping, or monitoring requires vendor-specific logic.

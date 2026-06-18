@@ -13,9 +13,31 @@ LightAI Go is currently on the Phase 4 model/runtime wizard line. The validated 
 
 ```text
 node model root -> file browse -> model scan -> ModelArtifact/ModelLocation
--> Backend -> BackendVersion -> BackendRuntime -> NodeBackendRuntime
+-> Backend -> BackendVersion -> BackendRuntime snapshot -> NodeBackendRuntime snapshot
 -> preflight -> Server RunPlan preview -> Agent Docker start
 -> /v1/models -> Docker logs -> stop -> cleanup
+```
+
+Snapshot boundaries are current design:
+
+```text
+BackendVersion -> BackendRuntime: copy defaults at creation; independent after creation.
+BackendRuntime -> NodeBackendRuntime: copy config at creation/check; independent after creation.
+BackendRuntimesPage manages templates only.
+RunnerConfigsPage manages NodeBackendRuntime add/edit/check/delete.
+Backend / BackendVersion catalog files are the source of truth; DB rows are reload/sync projections.
+System BackendVersion catalog: configs/backend-catalog/versions/ (runtime read-only).
+User BackendVersion catalog: data/backend-catalog.d/user/ by default, or LIGHTAI_BACKEND_CATALOG_USER_DIR.
+BackendVersion user add/edit/clone/delete writes the user catalog file first, then reloads DB.
+BackendVersion is hardware/node independent; GPU indexes, device mounts, node host paths, image_present, and ready/needs_check belong outside BackendVersion.
+```
+
+Current official system BackendVersion catalog baseline:
+
+```text
+vLLM v0.23.0
+SGLang v0.5.12.post1 and v0.5.13.post1 (v0.5.13.post1 tag verified by git ls-remote)
+llama.cpp b9700 build tag
 ```
 
 The current node model directory policy is scheme B:
@@ -44,7 +66,7 @@ Users must explicitly add a model directory before browse / scan / save.
 | Document | Purpose |
 | --- | --- |
 | `docs/design/backend-runtime-runplan-docker.md` | Current Backend / BackendVersion / BackendRuntime / RunPlan Docker design |
-| `docs/design/runtime-template-node-runtime-snapshot.md` | BackendRuntime vs NodeBackendRuntime: template and node config boundary |
+| `docs/design/runtime-template-node-runtime-snapshot.md` | BackendVersion/BackendRuntime/NodeBackendRuntime snapshot and user catalog boundary |
 | `docs/design/model-runtime-node-wizard.md` | Current model root, model wizard, runtime wizard, and deployment wizard design |
 | `docs/design/tenant-rbac-resource-ownership-design.md` | Tenant/RBAC ownership reference |
 | `docs/backend-catalog-vendor-extension.md` | Backend catalog vendor extension reference |

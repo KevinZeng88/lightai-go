@@ -207,6 +207,17 @@ func (h *AgentHandler) HandleAddNodeModelRoot(w http.ResponseWriter, r *http.Req
 		id, nodeID, clean, "enabled", strVal(req, "source", "user"), strVal(req, "description", ""), actorID, tid, now, now, now)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			var existingID string
+			if scanErr := h.DB.QueryRow(`SELECT id FROM node_model_roots WHERE node_id = ? AND path = ?`, nodeID, clean).Scan(&existingID); scanErr == nil {
+				if _, updateErr := h.DB.Exec(`UPDATE node_model_roots SET status = 'enabled', description = ?, updated_at = ? WHERE id = ?`,
+					strVal(req, "description", ""), now, existingID); updateErr != nil {
+					writeError(w, http.StatusInternalServerError, "internal error")
+					return
+				}
+				root, _ := h.resolveNodeModelRoot(nodeID, existingID, "")
+				writeJSON(w, http.StatusOK, root.jsonMap())
+				return
+			}
 			writeError(w, http.StatusConflict, "model root already exists")
 			return
 		}

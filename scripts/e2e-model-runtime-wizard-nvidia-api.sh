@@ -58,6 +58,21 @@ api_expect_fail() {
   [ "$code" != "200" ] && [ "$code" != "201" ]
 }
 
+json_find_root_id_by_path() {
+  python3 - "$1" <<'PY'
+import json, sys
+target = sys.argv[1]
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = []
+for item in data if isinstance(data, list) else []:
+    if item.get("path") == target:
+        print(item.get("id", ""))
+        break
+PY
+}
+
 on_exit() {
   local rc=$?; [ "$rc" -ne 0 ] && [ "$EXIT_CODE" -eq 0 ] && EXIT_CODE=$rc
   [ -n "$CURRENT_STAGE" ] && log "failed_stage=$CURRENT_STAGE"
@@ -118,10 +133,21 @@ stage_done
 # Add allowed root
 stage_start add_model_root
 root_path="$(dirname "$VLLM_MODEL")"
+set +e
 root_json="$(api POST "/api/v1/nodes/$node_id/model-roots" "{\"path\":\"$root_path\",\"description\":\"$PREFIX-$RUN_ID\"}")"
-ROOT_ID="$(printf '%s' "$root_json" | json_get id)"
+root_create_rc=$?
+set -e
+if [ "$root_create_rc" -eq 0 ]; then
+  ROOT_ID="$(printf '%s' "$root_json" | json_get id)"
+  ROOT_CREATED="1"
+else
+  roots_json="$(api GET "/api/v1/nodes/$node_id/model-roots?include_disabled=true")"
+  ROOT_ID="$(printf '%s' "$roots_json" | json_find_root_id_by_path "$root_path")"
+  [ -n "$ROOT_ID" ] || fail "model root create failed and existing root not found"
+  api PATCH "/api/v1/nodes/$node_id/model-roots/$ROOT_ID" "{\"status\":\"enabled\",\"description\":\"$PREFIX-$RUN_ID\"}" >/dev/null
+  ROOT_CREATED="0"
+fi
 [ -n "$ROOT_ID" ] || fail "model root create failed"
-ROOT_CREATED="1"
 log "root_id=$ROOT_ID root_path=$root_path"
 stage_done
 

@@ -7,7 +7,39 @@
 
 ## 1. Core Definitions
 
-### 1.1 BackendRuntime = 运行模板
+### 1.1 BackendVersion = 后端版本
+
+A BackendVersion is the software capability layer for one Backend. It stores version name, protocol, endpoint defaults, capability flags, official/common args schema, recommended image candidates, default model container mount, health check, official reference notes, and description.
+
+BackendVersion records may come from:
+
+| Source | Mutability | Path |
+| --- | --- | --- |
+| System catalog | Read-only through Web/API | `configs/backend-catalog/versions/**` |
+| User catalog | Add/edit/delete through Web/API and reload/sync | `data/backend-catalog.d/user/**` by default, or `LIGHTAI_BACKEND_CATALOG_USER_DIR` |
+
+Catalog files are the source of truth for Backend / BackendVersion. The DB is the normalized reload/sync projection used by API/Web queries and runtime references. BackendRuntime, NodeBackendRuntime, Deployment, and Instance records are DB-owned and are not written back to catalog files.
+
+**Rules:**
+- BackendVersion belongs to Backend.
+- System catalog rows are not overwritten in-place; clone to user catalog before editing.
+- User version create/edit writes a YAML file under the user catalog directory.
+- `POST /api/v1/backend-catalog/reload` reloads system and user catalog files into DB/API/Web state.
+- Reload/sync does not mutate existing BackendRuntime or NodeBackendRuntime snapshots.
+- User catalog files can be scripted/imported/exported by writing YAML under the user catalog directory and calling reload.
+- BackendVersion changes do not automatically update existing BackendRuntime rows.
+- BackendVersion must stay hardware/node independent. It must not store `node_id`, GPU index, `CUDA_VISIBLE_DEVICES`, `--gpus`, vendor device mounts, node host paths, `image_present`, `ready`, or `needs_check`.
+- NVIDIA / MetaX / Huawei Docker runtime flags, device mounts, driver checks, image presence, and readiness belong to BackendRuntime presets, NodeBackendRuntime, Node/GPU discovery, or RunPlan.
+
+Current system BackendVersion baseline:
+
+| Backend | Version | Notes |
+| --- | --- | --- |
+| vLLM | `v0.23.0` | OpenAI-compatible; image candidates include `vllm/vllm-openai:v0.23.0`, `v0.23.0-cu129-ubuntu2404`, `latest` |
+| SGLang | `v0.5.12.post1`, `v0.5.13.post1` | `v0.5.13.post1` tag verified with `git ls-remote`; launch module `python3 -m sglang.launch_server` |
+| llama.cpp | `b9700` | Build tag style, not forced semver; GGUF focused; `llama-server` |
+
+### 1.2 BackendRuntime = 运行模板
 
 A BackendRuntime is a **template-layer object** that describes how a class of backend should run. It is not bound to any specific node.
 
@@ -17,6 +49,10 @@ A BackendRuntime defines:
 |-------|---------|
 | `backend_id` | Which inference backend (vllm, llamacpp, ollama, sglang) |
 | `backend_version_id` | Which backend version |
+| `source_backend_id` | Backend source captured when this template was created |
+| `source_backend_version_id` | BackendVersion source captured when this template was created |
+| `source_version_revision` | Source version checksum/revision captured at creation |
+| `version_snapshot_json` | Frozen BackendVersion defaults copied at creation |
 | `name` / `display_name` | Human-readable runtime template name |
 | `vendor` | GPU/CPU vendor (nvidia, metax, cpu, huawei) |
 | `image_name` | Default Docker image |
@@ -37,8 +73,10 @@ A BackendRuntime defines:
 - The "运行模板" page must only show BackendRuntime records (template layer).
 - System templates (`is_builtin=1, is_editable=0`) are read-only.
 - User templates (`is_editable=1`) can be created by cloning a system template or from scratch.
+- Creating a BackendRuntime copies the selected BackendVersion defaults into `version_snapshot_json`.
+- Later BackendVersion edits do not mutate existing BackendRuntime config or version snapshot.
 
-### 1.2 NodeBackendRuntime = 节点运行配置
+### 1.3 NodeBackendRuntime = 节点运行配置
 
 A NodeBackendRuntime is a **node-level configuration record** that represents a specific BackendRuntime enabled on a specific node.
 
@@ -73,7 +111,24 @@ Current schema (`node_backend_runtimes` table):
 
 ## 2. Relationship Rules
 
-### 2.1 Creation
+### 2.1 BackendVersion → BackendRuntime Creation
+
+```
+User selects Backend + BackendVersion.
+The server reads the current BackendVersion defaults:
+  - default_entrypoint_json, default_args_json, default_backend_params_json
+  - parameter_defs_json, health_check_json, default_container_port
+  - default_images_json, env_json
+  - capabilities_json, docker_options_json, model_mount_json, vendor_options_json
+The server creates BackendRuntime with:
+  - source_backend_id, source_backend_version_id, source_version_revision
+  - version_snapshot_json
+  - runtime-level image/env/docker/mount/health fields initialized from the version or user input
+```
+
+After creation, BackendRuntime is independent. BackendVersion reload/sync updates version rows for new templates, not existing templates.
+
+### 2.2 BackendRuntime → NodeBackendRuntime Creation
 
 ```
 User selects BackendRuntime → creates/enables NodeBackendRuntime on a specific node.
@@ -93,7 +148,7 @@ Creating a user-managed BackendRuntime (template clone) is a separate action:
 - This creates a new BackendRuntime with `is_editable=1, is_builtin=0`
 - This is the "另存为模板 / 保存为用户模板" action
 
-### 2.2 Independence After Creation
+### 2.3 Independence After Creation
 
 ```
 NodeBackendRuntime persists a frozen config_snapshot_json at enable/check time.
@@ -105,11 +160,12 @@ current config values do not override the snapshot.
 
 **Current implementation (v16 migration):**
 - `node_backend_runtimes.config_snapshot_json` stores the frozen config.
-- `preflightDeployment` reads the snapshot and uses it to override the RuntimeInfo before calling `runplan.Resolve`.
+- `backend_runtimes.version_snapshot_json` stores BackendVersion defaults copied at BackendRuntime creation.
+- `preflightDeployment` reads the Runtime version snapshot and NBR config snapshot before calling `runplan.Resolve`.
 - Image resolution: NBR `image_ref` (node-level override) > snapshot `image_name` > BackendVersion.defaultImages.
 - If snapshot is empty (legacy data), the live BackendRuntime config is used as fallback.
 
-### 2.3 Editing NodeBackendRuntime
+### 2.4 Editing NodeBackendRuntime
 
 ```
 Editing a NodeBackendRuntime's node-level fields (image_ref, image_present,
@@ -293,7 +349,13 @@ Step 6: Start
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| GET | `/api/v1/backends/{id}/versions` | List BackendVersion rows for a Backend |
+| POST | `/api/v1/backends/{id}/versions` | Create user BackendVersion |
+| PATCH | `/api/v1/backend-versions/{version_id}` | Edit user BackendVersion |
+| POST | `/api/v1/backend-versions/{version_id}/clone` | Clone system BackendVersion to user catalog |
+| POST | `/api/v1/backend-catalog/reload` | Reload/sync system + user BackendVersion catalog files into DB projection |
 | GET | `/api/v1/backend-runtimes` | List BackendRuntime (templates) |
+| POST | `/api/v1/backend-runtimes` | Create BackendRuntime from Backend + BackendVersion snapshot |
 | POST | `/api/v1/backend-runtimes/from-template` | Create BackendRuntime from template |
 | POST | `/api/v1/backend-runtimes/{id}/clone` | Clone as user template |
 | PATCH | `/api/v1/backend-runtimes/{id}` | Edit BackendRuntime |
@@ -306,20 +368,23 @@ Step 6: Start
 
 ## 6. Current Implementation Status
 
-### Implemented (Phase 4, v16):
-- BackendRuntime CRUD + template-based creation
+### Implemented (Phase 4, v17):
+- BackendVersion user catalog add/edit/clone/reload
+- BackendRuntime CRUD + BackendVersion snapshot-based creation
 - NodeBackendRuntime enable/check with **config snapshot capture** (`config_snapshot_json`)
-- RunPlan resolver reads NBR snapshot as the primary execution config
+- RunPlan resolver reads Runtime version snapshot and NBR snapshot as the primary execution config
+- BackendVersion edits do NOT affect existing BackendRuntime RunPlans
 - BackendRuntime template edits do NOT affect existing NBR RunPlans
 - `preflightDeployment` overrides RuntimeInfo from NBR snapshot before calling `runplan.Resolve`
 - Per-node model mount using `model_root + "/" + relative_path` → container path `/models/<slug>`
 - Node count / ready count aggregation on BackendRuntime list
-- RunnerConfigsPage shows NodeBackendRuntime records
+- BackendRuntimesPage shows BackendRuntime templates and read-only NodeBackendRuntime usage references
+- RunnerConfigsPage shows NodeBackendRuntime records and supports add/edit/check/delete
 - Deployment wizard filters by backend_version_id + preflight
 - Status invalidation on NodeBackendRuntime edit (`needs_check`)
 - Expanded `needs_check` triggers: image_ref, image_id, image_digest, image_present, config_snapshot_json edits
 
-### P2 / future enhancements:
+### Formal documented blockers:
 - Template re-apply / template change with diff UI
 - Template revision visualization
 - Non-Docker runner types

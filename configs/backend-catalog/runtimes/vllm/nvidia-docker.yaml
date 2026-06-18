@@ -1,11 +1,11 @@
 id: runtime.vllm.nvidia-docker
 backend_id: backend.vllm
-backend_version_id: backend-version.vllm.openai-latest
+backend_version_id: vllm-v0.23.0
 slug: vllm-nvidia-docker
 managed_by: system
 runner_type: docker
 vendor: nvidia
-image_ref: vllm/vllm-openai:latest
+image_ref: vllm/vllm-openai:v0.23.0
 mount_policy:
   model:
     container_mount_dir: /models

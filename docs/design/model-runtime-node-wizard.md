@@ -22,7 +22,7 @@
 1. 新增模型时，先选择 Agent/节点，再从该节点浏览目录，选择模型文件或文件夹。
 2. Agent 尽量自动扫描模型元信息，推测模型名称、格式、参数规模、量化方式和能力。
 3. 一个逻辑模型可以有多个节点位置，每个位置可新增、禁用、删除、重扫和一致性核对。
-4. 新增运行配置时，先选择 Backend、BackendVersion、Agent/节点和运行类型。
+4. 新增运行模板时，先选择 Backend 和 BackendVersion；新增运行配置时，选择 BackendRuntime、Agent/节点和运行类型。
 5. 当前运行类型以 Docker 为主，并保留 command / external / kubernetes 等扩展接口。
 6. Agent 能列出本节点 Docker images，用户可选择已有 image，也可手工输入 image/tag/image_id。
 7. 一个运行配置可以挂多个节点配置，每个节点配置可新增、禁用、删除和重新检测。
@@ -335,11 +335,10 @@ Backend 不代表版本，也不代表节点实际可用状态。
 示例：
 
 ```text
-vllm-openai-latest
-vllm-openai-0.9
-sglang-openai-latest
-llama-cpp-server
-llama-cpp-server-metax
+vLLM v0.23.0
+SGLang v0.5.12.post1
+SGLang v0.5.13.post1
+llama.cpp b9700
 ollama-latest
 ```
 
@@ -348,8 +347,54 @@ ollama-latest
 ```text
 1. 定义支持的模型格式。
 2. 定义 OpenAI-compatible 等协议。
-3. 定义标准参数 schema。
-4. 原则上硬件无关，除非确实是厂商适配版。
+3. 定义官方/通用参数 schema。
+4. 定义推荐镜像候选、默认 endpoint、默认端口、默认模型容器挂载和健康检查。
+5. 原则上硬件无关。
+```
+
+BackendVersion 可以来自系统 catalog 或 user catalog。catalog 文件是 Backend / BackendVersion 的事实源；DB 是 reload/sync 后的规范化索引、缓存和查询 projection。
+
+运行时目录：
+
+```text
+system catalog: configs/backend-catalog/versions/
+user catalog: data/backend-catalog.d/user/
+override: LIGHTAI_BACKEND_CATALOG_USER_DIR
+```
+
+系统 catalog 随软件发布，运行时只读。用户新增、从 system clone、编辑、删除 BackendVersion 时，API 必须先写入或删除 user catalog 文件，再 reload/sync DB projection。reload/sync 读取 system + user catalog，不覆盖 user 文件，也不修改已有 BackendRuntime / NodeBackendRuntime snapshot。用户可以用脚本写入 YAML 文件并调用 `POST /api/v1/backend-catalog/reload`，也可以复制 user catalog YAML 到其他部署环境来分享版本定义。
+
+当前 system catalog 基线：
+
+```text
+vLLM v0.23.0:
+  image candidates: vllm/vllm-openai:v0.23.0, v0.23.0-cu129-ubuntu2404, latest
+  endpoints: /v1/models, /v1/chat/completions, /v1/completions, /v1/embeddings
+
+SGLang v0.5.12.post1 and v0.5.13.post1:
+  launch: python3 -m sglang.launch_server
+  v0.5.13.post1 tag verified with git ls-remote
+  endpoints: /v1/models, /v1/chat/completions, /v1/completions, /v1/embeddings
+
+llama.cpp b9700:
+  build tag version style, not semver
+  server binary: llama-server
+  GGUF focused, OpenAI-compatible subset
+```
+
+BackendVersion 禁止保存：
+
+```text
+node_id
+具体 GPU index
+CUDA_VISIBLE_DEVICES 具体值
+--gpus all
+NVIDIA runtime
+MetaX / Huawei device mount
+某节点 host model path
+image_present
+ready / needs_check
+某节点 Docker image 检查结果
 ```
 
 ### 5.3 BackendRuntime
@@ -405,6 +450,10 @@ deleted_at
 2. 用户要修改系统模板时，应复制为 user-managed Runtime。
 3. BackendRuntime 是逻辑模板，不等于某个节点已经 ready。
 4. 某节点是否可用，由 NodeBackendRuntime 表示。
+5. 创建 BackendRuntime 时必须选择 Backend + BackendVersion。
+6. 创建时复制 BackendVersion 当前默认配置到 BackendRuntime 的 version_snapshot_json。
+7. BackendVersion 后续修改不自动影响已有 BackendRuntime。
+8. BackendRuntime 保留 source_backend_id / source_backend_version_id / source_version_revision 作为来源审计信息。
 ```
 
 ### 5.4 NodeBackendRuntime
@@ -460,6 +509,10 @@ deleted
 2. 不同节点可以使用不同 image_ref/image_id。
 3. 节点级覆盖不能破坏系统模板，只影响该节点。
 4. NodeBackendRuntime status=ready 才能参与启动。
+5. 创建 NodeBackendRuntime 时复制 BackendRuntime 当前配置到 config_snapshot_json。
+6. BackendRuntime 后续修改不自动影响已有 NodeBackendRuntime。
+7. 修改 image_ref 或 config_snapshot_json 等影响启动结果的字段后，status 必须变为 needs_check。
+8. ModelLocation 不属于 NodeBackendRuntime；模型 host path 由 RunPlan resolver 按 node_id 动态解析。
 ```
 
 ---
@@ -506,7 +559,9 @@ deleted
 
 ### 6.2 运行配置页面
 
-运行配置列表展示：
+运行模板页面只展示 BackendRuntime 模板层对象，不创建、不修改、不检查、不删除 NodeBackendRuntime。可展示 node_count / ready_count，但必须标明为关联 NodeBackendRuntime 聚合统计。
+
+运行模板列表展示：
 
 ```text
 名称
@@ -515,21 +570,32 @@ BackendVersion
 运行类型
 Vendor
 默认 Image
-节点配置数量
-Ready 节点数量
-状态
-操作
+节点数（关联 NodeBackendRuntime 聚合）
+就绪数（关联 NodeBackendRuntime 聚合）
+操作：详情、编辑模板、另存为模板、删除用户模板
 ```
 
-运行配置详情展示：
+运行模板详情展示：
 
 ```text
 基本信息
 默认参数
 Docker 参数
-节点配置列表
-Command Preview 示例
+使用情况 / 节点配置引用（只读）
 审计记录
+```
+
+节点运行配置页面展示 NodeBackendRuntime，并负责添加、修改、检查、删除节点级配置。
+
+节点运行配置列表展示：
+
+```text
+运行模板
+节点
+镜像
+状态
+最近检测时间
+操作：详情、修改、检查、删除
 ```
 
 ### 6.3 实例页面
@@ -538,7 +604,7 @@ Command Preview 示例
 
 ```text
 选择模型
-选择运行配置
+选择运行模板
 可运行节点
 GPU/端口
 参数确认
@@ -802,27 +868,24 @@ path_type
 
 ---
 
-## 10. 新增运行配置向导
+## 10. 新增节点运行配置向导
 
 ### 10.1 入口
 
 ```text
-运行配置 → 新增运行配置
+运行配置 → 新增节点运行配置
 ```
 
 ### 10.2 流程
 
 ```text
-Step 1：选择 Backend
-Step 2：选择 BackendVersion
+Step 1：选择运行类型，目前仅 Docker，将来支持 command/external
+Step 2：选择运行模板 BackendRuntime
 Step 3：选择 Agent/节点
-Step 4：选择运行类型，目前仅 Docker，将来支持 command/external
-Step 5：Agent 列出该节点 Docker images
-Step 6：选择 image 或手工输入 image_ref
-Step 7：系统根据 Backend/Version/节点硬件推荐 BackendRuntime 模板
-Step 8：检测 Docker / GPU runtime / image / driver
-Step 9：加载默认参数
-Step 10：用户确认，保存 BackendRuntime 或 RuntimeProfile + NodeBackendRuntime
+Step 4：Agent 列出该节点 Docker images
+Step 5：选择 image 或手工输入 image_ref，并明确显示“已选择镜像”
+Step 6：检测节点在线、Docker / GPU runtime / image / driver
+Step 7：用户确认，保存 NodeBackendRuntime snapshot，状态为 needs_check / unverified，检测通过后为 ready
 ```
 
 ### 10.3 运行类型
@@ -887,39 +950,31 @@ image_present：true/false
 
 ### 10.5 运行配置保存策略
 
-如果用户基于系统模板创建：
+新增节点运行配置只创建或更新 NodeBackendRuntime，不创建 BackendRuntime clone，不污染运行模板列表。
+
+创建运行模板是单独动作：
 
 ```text
-BackendRuntime managed_by=system 不直接修改
-复制为 managed_by=user 的自定义运行配置
+运行模板 → 创建运行模板
+  选择 Backend
+  选择 BackendVersion
+  复制 BackendVersion 当前默认配置生成 BackendRuntime snapshot
+  用户修改模板级配置
+  保存 BackendRuntime
 ```
 
-如果只是把系统 Runtime 启用到某个节点：
-
-```text
-创建或更新 NodeBackendRuntime
-```
-
-建议 UX：
-
-```text
-新增运行配置：
-  创建用户自定义 BackendRuntime + 第一个 NodeBackendRuntime
-
-启用系统运行配置：
-  不改 BackendRuntime，只创建 NodeBackendRuntime
-```
+BackendVersion 修改后不自动影响已有 BackendRuntime；BackendRuntime 修改后不自动影响已有 NodeBackendRuntime。任何重新应用默认值都必须是显式动作，且不能静默同步。
 
 实现时应按当前代码已有对象适配，不重复造 RuntimeProfile 概念，除非项目已存在同义对象。
 
 ---
 
-## 11. 为运行配置添加节点
+## 11. 为运行模板添加节点运行配置
 
 ### 11.1 入口
 
 ```text
-运行配置详情 → 节点配置 → 添加节点
+运行配置页面 → 新增节点运行配置
 ```
 
 ### 11.2 流程

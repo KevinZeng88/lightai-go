@@ -6,6 +6,6 @@ backends:
   - backends/sglang.yaml
   - backends/ollama.yaml
 external_overrides:
-  backends: ../backend-catalog.d/custom-backends
-  versions: ../backend-catalog.d/custom-versions
-  runtimes: ../backend-catalog.d/custom-runtimes
+  backends: ../../data/backend-catalog.d/user/backends
+  versions: ../../data/backend-catalog.d/user
+  runtimes: ../../data/backend-catalog.d/user/runtimes

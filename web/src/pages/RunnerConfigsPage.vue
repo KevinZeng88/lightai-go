@@ -16,9 +16,13 @@
       <el-table-column :label="$t('nodeRuntime.status')" width="100">
         <template #default="{ row }"><el-tag :type="row.status==='ready'?'success':'warning'" size="small">{{ translateStatus(row.status, t) }}</el-tag></template>
       </el-table-column>
-      <el-table-column :label="$t('common.actions')" width="200">
+      <el-table-column prop="image_ref" :label="$t('nodeRuntime.imageRef')" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="last_checked_at" :label="$t('nodeRuntime.lastChecked')" width="180" show-overflow-tooltip />
+      <el-table-column :label="$t('common.actions')" width="310">
         <template #default="{ row }">
           <el-button size="small" @click="showDetail(row)">{{ $t('common.detail') }}</el-button>
+          <el-button size="small" @click="showEdit(row)">{{ $t('common.edit') }}</el-button>
+          <el-button size="small" type="warning" @click="checkRow(row)">{{ $t('runnerConfigs.check') }}</el-button>
           <el-button size="small" type="danger" @click="doDelete(row)">{{ $t('common.delete') }}</el-button>
         </template>
       </el-table-column>
@@ -62,9 +66,13 @@
       </div>
 
       <div v-if="step===3 && wizRunnerType==='docker'">
-        <DockerImagePicker v-if="wizNodeId" :node-id="wizNodeId" @select="(img:any) => wizImageRef = img.image_ref || img.image_ref" />
+        <DockerImagePicker v-if="wizNodeId" :node-id="wizNodeId" @select="onWizardImageSelected" />
+        <el-form label-width="130px" style="margin-top:12px">
+          <el-form-item :label="$t('dockerImages.selectedImage')"><el-input v-model="wizImageRef" @input="wizImagePresent = false" /></el-form-item>
+        </el-form>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="step=2">{{ $t('common.prev') }}</el-button>
+          <span v-if="wizImageRef" class="next-summary">{{ wizImageRef }}</span>
           <el-button type="primary" :disabled="!wizImageRef" @click="step=4">{{ $t('common.next') }}</el-button>
         </div>
       </div>
@@ -102,6 +110,18 @@
         </el-descriptions>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="editVisible" :title="$t('runnerConfigs.editConfig')" width="760px">
+      <el-alert :title="$t('runnerConfigs.editAffectsNextStart')" type="warning" show-icon :closable="false" style="margin-bottom:12px" />
+      <el-form label-position="top">
+        <el-form-item :label="$t('nodeRuntime.imageRef')"><el-input v-model="editImageRef" /></el-form-item>
+        <el-form-item :label="$t('runnerConfigs.snapshotJson')"><el-input v-model="editSnapshotText" type="textarea" :rows="10" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="doEdit" :loading="saving">{{ $t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -120,12 +140,12 @@ const { t } = useI18n()
 
 const loading = ref(false); const saving = ref(false); const checking = ref(false)
 const items = ref<any[]>([]); const templates = ref<any[]>([]); const selected = ref<any>(null); const detailVisible = ref(false)
-const detailNodeRuntimes = ref<any[]>([])
+const editVisible = ref(false); const editImageRef = ref(''); const editSnapshotText = ref('{}')
 
 // Wizard
 const wizardVisible = ref(false); const step = ref(0)
 const wizTemplateId = ref(''); const wizRunnerType = ref('docker')
-const wizNodeId = ref(''); const wizImageRef = ref('')
+const wizNodeId = ref(''); const wizImageRef = ref(''); const wizImagePresent = ref(false)
 const wizConfigName = ref(''); const wizCheckResult = ref<any>(null)
 
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(step, () => { step.value++ })
@@ -156,9 +176,13 @@ async function refresh() {
       ready_count: nbr.status === 'ready' ? 1 : 0,
       status: nbr.status,
       node_id: nbr._node_id,
-      node_label: nbr._node_label,
-      image_ref: nbr.image_ref,
-      backend_runtime_id: nbr.backend_runtime_id,
+        node_label: nbr._node_label,
+        image_ref: nbr.image_ref,
+        image_present: nbr.image_present,
+        last_checked_at: nbr.last_checked_at,
+        status_reason: nbr.status_reason,
+        config_snapshot_json: nbr.config_snapshot_json || {},
+        backend_runtime_id: nbr.backend_runtime_id,
     }))
   } catch {}
   loading.value = false
@@ -169,7 +193,7 @@ async function loadRefs() {
   loadNodes()
 }
 
-function startWizard() { wizardVisible.value = true; step.value = 0; wizTemplateId.value = ''; wizRunnerType.value = 'docker'; wizNodeId.value = ''; wizImageRef.value = ''; wizConfigName.value = ''; wizCheckResult.value = null; loadRefs() }
+function startWizard() { wizardVisible.value = true; step.value = 0; wizTemplateId.value = ''; wizRunnerType.value = 'docker'; wizNodeId.value = ''; wizImageRef.value = ''; wizImagePresent.value = false; wizConfigName.value = ''; wizCheckResult.value = null; loadRefs() }
 
 function onWizTemplateSelected(templateId: string) {
   const template = templates.value.find((t: any) => t.id === templateId)
@@ -192,16 +216,22 @@ function onWizTemplateSelected(templateId: string) {
 async function doCheck() {
   checking.value = true
   try {
-    wizCheckResult.value = await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/check`, { backend_runtime_id: wizTemplateId.value, image_ref: wizImageRef.value || '', image_present: !!wizImageRef.value, docker_available: wizRunnerType.value === 'docker' })
+    wizCheckResult.value = await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/check`, { backend_runtime_id: wizTemplateId.value, image_ref: wizImageRef.value || '', image_present: wizImagePresent.value, docker_available: wizRunnerType.value === 'docker' })
   } catch (e: any) { wizCheckResult.value = { status: 'unknown', status_reason: e?.message || 'check failed' } }
   checking.value = false
+}
+
+function onWizardImageSelected(img: any) {
+  wizImageRef.value = img.image_ref || ''
+  wizImagePresent.value = img.image_present === true
+  wizCheckResult.value = null
 }
 
 async function doCreateConfig() {
   saving.value = true
   try {
     // Enable the selected template on the selected node (creates NodeBackendRuntime only, no BackendRuntime clone)
-    await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: wizTemplateId.value, image_ref: wizImageRef.value, image_present: !!wizImageRef.value, docker_available: wizRunnerType.value === 'docker' })
+    await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: wizTemplateId.value, image_ref: wizImageRef.value, image_present: wizImagePresent.value, docker_available: wizRunnerType.value === 'docker' })
     ElMessage.success(t('runnerConfigs.created')); wizardVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   saving.value = false
@@ -210,6 +240,37 @@ async function doCreateConfig() {
 async function showDetail(row: any) {
   selected.value = row
   detailVisible.value = true
+}
+
+function showEdit(row: any) {
+  selected.value = row
+  editImageRef.value = row.image_ref || ''
+  editSnapshotText.value = JSON.stringify(row.config_snapshot_json || {}, null, 2)
+  editVisible.value = true
+}
+
+async function doEdit() {
+  if (!selected.value) return
+  saving.value = true
+  try {
+    let snapshot: any = {}
+    try { snapshot = JSON.parse(editSnapshotText.value || '{}') } catch { ElMessage.error(t('runnerConfigs.invalidJson')); saving.value = false; return }
+    await apiClient.patch(`/nodes/${selected.value.node_id}/backend-runtimes/${selected.value.id}`, { image_ref: editImageRef.value, config_snapshot_json: snapshot })
+    ElMessage.success(t('runnerConfigs.savedNeedsCheck'))
+    editVisible.value = false
+    await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
+  saving.value = false
+}
+
+async function checkRow(row: any) {
+  checking.value = true
+  try {
+    const result = await apiClient.post(`/nodes/${row.node_id}/backend-runtimes/check`, { backend_runtime_id: row.backend_runtime_id, image_ref: row.image_ref || '', image_present: row.image_present === true, docker_available: row.runner_type === 'docker' })
+    ElMessage.success(`${translateStatus(result.status, t)}: ${translateStatusReason(result.status_reason, t)}`)
+    await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
+  checking.value = false
 }
 
 async function doDelete(row: any) {
@@ -225,4 +286,5 @@ async function doDelete(row: any) {
 <style scoped>
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .page-header h2 { margin: 0; }
+.next-summary { color: var(--el-text-color-secondary); margin-right: 12px; font-size: 12px; }
 </style>
