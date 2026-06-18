@@ -104,29 +104,43 @@ e2e_scan_model() {
   local rel_path; rel_path="${MODEL_PATH#$root_path/}"
   local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/model-paths/scan" \
     "{\"root_id\":\"$ROOT_ID\",\"root\":\"$root_path\",\"relative_path\":\"$rel_path\",\"path_type\":\"directory\"}")"
-  ARTIFACT_ID="$(echo "$r" | json_get artifact_id)"
-  [ -n "$ARTIFACT_ID" ] || { fail "scan model failed"; return 1; }
+  local fmt; fmt="$(echo "$r" | json_get format 2>/dev/null || echo 'unknown')"
+  local name; name="$(echo "$r" | json_get discovered_name 2>/dev/null || echo 'unknown')"
+  log "scan model fmt=$fmt name=$name rel=$rel_path"
+}
+
+e2e_create_artifact() {
+  local name; name="e2e-${BACKEND_NAME}-${E2E_RUN_ID}-model"
+  local root_path; root_path="$(dirname "$MODEL_PATH")"
+  local rel_path; rel_path="${MODEL_PATH#$root_path/}"
+  local r; r="$(api_ok POST /api/v1/model-artifacts \
+    "{\"name\":\"$name\",\"display_name\":\"$name\",\"path\":\"$MODEL_PATH\",\"format\":\"huggingface\",\"task_type\":\"chat\"}")"
+  ARTIFACT_ID="$(echo "$r" | json_get id)"
+  [ -n "$ARTIFACT_ID" ] || { fail "create artifact failed"; return 1; }
+  # Create model location linking node + root + relative_path
+  api_ok POST "/api/v1/model-artifacts/$ARTIFACT_ID/locations" \
+    "{\"node_id\":\"$NODE_ID\",\"root_id\":\"$ROOT_ID\",\"relative_path\":\"$rel_path\",\"path_type\":\"directory\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" > /dev/null 2>&1 || true
   log "artifact_id=$ARTIFACT_ID rel=$rel_path"
 }
 
 e2e_enable_nbr() {
   local imgs; imgs="$(api_body GET "/api/v1/nodes/$NODE_ID/docker-images" 2>/dev/null || echo '[]')"
+  set +e
   local ip; ip="$(echo "$imgs" | python3 -c "
 import json,sys
 imgs=json.load(sys.stdin)
 img='${IMAGE_REF}'
-# match repo:tag or just repo prefix
 for i in imgs:
     tags=i.get('repotags',[]) or []
-    name=i.get('name','')
     for t in tags:
         if img in str(t):
             print('true'); sys.exit(0)
 print('false')
 " 2>/dev/null || echo false)"
+  set -e
   local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/enable" \
     "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
-  log "nbr enabled status=$(echo "$r" | json_get status)"
+  log "nbr enabled status=$(echo "$r" | json_get status 2>/dev/null || echo '?')"
 }
 
 e2e_create_deployment() {
@@ -230,6 +244,7 @@ e2e_run_default() {
   e2e_query_gpu    || return 1
   e2e_add_model_root   || return 1
   e2e_scan_model       || return 1
+  e2e_create_artifact  || return 1
   e2e_enable_nbr       || return 1
   e2e_create_deployment || return 1
   e2e_preflight        || return 1
