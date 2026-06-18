@@ -1,0 +1,349 @@
+2026-06-18 00:53:14.042 INFO  server shutting down signal=terminated
+2026-06-18 00:53:14.042 INFO  server stopped
+2026-06-18 00:53:14.042 INFO  node health checker stopped
+2026-06-18 00:53:16.512 INFO  agent token loaded from existing file file=runtime/security/agent-token.env agent_token=<redacted>
+2026-06-18 00:53:16.513 INFO  server starting version=lightai-go 0.1.0 (commit: unknown, built: unknown, go: go1.26.4, linux/amd64) listen=0.0.0.0:18080 log_level=info db_path=data/lightai.db dev_mode=false
+2026-06-18 00:53:16.513 INFO  db.open completed path=data/lightai.db duration_ms=0
+2026-06-18 00:53:16.513 INFO  db migrate: begin
+2026-06-18 00:53:16.515 INFO  db migrate: completed duration_ms=2
+2026-06-18 00:53:16.515 INFO  db.migrate completed duration_ms=2
+2026-06-18 00:53:16.562 INFO  bootstrap initialization skipped (already exists)
+2026-06-18 00:53:16.562 INFO  auth.bootstrap completed duration_ms=46
+2026-06-18 00:53:16.562 INFO  web assets not built; run 'cd web && npm run build'
+2026-06-18 00:53:16.562 INFO  node health checker started offline_threshold=20s check_interval=10s
+2026-06-18 00:53:16.562 INFO  server listening addr=0.0.0.0:18080
+2026-06-18 00:53:18.610 INFO  node re-registered node_id=node-70894186-093c-403d-87d1-08f17a690521 agent_id=agent-01
+2026-06-18 00:53:18.610 INFO  api.request.completed request_id=04d42c83d53840a5936fea635574c9b2 method=POST path=/api/v1/agent/register status=201 duration_ms=0
+2026-06-18 00:53:21.528 INFO  api.request.completed request_id=863c789af76842aaa430d74452fef937 method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 00:53:27.368 INFO  api.request.completed request_id=82a77edb960940fabebdc81b436ef165 method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 00:53:27.510 INFO  user logged in user_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb username=admin tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 00:53:27.510 INFO  api.request.completed request_id=36f783bff3f3444cbc18ea4ce4af4e97 method=POST path=/api/v1/auth/login status=200 duration_ms=48
+2026-06-18 00:53:27.580 INFO  api.request.completed request_id=d49255ff1f9246d6b84ac43a06798717 method=GET path=/api/v1/backends status=200 duration_ms=0
+2026-06-18 00:53:27.588 INFO  api.request.completed request_id=e1d4bc8d6f994b7da3dfb87e7e4eb138 method=GET path=/api/v1/backend-versions status=200 duration_ms=0
+2026-06-18 00:53:27.599 INFO  api.request.completed request_id=a5af5c483ae74835961f0c3e4b2969eb method=POST path=/api/v1/nodes/{id}/backend-runtimes/enable status=200 duration_ms=0
+2026-06-18 00:53:27.610 INFO  operation_started request_id=84c2ac4616bd4b88bfa9609507401e63 operation=model_artifact.create stage=operation_started
+2026-06-18 00:53:27.610 INFO  operation_completed request_id=84c2ac4616bd4b88bfa9609507401e63 operation=model_artifact.create stage=operation_completed duration_ms=0 id=98dc53bb-a7aa-4591-80e1-75275cd9cd0e name=e2e-nvidia-20260618005327-vllm-model tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 00:53:27.610 INFO  api.request.completed request_id=84c2ac4616bd4b88bfa9609507401e63 method=POST path=/api/v1/model-artifacts status=201 duration_ms=0
+2026-06-18 00:53:27.634 INFO  api.request.completed request_id=6ab6731cc6004a20abe51c89238b5264 method=POST path=/api/v1/model-artifacts/{id}/locations status=201 duration_ms=0
+2026-06-18 00:53:27.658 INFO  deployment.created deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 name=e2e-nvidia-20260618005327-vllm-deployment tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb model_artifact_id=98dc53bb-a7aa-4591-80e1-75275cd9cd0e backend_runtime_id=runtime.vllm.nvidia-docker request_id=2ad9c9496bc54cc1a630babf756bda54
+2026-06-18 00:53:27.658 INFO  audit.recorded action=deployment.create resource_type=deployment resource_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=2ad9c9496bc54cc1a630babf756bda54
+2026-06-18 00:53:27.658 INFO  api.request.completed request_id=2ad9c9496bc54cc1a630babf756bda54 method=POST path=/api/v1/deployments status=201 duration_ms=0
+2026-06-18 00:53:27.682 INFO  operation_started request_id=30bfbfe5984349b3acc770b6e6351c40 operation=deployment.start stage=operation_started deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 operation_id=74e3777e-2743-4195-a464-16ef91807951
+2026-06-18 00:53:27.683 INFO  runplan resolve: begin backend=vllm vendor=nvidia
+2026-06-18 00:53:27.683 INFO  runplan resolve: completed image=vllm/vllm-openai:latest args_count=13 errors=0 warnings=0 duration_ms=0
+2026-06-18 00:53:27.683 INFO  stage_completed request_id=30bfbfe5984349b3acc770b6e6351c40 operation=deployment.start stage=preflight duration_ms=0 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 node_id=node-70894186-093c-403d-87d1-08f17a690521 duration_ms=0
+2026-06-18 00:53:27.683 INFO  instance.start.requested operation_id=74e3777e-2743-4195-a464-16ef91807951 tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e node_id=node-70894186-093c-403d-87d1-08f17a690521 gpu_ids=[28212356-3831-4f47-8693-fa6906e75a4c] request_id=30bfbfe5984349b3acc770b6e6351c40
+2026-06-18 00:53:27.683 INFO  deployment.start.agent_spec.ports deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e host_port=8004 container_port=8000 health_check_path=/v1/models health_check_port_source=host_port
+2026-06-18 00:53:27.683 INFO  state_transition request_id=30bfbfe5984349b3acc770b6e6351c40 operation=deployment.start stage=state_transition entity_type=gpu_lease entity_id=c052f5e1-427a-4fa6-baff-5e1c23911429 state_from= state_to=reserved gpu_id=28212356-3831-4f47-8693-fa6906e75a4c instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 node_id=node-70894186-093c-403d-87d1-08f17a690521
+2026-06-18 00:53:27.683 INFO  agent_task.created operation_id=74e3777e-2743-4195-a464-16ef91807951 task_id=2eb94907-aada-4c58-9982-99c42773ba1d task_type=model_instance_start deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e agent_id= node_id=node-70894186-093c-403d-87d1-08f17a690521 generation=1 attempt=1
+2026-06-18 00:53:27.683 INFO  operation_completed request_id=30bfbfe5984349b3acc770b6e6351c40 operation=deployment.start stage=operation_completed duration_ms=0 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e task_id=2eb94907-aada-4c58-9982-99c42773ba1d run_plan_id=31ee357f-c116-483b-9921-a55d64c4a76f
+2026-06-18 00:53:27.683 INFO  audit.recorded action=instance.start resource_type=model_instance resource_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id=74e3777e-2743-4195-a464-16ef91807951 request_id=30bfbfe5984349b3acc770b6e6351c40
+2026-06-18 00:53:27.683 INFO  api.request.completed request_id=30bfbfe5984349b3acc770b6e6351c40 method=POST path=/api/v1/deployments/{id}/start status=200 duration_ms=0
+2026-06-18 00:53:27.719 INFO  api.request.completed request_id=55b4ddf32b3a44e69be1daf6aab1344c method=GET path=/api/v1/deployments/{id}/run-plan-groups status=200 duration_ms=0
+2026-06-18 00:53:27.726 INFO  api.request.completed request_id=3641d13ec47e43e1974dfc091a0acf7b method=GET path=/api/v1/node-run-plans/{id} status=200 duration_ms=0
+2026-06-18 00:53:27.733 INFO  api.request.completed request_id=a3683bbb4bf642bebcd05799ccf8d031 method=GET path=/api/v1/node-run-plans/{id}/command-preview status=200 duration_ms=0
+2026-06-18 00:53:27.747 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=9e83e85e90554c2b82f0cb3fd4d2a4b4
+2026-06-18 00:53:30.325 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 00:53:30.325 INFO  agent_task.claimed operation_id=74e3777e-2743-4195-a464-16ef91807951 task_id=2eb94907-aada-4c58-9982-99c42773ba1d task_type=model_instance_start agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e generation=1
+2026-06-18 00:53:34.484 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=8264e47a2eac484a86dc3e554b955a09
+2026-06-18 00:53:39.510 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=db9390819c404fe7ac38f941b99b7d2f
+2026-06-18 00:53:44.537 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=e69613558d6440889707be9e4c24841a
+2026-06-18 00:53:49.562 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=90eb9192904346d29ce7c7db12e23604
+2026-06-18 00:53:54.587 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=f0544824579749589b2b7e3d26e8dcc2
+2026-06-18 00:53:59.613 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=8900108a48694451bc221d20021bd8a6
+2026-06-18 00:54:06.452 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=a51e869aca26479894110903942dfac5
+2026-06-18 00:54:11.478 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=12275c2f09b34630b736190c44be43de
+2026-06-18 00:54:16.505 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=f03bb8ad35f146e494a170b9093d999f
+2026-06-18 00:54:21.530 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=8c28bcc8adc74faeb58228f9f4b6fd46
+2026-06-18 00:54:26.557 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=cb1947f3fd8745a4bdced575d7aae1d3
+2026-06-18 00:54:31.584 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=70255b90530f4a7db80c2e6a624037f3
+2026-06-18 00:54:36.609 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=62c67bd9f14b4e5cb87e052facc70c2f
+2026-06-18 00:54:43.266 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=184484090bbf48af8e73061fa49ce388
+2026-06-18 00:54:48.292 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=3ea0e0017a0b41eda54425d50db01273
+2026-06-18 00:54:50.243 INFO  state_transition request_id=ab2559d272b347638d502ca98dfb52e7 operation=task.result stage=state_transition entity_type=gpu_lease entity_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e state_from=reserved state_to=active instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e count=1
+2026-06-18 00:54:50.243 INFO  gpu_lease.activated instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e count=1
+2026-06-18 00:54:50.243 INFO  state_transition request_id=ab2559d272b347638d502ca98dfb52e7 operation=task.result stage=state_transition entity_type=instance entity_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e state_from=pending state_to=running task_id=2eb94907-aada-4c58-9982-99c42773ba1d deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac duration_ms=0
+2026-06-18 00:54:50.243 INFO  instance.state.updated operation_id=74e3777e-2743-4195-a464-16ef91807951 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e old_state=pending new_state=running container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac endpoint_url=http://127.0.0.1:8004
+2026-06-18 00:54:50.243 INFO  task.result.processed operation_id=74e3777e-2743-4195-a464-16ef91807951 task_id=2eb94907-aada-4c58-9982-99c42773ba1d instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e state=running container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac endpoint_url=http://127.0.0.1:8004 duration_ms=0
+2026-06-18 00:54:53.767 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 00:54:53.767 INFO  agent_task.claimed operation_id=7ac5693e-4ba4-45c4-be59-160fc4d4c72e task_id=7ac5693e-4ba4-45c4-be59-160fc4d4c72e task_type=model_instance_logs agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e generation=1
+2026-06-18 00:54:53.927 INFO  api.request.completed request_id=31fca6abb0d4471481970914862bc05a method=GET path=/api/v1/node-run-plans/{id}/logs status=200 duration_ms=604
+2026-06-18 00:54:53.938 INFO  operation_started request_id=1e2d0390c4e84244b0588c821fb74fd2 operation=deployment.stop stage=operation_started deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 operation_id=763c5b12-5598-40a2-b3a4-6f2ce99d1d57
+2026-06-18 00:54:53.939 INFO  instance.stop.requested operation_id=763c5b12-5598-40a2-b3a4-6f2ce99d1d57 tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac request_id=1e2d0390c4e84244b0588c821fb74fd2
+2026-06-18 00:54:55.767 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 00:54:55.768 INFO  agent_task.claimed operation_id=763c5b12-5598-40a2-b3a4-6f2ce99d1d57 task_id=93ac731f-e154-4536-89f5-1a75747030e6 task_type=model_instance_stop agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e generation=1
+2026-06-18 00:54:57.636 INFO  state_transition request_id=1be2dae15588451192381384ac9e2a03 operation=task.result stage=state_transition entity_type=instance entity_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e state_from=stopping state_to=stopped task_id=93ac731f-e154-4536-89f5-1a75747030e6 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 node_id=node-70894186-093c-403d-87d1-08f17a690521 duration_ms=0
+2026-06-18 00:54:57.739 INFO  instance.stop.completed operation_id=763c5b12-5598-40a2-b3a4-6f2ce99d1d57 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instance_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e container_id=dc71fd754e0e3a9c88ac780d44dd23b6910c5e05475881f288385c8a4cdee6ac final_state=running
+2026-06-18 00:54:57.739 INFO  operation_completed request_id=1e2d0390c4e84244b0588c821fb74fd2 operation=deployment.stop stage=operation_completed duration_ms=3800 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 instances_stopped=1
+2026-06-18 00:54:57.739 INFO  audit.recorded action=instance.stop resource_type=model_instance resource_id=0b1fe79e-dc93-4e42-89f4-f4e76484195e result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id=763c5b12-5598-40a2-b3a4-6f2ce99d1d57 request_id=1e2d0390c4e84244b0588c821fb74fd2
+2026-06-18 00:54:57.739 INFO  api.request.completed request_id=1e2d0390c4e84244b0588c821fb74fd2 method=POST path=/api/v1/deployments/{id}/stop status=200 duration_ms=3801
+2026-06-18 00:54:57.739 WARN  slow_operation request_id=1e2d0390c4e84244b0588c821fb74fd2 operation=api.request stage=slow_operation slow_stage=http_handler duration_ms=3801 threshold_ms=1000 method=POST path=/api/v1/deployments/{id}/stop
+2026-06-18 00:54:57.751 INFO  operation_started request_id=af421ae498634567a07b678c28a35179 operation=deployment.delete stage=operation_started deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6
+2026-06-18 00:54:57.752 INFO  operation_completed request_id=af421ae498634567a07b678c28a35179 operation=deployment.delete stage=operation_completed duration_ms=0 deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6
+2026-06-18 00:54:57.752 INFO  api.request.completed request_id=af421ae498634567a07b678c28a35179 method=DELETE path=/api/v1/deployments/{id} status=200 duration_ms=0
+2026-06-18 00:54:57.759 INFO  operation_started request_id=e47e983236eb48b39abd614ca68087b9 operation=model_artifact.delete stage=operation_started
+2026-06-18 00:54:57.759 INFO  operation_completed request_id=e47e983236eb48b39abd614ca68087b9 operation=model_artifact.delete stage=operation_completed duration_ms=0 id=98dc53bb-a7aa-4591-80e1-75275cd9cd0e
+2026-06-18 00:54:57.759 INFO  api.request.completed request_id=e47e983236eb48b39abd614ca68087b9 method=DELETE path=/api/v1/model-artifacts/{id} status=200 duration_ms=0
+2026-06-18 00:54:57.925 INFO  operation_started request_id=29581bb56c9343fc80a1fcffbe48b325 operation=deployment.stop stage=operation_started deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6 operation_id=3a94efb5-45ea-49ea-81b9-b0ae2c39c79e
+2026-06-18 00:54:57.925 WARN  api.request.completed request_id=29581bb56c9343fc80a1fcffbe48b325 method=POST path=/api/v1/deployments/{id}/stop status=404 duration_ms=0
+2026-06-18 00:54:57.932 INFO  operation_started request_id=1f1eb17070b747a897e79717c2d5269a operation=deployment.delete stage=operation_started deployment_id=4760431b-e55a-4900-a4b2-bc5f622a93e6
+2026-06-18 00:54:57.933 WARN  api.request.completed request_id=1f1eb17070b747a897e79717c2d5269a method=DELETE path=/api/v1/deployments/{id} status=404 duration_ms=0
+2026-06-18 00:54:57.941 INFO  operation_started request_id=a58dc12ec03c4f3aa1654446799d3168 operation=model_artifact.delete stage=operation_started
+2026-06-18 00:54:57.941 WARN  api.request.completed request_id=a58dc12ec03c4f3aa1654446799d3168 method=DELETE path=/api/v1/model-artifacts/{id} status=404 duration_ms=0
+2026-06-18 01:09:59.256 INFO  api.request.completed request_id=9e1f67ceeff74c4cb46954b4446da09e method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 01:09:59.353 INFO  api.request.completed request_id=976e27e49a2b4230923ab68982d7faa1 method=GET path=/metrics/targets status=200 duration_ms=0
+2026-06-18 01:10:04.517 INFO  api.request.completed request_id=9bc03635be2946869d82a79e81b2d932 method=GET path=/metrics status=200 duration_ms=1
+2026-06-18 01:10:11.270 INFO  api.request.completed request_id=53c901b19f4b440cb2aeb75da95c5203 method=GET path=/metrics status=200 duration_ms=0
+2026-06-18 01:10:16.270 INFO  api.request.completed request_id=c4315df2c22042abaeb69b0676126476 method=GET path=/metrics status=200 duration_ms=0
+2026-06-18 01:10:21.272 INFO  api.request.completed request_id=665757b23be74734869a56b13bd2703c method=GET path=/metrics status=200 duration_ms=1
+2026-06-18 01:10:26.270 INFO  api.request.completed request_id=b9d42237d51c4e5e805c3e533402ed6e method=GET path=/metrics status=200 duration_ms=0
+2026-06-18 01:10:31.108 INFO  api.request.completed request_id=dbb33ad9cf39431aa4c9f14d16e9dbc5 method=GET path=/metrics/targets status=200 duration_ms=0
+2026-06-18 01:10:31.270 INFO  api.request.completed request_id=cba3972637d34b809743183f4a4fa73c method=GET path=/metrics status=200 duration_ms=0
+2026-06-18 01:10:36.272 INFO  api.request.completed request_id=d845ebd3cbbd48a696de3581e6871122 method=GET path=/metrics status=200 duration_ms=2
+2026-06-18 01:10:41.271 INFO  api.request.completed request_id=7745917cb00b4585bf711f9386c86551 method=GET path=/metrics status=200 duration_ms=1
+2026-06-18 01:10:48.077 INFO  api.request.completed request_id=2e9ca6daf84d4365acc727d980677026 method=GET path=/metrics status=200 duration_ms=0
+2026-06-18 01:10:53.078 INFO  api.request.completed request_id=f78eb61986f34da182be22845f835362 method=GET path=/metrics status=200 duration_ms=1
+2026-06-18 01:10:58.077 INFO  api.request.completed request_id=220f73b191994989ba6c7f40e86f98df method=GET path=/metrics status=200 duration_ms=1
+2026-06-18 01:11:02.915 INFO  api.request.completed request_id=7b937feea2a94f0197d5985f11df66f3 method=GET path=/metrics/targets status=200 duration_ms=0
+2026-06-18 01:11:03.078 INFO  api.request.completed request_id=f12c24c8cdb64cb6b516093741594ef0 method=GET path=/metrics status=200 duration_ms=1
+2026-06-18 01:11:08.078 INFO  api.request.completed request_id=3a8f8ee6f8224128b926f7fc5453ba13 method=GET path=/metrics status=200 duration_ms=1
+2026-06-18 01:11:26.450 INFO  server shutting down signal=terminated
+2026-06-18 01:11:26.450 INFO  server stopped
+2026-06-18 01:11:26.450 INFO  node health checker stopped
+2026-06-18 11:43:07.337 INFO  agent token loaded from existing file file=runtime/security/agent-token.env agent_token=<redacted>
+2026-06-18 11:43:07.337 INFO  server starting version=lightai-go 0.1.0 (commit: unknown, built: unknown, go: go1.26.4, linux/amd64) listen=0.0.0.0:18080 log_level=info db_path=data/lightai.db dev_mode=false
+2026-06-18 11:43:07.339 INFO  db.open completed path=data/lightai.db duration_ms=2
+2026-06-18 11:43:07.340 INFO  db migrate: begin
+2026-06-18 11:43:07.344 INFO  db migrate: completed duration_ms=4
+2026-06-18 11:43:07.344 INFO  db.migrate completed duration_ms=4
+2026-06-18 11:43:07.394 INFO  bootstrap initialization skipped (already exists)
+2026-06-18 11:43:07.394 INFO  auth.bootstrap completed duration_ms=50
+2026-06-18 11:43:07.394 INFO  web assets not built; run 'cd web && npm run build'
+2026-06-18 11:43:07.394 INFO  node health checker started offline_threshold=20s check_interval=10s
+2026-06-18 11:43:07.394 INFO  server listening addr=0.0.0.0:18080
+2026-06-18 11:43:09.460 INFO  node re-registered node_id=node-70894186-093c-403d-87d1-08f17a690521 agent_id=agent-01
+2026-06-18 11:43:09.460 INFO  api.request.completed request_id=2c467aa0cf56451db65ee845d005b30d method=POST path=/api/v1/agent/register status=201 duration_ms=0
+2026-06-18 11:43:12.350 INFO  api.request.completed request_id=7be2aac89e30420d870d3ba9c66408b7 method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 11:43:12.357 INFO  api.request.completed request_id=0c538891dcad4d1c9ae4b53252f81415 method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 11:43:12.415 INFO  user logged in user_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb username=admin tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 11:43:12.415 INFO  api.request.completed request_id=7c695da6eb81467bb67ce202ed11ce68 method=POST path=/api/v1/auth/login status=200 duration_ms=50
+2026-06-18 11:43:33.827 INFO  agent token loaded from existing file file=runtime/security/agent-token.env agent_token=<redacted>
+2026-06-18 11:43:33.827 INFO  server starting version=lightai-go 0.1.0 (commit: unknown, built: unknown, go: go1.26.4, linux/amd64) listen=0.0.0.0:18080 log_level=info db_path=data/lightai.db dev_mode=false
+2026-06-18 11:43:33.828 INFO  db.open completed path=data/lightai.db duration_ms=0
+2026-06-18 11:43:33.828 INFO  db migrate: begin
+2026-06-18 11:43:33.828 INFO  db migrate: completed duration_ms=0
+2026-06-18 11:43:33.828 INFO  db.migrate completed duration_ms=0
+2026-06-18 11:43:33.876 INFO  bootstrap initialization skipped (already exists)
+2026-06-18 11:43:33.876 INFO  auth.bootstrap completed duration_ms=47
+2026-06-18 11:43:33.876 INFO  web assets not built; run 'cd web && npm run build'
+2026-06-18 11:43:33.876 INFO  node health checker started offline_threshold=20s check_interval=10s
+2026-06-18 11:43:33.876 INFO  server listening addr=0.0.0.0:18080
+2026-06-18 11:43:35.925 INFO  node re-registered node_id=node-70894186-093c-403d-87d1-08f17a690521 agent_id=agent-01
+2026-06-18 11:43:35.925 INFO  api.request.completed request_id=8764acfa7c1f4571bc44e0be2a73d947 method=POST path=/api/v1/agent/register status=201 duration_ms=0
+2026-06-18 11:43:38.845 INFO  api.request.completed request_id=c0f552cb71204d9b93f2a0fbecd4bad2 method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 11:43:38.852 INFO  api.request.completed request_id=fe023bf756904380818e4f6d2ff132f5 method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 11:43:38.908 INFO  user logged in user_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb username=admin tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 11:43:38.908 INFO  api.request.completed request_id=f2793096f1b145c68eceb13e584a6395 method=POST path=/api/v1/auth/login status=200 duration_ms=49
+2026-06-18 11:43:38.971 INFO  audit.recorded action=node_model_root.add resource_type=node resource_id=node-70894186-093c-403d-87d1-08f17a690521 result=failure tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=df2b5457d7f949398f5c16bd889f4365
+2026-06-18 11:43:38.971 WARN  api.request.completed request_id=df2b5457d7f949398f5c16bd889f4365 method=POST path=/api/v1/nodes/{id}/model-roots status=400 duration_ms=0
+2026-06-18 11:43:38.977 INFO  audit.recorded action=node_model_root.add resource_type=node resource_id=node-70894186-093c-403d-87d1-08f17a690521 result=failure tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=0e8ff106eeb246b983351a4aee1bfaa0
+2026-06-18 11:43:38.977 WARN  api.request.completed request_id=0e8ff106eeb246b983351a4aee1bfaa0 method=POST path=/api/v1/nodes/{id}/model-roots status=400 duration_ms=0
+2026-06-18 11:43:38.983 INFO  audit.recorded action=node_model_root.add resource_type=node resource_id=node-70894186-093c-403d-87d1-08f17a690521 result=failure tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=7b8200d4e24a4a1ab5c8dda7a4849b87
+2026-06-18 11:43:38.983 WARN  api.request.completed request_id=7b8200d4e24a4a1ab5c8dda7a4849b87 method=POST path=/api/v1/nodes/{id}/model-roots status=400 duration_ms=0
+2026-06-18 11:43:38.988 INFO  audit.recorded action=node_model_root.add resource_type=node resource_id=node-70894186-093c-403d-87d1-08f17a690521 result=failure tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=c133044d5a404025b1ac4207461e031b
+2026-06-18 11:43:38.988 WARN  api.request.completed request_id=c133044d5a404025b1ac4207461e031b method=POST path=/api/v1/nodes/{id}/model-roots status=400 duration_ms=0
+2026-06-18 11:43:38.998 INFO  audit.recorded action=node_model_root.add resource_type=node_model_root resource_id=010fa236-94b2-43ef-b382-0952d60f14d7 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=89525a352c8c419e92e23e6f94a7b692
+2026-06-18 11:43:38.998 INFO  api.request.completed request_id=89525a352c8c419e92e23e6f94a7b692 method=POST path=/api/v1/nodes/{id}/model-roots status=201 duration_ms=0
+2026-06-18 11:43:39.040 INFO  api.request.completed request_id=55d2c0e389cb4463b305939498a918fe method=POST path=/api/v1/nodes/{id}/model-paths/scan status=200 duration_ms=1
+2026-06-18 11:43:39.064 INFO  operation_started request_id=3a6e897841d343a3a226bec19cf877f8 operation=model_artifact.create stage=operation_started
+2026-06-18 11:43:39.064 INFO  operation_completed request_id=3a6e897841d343a3a226bec19cf877f8 operation=model_artifact.create stage=operation_completed duration_ms=0 id=e0256b8f-c355-4a51-bfdb-7c69e76f21f9 name=e2e-wizard-20260618114333-model tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 11:43:39.064 INFO  api.request.completed request_id=3a6e897841d343a3a226bec19cf877f8 method=POST path=/api/v1/model-artifacts status=201 duration_ms=0
+2026-06-18 11:43:39.087 INFO  api.request.completed request_id=1eb22e9eb2f14afa8d150e951d80af4d method=POST path=/api/v1/model-artifacts/{id}/locations status=201 duration_ms=0
+2026-06-18 11:43:39.304 INFO  api.request.completed request_id=08282f889de64a54b370482ca61cc12d method=POST path=/api/v1/nodes/{id}/backend-runtimes/enable status=200 duration_ms=0
+2026-06-18 11:43:39.315 INFO  operation_started request_id=40c2ce6dd5e2415da79e1032379b0100 operation=backend_runtime.clone stage=operation_started
+2026-06-18 11:43:39.315 INFO  operation_completed request_id=40c2ce6dd5e2415da79e1032379b0100 operation=backend_runtime.clone stage=operation_completed duration_ms=0 id=d9050c9b-18f6-42ac-8130-392f8e915319 original_id=runtime.vllm.nvidia-docker tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 11:43:39.315 INFO  api.request.completed request_id=40c2ce6dd5e2415da79e1032379b0100 method=POST path=/api/v1/backend-runtimes/runtime.vllm.nvidia-docker/clone status=201 duration_ms=0
+2026-06-18 11:43:39.340 INFO  api.request.completed request_id=f480a210924c40b5b9627a8444c36c8c method=POST path=/api/v1/deployments/preflight status=200 duration_ms=0
+2026-06-18 11:43:39.367 INFO  deployment.created deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 name=e2e-wizard-20260618114333-deploy tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb model_artifact_id=e0256b8f-c355-4a51-bfdb-7c69e76f21f9 backend_runtime_id=runtime.vllm.nvidia-docker request_id=62fd56be695b4b3f94ca73bc190e42f0
+2026-06-18 11:43:39.367 INFO  audit.recorded action=deployment.create resource_type=deployment resource_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=62fd56be695b4b3f94ca73bc190e42f0
+2026-06-18 11:43:39.367 INFO  api.request.completed request_id=62fd56be695b4b3f94ca73bc190e42f0 method=POST path=/api/v1/deployments status=201 duration_ms=0
+2026-06-18 11:43:39.388 INFO  operation_started request_id=1000f9a2470841319e2091410058d489 operation=deployment.start stage=operation_started deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 operation_id=4df8dbd3-7ad8-4d20-9b9f-991e41495cdf
+2026-06-18 11:43:39.388 INFO  runplan resolve: begin backend=vllm vendor=nvidia
+2026-06-18 11:43:39.388 INFO  runplan resolve: completed image=vllm/vllm-openai:latest args_count=13 errors=0 warnings=0 duration_ms=0
+2026-06-18 11:43:39.388 INFO  stage_completed request_id=1000f9a2470841319e2091410058d489 operation=deployment.start stage=preflight duration_ms=0 deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 node_id=node-70894186-093c-403d-87d1-08f17a690521 duration_ms=0
+2026-06-18 11:43:39.388 INFO  instance.start.requested operation_id=4df8dbd3-7ad8-4d20-9b9f-991e41495cdf tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad node_id=node-70894186-093c-403d-87d1-08f17a690521 gpu_ids=[28212356-3831-4f47-8693-fa6906e75a4c] request_id=1000f9a2470841319e2091410058d489
+2026-06-18 11:43:39.388 INFO  deployment.start.agent_spec.ports deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad host_port=8004 container_port=8000 health_check_path=/v1/models health_check_port_source=host_port
+2026-06-18 11:43:39.389 INFO  state_transition request_id=1000f9a2470841319e2091410058d489 operation=deployment.start stage=state_transition entity_type=gpu_lease entity_id=c93dafa7-c1ea-46c7-93d0-2c2c4245f290 state_from= state_to=reserved gpu_id=28212356-3831-4f47-8693-fa6906e75a4c instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 node_id=node-70894186-093c-403d-87d1-08f17a690521
+2026-06-18 11:43:39.389 INFO  agent_task.created operation_id=4df8dbd3-7ad8-4d20-9b9f-991e41495cdf task_id=f93beb4e-67a4-4ca0-9208-73a5584ebb1b task_type=model_instance_start deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad agent_id= node_id=node-70894186-093c-403d-87d1-08f17a690521 generation=1 attempt=1
+2026-06-18 11:43:39.389 INFO  operation_completed request_id=1000f9a2470841319e2091410058d489 operation=deployment.start stage=operation_completed duration_ms=0 deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad task_id=f93beb4e-67a4-4ca0-9208-73a5584ebb1b run_plan_id=59d0c6fc-c5d1-4608-9ebd-c10be5a308bf
+2026-06-18 11:43:39.389 INFO  audit.recorded action=instance.start resource_type=model_instance resource_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id=4df8dbd3-7ad8-4d20-9b9f-991e41495cdf request_id=1000f9a2470841319e2091410058d489
+2026-06-18 11:43:39.389 INFO  api.request.completed request_id=1000f9a2470841319e2091410058d489 method=POST path=/api/v1/deployments/{id}/start status=200 duration_ms=1
+2026-06-18 11:43:39.418 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=2175099f6a6c43ee8ad37ab5365b13e2
+2026-06-18 11:43:39.927 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 11:43:39.927 INFO  agent_task.claimed operation_id=4df8dbd3-7ad8-4d20-9b9f-991e41495cdf task_id=f93beb4e-67a4-4ca0-9208-73a5584ebb1b task_type=model_instance_start agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad generation=1
+2026-06-18 11:43:44.438 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=b8c1fd36a4d24ff8bbe3723a9e494c7b
+2026-06-18 11:43:49.458 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=bc89ff4b41ea49d58ad5e70ba4505fd5
+2026-06-18 11:43:54.480 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=77cb5d9a67aa4809ae083f52cbb38364
+2026-06-18 11:43:59.500 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=ab7293b1e7e34698839265cfb712dec8
+2026-06-18 11:44:04.518 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=f042bc5e7c8e4f27a43344f47061e42d
+2026-06-18 11:44:09.537 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=0869412049a14fc7bd00a5e8f8f707fb
+2026-06-18 11:44:14.557 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=ed6f705cf33746f697cb54f388acc072
+2026-06-18 11:44:19.579 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=b6ae0d81eb4343be8108ad4626d21ba6
+2026-06-18 11:44:24.599 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=b70e978e19cb4bdf9477e6fdb2608e24
+2026-06-18 11:44:29.618 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=c5d745e0afe14d569073e426a55ceaff
+2026-06-18 11:44:34.637 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=d2ba6406c4954d9d8aba75fa2af62173
+2026-06-18 11:44:39.656 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=4d797e20e7d2402e983ae4177577be7e
+2026-06-18 11:44:44.675 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=e2485deacd4f40feada3253a62b40e40
+2026-06-18 11:44:49.695 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=c84c0d38fe7e406292d202f098cfa620
+2026-06-18 11:44:54.715 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=9e661e15caa3438daeb9c762c1f89114
+2026-06-18 11:44:59.736 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=f09b93342c9547d29eba9dfb4ce93fbc
+2026-06-18 11:45:02.541 INFO  state_transition request_id=cd919ec9b8b84c67ad95560cb8b8d736 operation=task.result stage=state_transition entity_type=gpu_lease entity_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad state_from=reserved state_to=active instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad count=1
+2026-06-18 11:45:02.541 INFO  gpu_lease.activated instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad count=1
+2026-06-18 11:45:02.541 INFO  state_transition request_id=cd919ec9b8b84c67ad95560cb8b8d736 operation=task.result stage=state_transition entity_type=instance entity_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad state_from=pending state_to=running task_id=f93beb4e-67a4-4ca0-9208-73a5584ebb1b deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id=abb1375c3880d5c1ff4f5c3249f653b865addf6fa64f7d5c0c4315d0193dd650 duration_ms=0
+2026-06-18 11:45:02.541 INFO  instance.state.updated operation_id=4df8dbd3-7ad8-4d20-9b9f-991e41495cdf instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad old_state=pending new_state=running container_id=abb1375c3880d5c1ff4f5c3249f653b865addf6fa64f7d5c0c4315d0193dd650 endpoint_url=http://127.0.0.1:8004
+2026-06-18 11:45:02.541 INFO  task.result.processed operation_id=4df8dbd3-7ad8-4d20-9b9f-991e41495cdf task_id=f93beb4e-67a4-4ca0-9208-73a5584ebb1b instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad state=running container_id=abb1375c3880d5c1ff4f5c3249f653b865addf6fa64f7d5c0c4315d0193dd650 endpoint_url=http://127.0.0.1:8004 duration_ms=0
+2026-06-18 11:45:04.761 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=de7de976b6204bd29b3f336cbd95b663
+2026-06-18 11:45:05.928 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 11:45:05.928 INFO  agent_task.claimed operation_id=f84f265e-4599-48ad-ad6a-e189943af53d task_id=f84f265e-4599-48ad-ad6a-e189943af53d task_type=model_instance_logs agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad generation=1
+2026-06-18 11:45:05.979 INFO  api.request.completed request_id=e54917b3cc254a1583a86ed7abdcf7e0 method=GET path=/api/v1/node-run-plans/{id}/logs status=200 duration_ms=1203
+2026-06-18 11:45:05.979 WARN  slow_operation request_id=e54917b3cc254a1583a86ed7abdcf7e0 operation=api.request stage=slow_operation slow_stage=http_handler duration_ms=1203 threshold_ms=1000 method=GET path=/api/v1/node-run-plans/{id}/logs
+2026-06-18 11:45:05.990 INFO  operation_started request_id=6abbf3df46104c1fbbbb9ebf284964cf operation=deployment.stop stage=operation_started deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 operation_id=22e097ae-014d-4154-a72c-8b683b0fb13e
+2026-06-18 11:45:05.990 INFO  instance.stop.requested operation_id=22e097ae-014d-4154-a72c-8b683b0fb13e tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad container_id=abb1375c3880d5c1ff4f5c3249f653b865addf6fa64f7d5c0c4315d0193dd650 request_id=6abbf3df46104c1fbbbb9ebf284964cf
+2026-06-18 11:45:07.927 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 11:45:07.927 INFO  agent_task.claimed operation_id=22e097ae-014d-4154-a72c-8b683b0fb13e task_id=7f40f23b-69f9-4a7b-a4b9-2b4520007c81 task_type=model_instance_stop agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad generation=1
+2026-06-18 11:45:09.966 INFO  state_transition request_id=9194b47be1984b1bb0988757a2f68e75 operation=task.result stage=state_transition entity_type=instance entity_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad state_from=stopping state_to=stopped task_id=7f40f23b-69f9-4a7b-a4b9-2b4520007c81 deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 node_id=node-70894186-093c-403d-87d1-08f17a690521 duration_ms=0
+2026-06-18 11:45:09.991 INFO  instance.stop.completed operation_id=22e097ae-014d-4154-a72c-8b683b0fb13e deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instance_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad container_id=abb1375c3880d5c1ff4f5c3249f653b865addf6fa64f7d5c0c4315d0193dd650 final_state=running
+2026-06-18 11:45:09.991 INFO  operation_completed request_id=6abbf3df46104c1fbbbb9ebf284964cf operation=deployment.stop stage=operation_completed duration_ms=4001 deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 instances_stopped=1
+2026-06-18 11:45:09.991 INFO  audit.recorded action=instance.stop resource_type=model_instance resource_id=2345bdab-ff5a-4539-ac2e-5ad3ed81f9ad result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id=22e097ae-014d-4154-a72c-8b683b0fb13e request_id=6abbf3df46104c1fbbbb9ebf284964cf
+2026-06-18 11:45:09.991 INFO  api.request.completed request_id=6abbf3df46104c1fbbbb9ebf284964cf method=POST path=/api/v1/deployments/{id}/stop status=200 duration_ms=4001
+2026-06-18 11:45:09.991 WARN  slow_operation request_id=6abbf3df46104c1fbbbb9ebf284964cf operation=api.request stage=slow_operation slow_stage=http_handler duration_ms=4001 threshold_ms=1000 method=POST path=/api/v1/deployments/{id}/stop
+2026-06-18 11:45:10.002 INFO  operation_started request_id=845c3ea88fbd41b19802633b5f46150b operation=deployment.delete stage=operation_started deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6
+2026-06-18 11:45:10.003 INFO  operation_completed request_id=845c3ea88fbd41b19802633b5f46150b operation=deployment.delete stage=operation_completed duration_ms=0 deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6
+2026-06-18 11:45:10.003 INFO  api.request.completed request_id=845c3ea88fbd41b19802633b5f46150b method=DELETE path=/api/v1/deployments/{id} status=200 duration_ms=0
+2026-06-18 11:45:10.010 INFO  operation_started request_id=27bc04ba776b4602bd028d498ec6465c operation=model_artifact.delete stage=operation_started
+2026-06-18 11:45:10.011 INFO  operation_completed request_id=27bc04ba776b4602bd028d498ec6465c operation=model_artifact.delete stage=operation_completed duration_ms=0 id=e0256b8f-c355-4a51-bfdb-7c69e76f21f9
+2026-06-18 11:45:10.011 INFO  api.request.completed request_id=27bc04ba776b4602bd028d498ec6465c method=DELETE path=/api/v1/model-artifacts/{id} status=200 duration_ms=0
+2026-06-18 11:45:10.018 INFO  audit.recorded action=node_model_root.delete resource_type=node_model_root resource_id=010fa236-94b2-43ef-b382-0952d60f14d7 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=c9189f325b474a45ab0fae1d1966b822
+2026-06-18 11:45:10.018 INFO  api.request.completed request_id=c9189f325b474a45ab0fae1d1966b822 method=DELETE path=/api/v1/nodes/{id}/model-roots/{id} status=200 duration_ms=0
+2026-06-18 11:45:10.206 INFO  operation_started request_id=280da23b6f1641ec8bba79f7ae1e757a operation=deployment.stop stage=operation_started deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6 operation_id=037389e9-a056-4bf7-8a5c-54e49bfc3cb0
+2026-06-18 11:45:10.206 WARN  api.request.completed request_id=280da23b6f1641ec8bba79f7ae1e757a method=POST path=/api/v1/deployments/{id}/stop status=404 duration_ms=0
+2026-06-18 11:45:10.213 INFO  operation_started request_id=d8104e2efaa848b4a89ee222f101ad75 operation=deployment.delete stage=operation_started deployment_id=38cb9ddf-7ad5-4239-860e-2f33afe2fac6
+2026-06-18 11:45:10.213 WARN  api.request.completed request_id=d8104e2efaa848b4a89ee222f101ad75 method=DELETE path=/api/v1/deployments/{id} status=404 duration_ms=0
+2026-06-18 11:45:10.221 INFO  operation_started request_id=89ea7250861d4a9dba61a23675b1a01b operation=model_artifact.delete stage=operation_started
+2026-06-18 11:45:10.221 WARN  api.request.completed request_id=89ea7250861d4a9dba61a23675b1a01b method=DELETE path=/api/v1/model-artifacts/{id} status=404 duration_ms=0
+2026-06-18 11:52:02.729 INFO  agent token loaded from existing file file=runtime/security/agent-token.env agent_token=<redacted>
+2026-06-18 11:52:02.729 INFO  server starting version=lightai-go 0.1.0 (commit: unknown, built: unknown, go: go1.26.4, linux/amd64) listen=0.0.0.0:18080 log_level=info db_path=data/lightai.db dev_mode=false
+2026-06-18 11:52:02.729 INFO  db.open completed path=data/lightai.db duration_ms=0
+2026-06-18 11:52:02.729 INFO  db migrate: begin
+2026-06-18 11:52:02.731 INFO  db migrate: completed duration_ms=2
+2026-06-18 11:52:02.731 INFO  db.migrate completed duration_ms=2
+2026-06-18 11:52:02.780 INFO  bootstrap initialization skipped (already exists)
+2026-06-18 11:52:02.780 INFO  auth.bootstrap completed duration_ms=48
+2026-06-18 11:52:02.781 INFO  web assets not built; run 'cd web && npm run build'
+2026-06-18 11:52:02.781 INFO  node health checker started offline_threshold=20s check_interval=10s
+2026-06-18 11:52:02.781 INFO  server listening addr=0.0.0.0:18080
+2026-06-18 11:52:04.830 INFO  node re-registered node_id=node-70894186-093c-403d-87d1-08f17a690521 agent_id=agent-01
+2026-06-18 11:52:04.830 INFO  api.request.completed request_id=549c291944c943759b925962882488f9 method=POST path=/api/v1/agent/register status=201 duration_ms=0
+2026-06-18 11:52:07.750 INFO  api.request.completed request_id=0a232814e0d64ea195f8e2c843b9905d method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 11:52:15.274 INFO  agent token loaded from existing file file=runtime/security/agent-token.env agent_token=<redacted>
+2026-06-18 11:52:15.274 INFO  server starting version=lightai-go 0.1.0 (commit: unknown, built: unknown, go: go1.26.4, linux/amd64) listen=0.0.0.0:18080 log_level=info db_path=data/lightai.db dev_mode=false
+2026-06-18 11:52:15.275 INFO  db.open completed path=data/lightai.db duration_ms=0
+2026-06-18 11:52:15.275 INFO  db migrate: begin
+2026-06-18 11:52:15.275 INFO  db migrate: completed duration_ms=0
+2026-06-18 11:52:15.275 INFO  db.migrate completed duration_ms=0
+2026-06-18 11:52:15.323 INFO  bootstrap initialization skipped (already exists)
+2026-06-18 11:52:15.323 INFO  auth.bootstrap completed duration_ms=48
+2026-06-18 11:52:15.324 INFO  web assets not built; run 'cd web && npm run build'
+2026-06-18 11:52:15.324 INFO  node health checker started offline_threshold=20s check_interval=10s
+2026-06-18 11:52:15.324 INFO  server listening addr=0.0.0.0:18080
+2026-06-18 11:52:17.371 INFO  node re-registered node_id=node-70894186-093c-403d-87d1-08f17a690521 agent_id=agent-01
+2026-06-18 11:52:17.371 INFO  api.request.completed request_id=76235386972046a0b840b11bcedda4b7 method=POST path=/api/v1/agent/register status=201 duration_ms=0
+2026-06-18 11:52:20.287 INFO  api.request.completed request_id=6360392406714f5286e7d3c5e320f265 method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 11:52:20.295 INFO  api.request.completed request_id=d1dab737c0fc4e8a8c23aa7ada3e3eb6 method=GET path=/healthz status=200 duration_ms=0
+2026-06-18 11:52:20.351 INFO  user logged in user_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb username=admin tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 11:52:20.351 INFO  api.request.completed request_id=fa62bd4d387b4358b6f5c6bb54be9303 method=POST path=/api/v1/auth/login status=200 duration_ms=49
+2026-06-18 11:52:20.415 INFO  audit.recorded action=node_model_root.add resource_type=node resource_id=node-70894186-093c-403d-87d1-08f17a690521 result=failure tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=6b8060926a1543169a55ff4bdb6adb04
+2026-06-18 11:52:20.415 WARN  api.request.completed request_id=6b8060926a1543169a55ff4bdb6adb04 method=POST path=/api/v1/nodes/{id}/model-roots status=400 duration_ms=0
+2026-06-18 11:52:20.421 INFO  audit.recorded action=node_model_root.add resource_type=node resource_id=node-70894186-093c-403d-87d1-08f17a690521 result=failure tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=1956ec74fffa45baba11cabcf1baaec7
+2026-06-18 11:52:20.421 WARN  api.request.completed request_id=1956ec74fffa45baba11cabcf1baaec7 method=POST path=/api/v1/nodes/{id}/model-roots status=400 duration_ms=0
+2026-06-18 11:52:20.427 INFO  audit.recorded action=node_model_root.add resource_type=node resource_id=node-70894186-093c-403d-87d1-08f17a690521 result=failure tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=c62f5c1fddef404cba996af1bc2a81d7
+2026-06-18 11:52:20.427 WARN  api.request.completed request_id=c62f5c1fddef404cba996af1bc2a81d7 method=POST path=/api/v1/nodes/{id}/model-roots status=400 duration_ms=0
+2026-06-18 11:52:20.433 INFO  audit.recorded action=node_model_root.add resource_type=node resource_id=node-70894186-093c-403d-87d1-08f17a690521 result=failure tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=b3c3f388130f40acb7f2a47463430b0b
+2026-06-18 11:52:20.433 WARN  api.request.completed request_id=b3c3f388130f40acb7f2a47463430b0b method=POST path=/api/v1/nodes/{id}/model-roots status=400 duration_ms=0
+2026-06-18 11:52:20.443 INFO  audit.recorded action=node_model_root.add resource_type=node_model_root resource_id=ea73d735-279b-4273-91e9-f4dab23296b8 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=06de42dd2b6f4df6800b50f2fd20414a
+2026-06-18 11:52:20.443 INFO  api.request.completed request_id=06de42dd2b6f4df6800b50f2fd20414a method=POST path=/api/v1/nodes/{id}/model-roots status=201 duration_ms=0
+2026-06-18 11:52:20.484 INFO  api.request.completed request_id=0e244f57d77e465ca2c388d66e259e65 method=POST path=/api/v1/nodes/{id}/model-paths/scan status=200 duration_ms=0
+2026-06-18 11:52:20.510 INFO  operation_started request_id=a0a1224994ce4f93a4ecdd78cd84e0e4 operation=model_artifact.create stage=operation_started
+2026-06-18 11:52:20.510 INFO  operation_completed request_id=a0a1224994ce4f93a4ecdd78cd84e0e4 operation=model_artifact.create stage=operation_completed duration_ms=0 id=175a56c1-b3d1-4566-8faf-2d4f9962a465 name=e2e-wizard-20260618115214-model tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 11:52:20.510 INFO  api.request.completed request_id=a0a1224994ce4f93a4ecdd78cd84e0e4 method=POST path=/api/v1/model-artifacts status=201 duration_ms=0
+2026-06-18 11:52:20.532 INFO  api.request.completed request_id=6bc454f116b0435188a54447823b2ee3 method=POST path=/api/v1/model-artifacts/{id}/locations status=201 duration_ms=0
+2026-06-18 11:52:20.749 INFO  api.request.completed request_id=494a7515436d44b8b6684bb1e351d023 method=POST path=/api/v1/nodes/{id}/backend-runtimes/enable status=200 duration_ms=0
+2026-06-18 11:52:20.760 INFO  operation_started request_id=3e2b492313e445c3b6b03714d1abd87a operation=backend_runtime.clone stage=operation_started
+2026-06-18 11:52:20.761 INFO  operation_completed request_id=3e2b492313e445c3b6b03714d1abd87a operation=backend_runtime.clone stage=operation_completed duration_ms=0 id=b0de8b7e-4550-4317-9abc-14454e8d2c19 original_id=runtime.vllm.nvidia-docker tenant_id=a0000000-0000-0000-0000-000000000001
+2026-06-18 11:52:20.761 INFO  api.request.completed request_id=3e2b492313e445c3b6b03714d1abd87a method=POST path=/api/v1/backend-runtimes/runtime.vllm.nvidia-docker/clone status=201 duration_ms=0
+2026-06-18 11:52:20.786 INFO  api.request.completed request_id=960be4cdf66249ea8f1179cf5139b2f7 method=POST path=/api/v1/deployments/preflight status=200 duration_ms=0
+2026-06-18 11:52:20.811 INFO  deployment.created deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 name=e2e-wizard-20260618115214-deploy tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb model_artifact_id=175a56c1-b3d1-4566-8faf-2d4f9962a465 backend_runtime_id=runtime.vllm.nvidia-docker request_id=9642a2a3dd34486e97a79c2028fca286
+2026-06-18 11:52:20.811 INFO  audit.recorded action=deployment.create resource_type=deployment resource_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=9642a2a3dd34486e97a79c2028fca286
+2026-06-18 11:52:20.811 INFO  api.request.completed request_id=9642a2a3dd34486e97a79c2028fca286 method=POST path=/api/v1/deployments status=201 duration_ms=0
+2026-06-18 11:52:20.832 INFO  operation_started request_id=8b26a5c52fdb4b789e74edafea17a9ce operation=deployment.start stage=operation_started deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 operation_id=d0b14f70-94be-4c36-8f69-bccb8c3713aa
+2026-06-18 11:52:20.832 INFO  runplan resolve: begin backend=vllm vendor=nvidia
+2026-06-18 11:52:20.832 INFO  runplan resolve: completed image=vllm/vllm-openai:latest args_count=13 errors=0 warnings=0 duration_ms=0
+2026-06-18 11:52:20.832 INFO  stage_completed request_id=8b26a5c52fdb4b789e74edafea17a9ce operation=deployment.start stage=preflight duration_ms=0 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 node_id=node-70894186-093c-403d-87d1-08f17a690521 duration_ms=0
+2026-06-18 11:52:20.832 INFO  instance.start.requested operation_id=d0b14f70-94be-4c36-8f69-bccb8c3713aa tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 node_id=node-70894186-093c-403d-87d1-08f17a690521 gpu_ids=[28212356-3831-4f47-8693-fa6906e75a4c] request_id=8b26a5c52fdb4b789e74edafea17a9ce
+2026-06-18 11:52:20.832 INFO  deployment.start.agent_spec.ports deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 host_port=8004 container_port=8000 health_check_path=/v1/models health_check_port_source=host_port
+2026-06-18 11:52:20.832 INFO  state_transition request_id=8b26a5c52fdb4b789e74edafea17a9ce operation=deployment.start stage=state_transition entity_type=gpu_lease entity_id=c597a119-92f5-4107-ae93-3ae9756b882e state_from= state_to=reserved gpu_id=28212356-3831-4f47-8693-fa6906e75a4c instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 node_id=node-70894186-093c-403d-87d1-08f17a690521
+2026-06-18 11:52:20.832 INFO  agent_task.created operation_id=d0b14f70-94be-4c36-8f69-bccb8c3713aa task_id=ef6537e2-dbb6-4a12-a7e7-a3e61da57fe8 task_type=model_instance_start deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 agent_id= node_id=node-70894186-093c-403d-87d1-08f17a690521 generation=1 attempt=1
+2026-06-18 11:52:20.832 INFO  operation_completed request_id=8b26a5c52fdb4b789e74edafea17a9ce operation=deployment.start stage=operation_completed duration_ms=0 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 task_id=ef6537e2-dbb6-4a12-a7e7-a3e61da57fe8 run_plan_id=763b33c7-e678-43a1-a3e4-1a8f3b433201
+2026-06-18 11:52:20.832 INFO  audit.recorded action=instance.start resource_type=model_instance resource_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id=d0b14f70-94be-4c36-8f69-bccb8c3713aa request_id=8b26a5c52fdb4b789e74edafea17a9ce
+2026-06-18 11:52:20.832 INFO  api.request.completed request_id=8b26a5c52fdb4b789e74edafea17a9ce method=POST path=/api/v1/deployments/{id}/start status=200 duration_ms=0
+2026-06-18 11:52:20.861 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=88d2cbfd8503418a829dbf7b2e5a3e2e
+2026-06-18 11:52:21.374 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 11:52:21.374 INFO  agent_task.claimed operation_id=d0b14f70-94be-4c36-8f69-bccb8c3713aa task_id=ef6537e2-dbb6-4a12-a7e7-a3e61da57fe8 task_type=model_instance_start agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 generation=1
+2026-06-18 11:52:25.880 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=e0651e151c2d4a8eb93148dda28f802d
+2026-06-18 11:52:30.900 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=08728f75b5c344aa8e86fcfa78608440
+2026-06-18 11:52:35.919 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=0d2a533ad6fe4d62b709ee3350c8e223
+2026-06-18 11:52:40.941 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=94a4860429114941ad29267fc7de0c8c
+2026-06-18 11:52:45.961 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=cfddffe6716a4d0889571da528717201
+2026-06-18 11:52:50.981 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=4e021668bdfb4b44b4c6c98b4a3c8b16
+2026-06-18 11:52:56.000 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=27cf956981fb4fa4bb30e7279891d0b1
+2026-06-18 11:53:01.021 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=1db11fbff52d428781fdb999667fbc88
+2026-06-18 11:53:06.040 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=abd96b77cbc84861bc016fccaf0f71ea
+2026-06-18 11:53:11.061 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=6971645c70334b12a9b7467f12361777
+2026-06-18 11:53:16.081 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=a3e2d84590c7439093ff75e5d2f4b329
+2026-06-18 11:53:21.101 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=3c554d9ee02f43f3b15e49c89d646c05
+2026-06-18 11:53:26.120 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=7e7a347e1c2c4ed78bc8240034db2f57
+2026-06-18 11:53:31.140 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=f9ed8b3b03af4b7d93898ce9add19609
+2026-06-18 11:53:36.160 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=194b07f0ec8f4138a84e314579a49022
+2026-06-18 11:53:39.861 INFO  state_transition request_id=7191c18c8222417a8c20b4334b9c238a operation=task.result stage=state_transition entity_type=gpu_lease entity_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 state_from=reserved state_to=active instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 count=1
+2026-06-18 11:53:39.861 INFO  gpu_lease.activated instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 count=1
+2026-06-18 11:53:39.861 INFO  state_transition request_id=7191c18c8222417a8c20b4334b9c238a operation=task.result stage=state_transition entity_type=instance entity_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 state_from=pending state_to=running task_id=ef6537e2-dbb6-4a12-a7e7-a3e61da57fe8 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 node_id=node-70894186-093c-403d-87d1-08f17a690521 container_id=9914a48cd8bf6d6fba531ce25f35a0f23becbd5d6102e1d4eb9b97d709aaad8d duration_ms=0
+2026-06-18 11:53:39.861 INFO  instance.state.updated operation_id=d0b14f70-94be-4c36-8f69-bccb8c3713aa instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 old_state=pending new_state=running container_id=9914a48cd8bf6d6fba531ce25f35a0f23becbd5d6102e1d4eb9b97d709aaad8d endpoint_url=http://127.0.0.1:8004
+2026-06-18 11:53:39.861 INFO  task.result.processed operation_id=d0b14f70-94be-4c36-8f69-bccb8c3713aa task_id=ef6537e2-dbb6-4a12-a7e7-a3e61da57fe8 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 state=running container_id=9914a48cd8bf6d6fba531ce25f35a0f23becbd5d6102e1d4eb9b97d709aaad8d endpoint_url=http://127.0.0.1:8004 duration_ms=0
+2026-06-18 11:53:41.185 INFO  model_instances.list_completed operation=list_model_instances count=1 duration_ms=0 request_id=0e1ad2a337c240efa834f74d8d57cb0b
+2026-06-18 11:53:41.375 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 11:53:41.375 INFO  agent_task.claimed operation_id=1d18a6f2-c88d-4e65-8e68-093ab77fe5a8 task_id=1d18a6f2-c88d-4e65-8e68-093ab77fe5a8 task_type=model_instance_logs agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 generation=1
+2026-06-18 11:53:41.401 INFO  api.request.completed request_id=b66e1f954c094d9e8be5aff0d879be03 method=GET path=/api/v1/node-run-plans/{id}/logs status=200 duration_ms=202
+2026-06-18 11:53:41.413 INFO  operation_started request_id=f8af713423da480e9815a04d0c124353 operation=deployment.stop stage=operation_started deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 operation_id=cbff4a26-4688-4580-bc49-022e032975c7
+2026-06-18 11:53:41.413 INFO  instance.stop.requested operation_id=cbff4a26-4688-4580-bc49-022e032975c7 tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 container_id=9914a48cd8bf6d6fba531ce25f35a0f23becbd5d6102e1d4eb9b97d709aaad8d request_id=f8af713423da480e9815a04d0c124353
+2026-06-18 11:53:43.373 INFO  claim: claimed tasks node_id=node-70894186-093c-403d-87d1-08f17a690521 claimed_count=1
+2026-06-18 11:53:43.373 INFO  agent_task.claimed operation_id=cbff4a26-4688-4580-bc49-022e032975c7 task_id=cc721c85-f3b8-423a-b494-067ce6cf6a5f task_type=model_instance_stop agent_id=agent-01 node_id=node-70894186-093c-403d-87d1-08f17a690521 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 generation=1
+2026-06-18 11:53:45.314 INFO  state_transition request_id=17d1f1bc24154c16bf284e538704fef0 operation=task.result stage=state_transition entity_type=instance entity_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 state_from=stopping state_to=stopped task_id=cc721c85-f3b8-423a-b494-067ce6cf6a5f deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 node_id=node-70894186-093c-403d-87d1-08f17a690521 duration_ms=0
+2026-06-18 11:53:45.413 INFO  instance.stop.completed operation_id=cbff4a26-4688-4580-bc49-022e032975c7 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instance_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 container_id=9914a48cd8bf6d6fba531ce25f35a0f23becbd5d6102e1d4eb9b97d709aaad8d final_state=running
+2026-06-18 11:53:45.413 INFO  operation_completed request_id=f8af713423da480e9815a04d0c124353 operation=deployment.stop stage=operation_completed duration_ms=4000 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 instances_stopped=1
+2026-06-18 11:53:45.413 INFO  audit.recorded action=instance.stop resource_type=model_instance resource_id=20ed9a85-189f-4c63-8ce7-b736e80549b8 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id=cbff4a26-4688-4580-bc49-022e032975c7 request_id=f8af713423da480e9815a04d0c124353
+2026-06-18 11:53:45.413 INFO  api.request.completed request_id=f8af713423da480e9815a04d0c124353 method=POST path=/api/v1/deployments/{id}/stop status=200 duration_ms=4000
+2026-06-18 11:53:45.413 WARN  slow_operation request_id=f8af713423da480e9815a04d0c124353 operation=api.request stage=slow_operation slow_stage=http_handler duration_ms=4000 threshold_ms=1000 method=POST path=/api/v1/deployments/{id}/stop
+2026-06-18 11:53:45.424 INFO  operation_started request_id=74784c389cdf425a80f6e172cd85799b operation=deployment.delete stage=operation_started deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6
+2026-06-18 11:53:45.425 INFO  operation_completed request_id=74784c389cdf425a80f6e172cd85799b operation=deployment.delete stage=operation_completed duration_ms=0 deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6
+2026-06-18 11:53:45.425 INFO  api.request.completed request_id=74784c389cdf425a80f6e172cd85799b method=DELETE path=/api/v1/deployments/{id} status=200 duration_ms=0
+2026-06-18 11:53:45.432 INFO  operation_started request_id=0afc704eadc344e280d3470e1ae70b6a operation=model_artifact.delete stage=operation_started
+2026-06-18 11:53:45.432 INFO  operation_completed request_id=0afc704eadc344e280d3470e1ae70b6a operation=model_artifact.delete stage=operation_completed duration_ms=0 id=175a56c1-b3d1-4566-8faf-2d4f9962a465
+2026-06-18 11:53:45.432 INFO  api.request.completed request_id=0afc704eadc344e280d3470e1ae70b6a method=DELETE path=/api/v1/model-artifacts/{id} status=200 duration_ms=0
+2026-06-18 11:53:45.440 INFO  audit.recorded action=node_model_root.delete resource_type=node_model_root resource_id=ea73d735-279b-4273-91e9-f4dab23296b8 result=success tenant_id=a0000000-0000-0000-0000-000000000001 actor_id=a1b054b8-58aa-435f-bfd8-b15dbf0945bb operation_id= request_id=3e5e2f92255a420b8ee6da6913b2ef3c
+2026-06-18 11:53:45.440 INFO  api.request.completed request_id=3e5e2f92255a420b8ee6da6913b2ef3c method=DELETE path=/api/v1/nodes/{id}/model-roots/{id} status=200 duration_ms=0
+2026-06-18 11:53:45.599 INFO  operation_started request_id=bb326d88ad214c4f9d6616a2b06fd750 operation=deployment.stop stage=operation_started deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6 operation_id=d65901fd-a2b2-400a-a637-a2c826a67a8a
+2026-06-18 11:53:45.600 WARN  api.request.completed request_id=bb326d88ad214c4f9d6616a2b06fd750 method=POST path=/api/v1/deployments/{id}/stop status=404 duration_ms=0
+2026-06-18 11:53:45.608 INFO  operation_started request_id=94d1d09d1cdb476490e128f75b6abceb operation=deployment.delete stage=operation_started deployment_id=02440bae-6ddf-4d6d-a7e9-71fa68ee8cb6
+2026-06-18 11:53:45.608 WARN  api.request.completed request_id=94d1d09d1cdb476490e128f75b6abceb method=DELETE path=/api/v1/deployments/{id} status=404 duration_ms=0
+2026-06-18 11:53:45.615 INFO  operation_started request_id=e626b97e0e4149ecb04700897b6c74ef operation=model_artifact.delete stage=operation_started
+2026-06-18 11:53:45.616 WARN  api.request.completed request_id=e626b97e0e4149ecb04700897b6c74ef method=DELETE path=/api/v1/model-artifacts/{id} status=404 duration_ms=0

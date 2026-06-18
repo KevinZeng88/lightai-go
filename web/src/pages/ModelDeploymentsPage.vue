@@ -3,7 +3,6 @@
     <div class="page-header">
       <h2>{{ $t('deployments.title') }}</h2>
       <div>
-        <el-button type="primary" @click="showCreate">{{ $t('common.create') }}</el-button>
         <el-button type="primary" @click="startWizard">{{ $t('startWizard.title') }}</el-button>
       </div>
     </div>
@@ -42,6 +41,8 @@
     <el-dialog v-model="wizardVisible" :title="$t('startWizard.title')" width="800px" :close-on-click-modal="false">
       <el-steps :active="wizardStep" finish-status="success" simple style="margin-bottom:20px">
         <el-step :title="$t('startWizard.selectModel')" />
+        <el-step :title="$t('startWizard.selectBackend')" />
+        <el-step :title="$t('startWizard.selectVersion')" />
         <el-step :title="$t('startWizard.selectRuntime')" />
         <el-step :title="$t('startWizard.preflight')" />
         <el-step :title="$t('startWizard.start')" />
@@ -55,16 +56,36 @@
       </div>
 
       <div v-if="wizardStep === 1">
-        <el-select v-model="wizardRuntimeId" :placeholder="$t('startWizard.selectRuntime')" style="width:100%" filterable>
-          <el-option v-for="r in runtimes" :key="r.id" :label="`${r.name} (${r.vendor})`" :value="r.id" />
+        <el-select v-model="wizardBackendId" :placeholder="$t('startWizard.selectBackend')" style="width:100%" filterable @change="onBackendSelected">
+          <el-option v-for="b in backends" :key="b.id" :label="b.display_name || b.name" :value="b.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="wizardStep=0">{{ $t('common.prev') }}</el-button>
+          <el-button type="primary" :disabled="!wizardBackendId" @click="wizardStep=2">{{ $t('common.next') }}</el-button>
+        </div>
+      </div>
+
+      <div v-if="wizardStep === 2">
+        <el-select v-model="wizardVersionId" :placeholder="$t('startWizard.selectVersion')" style="width:100%" filterable @change="wizardRuntimeId=''">
+          <el-option v-for="v in versions" :key="v.id" :label="v.display_name || v.version" :value="v.id" />
+        </el-select>
+        <div style="margin-top:12px;text-align:right">
+          <el-button @click="wizardStep=1">{{ $t('common.prev') }}</el-button>
+          <el-button type="primary" :disabled="!wizardVersionId" @click="wizardStep=3">{{ $t('common.next') }}</el-button>
+        </div>
+      </div>
+
+      <div v-if="wizardStep === 3">
+        <el-select v-model="wizardRuntimeId" :placeholder="$t('startWizard.selectRuntime')" style="width:100%" filterable>
+          <el-option v-for="r in filteredRuntimes" :key="r.id" :label="`${r.name} (${r.vendor})`" :value="r.id" />
+        </el-select>
+        <div style="margin-top:12px;text-align:right">
+          <el-button @click="wizardStep=2">{{ $t('common.prev') }}</el-button>
           <el-button type="primary" :disabled="!wizardRuntimeId" @click="doPreflight">{{ $t('startWizard.preflight') }}</el-button>
         </div>
       </div>
 
-      <div v-if="wizardStep === 2" v-loading="preflightLoading">
+      <div v-if="wizardStep === 4" v-loading="preflightLoading">
         <el-alert v-if="preflightResult" :type="preflightResult.can_run ? 'success' : 'warning'" :closable="false">
           {{ preflightResult.can_run ? $t('preflight.canRun') : $t('preflight.noNodes') }}
         </el-alert>
@@ -78,18 +99,18 @@
           <el-alert v-for="e in preflightResult.errors" :key="e" type="error" :title="e" show-icon :closable="false" />
         </div>
         <div style="margin-top:12px;text-align:right">
-          <el-button @click="wizardStep=1">{{ $t('common.prev') }}</el-button>
-          <el-button type="primary" :disabled="!preflightResult?.can_run" @click="wizardStep=3">{{ $t('common.next') }}</el-button>
+          <el-button @click="wizardStep=3">{{ $t('common.prev') }}</el-button>
+          <el-button type="primary" :disabled="!preflightResult?.can_run" @click="wizardStep=5">{{ $t('common.next') }}</el-button>
         </div>
       </div>
 
-      <div v-if="wizardStep === 3">
+      <div v-if="wizardStep === 5">
         <el-form label-width="120px">
           <el-form-item :label="$t('modelLocations.node')"><el-input v-model="wizardStartNode" disabled /></el-form-item>
           <el-form-item :label="$t('deployments.hostPort')"><el-input v-model.number="wizardHostPort" /></el-form-item>
         </el-form>
         <div style="margin-top:12px;text-align:right">
-          <el-button @click="wizardStep=2">{{ $t('common.prev') }}</el-button>
+          <el-button @click="wizardStep=4">{{ $t('common.prev') }}</el-button>
           <el-button type="primary" @click="doWizardStart" :loading="wizardStarting">{{ $t('startWizard.start') }}</el-button>
         </div>
       </div>
@@ -102,20 +123,20 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 
 const loading = ref(false); const saving = ref(false)
-const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([])
+const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([]); const backends = ref<any[]>([]); const versions = ref<any[]>([])
 const createVisible = ref(false); const dryRunVisible = ref(false); const runPlanVisible = ref(false)
 const dryRunResult = ref<any>(null); const runPlanData = ref('')
 const createForm = ref({ name: '', model_artifact_id: '', backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
 const wizardVisible = ref(false); const wizardStep = ref(0)
-const wizardModelId = ref(''); const wizardRuntimeId = ref('')
+const wizardModelId = ref(''); const wizardBackendId = ref(''); const wizardVersionId = ref(''); const wizardRuntimeId = ref('')
 const wizardStartNode = ref(''); const wizardHostPort = ref(8004)
 const preflightLoading = ref(false); const preflightResult = ref<any>(null)
 const wizardStarting = ref(false)
@@ -127,6 +148,7 @@ const { loadNodes, nodeLabel } = useNodeLabels()
 async function loadRefs() {
   try { models.value = await apiClient.get('/model-artifacts') } catch { models.value = [] }
   try { runtimes.value = await apiClient.get('/backend-runtimes') } catch { runtimes.value = [] }
+  try { backends.value = await apiClient.get('/backends') } catch { backends.value = [] }
   loadNodes()
 }
 
@@ -157,9 +179,17 @@ async function handleDelete(row: any) {
 }
 
 // ---- Start Wizard ----
-function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardModelId.value = ''; wizardRuntimeId.value = ''; preflightResult.value = null; wizardStartNode.value = ''; loadRefs() }
+const filteredRuntimes = computed(() => runtimes.value.filter((r) => !wizardVersionId.value || r.backend_version_id === wizardVersionId.value))
+
+async function onBackendSelected() {
+  wizardVersionId.value = ''
+  wizardRuntimeId.value = ''
+  try { versions.value = await apiClient.get(`/backends/${wizardBackendId.value}/versions`) } catch { versions.value = [] }
+}
+
+function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardModelId.value = ''; wizardBackendId.value = ''; wizardVersionId.value = ''; wizardRuntimeId.value = ''; versions.value = []; preflightResult.value = null; wizardStartNode.value = ''; loadRefs() }
 async function doPreflight() {
-  preflightLoading.value = true; wizardStep.value = 2
+  preflightLoading.value = true; wizardStep.value = 4
   try {
     preflightResult.value = await apiClient.post('/deployments/preflight', { model_artifact_id: wizardModelId.value, backend_runtime_id: wizardRuntimeId.value, host_port: wizardHostPort.value })
     if (preflightResult.value?.candidate_nodes?.length) wizardStartNode.value = preflightResult.value.candidate_nodes[0].node_id

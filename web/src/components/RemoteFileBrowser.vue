@@ -3,14 +3,15 @@
     <!-- Root picker (shown when no root selected) -->
     <div v-if="!currentRoot" class="browser-picker">
       <div class="picker-label">{{ $t('fileBrowser.selectRoot') }}</div>
+      <el-empty v-if="!rootsLoading && !roots.length" :description="$t('fileBrowser.noRoots')" />
       <div class="picker-row">
-        <el-select v-model="selectedRoot" :placeholder="$t('fileBrowser.selectRoot')" style="flex:1" @change="onRootSelected" :loading="rootsLoading">
-          <el-option v-for="r in mergedRoots" :key="r.root" :label="r.label" :value="r.root" />
+        <el-select v-model="selectedRootId" :placeholder="$t('fileBrowser.selectRoot')" style="flex:1" @change="onRootSelected" :loading="rootsLoading">
+          <el-option v-for="r in roots" :key="r.id" :label="r.path" :value="r.id" />
         </el-select>
         <el-button :icon="Plus" size="small" @click="showAddRoot">{{ $t('fileBrowser.addRoot') }}</el-button>
       </div>
-      <div v-if="dynamicRoots.length" class="dynamic-roots">
-        <el-tag v-for="r in dynamicRoots" :key="r" closable size="small" @close="doRemoveRoot(r)">{{ r }}</el-tag>
+      <div v-if="roots.length" class="dynamic-roots">
+        <el-tag v-for="r in roots" :key="r.id" closable size="small" @close="doRemoveRoot(r)">{{ r.path }}</el-tag>
       </div>
     </div>
 
@@ -54,7 +55,7 @@
         <el-table-column prop="mod_time" :label="$t('fileBrowser.modTime')" width="180" />
         <el-table-column :label="$t('fileBrowser.select')" width="130">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="$emit('select', { ...row, root: currentRoot, relative_path: currentPath ? currentPath + '/' + row.name : row.name, absolute_path: currentRoot + '/' + currentPath + (currentPath?'/':'') + row.name })">
+            <el-button size="small" type="primary" @click="emitSelect(row)">
               {{ row.is_dir ? $t('fileBrowser.selectDirectory') : $t('fileBrowser.selectFile') }}
             </el-button>
           </template>
@@ -78,22 +79,17 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
 const props = defineProps<{ nodeId: string; root?: string }>()
-defineEmits<{ select: [entry: any] }>()
+const emit = defineEmits<{ select: [entry: any] }>()
 
 const loading = ref(false); const rootsLoading = ref(false)
-const entries = ref<any[]>([]); const staticRoots = ref<any[]>([]); const dynamicRoots = ref<string[]>([])
-const error = ref(''); const selectedRoot = ref('')
-const currentRoot = ref(props.root || '')
+const entries = ref<any[]>([]); const roots = ref<any[]>([])
+const error = ref(''); const selectedRootId = ref('')
+const currentRoot = ref('')
+const currentRootId = ref('')
 const currentPath = ref(''); const truncated = ref(false)
 
 // Add root dialog
 const addRootVisible = ref(false); const newRootPath = ref('')
-
-const mergedRoots = computed(() => {
-  const all = [...staticRoots.value]
-  for (const dr of dynamicRoots.value) { all.push({ root: dr, label: dr }) }
-  return all
-})
 
 const breadcrumbs = computed(() => {
   const parts: { label: string; path: string }[] = []
@@ -110,15 +106,17 @@ async function fetchRoots() {
   if (!props.nodeId) return
   rootsLoading.value = true
   try {
-    const resp = await apiClient.get(`/nodes/${props.nodeId}/files?root=&path=`)
-    staticRoots.value = resp.allowed_roots || []
-    if (props.root) { currentRoot.value = props.root; loadDir() }
-  } catch { staticRoots.value = [] }
-  // Also fetch dynamic roots from DB
-  try {
-    const dr = await apiClient.get(`/nodes/${props.nodeId}/model-browser/roots`)
-    dynamicRoots.value = dr.extra_roots || []
-  } catch { dynamicRoots.value = [] }
+    roots.value = await apiClient.get(`/nodes/${props.nodeId}/model-roots`)
+    if (props.root) {
+      const matched = roots.value.find((r) => r.path === props.root || r.root === props.root)
+      if (matched) {
+        currentRoot.value = matched.path
+        currentRootId.value = matched.id
+        selectedRootId.value = matched.id
+        loadDir()
+      }
+    }
+  } catch { roots.value = [] }
   rootsLoading.value = false
 }
 
@@ -126,28 +124,35 @@ function showAddRoot() { newRootPath.value = ''; addRootVisible.value = true }
 async function doAddRoot() {
   if (!newRootPath.value) return
   try {
-    const resp = await apiClient.post(`/nodes/${props.nodeId}/model-browser/roots`, { root: newRootPath.value })
-    dynamicRoots.value = resp.extra_roots || []
+    await apiClient.post(`/nodes/${props.nodeId}/model-roots`, { path: newRootPath.value })
+    await fetchRoots()
     ElMessage.success(t('fileBrowser.rootAdded'))
     addRootVisible.value = false
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+  } catch (e: any) { ElMessage.error(e?.message || t('common.requestFailed')) }
 }
-async function doRemoveRoot(root: string) {
+async function doRemoveRoot(root: any) {
   try {
-    const resp = await apiClient.delete(`/nodes/${props.nodeId}/model-browser/roots?root=${encodeURIComponent(root)}`)
-    dynamicRoots.value = resp.extra_roots || []
+    await apiClient.delete(`/nodes/${props.nodeId}/model-roots/${root.id}`)
+    await fetchRoots()
     ElMessage.success(t('fileBrowser.rootRemoved'))
-  } catch (e: any) { ElMessage.error(e?.message || 'Failed') }
+  } catch (e: any) { ElMessage.error(e?.message || t('common.requestFailed')) }
 }
 
-function onRootSelected(root: string) { currentRoot.value = root; currentPath.value = ''; loadDir() }
-function switchRoot() { currentRoot.value = ''; currentPath.value = ''; entries.value = []; selectedRoot.value = ''; fetchRoots() }
+function onRootSelected(rootId: string) {
+  const root = roots.value.find((r) => r.id === rootId)
+  if (!root) return
+  currentRootId.value = root.id
+  currentRoot.value = root.path
+  currentPath.value = ''
+  loadDir()
+}
+function switchRoot() { currentRoot.value = ''; currentRootId.value = ''; currentPath.value = ''; entries.value = []; selectedRootId.value = ''; fetchRoots() }
 
 async function loadDir(path?: string) {
   if (!props.nodeId || !currentRoot.value) return
   loading.value = true; error.value = ''
   try {
-    const params = new URLSearchParams(); params.set('root', currentRoot.value); params.set('path', path || currentPath.value || ''); params.set('limit', '200')
+    const params = new URLSearchParams(); params.set('root_id', currentRootId.value); params.set('path', path || currentPath.value || ''); params.set('limit', '200')
     const resp = await apiClient.get(`/nodes/${props.nodeId}/files?${params}`)
     entries.value = resp.entries || []
     truncated.value = resp.truncated || false
@@ -167,6 +172,19 @@ function onRowDblClick(row: any) {
   currentPath.value = currentPath.value ? currentPath.value + '/' + row.name : row.name; loadDir(currentPath.value)
 }
 function refresh() { loadDir() }
+
+function emitSelect(row: any) {
+  const rel = currentPath.value ? currentPath.value + '/' + row.name : row.name
+  emit('select', {
+    ...row,
+    root_id: currentRootId.value,
+    root: currentRoot.value,
+    model_root: currentRoot.value,
+    relative_path: rel,
+    absolute_path: currentRoot.value + '/' + rel,
+    path_type: row.is_dir ? 'directory' : 'file',
+  })
+}
 
 function formatSize(bytes: number): string {
   if (!bytes || bytes === 0) return '-'

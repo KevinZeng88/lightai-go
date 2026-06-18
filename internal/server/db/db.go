@@ -138,11 +138,16 @@ func (db *DB) Migrate() error {
 		}
 	}
 
-		if currentVersion < 14 {
-			if err := db.migrateV14(); err != nil {
-				return fmt.Errorf("migrate v14: %w", err)
-			}
+	if currentVersion < 14 {
+		if err := db.migrateV14(); err != nil {
+			return fmt.Errorf("migrate v14: %w", err)
 		}
+	}
+	if currentVersion < 15 {
+		if err := db.migrateV15(); err != nil {
+			return fmt.Errorf("migrate v15: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -1243,6 +1248,34 @@ func (db *DB) migrateV14() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (14, 'V14: model browser dynamic roots')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV15 adds first-class node model root policy rows.
+func (db *DB) migrateV15() error {
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS node_model_roots (
+		id TEXT PRIMARY KEY,
+		node_id TEXT NOT NULL REFERENCES nodes(id),
+		path TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'enabled',
+		source TEXT NOT NULL DEFAULT 'user',
+		description TEXT NOT NULL DEFAULT '',
+		created_by TEXT NOT NULL DEFAULT '',
+		tenant_id TEXT NOT NULL DEFAULT '',
+		last_checked_at TEXT,
+		last_error TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(node_id, path)
+	)`); err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_node_model_roots_node ON node_model_roots(node_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_node_model_roots_status ON node_model_roots(status)`)
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (15, 'V15: node model roots policy')`); err != nil {
 		return err
 	}
 	return nil

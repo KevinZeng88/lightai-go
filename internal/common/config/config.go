@@ -88,11 +88,13 @@ type HeartbeatConfig struct {
 
 // ModelBrowserConfig holds model file browser settings.
 type ModelBrowserConfig struct {
-	Enabled        bool     `yaml:"enabled" json:"enabled"`
-	AllowedRoots   []string `yaml:"allowed_roots" json:"allowed_roots"`
-	MaxEntries     int      `yaml:"max_entries" json:"max_entries"`
-	MaxScanDepth   int      `yaml:"max_scan_depth" json:"max_scan_depth"`
-	FollowSymlinks bool     `yaml:"follow_symlinks" json:"follow_symlinks"`
+	Enabled             bool     `yaml:"enabled" json:"enabled"`
+	AllowedRoots        []string `yaml:"allowed_roots" json:"allowed_roots"`
+	DeniedRoots         []string `yaml:"denied_roots" json:"denied_roots"`
+	MaxEntries          int      `yaml:"max_entries" json:"max_entries"`
+	MaxScanDepth        int      `yaml:"max_scan_depth" json:"max_scan_depth"`
+	FollowSymlinks      bool     `yaml:"follow_symlinks" json:"follow_symlinks"`
+	AllowRuntimeRootAdd bool     `yaml:"allow_runtime_root_add" json:"allow_runtime_root_add"`
 }
 
 // TaskConfig holds agent task execution settings.
@@ -214,6 +216,15 @@ func DefaultAgentConfig() AgentConfig {
 		},
 		GPU: GPUProfileConfig{
 			Profile: "production",
+		},
+		ModelBrowser: ModelBrowserConfig{
+			Enabled:             true,
+			AllowedRoots:        []string{},
+			DeniedRoots:         []string{"/", "/etc", "/root", "/boot", "/proc", "/sys", "/dev", "/run", "/var/run", "/var/lib/docker"},
+			MaxEntries:          1000,
+			MaxScanDepth:        2,
+			FollowSymlinks:      false,
+			AllowRuntimeRootAdd: true,
 		},
 		Logging: LoggingConfig{
 			Level:         "info",

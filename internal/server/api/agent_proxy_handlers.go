@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"net/url"
 )
 
 // HandleProxyNodeFiles proxies file browsing requests to the agent's /files endpoint.
@@ -18,21 +18,37 @@ func (h *AgentHandler) HandleProxyNodeFiles(w http.ResponseWriter, r *http.Reque
 	if port == 0 {
 		port = 19091
 	}
-	// Merge dynamic extra_roots from DB into the agent request.
-	var extraJSON string
-	var extraRoots string
-	if err := h.DB.QueryRow(`SELECT model_browser_extra_roots FROM nodes WHERE id = ?`, nodeID).Scan(&extraJSON); err == nil && extraJSON != "" {
-		var extra []string
-		if json.Unmarshal([]byte(extraJSON), &extra) == nil && len(extra) > 0 {
-			extraRoots = strings.Join(extra, ",")
+	rootID := r.URL.Query().Get("root_id")
+	rootPath := r.URL.Query().Get("root")
+	if rootID == "" && rootPath == "" {
+		roots, err := h.listNodeModelRoots(nodeID, false)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "node not found")
+			return
 		}
+		out := []map[string]interface{}{}
+		for _, root := range roots {
+			out = append(out, root.jsonMap())
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"allowed_roots": out, "entries": []map[string]interface{}{}})
+		return
 	}
-	agentURL := fmt.Sprintf("http://%s:%d/files?root=%s&path=%s&limit=%s&extra_roots=%s",
-		ip, port,
-		r.URL.Query().Get("root"),
-		r.URL.Query().Get("path"),
-		r.URL.Query().Get("limit"),
-		extraRoots)
+	root, err := h.resolveNodeModelRoot(nodeID, rootID, rootPath)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"entries": []map[string]interface{}{}, "error": "root_not_allowed"})
+		return
+	}
+	rel, err := safeRelativePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"entries": []map[string]interface{}{}, "error": "path traversal blocked"})
+		return
+	}
+	q := url.Values{}
+	q.Set("root", root.Path)
+	q.Set("path", rel)
+	q.Set("limit", r.URL.Query().Get("limit"))
+	q.Set("extra_roots", root.Path)
+	agentURL := fmt.Sprintf("http://%s:%d/files?%s", ip, port, q.Encode())
 	resp, err := http.Get(agentURL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
@@ -40,6 +56,20 @@ func (h *AgentHandler) HandleProxyNodeFiles(w http.ResponseWriter, r *http.Reque
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		out := map[string]interface{}{}
+		if json.Unmarshal(body, &out) == nil {
+			out["root_id"] = root.ID
+			out["root"] = root.Path
+			out["model_root"] = root.Path
+			out["relative_path"] = rel
+			out["absolute_path"] = root.Path
+			if rel != "" {
+				out["absolute_path"] = root.Path + "/" + rel
+			}
+			body, _ = json.Marshal(out)
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)
@@ -54,8 +84,29 @@ func (h *AgentHandler) HandleProxyNodeModelScan(w http.ResponseWriter, r *http.R
 	if port == 0 {
 		port = 19091
 	}
-	agentURL := fmt.Sprintf("http://%s:%d/model-paths/scan", ip, port)
 	bodyBytes, _ := io.ReadAll(r.Body)
+	reqMap := map[string]interface{}{}
+	if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	root, err := h.resolveNodeModelRoot(nodeID, strVal(reqMap, "root_id", ""), strVal(reqMap, "root", ""))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "root not allowed")
+		return
+	}
+	rel, err := safeRelativePath(strVal(reqMap, "relative_path", ""))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	reqMap["root"] = root.Path
+	reqMap["root_id"] = root.ID
+	reqMap["relative_path"] = rel
+	bodyBytes, _ = json.Marshal(reqMap)
+	q := url.Values{}
+	q.Set("extra_roots", root.Path)
+	agentURL := fmt.Sprintf("http://%s:%d/model-paths/scan?%s", ip, port, q.Encode())
 	resp, err := http.Post(agentURL, "application/json", bytes.NewReader(bodyBytes))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
@@ -63,6 +114,20 @@ func (h *AgentHandler) HandleProxyNodeModelScan(w http.ResponseWriter, r *http.R
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		out := map[string]interface{}{}
+		if json.Unmarshal(body, &out) == nil {
+			out["root_id"] = root.ID
+			out["root"] = root.Path
+			out["model_root"] = root.Path
+			out["relative_path"] = rel
+			out["absolute_path"] = root.Path
+			if rel != "" {
+				out["absolute_path"] = root.Path + "/" + rel
+			}
+			body, _ = json.Marshal(out)
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)

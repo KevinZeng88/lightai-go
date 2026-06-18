@@ -18,7 +18,7 @@
 2. Agent 尽量自动扫描模型元信息，推测模型名称、格式、参数规模、量化方式和能力。
 3. 一个逻辑模型可以有多个节点位置，每个位置可新增、禁用、删除、重扫和一致性核对。
 4. 新增运行配置时，先选择 Backend、BackendVersion、Agent/节点和运行类型。
-5. 当前运行类型以 Docker 为主，后续预留 command / external / kubernetes 等类型。
+5. 当前运行类型以 Docker 为主，并保留 command / external / kubernetes 等扩展接口。
 6. Agent 能列出本节点 Docker images，用户可选择已有 image，也可手工输入 image/tag/image_id。
 7. 一个运行配置可以挂多个节点配置，每个节点配置可新增、禁用、删除和重新检测。
 8. 启动实例时，模型位置和运行配置必须存在共同可用节点，才表示有运行可能。
@@ -216,6 +216,94 @@ relative_path: Qwen3.5-9B-Q4_K_M.gguf
 absolute_path: /home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf
 path_type: file
 ```
+
+### 4.3 NodeModelRoot
+
+本轮采用方案 B：Server 持久化节点模型目录策略，Agent 保留最终 denied_roots 和路径归属校验。前端不能只维护临时 root，也不能把任意绝对路径直接提交给 scan/save。
+
+`NodeModelRoot` 表示某个节点被授权用于模型浏览、扫描和保存 `ModelLocation` 的目录根。
+
+建议字段：
+
+```text
+id
+node_id
+path
+status                    enabled / disabled
+source                    config / user
+description
+created_by
+tenant_id
+last_checked_at
+last_error
+created_at
+updated_at
+```
+
+当前落地：
+
+```text
+DB: node_model_roots
+API: /api/v1/nodes/{node_id}/model-roots
+Web: RemoteFileBrowser 加载和管理已持久化 root
+Agent: /files 与 /model-paths/scan 共用同一套 root + relative_path 校验
+```
+
+默认策略：
+
+```text
+allowed_model_roots 默认为空。
+用户必须先为节点显式添加允许目录，才能浏览、扫描、保存模型位置。
+```
+
+禁止目录默认值：
+
+```yaml
+model_browser:
+  enabled: true
+  allowed_roots: []
+  denied_roots:
+    - /
+    - /etc
+    - /root
+    - /boot
+    - /proc
+    - /sys
+    - /dev
+    - /run
+    - /var/run
+    - /var/lib/docker
+  max_entries: 1000
+  max_scan_depth: 2
+  follow_symlinks: false
+  allow_runtime_root_add: true
+```
+
+安全规则：
+
+```text
+1. 添加 root 前执行 filepath.Clean。
+2. 禁止添加 denied_roots 本身及其子路径。
+3. 禁止通过 ../ path traversal 绕过。
+4. 禁止 symlink 指向 denied_roots。
+5. 文件浏览、模型扫描、ModelLocation 保存使用同一套 root policy。
+6. 添加、禁用、删除 root 写入 audit log。
+7. 添加/删除 root 需要 node_model_root:write；浏览需要 node_file:read。
+8. 删除 root 前检查 active ModelLocation 引用，存在引用时拒绝删除。
+```
+
+统一路径语义：
+
+```json
+{
+  "root_id": "node-root-id",
+  "root": "/home/kzeng/models",
+  "relative_path": "Qwen3-0.6B-Instruct-2512",
+  "path_type": "directory"
+}
+```
+
+`absolute_path` 只能由 Server 根据已授权 root 计算或反解，不能作为普通向导的主要输入。
 
 ---
 
@@ -495,20 +583,25 @@ Agent 需要提供受控目录浏览能力。
 建议 API：
 
 ```text
-GET /api/v1/nodes/{node_id}/files?root=...&path=...&type=model
+GET /api/v1/nodes/{node_id}/model-roots
+POST /api/v1/nodes/{node_id}/model-roots
+PATCH /api/v1/nodes/{node_id}/model-roots/{root_id}
+DELETE /api/v1/nodes/{node_id}/model-roots/{root_id}
+GET /api/v1/nodes/{node_id}/files?root_id=...&path=...&type=model
 POST /api/v1/nodes/{node_id}/model-paths/scan
 ```
 
 目录浏览要求：
 
 ```text
-1. 只允许浏览 Agent 配置中的 allowed_model_roots。
+1. 只允许浏览 Server 持久化的 enabled NodeModelRoot。
 2. 默认只列当前目录，不递归。
 3. 支持分页。
 4. 支持文件类型过滤。
 5. 支持显示文件大小、修改时间、是否目录。
 6. 不允许浏览 /etc、/root、/home/其他用户等未授权目录。
 7. 错误要明确：路径不存在、无权限、超出 allowed roots、扫描超时。
+8. Agent 接收 Server 授权 root 后仍必须执行 denied_roots 与 path containment 校验。
 ```
 
 Agent 配置建议：
@@ -516,13 +609,22 @@ Agent 配置建议：
 ```yaml
 model_browser:
   enabled: true
-  allowed_roots:
-    - /home/kzeng/models
-    - /data/models
-    - /data/part2/MX-C500/model
+  allowed_roots: []
+  denied_roots:
+    - /
+    - /etc
+    - /root
+    - /boot
+    - /proc
+    - /sys
+    - /dev
+    - /run
+    - /var/run
+    - /var/lib/docker
   max_entries: 1000
   max_scan_depth: 2
   follow_symlinks: false
+  allow_runtime_root_add: true
 ```
 
 ### 7.4 模型扫描

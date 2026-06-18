@@ -343,46 +343,30 @@ func main() {
 			w.Header().Set("Content-Type", "application/json")
 			root := strings.TrimSpace(r.URL.Query().Get("root"))
 			relPath := strings.TrimSpace(r.URL.Query().Get("path"))
-			if !cfg.ModelBrowser.Enabled || len(cfg.ModelBrowser.AllowedRoots) == 0 {
+			modelBrowserCfg := cfg.ModelBrowser
+			if modelBrowserCfg.AllowRuntimeRootAdd {
+				modelBrowserCfg.AllowedRoots = append(modelBrowserCfg.AllowedRoots, parseExtraModelRoots(r.URL.Query().Get("extra_roots"))...)
+			}
+			if !cfg.ModelBrowser.Enabled {
 				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "model browser not enabled"})
 				return
 			}
 			// When no root is specified, return the list of allowed roots.
 			if root == "" {
 				var roots []map[string]interface{}
-				for _, ar := range cfg.ModelBrowser.AllowedRoots {
+				for _, ar := range agentAllowedModelRoots(modelBrowserCfg) {
 					roots = append(roots, map[string]interface{}{"root": ar, "label": ar})
 				}
 				json.NewEncoder(w).Encode(map[string]interface{}{"allowed_roots": roots, "entries": []map[string]interface{}{}})
 				return
 			}
-			// Merge extra_roots from query param with allowed_roots.
-		extraRootsParam := r.URL.Query().Get("extra_roots")
-		allRoots := cfg.ModelBrowser.AllowedRoots
-		if extraRootsParam != "" {
-			for _, er := range strings.Split(extraRootsParam, ",") {
-				er = strings.TrimSpace(er)
-				if er != "" {
-					allRoots = append(allRoots, er)
+			absPath, err := agentValidateModelPath(modelBrowserCfg, root, relPath)
+			if err != nil {
+				if err.Error() == "path traversal blocked" {
+					json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "path traversal blocked"})
+					return
 				}
-			}
-		}
-
-		rootOK := false
-		for _, ar := range allRoots {
-				if root == ar {
-					rootOK = true
-					break
-				}
-			}
-			if !rootOK {
 				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "root_not_allowed"})
-				return
-			}
-			absPath := filepath.Join(root, relPath)
-			cleanRoot := filepath.Clean(root)
-			if !strings.HasPrefix(filepath.Clean(absPath), cleanRoot+string(os.PathSeparator)) && filepath.Clean(absPath) != cleanRoot {
-				json.NewEncoder(w).Encode(map[string]interface{}{"entries": []map[string]interface{}{}, "error": "path traversal blocked"})
 				return
 			}
 			entries, err := os.ReadDir(absPath)
@@ -434,26 +418,11 @@ func main() {
 				json.NewEncoder(w).Encode(map[string]interface{}{"error": "model browser not enabled"})
 				return
 			}
-			// Merge extra_roots from query param with allowed_roots.
-		extraRootsParam := r.URL.Query().Get("extra_roots")
-		allRoots := cfg.ModelBrowser.AllowedRoots
-		if extraRootsParam != "" {
-			for _, er := range strings.Split(extraRootsParam, ",") {
-				er = strings.TrimSpace(er)
-				if er != "" {
-					allRoots = append(allRoots, er)
-				}
+			modelBrowserCfg := cfg.ModelBrowser
+			if modelBrowserCfg.AllowRuntimeRootAdd {
+				modelBrowserCfg.AllowedRoots = append(modelBrowserCfg.AllowedRoots, parseExtraModelRoots(r.URL.Query().Get("extra_roots"))...)
 			}
-		}
-
-		rootOK := false
-		for _, ar := range allRoots {
-				if req.Root == ar {
-					rootOK = true
-					break
-				}
-			}
-			if !rootOK {
+			if _, err := agentValidateModelPath(modelBrowserCfg, req.Root, req.RelativePath); err != nil {
 				json.NewEncoder(w).Encode(map[string]interface{}{"error": "root not allowed"})
 				return
 			}
@@ -1157,6 +1126,104 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 	result.ContainerID = payload.ContainerID
 	result.DeploymentID = task.DeploymentID
 	result.NodeID = task.NodeID
+}
+
+func agentAllowedModelRoots(cfg config.ModelBrowserConfig) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	add := func(value string) {
+		clean := filepath.Clean(strings.TrimSpace(value))
+		if clean == "." || clean == "" || seen[clean] {
+			return
+		}
+		seen[clean] = true
+		out = append(out, clean)
+	}
+	for _, root := range cfg.AllowedRoots {
+		add(root)
+	}
+	if cfg.AllowRuntimeRootAdd {
+		for _, root := range strings.Split(os.Getenv("LIGHTAI_MODEL_BROWSER_EXTRA_ROOTS"), ",") {
+			add(root)
+		}
+	}
+	return out
+}
+
+func parseExtraModelRoots(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	out := []string{}
+	for _, root := range strings.Split(value, ",") {
+		root = strings.TrimSpace(root)
+		if root != "" {
+			out = append(out, root)
+		}
+	}
+	return out
+}
+
+func agentDeniedModelRoots(cfg config.ModelBrowserConfig) []string {
+	if len(cfg.DeniedRoots) > 0 {
+		return cfg.DeniedRoots
+	}
+	return []string{"/", "/etc", "/root", "/boot", "/proc", "/sys", "/dev", "/run", "/var/run", "/var/lib/docker"}
+}
+
+func agentValidateModelPath(cfg config.ModelBrowserConfig, root, relPath string) (string, error) {
+	cleanRoot := filepath.Clean(strings.TrimSpace(root))
+	if cleanRoot == "." || cleanRoot == "" || !filepath.IsAbs(cleanRoot) {
+		return "", fmt.Errorf("root not allowed")
+	}
+	for _, denied := range agentDeniedModelRoots(cfg) {
+		if agentPathWithinRoot(cleanRoot, denied) {
+			return "", fmt.Errorf("root not allowed")
+		}
+	}
+	if realRoot, err := filepath.EvalSymlinks(cleanRoot); err == nil {
+		for _, denied := range agentDeniedModelRoots(cfg) {
+			if agentPathWithinRoot(filepath.Clean(realRoot), denied) {
+				return "", fmt.Errorf("root not allowed")
+			}
+		}
+	}
+	rootOK := false
+	for _, allowed := range agentAllowedModelRoots(cfg) {
+		if filepath.Clean(allowed) == cleanRoot {
+			rootOK = true
+			break
+		}
+	}
+	if !rootOK {
+		return "", fmt.Errorf("root not allowed")
+	}
+	cleanRel := filepath.Clean(strings.TrimSpace(relPath))
+	if cleanRel == "." {
+		cleanRel = ""
+	}
+	if filepath.IsAbs(cleanRel) || cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path traversal blocked")
+	}
+	absPath := filepath.Clean(filepath.Join(cleanRoot, cleanRel))
+	if !agentPathWithinRoot(absPath, cleanRoot) {
+		return "", fmt.Errorf("path traversal blocked")
+	}
+	if !cfg.FollowSymlinks {
+		if realPath, err := filepath.EvalSymlinks(absPath); err == nil && !agentPathWithinRoot(filepath.Clean(realPath), cleanRoot) {
+			return "", fmt.Errorf("path traversal blocked")
+		}
+	}
+	return absPath, nil
+}
+
+func agentPathWithinRoot(path, root string) bool {
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(root)
+	if cleanRoot == string(os.PathSeparator) {
+		return cleanPath == cleanRoot
+	}
+	return cleanPath == cleanRoot || strings.HasPrefix(cleanPath, cleanRoot+string(os.PathSeparator))
 }
 
 // reconcileManagedContainers lists Docker containers with the LightAI naming prefix

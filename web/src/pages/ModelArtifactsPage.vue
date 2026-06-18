@@ -87,10 +87,10 @@
             <el-input v-model="wizardModelName" size="small" />
           </el-descriptions-item>
           <el-descriptions-item :label="$t('modelWizard.modelFormat')">{{ scanResult.format || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Architecture">{{ (typeof scanResult.architecture === 'string') ? scanResult.architecture : JSON.stringify(scanResult.architecture) }}</el-descriptions-item>
-          <el-descriptions-item label="Size">{{ scanResult.size_label || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Path">{{ scanResult.absolute_path || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Type">{{ scanResult.path_type || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.architecture')">{{ (typeof scanResult.architecture === 'string') ? scanResult.architecture : JSON.stringify(scanResult.architecture) }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.size')">{{ scanResult.size_label || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.path')">{{ scanResult.absolute_path || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.type')">{{ scanResult.path_type || '-' }}</el-descriptions-item>
         </el-descriptions>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="wizardStep=1">{{ $t('common.prev') }}</el-button>
@@ -104,7 +104,7 @@
       <el-select v-model="addLocNodeId" :placeholder="$t('modelWizard.selectNode')" style="width:100%;margin-bottom:8px" filterable>
         <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
       </el-select>
-      <RemoteFileBrowser v-if="addLocNodeId" :node-id="addLocNodeId" @select="(e:any) => { addLocPath = e.name; addLocSelected = e }" />
+      <RemoteFileBrowser v-if="addLocNodeId" :node-id="addLocNodeId" @select="(e:any) => { addLocPath = e.relative_path; addLocSelected = e }" />
       <template #footer>
         <el-button @click="addLocVisible = false">{{ $t('common.cancel') }}</el-button>
         <el-button type="primary" :disabled="!addLocPath" @click="doAddLocation" :loading="addLocSaving">{{ $t('common.save') }}</el-button>
@@ -115,11 +115,13 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import RemoteFileBrowser from '@/components/RemoteFileBrowser.vue'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
+const { t } = useI18n()
 
 const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const dialogVisible = ref(false); const detailVisible = ref(false); const selected = ref<any>(null); const locations = ref<any[]>([])
@@ -188,10 +190,10 @@ async function doScan() {
     const entry = wizardSelectedEntry.value
     const root = entry.root || ''
     const relPath = entry.relative_path || entry.name
-    const resp = await apiClient.post(`/nodes/${wizardNodeId.value}/model-paths/scan`, { root, relative_path: relPath })
+    const resp = await apiClient.post(`/nodes/${wizardNodeId.value}/model-paths/scan`, { root_id: entry.root_id, root, relative_path: relPath, path_type: entry.path_type || (entry.is_dir ? 'directory' : 'file') })
     scanResult.value = resp
     if (resp.discovered_name) wizardModelName.value = resp.discovered_name
-  } catch (e: any) { scanResult.value = { error: e?.message || 'scan failed' } }
+  } catch (e: any) { scanResult.value = { error: e?.message || t('modelWizard.scanFailed') } }
   wizardScanning.value = false
 }
 
@@ -205,7 +207,9 @@ async function doWizardSave() {
       display_name: wizardModelName.value,
     })
     await apiClient.post(`/model-artifacts/${artifact.id}/locations`, {
-      node_id: wizardNodeId.value, absolute_path: scanResult.value.absolute_path,
+      node_id: wizardNodeId.value, root_id: scanResult.value.root_id || wizardSelectedEntry.value?.root_id,
+      model_root: scanResult.value.model_root || scanResult.value.root || wizardSelectedEntry.value?.root,
+      relative_path: scanResult.value.relative_path || wizardSelectedEntry.value?.relative_path,
       path_type: scanResult.value.path_type || 'directory',
       verification_status: 'verified', match_status: 'exact_match',
     })
@@ -221,7 +225,10 @@ async function doAddLocation() {
   addLocSaving.value = true
   try {
     await apiClient.post(`/model-artifacts/${selected.value.id}/locations`, {
-      node_id: addLocNodeId.value, absolute_path: addLocPath.value, path_type: 'directory',
+      node_id: addLocNodeId.value, root_id: addLocSelected.value.root_id,
+      model_root: addLocSelected.value.root,
+      relative_path: addLocSelected.value.relative_path,
+      path_type: addLocSelected.value.path_type || 'directory',
       verification_status: 'verified', match_status: 'exact_match',
     })
     ElMessage.success('Location added'); addLocVisible.value = false

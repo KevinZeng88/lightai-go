@@ -9,7 +9,7 @@ PREFIX="e2e-wizard"
 RUN_ID="${LIGHTAI_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 COOKIE_JAR="$(mktemp)"
 CSRF_TOKEN=""
-DEPLOYMENT_ID=""; INSTANCE_ID=""; ARTIFACT_ID=""; RUNTIME_CLONE_ID=""; NBR_ID=""
+DEPLOYMENT_ID=""; INSTANCE_ID=""; ARTIFACT_ID=""; RUNTIME_CLONE_ID=""; NBR_ID=""; ROOT_ID=""; ROOT_CREATED="0"; RUN_PLAN_ID=""
 EXIT_CODE=0; CURRENT_STAGE=""; STAGE_START_MS=""
 
 VLLM_IMAGE="${VLLM_IMAGE:-vllm/vllm-openai:latest}"
@@ -23,7 +23,18 @@ now_ms() { date +%s%3N; }
 stage_start() { CURRENT_STAGE="$1"; log "stage=$1 start"; STAGE_START_MS="$(now_ms)"; }
 stage_done() { local s="${1:-$CURRENT_STAGE}"; local d=$(($(now_ms) - STAGE_START_MS)); log "stage=$s done duration_ms=$d"; CURRENT_STAGE=""; }
 
-json_get() { python3 -c 'import json,sys; d=json.load(sys.stdin); p=sys.argv[1].split("."); [d:=d.get(x,"") if isinstance(d,dict) else (d[0] if d else {}) for x in p]; print(d if d is not None else "")' "$1"; }
+json_get() {
+  python3 -c 'import json,sys
+d=json.load(sys.stdin)
+for key in sys.argv[1].split("."):
+    if isinstance(d, list):
+        d=d[0] if d else {}
+    if isinstance(d, dict):
+        d=d.get(key, "")
+    else:
+        d=""
+print(d if d is not None else "")' "$1"
+}
 
 api() {
   local m="$1" p="$2" d="${3:-}"
@@ -37,12 +48,23 @@ api() {
   printf '%s\n' "$body"
 }
 
+api_expect_fail() {
+  local m="$1" p="$2" d="${3:-}"
+  local a=(-sS -X "$m" "$SERVER_URL$p" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -H "Origin: $SERVER_URL" -H "Content-Type: application/json")
+  [ -n "$CSRF_TOKEN" ] && [ "$m" != "GET" ] && a+=(-H "X-CSRF-Token: $CSRF_TOKEN")
+  [ -n "$d" ] && a+=(-d "$d")
+  local r; r="$(curl "${a[@]}" -w $'\nHTTP:%{http_code}')" || return 1
+  local code; code="$(printf '%s\n' "$r" | awk -F: '/^HTTP:/ {print $2}' | tail -1)"
+  [ "$code" != "200" ] && [ "$code" != "201" ]
+}
+
 on_exit() {
   local rc=$?; [ "$rc" -ne 0 ] && [ "$EXIT_CODE" -eq 0 ] && EXIT_CODE=$rc
   [ -n "$CURRENT_STAGE" ] && log "failed_stage=$CURRENT_STAGE"
   if [ "${KEEP_E2E_RESOURCES:-0}" != "1" ]; then
     [ -n "$DEPLOYMENT_ID" ] && { api POST "/api/v1/deployments/$DEPLOYMENT_ID/stop" '{}' >/dev/null 2>&1 || true; api DELETE "/api/v1/deployments/$DEPLOYMENT_ID" >/dev/null 2>&1 || true; }
     [ -n "$ARTIFACT_ID" ] && api DELETE "/api/v1/model-artifacts/$ARTIFACT_ID" >/dev/null 2>&1 || true
+    [ "$ROOT_CREATED" = "1" ] && [ -n "$ROOT_ID" ] && api DELETE "/api/v1/nodes/$node_id/model-roots/$ROOT_ID" >/dev/null 2>&1 || true
     [ -n "$INSTANCE_ID" ] && docker rm -f "lightai-${INSTANCE_ID:0:12}" >/dev/null 2>&1 || true
   fi
   rm -f "$COOKIE_JAR"
@@ -85,15 +107,33 @@ gpu_json="$(api GET /api/v1/gpus)"; gpu_id="$(printf '%s' "$gpu_json" | json_get
 log "gpu_id=$gpu_id"
 stage_done
 
+# Negative root policy checks
+stage_start negative_model_roots
+api_expect_fail POST "/api/v1/nodes/$node_id/model-roots" '{"path":"/"}' || fail "adding / model root should fail"
+api_expect_fail POST "/api/v1/nodes/$node_id/model-roots" '{"path":"/etc"}' || fail "adding /etc model root should fail"
+api_expect_fail POST "/api/v1/nodes/$node_id/model-roots" '{"path":"/etc/lightai"}' || fail "adding /etc/lightai model root should fail"
+api_expect_fail POST "/api/v1/nodes/$node_id/model-roots" '{"path":"/tmp/../etc"}' || fail "adding traversal model root should fail"
+stage_done
+
+# Add allowed root
+stage_start add_model_root
+root_path="$(dirname "$VLLM_MODEL")"
+root_json="$(api POST "/api/v1/nodes/$node_id/model-roots" "{\"path\":\"$root_path\",\"description\":\"$PREFIX-$RUN_ID\"}")"
+ROOT_ID="$(printf '%s' "$root_json" | json_get id)"
+[ -n "$ROOT_ID" ] || fail "model root create failed"
+ROOT_CREATED="1"
+log "root_id=$ROOT_ID root_path=$root_path"
+stage_done
+
 # Browse files
 stage_start browse_files
-files_json="$(api GET "/api/v1/nodes/$node_id/files?root=/home/kzeng/models&path=&limit=50")"
+files_json="$(api GET "/api/v1/nodes/$node_id/files?root_id=$ROOT_ID&path=&limit=50")"
 printf '%s' "$files_json" | grep -q "Qwen3" || fail "Qwen3 model not found in /home/kzeng/models"
 stage_done
 
 # Scan model
 stage_start scan_model
-scan_json="$(api POST "/api/v1/nodes/$node_id/model-paths/scan" "{\"root\":\"$(dirname "$VLLM_MODEL")\",\"relative_path\":\"$(basename "$VLLM_MODEL")\"}")"
+scan_json="$(api POST "/api/v1/nodes/$node_id/model-paths/scan" "{\"root_id\":\"$ROOT_ID\",\"relative_path\":\"$(basename "$VLLM_MODEL")\",\"path_type\":\"directory\"}")"
 log "scan result: $(printf '%s' "$scan_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("format","?"), d.get("discovered_name","?"))' 2>/dev/null || true)"
 stage_done
 
@@ -102,7 +142,7 @@ stage_start create_model_artifact
 artifact_json="$(api POST /api/v1/model-artifacts "{\"name\":\"$PREFIX-$RUN_ID-model\",\"display_name\":\"$PREFIX model\",\"path\":\"$VLLM_MODEL\",\"format\":\"huggingface\",\"task_type\":\"chat\"}")"
 ARTIFACT_ID="$(printf '%s' "$artifact_json" | json_get id)"
 [ -n "$ARTIFACT_ID" ] || fail "artifact create failed"
-api POST "/api/v1/model-artifacts/$ARTIFACT_ID/locations" "{\"node_id\":\"$node_id\",\"absolute_path\":\"$VLLM_MODEL\",\"path_type\":\"directory\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" >/dev/null
+api POST "/api/v1/model-artifacts/$ARTIFACT_ID/locations" "{\"node_id\":\"$node_id\",\"root_id\":\"$ROOT_ID\",\"relative_path\":\"$(basename "$VLLM_MODEL")\",\"path_type\":\"directory\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" >/dev/null
 stage_done
 
 # Query Docker images
@@ -159,7 +199,9 @@ stage_done
 
 # Docker logs
 stage_start logs_api
-api GET "/api/v1/node-run-plans/$(api GET "/api/v1/deployments/$DEPLOYMENT_ID/run-plan-groups" | json_get id)/logs?tail=50" >/tmp/e2e-wiz-logs.json 2>/dev/null || true
+RUN_PLAN_ID="$(api GET "/api/v1/model-instances?deployment_id=$DEPLOYMENT_ID" | json_get current_run_plan_id)"
+[ -n "$RUN_PLAN_ID" ] || fail "node run plan not found"
+api GET "/api/v1/node-run-plans/$RUN_PLAN_ID/logs?tail=50" >/tmp/e2e-wiz-logs.json
 stage_done
 
 # Stop
@@ -171,6 +213,7 @@ stage_done
 stage_start cleanup_resources
 api DELETE "/api/v1/deployments/$DEPLOYMENT_ID" >/dev/null
 api DELETE "/api/v1/model-artifacts/$ARTIFACT_ID" >/dev/null
+[ "$ROOT_CREATED" = "1" ] && api DELETE "/api/v1/nodes/$node_id/model-roots/$ROOT_ID" >/dev/null && ROOT_CREATED="0"
 docker rm -f "lightai-${INSTANCE_ID:0:12}" >/dev/null 2>&1 || true
 stage_done
 
