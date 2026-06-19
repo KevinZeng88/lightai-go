@@ -472,3 +472,61 @@ No automatic cleanup is performed. Users should manually review and delete unwan
 - `docs/design/model-runtime-node-wizard.md` — Model wizard and deployment wizard design
 - `docs/reports/model-runtime-node-wizard/open-issues-closeout.md` — Formal closeout
 - `docs/reports/backend-runtime-runplan/open-issues-closeout.md` — BackendRuntime blockers
+
+## 9. API Boundary Closeout (2026-06-20)
+
+### 9.1 Three Design Boundaries (Confirmed)
+
+**Boundary 1 — BackendRuntime is a node-independent template.**
+BackendRuntime does not bind to any node. It is NOT a deployable object. It never auto-creates a NodeBackendRuntime. Deployment APIs reject `backend_runtime_id` with HTTP 400.
+
+**Boundary 2 — NodeBackendRuntime is created only by explicit enable.**
+`POST /nodes/{id}/backend-runtimes/enable` creates or updates a NodeBackendRuntime. After enable, status is always `needs_check` (unless server detects a blocking condition: `failed`, `unsupported_device`, `template_only`). No other API path creates NBR implicitly.
+
+**Boundary 3 — UI must not submit trusted evidence.**
+UI must not send `image_present`, `docker_available`, `status`, or `ready` in any payload. NBR `ready` status comes only from a server/agent verification path. The agent evidence endpoint returns 400 if called without required evidence.
+
+### 9.2 API Responsibilities
+
+| Endpoint | Caller | Purpose | Post-condition |
+|----------|--------|---------|----------------|
+| `POST /nodes/{id}/backend-runtimes/enable` | UI | Create or update NodeBackendRuntime | NBR exists, `status = needs_check` |
+| `POST /nodes/{id}/backend-runtimes/{nbr_id}/check-request` | UI | Request server to verify NBR via agent proxy | Server queries agent Docker images, evaluates readiness, updates NBR status (`ready` / `missing_image` / `error`) |
+| `POST /nodes/{id}/backend-runtimes/check` | Agent (callback) | Submit verified docker/image evidence | NBR updated with agent-provided evidence; returns **400** if `image_present`/`docker_available` missing |
+
+### 9.3 Deployment Path Constraints
+
+- `POST /deployments` — requires `node_backend_runtime_id`; rejects `backend_runtime_id` (400)
+- `POST /deployments/preflight` — requires `node_backend_runtime_id`; rejects `backend_runtime_id` (400)
+- `POST /deployments/{id}/start` — requires deployment has `source_node_backend_runtime_id`; NBR must be `status=ready`
+- `needs_check`, `unknown`, `missing_image`, `unsupported_device`, `template_only`, `disabled` NBRs are NOT eligible for deployment
+- RunPlan parameters come from frozen deployment config snapshot, not live BackendRuntime template
+- Modifying BackendRuntime does not affect existing NBR or RunPlan
+
+### 9.4 E2E Verification Coverage
+
+| Scenario | Covered by |
+|----------|-----------|
+| Clone does not auto-create NBR | `scripts/e2e-runtime-config-copy-first-save-selection.sh` |
+| Explicit enable → needs_check | `runtime_boundary_test.go` (TestDeploymentCreateRejectsNonReadyNBR) |
+| check-request / agent check → ready | `runtime_boundary_test.go` (snapshotSetupFullChain), E2E wizard scripts |
+| first-save shm_size not overridden | `scripts/e2e-runtime-config-copy-first-save-selection.sh` |
+| vLLM / SGLang / llama.cpp covered | `scripts/e2e-real-smoke-all-three.sh`, wizard scripts |
+| UI payload excludes image_present/docker_available/status=ready | grep verification below |
+
+**Grep verification (2026-06-20):**
+```bash
+grep -rn 'image_present\|docker_available\|"status".*"ready"' web/src/pages/RunnerConfigsPage.vue web/src/components/DockerImagePicker.vue
+# Result: (clean — zero occurrences in frontend payload paths)
+```
+
+### 9.5 Key Commit Chain
+
+| Commit | Fix |
+|--------|-----|
+| `67d668d` | Runtime config clone first-save override + NBR auto-create + name convergence (initial) |
+| `975de2b` | **Remove auto-NBR creation** — enforce explicit enable-to-node design |
+| `b87f32b` | **Server must not trust client** image_present/docker_available for NBR ready |
+| `6e3009e` | **Enforce NBR as deployment basis** — UI shows NBR, not BR |
+| `9123961` | **Remove backend_runtime_id as deployment basis** — no backward compatibility |
+| `2325fea` | **UI-facing check-request endpoint** — server verifies NBR via agent proxy |
