@@ -161,7 +161,7 @@ print('false')
 " 2>/dev/null || echo false)"
   set -e
   local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/enable" \
-    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
+    "{\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
   log "nbr enabled status=$(echo "$r" | json_get status 2>/dev/null || echo '?')"
 }
 
@@ -182,7 +182,7 @@ print('false')
 " 2>/dev/null || echo false)"
   set -e
   local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/check" \
-    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
+    "{\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
   local st; st="$(echo "$r" | json_get status 2>/dev/null || echo '?')"
   log "nbr check status=$st"
   [ "$st" = "ready" ] || { fail "nbr not ready after check (status=$st)"; return 1; }
@@ -190,7 +190,7 @@ print('false')
 
 e2e_create_deployment() {
   local name; name="e2e-${BACKEND_NAME}-${E2E_RUN_ID}"
-  local payload; payload="{\"name\":\"$name\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[\"$GPU_ID\"]},\"service_json\":{\"host_port\":$HOST_PORT}"
+  local payload; payload="{\"name\":\"$name\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[\"$GPU_ID\"]},\"service_json\":{\"host_port\":$HOST_PORT}"
   if [ -n "$DEPLOY_PARAMS" ]; then
     payload="$payload,\"parameters_json\":{$DEPLOY_PARAMS}"
   fi
@@ -208,7 +208,7 @@ e2e_create_deployment() {
 
 e2e_preflight() {
   local r; r="$(api_body POST /api/v1/deployments/preflight \
-    "{\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"host_port\":$HOST_PORT}")"
+    "{\"model_artifact_id\":\"$ARTIFACT_ID\",\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"host_port\":$HOST_PORT}")"
   log "candidate_nodes=$(echo "$r" | json_get candidate_nodes)"
   mkdir -p "$ARTIFACT_DIR"
   echo "$r" > "$ARTIFACT_DIR/preflight.json"

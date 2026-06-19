@@ -141,45 +141,49 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	artifactID := strVal(req, "model_artifact_id", "")
-	backendRuntimeID := strVal(req, "backend_runtime_id", "")
-	nodeBackendRuntimeID := strVal(req, "node_backend_runtime_id", "")
+	// Reject backend_runtime_id — BackendRuntime is a template, not a deployable object.
+	if _, ok := req["backend_runtime_id"]; ok {
+		writeError(w, http.StatusBadRequest,
+			"BackendRuntime is a template and cannot be used for deployment. Use node_backend_runtime_id.")
+		return
+	}
 
-	// Resolve node_backend_runtime_id if provided (explicit NBR reference).
-	var sourceNBRID string
-	if nodeBackendRuntimeID != "" {
-		var nbrBackendRuntimeID, nbrNodeID, nbrStatus string
-		if err := h.DB.QueryRow(
-			`SELECT backend_runtime_id, node_id, status FROM node_backend_runtimes WHERE id = ?`,
-			nodeBackendRuntimeID,
-		).Scan(&nbrBackendRuntimeID, &nbrNodeID, &nbrStatus); err != nil {
-			writeError(w, http.StatusBadRequest, "node_backend_runtime_id not found")
-			return
-		}
-		if nbrStatus != "ready" {
-			writeError(w, http.StatusBadRequest,
-				fmt.Sprintf("node backend runtime is not ready (status=%s); please run agent check first", nbrStatus))
-			return
-		}
-		// Validate consistency with explicitly provided backend_runtime_id.
-		if backendRuntimeID != "" && backendRuntimeID != nbrBackendRuntimeID {
-			writeError(w, http.StatusBadRequest, "backend_runtime_id does not match node_backend_runtime_id")
-			return
-		}
-		backendRuntimeID = nbrBackendRuntimeID
-		// Set placement node_id from NBR if not explicitly provided.
-		if placementRaw, ok := req["placement_json"]; ok && placementRaw != nil {
-			if pm, ok := placementRaw.(map[string]interface{}); ok {
-				if existingNode, ok := pm["node_id"].(string); ok && existingNode != "" && existingNode != nbrNodeID {
-					writeError(w, http.StatusBadRequest, "placement node_id does not match node_backend_runtime_id node")
-					return
-				}
-				pm["node_id"] = nbrNodeID
+	artifactID := strVal(req, "model_artifact_id", "")
+	nodeBackendRuntimeID := strVal(req, "node_backend_runtime_id", "")
+	if nodeBackendRuntimeID == "" {
+		writeError(w, http.StatusBadRequest, "node_backend_runtime_id is required")
+		return
+	}
+
+	// Resolve node_backend_runtime_id: must exist and be ready.
+	var nbrBackendRuntimeID, nbrNodeID, nbrStatus string
+	if err := h.DB.QueryRow(
+		`SELECT backend_runtime_id, node_id, status FROM node_backend_runtimes WHERE id = ?`,
+		nodeBackendRuntimeID,
+	).Scan(&nbrBackendRuntimeID, &nbrNodeID, &nbrStatus); err != nil {
+		writeError(w, http.StatusBadRequest, "node_backend_runtime_id not found")
+		return
+	}
+	if nbrStatus != "ready" {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("node backend runtime is not ready (status=%s); please run agent check first", nbrStatus))
+		return
+	}
+
+	// Derive backend_runtime_id and node_id from the NBR.
+	backendRuntimeID := nbrBackendRuntimeID
+
+	// Set placement node_id from NBR if not explicitly provided.
+	if placementRaw, ok := req["placement_json"]; ok && placementRaw != nil {
+		if pm, ok := placementRaw.(map[string]interface{}); ok {
+			if existingNode, ok := pm["node_id"].(string); ok && existingNode != "" && existingNode != nbrNodeID {
+				writeError(w, http.StatusBadRequest, "placement node_id does not match node_backend_runtime_id node")
+				return
 			}
-		} else {
-			req["placement_json"] = map[string]interface{}{"node_id": nbrNodeID}
+			pm["node_id"] = nbrNodeID
 		}
-		sourceNBRID = nodeBackendRuntimeID
+	} else {
+		req["placement_json"] = map[string]interface{}{"node_id": nbrNodeID}
 	}
 
 	// REVIEW-022: Validate references at create time.
@@ -190,44 +194,17 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 			return
 		}
 	}
-	if backendRuntimeID != "" {
-		var exists string
-		if err := h.DB.QueryRow(`SELECT id FROM backend_runtimes WHERE id = ?`, backendRuntimeID).Scan(&exists); err != nil {
-			writeError(w, http.StatusBadRequest, "backend_runtime_id not found")
-			return
-		}
+
+	// Capture frozen config snapshot: start from BackendRuntime template,
+	// then merge NBR config snapshot for node-level overrides.
+	configSnapshot := h.buildDeploymentRuntimeSnapshot(backendRuntimeID)
+	var nbrSnapshot, nbrImageRef string
+	if h.DB.QueryRow(
+		`SELECT COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE id = ?`,
+		nodeBackendRuntimeID,
+	).Scan(&nbrSnapshot, &nbrImageRef) == nil && nbrSnapshot != "" && nbrSnapshot != "{}" {
+		configSnapshot = mergeNBRConfigSnapshot(configSnapshot, nbrSnapshot, nbrImageRef)
 	}
-
-		// Capture frozen config snapshot from BackendRuntime at deployment creation time.
-		configSnapshot := "{}"
-		if backendRuntimeID != "" {
-			configSnapshot = h.buildDeploymentRuntimeSnapshot(backendRuntimeID)
-
-			// If placement specifies a target node, merge NodeBackendRuntime config snapshot.
-			// This captures node-level overrides at deployment creation time so the
-			// deployment is fully decoupled from future NBR edits.
-			if placementRaw, ok := req["placement_json"]; ok && placementRaw != nil {
-				if pm, ok := placementRaw.(map[string]interface{}); ok {
-					if nodeID, ok := pm["node_id"].(string); ok && nodeID != "" {
-						var nbrSnapshot, nbrImageRef string
-						nbrRow := h.DB.QueryRow(
-							`SELECT COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
-							nodeID, backendRuntimeID,
-						)
-						if nbrRow.Scan(&nbrSnapshot, &nbrImageRef) == nil && nbrSnapshot != "" && nbrSnapshot != "{}" {
-							configSnapshot = mergeNBRConfigSnapshot(configSnapshot, nbrSnapshot, nbrImageRef)
-						}
-						// Track explicit NBR reference if not already set from node_backend_runtime_id.
-						if sourceNBRID == "" {
-							var nbrid string
-							h.DB.QueryRow(`SELECT id FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
-								nodeID, backendRuntimeID).Scan(&nbrid)
-							sourceNBRID = nbrid
-						}
-					}
-				}
-			}
-		}
 
 	id := uuid.NewString()
 	tid := tenantID(r)
@@ -241,7 +218,7 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(req["parameters_json"]), jsonString(req["env_overrides_json"]),
 		configSnapshot,
-		sourceNBRID,
+		nodeBackendRuntimeID,
 		"stopped", "saved", tid, now, now,
 	)
 	if err != nil {
@@ -304,7 +281,7 @@ func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Requ
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
-	for _, f := range []string{"name", "display_name", "description", "model_artifact_id", "backend_runtime_id"} {
+	for _, f := range []string{"name", "display_name", "description", "model_artifact_id"} {
 		if v, ok := req[f]; ok {
 			if s, ok := v.(string); ok {
 				v = strings.TrimSpace(s)
@@ -726,13 +703,16 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	}
 
 	pf.artifactID = strVal(deploy, "model_artifact_id", "")
-	pf.runtimeID = strVal(deploy, "backend_runtime_id", "")
+	pf.nodeRuntimeID = strVal(deploy, "source_node_backend_runtime_id", "")
+	pf.runtimeID = strVal(deploy, "backend_runtime_id", "") // internal template reference, not deployment selector
 	if pf.artifactID == "" {
 		pf.addErr("unknown", "model_artifact_id is required", map[string]interface{}{"artifact_id": pf.artifactID})
 		return pf
 	}
-	if pf.runtimeID == "" {
-		pf.addErr("unknown", "backend_runtime_id is required", map[string]interface{}{"runtime_id": pf.runtimeID})
+	if pf.nodeRuntimeID == "" {
+		pf.addErr("node_backend_runtime_not_ready",
+			"deployment has no node_backend_runtime_id reference; recreate with a valid NBR",
+			map[string]interface{}{"deployment_id": deployID})
 		return pf
 	}
 
@@ -766,21 +746,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	}
 	pf.artifact = artifact
 
-	// Auto-select online node if placement doesn't specify one.
-	if pf.placement.NodeID == "" {
-		var autoNodeID string
-		if isPlatformAdmin(r) {
-			h.DB.QueryRow(`SELECT id FROM nodes WHERE status = 'online' LIMIT 1`).Scan(&autoNodeID)
-		} else {
-			deployTid := strVal(deploy, "tenant_id", "")
-			h.DB.QueryRow(`SELECT id FROM nodes WHERE status = 'online' AND tenant_id = ? LIMIT 1`, deployTid).Scan(&autoNodeID)
-		}
-		if autoNodeID == "" {
-			pf.addErr("node_offline", "no online node available for deployment", nil)
-			return pf
-		}
-		pf.placement.NodeID = autoNodeID
-	}
+	// Node comes from the NodeBackendRuntime — resolved below.
 
 	// Fetch runtime chain: backend_runtime → inference_backend → backend_version.
 	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json, COALESCE(health_check_override_json,'{}'), COALESCE(version_snapshot_json,'{}') FROM backend_runtimes WHERE id = ?`, pf.runtimeID).Scan(&pf.rtVendor, &pf.rtImage, &pf.rtDockerJSON, &pf.rtArgsOverride, &pf.rtEntryOverride, &pf.rtDefaultEnv, &pf.rtBackendID, &pf.rtVersionID, &pf.rtModelMount, &pf.rtHC, &pf.rtVersionSnapshot)
@@ -812,15 +778,15 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 
 	// Validate NodeBackendRuntime readiness and read snapshot + image_ref.
 	var nodeRuntimeStatus string
-	h.DB.QueryRow(`SELECT id, status, COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, pf.placement.NodeID, pf.runtimeID).Scan(&pf.nodeRuntimeID, &nodeRuntimeStatus, &pf.nbrSnapshot, &pf.nbrImageRef)
-	if pf.nodeRuntimeID == "" || nodeRuntimeStatus != "ready" {
+	h.DB.QueryRow(`SELECT status, backend_runtime_id, node_id, COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE id = ?`, pf.nodeRuntimeID).Scan(&nodeRuntimeStatus, &pf.runtimeID, &pf.placement.NodeID, &pf.nbrSnapshot, &pf.nbrImageRef)
+	if nodeRuntimeStatus != "ready" {
 		reason := fmt.Sprintf("node backend runtime is not ready (status=%s)", nodeRuntimeStatus)
-		if pf.nodeRuntimeID == "" {
-			reason = "no node backend runtime exists for this node and backend runtime; create a node runtime config first"
+		if nodeRuntimeStatus == "" {
+			reason = "node_backend_runtime_id not found; recreate deployment with a valid NBR"
 		} else if nodeRuntimeStatus == "needs_check" {
 			reason = "node backend runtime needs agent check before it can be used; run check on the node runtime config first"
 		}
-		pf.addErr("node_backend_runtime_not_ready", reason, map[string]interface{}{"node_id": pf.placement.NodeID, "runtime_id": pf.runtimeID, "node_runtime_id": pf.nodeRuntimeID, "nbr_status": nodeRuntimeStatus})
+		pf.addErr("node_backend_runtime_not_ready", reason, map[string]interface{}{"node_runtime_id": pf.nodeRuntimeID, "nbr_status": nodeRuntimeStatus, "node_id": pf.placement.NodeID, "runtime_id": pf.runtimeID})
 		return pf
 	}
 

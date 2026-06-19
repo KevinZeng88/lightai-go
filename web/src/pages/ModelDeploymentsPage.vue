@@ -398,7 +398,7 @@ function showEdit(row: any) {
   editForm.value.original_name = row.name || row.display_name || ''
   editForm.value.display_name = row.display_name || ''
   editForm.value.model_artifact_id = row.model_artifact_id || ''
-  editForm.value.backend_runtime_id = row.backend_runtime_id || ''
+  editForm.value.backend_runtime_id = row.source_node_backend_runtime_id || row.backend_runtime_id || ''
   editForm.value.source_template_name = row.source_template_name || ''
   editForm.value.source_backend_runtime_id = row.source_backend_runtime_id || ''
   editForm.value.copied_at = row.copied_at || ''
@@ -422,7 +422,6 @@ async function doEdit() {
     const payload: any = {
       display_name: editForm.value.display_name,
       model_artifact_id: editForm.value.model_artifact_id,
-      backend_runtime_id: editForm.value.backend_runtime_id,
       service_json: servicePayload(editForm.value.host_port, editForm.value.container_port, editForm.value.app_port),
     }
     await apiClient.patch(`/deployments/${selectedEditRow.value.id}`, payload)
@@ -539,11 +538,6 @@ async function ensureWizardDeployment() {
   // Send node_backend_runtime_id when we have one selected
   if (wizardNBRId.value) {
     payload.node_backend_runtime_id = wizardNBRId.value
-    // Also resolve backend_runtime_id from NBR for backward compat
-    const nbr = allNBRs.value.find((n: any) => n.id === wizardNBRId.value)
-    if (nbr) {
-      payload.backend_runtime_id = nbr.backend_runtime_id
-    }
   }
   const deploy = await apiClient.post('/deployments', payload)
   wizardDeploymentId.value = deploy.id

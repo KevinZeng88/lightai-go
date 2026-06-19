@@ -8,7 +8,7 @@ export interface PreflightResult {
 }
 
 export function preflightDeployment(data: {
-  model_artifact_id: string; backend_runtime_id: string
+  model_artifact_id: string; node_backend_runtime_id: string
   node_id?: string; gpu_ids?: string[]; host_port?: number
 }): Promise<PreflightResult> {
   return apiClient.post('/deployments/preflight', data)

@@ -202,7 +202,20 @@ Not implemented in current phase. Documented as P2:
    subsequent starts.
 ```
 
-### 2.5 Why Deployment Must Select Ready NBR
+### 2.5 backend_runtime_id Is NOT a Deployment Parameter
+
+**`backend_runtime_id` is rejected by all deployment-related APIs.** It is accepted ONLY by NBR enable/check endpoints (to identify which BackendRuntime template to enable/check on a node).
+
+APIs that reject `backend_runtime_id` with HTTP 400:
+- `POST /deployments` — returns "BackendRuntime is a template and cannot be used for deployment. Use node_backend_runtime_id."
+- `POST /deployments/preflight` — same rejection
+- `PATCH /deployments/{id}` — silently ignored (field not accepted)
+
+The `backend_runtime_id` column in the `model_deployments` table is an **internal template reference FK** only — it is populated from the NBR at deployment creation time and is never accepted as user input for deployment purposes.
+
+There is **no backward compatibility** for the old `backend_runtime_id` deployment path. Old deployments without `source_node_backend_runtime_id` will fail preflight/start. Recreate them with a valid NBR.
+
+### 2.6 Why Deployment Must Select Ready NBR
 
 BackendRuntime (BR) is a **template layer object** — it describes how a class of backend should run (Docker image, args, env, mounts), but it is NOT bound to any specific node and does NOT carry any readiness guarantee.
 

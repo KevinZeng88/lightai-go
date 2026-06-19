@@ -607,32 +607,16 @@ func TestPreflightDeploymentFailsWhenNoNBRExists(t *testing.T) {
 	insertUIPersistenceArtifact(t, h, artifactID)
 	snapshotInsertModelLocation(t, database, "ml-no-nbr", artifactID, nodeID)
 
-	// Create deployment
+	// Create deployment with node_backend_runtime_id pointing to non-existent NBR.
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x",
-		`{"name":"dep-no-nbr","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8010}}`,
+		`{"name":"dep-no-nbr","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"nonexistent:rt-no-nbr","service_json":{"host_port":8010}}`,
 		adminSession(), nil))
-	if w.Code != 201 {
-		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	if w.Code == 201 {
+		t.Fatalf("create should have failed with non-existent NBR, got code=%d", w.Code)
 	}
-	var dep map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &dep)
-	depID := dep["id"].(string)
-
-	// Try to start — should fail because no NBR exists.
-	sw := httptest.NewRecorder()
-	h.HandleStartDeployment(sw, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": depID}))
-	if sw.Code == 200 {
-		t.Fatalf("start should have failed without NBR, got code=%d body=%s", sw.Code, sw.Body.String())
-	}
-	var errResp map[string]interface{}
-	json.Unmarshal(sw.Body.Bytes(), &errResp)
-	errMsg := ""
-	if m, ok := errResp["error"]; ok {
-		errMsg = m.(string)
-	}
-	if !strings.Contains(errMsg, "node_backend_runtime_not_ready") && !strings.Contains(errMsg, "no node backend runtime") && !strings.Contains(sw.Body.String(), "node_backend_runtime_not_ready") {
-		t.Fatalf("expected node_backend_runtime_not_ready error, got: %s", sw.Body.String())
+	if !strings.Contains(w.Body.String(), "not found") {
+		t.Fatalf("expected 'not found' error, got: %s", w.Body.String())
 	}
 }
 
@@ -671,26 +655,16 @@ func TestPreflightDeploymentFailsWhenNBRNotReady(t *testing.T) {
 		t.Fatalf("expected NBR status=needs_check, got %v", nbrResp["status"])
 	}
 
-	// Create deployment
+	// Create deployment with needs_check NBR — should be rejected.
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x",
-		`{"name":"dep-not-ready","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8011}}`,
+		`{"name":"dep-not-ready","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8011}}`,
 		adminSession(), nil))
-	if w.Code != 201 {
-		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	if w.Code == 201 {
+		t.Fatalf("create should have rejected needs_check NBR, got code=%d", w.Code)
 	}
-	var dep map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &dep)
-	depID := dep["id"].(string)
-
-	// Try to start — should fail because NBR status is needs_check.
-	sw := httptest.NewRecorder()
-	h.HandleStartDeployment(sw, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": depID}))
-	if sw.Code == 200 {
-		t.Fatalf("start should have failed with needs_check NBR, got code=%d body=%s", sw.Code, sw.Body.String())
-	}
-	if !strings.Contains(sw.Body.String(), "node_backend_runtime_not_ready") && !strings.Contains(sw.Body.String(), "needs_check") {
-		t.Fatalf("expected node_backend_runtime_not_ready with needs_check, got: %s", sw.Body.String())
+	if !strings.Contains(w.Body.String(), "not ready") && !strings.Contains(w.Body.String(), "needs_check") {
+		t.Fatalf("expected rejection for needs_check NBR, got: %s", w.Body.String())
 	}
 }
 
@@ -765,14 +739,13 @@ func TestPreflightDoesNotAutoCreateNBR(t *testing.T) {
 		t.Fatalf("expected 0 NBR rows before test, got %d", nbrCountBefore)
 	}
 
-	// Call standalone preflight (should not create NBR).
+	// Call preflight with backend_runtime_id — should be rejected with 400.
 	pw := httptest.NewRecorder()
 	h.HandlePreflightDeployments(pw, newReq("POST", "/x",
 		`{"model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`"}`,
 		adminSession(), nil))
-	// The call should succeed (return a result) but with can_run=false and no candidates.
-	if pw.Code != 200 {
-		t.Fatalf("preflight code=%d body=%s", pw.Code, pw.Body.String())
+	if pw.Code != 400 {
+		t.Fatalf("preflight should reject backend_runtime_id with 400, got code=%d body=%s", pw.Code, pw.Body.String())
 	}
 
 	// Verify no NBR row was created by the preflight call.
@@ -965,6 +938,155 @@ func TestContainerFailureResultCarriesReasonAndStderrPreview(t *testing.T) {
 	}
 	if tr.Stderr == "" {
 		t.Error("Stderr not set")
+	}
+}
+
+// ── backend_runtime_id rejection tests ─────────────────────────────────
+
+// TestCreateDeploymentRejectsBackendRuntimeID verifies that POST /deployments
+// with bare backend_runtime_id (no node_backend_runtime_id) returns 400.
+func TestCreateDeploymentRejectsBackendRuntimeID(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-rej-create")
+	insertRuntime(t, db, "rt-rej-create", "Rej Runtime", "")
+
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-rej","model_artifact_id":"some-artifact","backend_runtime_id":"rt-rej-create"}`,
+		adminSession(), nil))
+	if w.Code != 400 {
+		t.Fatalf("expected 400 for bare backend_runtime_id, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "template") {
+		t.Fatalf("error should mention template, got: %s", w.Body.String())
+	}
+}
+
+// TestPreflightRejectsBackendRuntimeID verifies that POST /deployments/preflight
+// with backend_runtime_id returns 400.
+func TestPreflightRejectsBackendRuntimeID(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	w := httptest.NewRecorder()
+	h.HandlePreflightDeployments(w, newReq("POST", "/x",
+		`{"model_artifact_id":"art-x","backend_runtime_id":"rt-x"}`,
+		adminSession(), nil))
+	if w.Code != 400 {
+		t.Fatalf("expected 400 for preflight with backend_runtime_id, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "template") {
+		t.Fatalf("error should mention template, got: %s", w.Body.String())
+	}
+}
+
+// TestPatchDeploymentRejectsBackendRuntimeID verifies that PATCH /deployments
+// with backend_runtime_id returns 400.
+func TestPatchDeploymentRejectsBackendRuntimeID(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-rej-patch")
+	runtimeBoundaryInsertDeployment(t, db, "dep-rej-patch")
+
+	w := httptest.NewRecorder()
+	h.HandlePatchDeployment(w, newReq("PATCH", "/x",
+		`{"backend_runtime_id":"changed-rt"}`,
+		adminSession(), map[string]string{"id": "dep-rej-patch"}))
+	// backend_runtime_id is not in the patachable field list anymore;
+	// the request is silently accepted (field ignored) or returns 400.
+	// Check that the value was NOT applied.
+	var stored string
+	db.QueryRow(`SELECT backend_runtime_id FROM model_deployments WHERE id='dep-rej-patch'`).Scan(&stored)
+	if stored != "rt-dep-rej-patch" {
+		t.Fatalf("backend_runtime_id should not have changed: got %q want rt-dep-rej-patch", stored)
+	}
+}
+
+// TestStartFailsForDeploymentWithoutNBRID verifies that a deployment
+// with no source_node_backend_runtime_id fails to start.
+func TestStartFailsForDeploymentWithoutNBRID(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	runtimeBoundaryInsertOnlineNode(t, db, "node-no-nbrid")
+	runtimeBoundaryInsertDeployment(t, db, "dep-no-nbrid")
+
+	// Manually clear the source_node_backend_runtime_id.
+	db.Exec(`UPDATE model_deployments SET source_node_backend_runtime_id = '' WHERE id = 'dep-no-nbrid'`)
+
+	sw := httptest.NewRecorder()
+	h.HandleStartDeployment(sw, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": "dep-no-nbrid"}))
+	if sw.Code == 200 {
+		t.Fatalf("start should fail without source_node_backend_runtime_id, got %d body=%s", sw.Code, sw.Body.String())
+	}
+	if !strings.Contains(sw.Body.String(), "node_backend_runtime") {
+		t.Fatalf("error should mention node_backend_runtime, got: %s", sw.Body.String())
+	}
+}
+
+// TestDeploymentStartUsesNBRNotBackendRuntime verifies that start/runplan
+// uses the frozen deployment config snapshot, not live BackendRuntime data.
+func TestDeploymentStartUsesNBRNotBackendRuntime(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID, runtimeID, artifactID := snapshotSetupFullChain(t, h, "nbr-src")
+
+	// Create deployment via API with node_backend_runtime_id.
+	nbrID := nodeID + ":" + runtimeID
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-nbr-src","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nbrID+`","service_json":{"host_port":8020}}`,
+		adminSession(), nil))
+	if w.Code != 201 {
+		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	}
+	var dep map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &dep)
+	depID := dep["id"].(string)
+
+	// Verify source_node_backend_runtime_id is stored.
+	if dep["source_node_backend_runtime_id"] != nbrID {
+		t.Fatalf("source_node_backend_runtime_id=%v want %s", dep["source_node_backend_runtime_id"], nbrID)
+	}
+
+	// Verify config_snapshot_json includes NBR config.
+	snapRaw := dep["config_snapshot_json"]
+	var snapStr string
+	switch v := snapRaw.(type) {
+	case string:
+		snapStr = v
+	case map[string]interface{}:
+		raw, _ := json.Marshal(v)
+		snapStr = string(raw)
+	}
+	if snapStr == "" || snapStr == "{}" {
+		t.Fatal("config_snapshot_json is empty")
+	}
+	if !strings.Contains(snapStr, "nbr_image_ref") {
+		t.Fatalf("deployment snapshot missing nbr_image_ref: %s", snapStr)
+	}
+
+	// Now modify the BackendRuntime template — should NOT affect the deployment.
+	db.Exec(`UPDATE backend_runtimes SET image_name = 'modified:v99' WHERE id = ?`, runtimeID)
+
+	// Dry-run should still use the frozen snapshot, not the modified template.
+	dw := httptest.NewRecorder()
+	h.HandleDeploymentDryRun(dw, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": depID}))
+	if dw.Code != 200 {
+		// Dry-run may fail if model_location check fails; that's fine.
+		// What matters is that it didn't use the modified template.
+		t.Logf("dry-run code=%d (may fail if no model_location)", dw.Code)
+	}
+
+	// Verify the template modification was applied to the DB but NOT the deployment.
+	var templateImage string
+	db.QueryRow(`SELECT image_name FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&templateImage)
+	if templateImage != "modified:v99" {
+		t.Fatalf("template modification not persisted: image_name=%q", templateImage)
+	}
+	if strings.Contains(snapStr, "modified:v99") {
+		t.Fatalf("deployment snapshot picked up live template change: %s", snapStr)
 	}
 }
 

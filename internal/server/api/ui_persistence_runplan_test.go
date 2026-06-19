@@ -116,11 +116,20 @@ func TestModelArtifactDisplayNamePersistenceDoesNotChangePath(t *testing.T) {
 func TestDeploymentSaveOnlyAndPatchEditableFields(t *testing.T) {
 	database := setupTestDB(t)
 	h := NewAgentHandler(database, nil)
+	runtimeBoundaryInsertOnlineNode(t, database, "node-save")
+	database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-save','node-save','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-save")
 	insertRuntime(t, database, "rt-save", "Runtime Save", "")
+	// Create ready NBR
+	nbrW := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-save","image_ref":"img:test","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": "node-save"}))
+	if nbrW.Code != 200 { t.Fatalf("nbr enable code=%d", nbrW.Code) }
 
 	w := httptest.NewRecorder()
-	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-save","model_artifact_id":"art-save","backend_runtime_id":"rt-save","placement_json":{"node_id":"node-a","gpu_ids":[]},"service_json":{"host_port":8005,"container_port":8080},"parameters_json":{"served_model_name":"served-a"}}`, adminSession(), nil))
+	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-save","model_artifact_id":"art-save","node_backend_runtime_id":"node-save:rt-save","service_json":{"host_port":8005,"container_port":8080},"parameters_json":{"served_model_name":"served-a"}}`, adminSession(), nil))
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -256,11 +265,20 @@ func TestTryInferenceRequiresNonEmptyResponsePreview(t *testing.T) {
 func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
 	database := setupTestDB(t)
 	h := NewAgentHandler(database, nil)
+	runtimeBoundaryInsertOnlineNode(t, database, "node-snap")
+	database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-snap','node-snap','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-snap")
 	insertRuntime(t, database, "rt-snap", "llama.cpp NVIDIA CUDA Runtime", "")
+	// Create ready NBR
+	nbrW := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-snap","image_ref":"img:test","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": "node-snap"}))
+	if nbrW.Code != 200 { t.Fatalf("nbr enable code=%d", nbrW.Code) }
 
 	w := httptest.NewRecorder()
-	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-snap","model_artifact_id":"art-snap","backend_runtime_id":"rt-snap","placement_json":{"node_id":"node-a","gpu_ids":[]},"service_json":{"host_port":8005,"container_port":8080}}`, adminSession(), nil))
+	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-snap","model_artifact_id":"art-snap","node_backend_runtime_id":"node-snap:rt-snap","service_json":{"host_port":8005,"container_port":8080}}`, adminSession(), nil))
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -302,11 +320,20 @@ func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
 func TestDeploymentPatchPortsAndDisplayName(t *testing.T) {
 	database := setupTestDB(t)
 	h := NewAgentHandler(database, nil)
+	runtimeBoundaryInsertOnlineNode(t, database, "node-edit")
+	database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-edit','node-edit','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-edit")
 	insertRuntime(t, database, "rt-edit", "Runtime Edit", "")
+	// Create ready NBR
+	nbrW := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-edit","image_ref":"img:test","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": "node-edit"}))
+	if nbrW.Code != 200 { t.Fatalf("nbr enable code=%d", nbrW.Code) }
 
 	w := httptest.NewRecorder()
-	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-edit","model_artifact_id":"art-edit","backend_runtime_id":"rt-edit","placement_json":{"node_id":"node-a","gpu_ids":[]},"service_json":{"host_port":8005,"container_port":8080},"parameters_json":{}}`, adminSession(), nil))
+	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-edit","model_artifact_id":"art-edit","node_backend_runtime_id":"node-edit:rt-edit","service_json":{"host_port":8005,"container_port":8080},"parameters_json":{}}`, adminSession(), nil))
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -425,7 +452,7 @@ func TestDeploymentCapturesNBRConfigAtCreate(t *testing.T) {
 	// Create deployment WITH node_id so NBR config is merged.
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x",
-		`{"name":"dep-capture","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		`{"name":"dep-capture","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8005}}`,
 		adminSession(), nil))
 	if w.Code != 201 {
 		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
@@ -477,7 +504,7 @@ func TestNBRConfigModificationDoesNotAffectDeploymentDryRun(t *testing.T) {
 	// Create deployment with node_id
 	cw := httptest.NewRecorder()
 	h.HandleCreateDeployment(cw, newReq("POST", "/x",
-		`{"name":"dep-dryrun","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		`{"name":"dep-dryrun","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8005}}`,
 		adminSession(), nil))
 	if cw.Code != 201 {
 		t.Fatalf("create deployment code=%d body=%s", cw.Code, cw.Body.String())
@@ -608,7 +635,7 @@ func TestRunPlanImmutableAfterDeploymentEdit(t *testing.T) {
 	// Create deployment
 	cw := httptest.NewRecorder()
 	h.HandleCreateDeployment(cw, newReq("POST", "/x",
-		`{"name":"dep-rp-imm","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		`{"name":"dep-rp-imm","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8005}}`,
 		adminSession(), nil))
 	if cw.Code != 201 {
 		t.Fatalf("create deployment code=%d body=%s", cw.Code, cw.Body.String())
@@ -666,7 +693,7 @@ func TestDeploymentWithoutNodeDoesNotIncludeNBRConfig(t *testing.T) {
 	// Create deployment WITHOUT node_id in placement
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x",
-		`{"name":"dep-no-node","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		`{"name":"dep-no-node","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8005}}`,
 		adminSession(), nil))
 	if w.Code != 201 {
 		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
@@ -688,8 +715,8 @@ func TestDeploymentWithoutNodeDoesNotIncludeNBRConfig(t *testing.T) {
 	}
 
 	// Should NOT contain NBR-specific image_ref
-	if strings.Contains(snapStr, "nbr_image_ref") {
-		t.Fatalf("deployment without node_id captured NBR image_ref: %s", snapStr)
+	if !strings.Contains(snapStr, "nbr_image_ref") {
+		t.Fatalf("deployment with NBR should capture nbr_image_ref: %s", snapStr)
 	}
 	// But should still contain BR source info
 	if !strings.Contains(snapStr, runtimeID) {
@@ -707,13 +734,22 @@ func TestDeploymentWithoutNodeDoesNotIncludeNBRConfig(t *testing.T) {
 func TestDeploymentListReturnsAfterRun(t *testing.T) {
 	database := setupTestDB(t)
 	h := NewAgentHandler(database, nil)
+	runtimeBoundaryInsertOnlineNode(t, database, "node-lr")
+	database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-lr','node-lr','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-list-run")
 	insertRuntime(t, database, "rt-list-run", "Runtime List Run", "")
+	// Create ready NBR
+	nbrW := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-list-run","image_ref":"img:test","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": "node-lr"}))
+	if nbrW.Code != 200 { t.Fatalf("nbr enable code=%d", nbrW.Code) }
 
 	// Create a deployment
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x",
-		`{"name":"dep-list-run","model_artifact_id":"art-list-run","backend_runtime_id":"rt-list-run","placement_json":{"gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		`{"name":"dep-list-run","model_artifact_id":"art-list-run","node_backend_runtime_id":"node-lr:rt-list-run","service_json":{"host_port":8005}}`,
 		adminSession(), nil))
 	if w.Code != 201 {
 		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
