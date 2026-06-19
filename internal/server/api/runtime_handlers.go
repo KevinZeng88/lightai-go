@@ -325,8 +325,23 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 	}
 	imagePresent := boolVal(req, "image_present", false)
 	dockerAvailable := boolVal(req, "docker_available", false)
+	// Security: client-provided image_present/docker_available are only trusted
+	// when the caller is the agent (checkOnly=true). The UI enable path
+	// (checkOnly=false) must NOT set status=ready or status=unknown based on
+	// unverified client claims. Server can only verify node online + vendor/GPU.
 	status, reason := h.evaluateNodeBackendRuntime(nodeID, vendor, imageRef, imagePresent, dockerAvailable)
-	if checkOnly && status == "unknown" {
+	if !checkOnly {
+		// UI-initiated enable: require agent verification for Docker/image.
+		// Server-verified failures (offline, unsupported_device, template_only)
+		// are preserved. ready/unknown/missing_image are replaced with needs_check.
+		switch status {
+		case "failed", "unsupported_device", "template_only":
+			// Server-verified blocking conditions — keep as-is
+		default:
+			status = "needs_check"
+			reason = "awaiting agent verification of Docker and image availability"
+		}
+	} else if status == "unknown" {
 		reason = "check request did not provide docker/image evidence"
 	}
 

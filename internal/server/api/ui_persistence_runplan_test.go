@@ -160,7 +160,7 @@ func TestNodeBackendRuntimeDisplayNamePersistence(t *testing.T) {
 	insertRuntime(t, database, "rt-nbr-name", "Runtime NBR Name", "")
 
 	w := httptest.NewRecorder()
-	h.HandleEnableNodeBackendRuntime(w, newReq("POST", "/x", `{"backend_runtime_id":"rt-nbr-name","display_name":"Runtime NBR Name - Custom Node","image_ref":"img:test","image_present":true,"docker_available":true}`, adminSession(), map[string]string{"id": "node-nbr-name"}))
+	h.HandleCheckNodeBackendRuntime(w, newReq("POST", "/x", `{"backend_runtime_id":"rt-nbr-name","display_name":"Runtime NBR Name - Custom Node","image_ref":"img:test","image_present":true,"docker_available":true}`, adminSession(), map[string]string{"id": "node-nbr-name"}))
 	if w.Code != http.StatusOK {
 		t.Fatalf("enable code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -402,7 +402,7 @@ func snapshotSetupFullChain(t *testing.T, h *AgentHandler, suffix string) (strin
 
 	// Enable NBR with ready status
 	ew := httptest.NewRecorder()
-	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
 		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR `+suffix+`","image_ref":"img:nbr-`+suffix+`","image_present":true,"docker_available":true}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {

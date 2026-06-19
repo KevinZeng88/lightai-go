@@ -94,7 +94,7 @@ func TestNodeBackendRuntimeCopiesTemplateSnapshotAndTemplateEditDoesNotChangeIt(
 	insertRuntime(t, db, "rt-snap", "Runtime Snap", "")
 
 	w := httptest.NewRecorder()
-	h.HandleEnableNodeBackendRuntime(w, newReq("POST", "/x", `{"backend_runtime_id":"rt-snap","image_ref":"img:test","image_present":true,"docker_available":true}`, adminSession(), map[string]string{"id": "node-a"}))
+	h.HandleCheckNodeBackendRuntime(w, newReq("POST", "/x", `{"backend_runtime_id":"rt-snap","image_ref":"img:test","image_present":true,"docker_available":true}`, adminSession(), map[string]string{"id": "node-a"}))
 	if w.Code != 200 {
 		t.Fatalf("enable code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -132,7 +132,7 @@ func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 
 	// 1. Create NodeBackendRuntime via enable (snapshot captured from BackendRuntime).
 	ew := httptest.NewRecorder()
-	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
 		`{"backend_runtime_id":"rt-check","image_ref":"img:orig","image_present":true,"docker_available":true}`,
 		adminSession(), map[string]string{"id": "node-check"}))
 	if ew.Code != 200 {
@@ -217,7 +217,7 @@ func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
 
 	// 1. Create NBR with image_ref = "img-a:tag".
 	ew := httptest.NewRecorder()
-	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
 		`{"backend_runtime_id":"rt-imgref","image_ref":"img-a:tag","image_present":true,"docker_available":true}`,
 		adminSession(), map[string]string{"id": "node-imgref"}))
 	if ew.Code != 200 {

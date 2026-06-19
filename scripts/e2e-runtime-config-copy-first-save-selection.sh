@@ -126,12 +126,20 @@ for n in json.load(sys.stdin):
 " 2>/dev/null)
   assert_empty "$label: no auto NBR after clone" "$nbr_status" || log "FAIL: NBR auto-created (should not happen)"
 
-  # ── Test 3: Explicit enable on node ──
+  # ── Test 3: Explicit enable on node (UI path — requires agent verification) ──
   log "  --- Test 3: Explicit enable on node ---"
-  local enable_resp; enable_resp=$(api_post "nodes/$NODE_ID/backend-runtimes/enable" "{\"backend_runtime_id\":\"$clone_id\",\"image_present\":true,\"docker_available\":true}")
+  local enable_resp; enable_resp=$(api_post "nodes/$NODE_ID/backend-runtimes/enable" "{\"backend_runtime_id\":\"$clone_id\"}")
   echo "$enable_resp" > "$ARTIFACT_DIR/${label}-enable-response.json"
   local nbr_enabled_status; nbr_enabled_status=$(echo "$enable_resp" | json_field status)
-  assert_eq "$label: explicit enable creates NBR" "ready" "$nbr_enabled_status" || log "NBR status=$nbr_enabled_status (expected ready)"
+  # UI enable must NOT set ready based on unverified client claims
+  assert_eq "$label: enable creates NBR (needs agent verification)" "needs_check" "$nbr_enabled_status" || log "NBR status=$nbr_enabled_status (expected needs_check)"
+
+  # ── Test 3b: Agent check verifies Docker + image → ready ──
+  log "  --- Test 3b: Agent check → ready ---"
+  local check_resp; check_resp=$(api_post "nodes/$NODE_ID/backend-runtimes/check" "{\"backend_runtime_id\":\"$clone_id\",\"image_present\":true,\"docker_available\":true}")
+  echo "$check_resp" > "$ARTIFACT_DIR/${label}-check-response.json"
+  local check_status; check_status=$(echo "$check_resp" | json_field status)
+  assert_eq "$label: agent check sets ready" "ready" "$check_status" || log "check status=$check_status (expected ready)"
 
   # ── Test 4: DryRun after explicit enable — uses user's shm_size ──
   log "  --- Test 4: DryRun after explicit enable ---"
