@@ -261,7 +261,8 @@ async function doTest(row: any) {
 	  stopping.value = true
 	  stoppingId.value = row.id
 	  try {
-	    await apiClient.post(`/model-instances/${row.id}/stop`)
+	    // Stop via deployment endpoint (no dedicated instance stop route).
+	    await apiClient.post(`/deployments/${row.deployment_id}/stop`)
 	    ElMessage.success(t('instances.stopped'))
 	    await refresh()
 	  } catch (e: any) {
