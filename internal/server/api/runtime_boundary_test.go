@@ -1089,4 +1089,69 @@ func TestDeploymentStartUsesNBRNotBackendRuntime(t *testing.T) {
 		t.Fatalf("deployment snapshot picked up live template change: %s", snapStr)
 	}
 }
+// TestCheckRequestEndpointPathValuesCorrect verifies that the check-request
+// handler correctly reads node_id from the route path parameter {id}.
+// Regression test for PathValue("node_id") vs route {id} mismatch.
+func TestCheckRequestEndpointPathValuesCorrect(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
 
+	nodeID := "node-cr-path"
+	runtimeID := "rt-cr-path"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-cr-path',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, runtimeID, "Runtime CR Path", "")
+
+	// Enable NBR via agent check so it's ready.
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:cr","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	nbrID := nodeID + ":" + runtimeID
+
+	// Call check-request with the correct path params.
+	// Route is POST /api/v1/nodes/{id}/backend-runtimes/{nbr_id}/check-request
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s (expected 200, not 'node_id and nbr_id are required')",
+			cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	if resp["id"] != nbrID {
+		t.Fatalf("check-request returned wrong id: %v want %s", resp["id"], nbrID)
+	}
+	// Status may be ready or missing_image depending on whether agent is reachable.
+	// The key assertion is that we got past the PathValue check.
+	t.Logf("check-request status=%v reason=%v image_present=%v docker_available=%v",
+		resp["status"], resp["status_reason"], resp["image_present"], resp["docker_available"])
+}
+
+// TestCheckRequestEndpointRejectsMissingPathValues verifies that
+// calling check-request without node_id or nbr_id in path returns 400.
+func TestCheckRequestEndpointRejectsMissingPathValues(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	// No path params at all → should fail with 400.
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{}))
+	if cw.Code != 400 {
+		t.Fatalf("expected 400 for missing path params, got %d body=%s", cw.Code, cw.Body.String())
+	}
+	if !strings.Contains(cw.Body.String(), "node_id and nbr_id are required") {
+		t.Fatalf("expected 'node_id and nbr_id are required', got: %s", cw.Body.String())
+	}
+}

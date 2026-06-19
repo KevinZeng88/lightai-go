@@ -300,7 +300,7 @@ func (h *AgentHandler) HandleCheckNodeBackendRuntime(w http.ResponseWriter, r *h
 // evaluates readiness with server-verified evidence.
 // POST /api/v1/nodes/{node_id}/backend-runtimes/{nbr_id}/check-request
 func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWriter, r *http.Request) {
-	nodeID := r.PathValue("node_id")
+	nodeID := r.PathValue("id")
 	nbrID := r.PathValue("nbr_id")
 	if nodeID == "" || nbrID == "" {
 		writeError(w, http.StatusBadRequest, "node_id and nbr_id are required")
