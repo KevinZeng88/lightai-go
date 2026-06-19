@@ -49,9 +49,22 @@ type VersionInfo struct {
 type ParameterDef struct {
 	Name     string      `json:"name"`
 	CliName  string      `json:"cli_name"`
+	Alias    string      `json:"alias"`
 	Type     string      `json:"type"`
 	Default  interface{} `json:"default"`
 	Required bool        `json:"required"`
+}
+
+// effectiveCliName returns the CLI name for this parameter, preferring
+// CliName, then Alias, then Name.
+func (d *ParameterDef) effectiveCliName() string {
+	if d.CliName != "" {
+		return d.CliName
+	}
+	if d.Alias != "" {
+		return d.Alias
+	}
+	return d.Name
 }
 
 // HealthCheckInput is the health check configuration.
@@ -443,13 +456,26 @@ func deduplicateArgs(args []string) []string {
 func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef) []string {
 	var args []string
 	for _, def := range defs {
-		// Look up value by ParameterDef name (CLI format e.g. "--served-model-name")
-		// and also by normalized name (snake_case e.g. "served_model_name").
+		// Look up value by multiple name forms:
+		//   1. ParameterDef.Name (CLI format e.g. "--served-model-name")
+		//   2. Normalized Name (snake_case e.g. "served_model_name")
+		//   3. ParameterDef.CliName / Alias (e.g. "-ngl" for "--n-gpu-layers")
+		//   4. Normalized CliName/Alias (e.g. "ngl")
 		val, ok := params[def.Name]
 		if !ok {
 			normalized := strings.ReplaceAll(strings.TrimPrefix(strings.TrimPrefix(def.Name, "-"), "-"), "-", "_")
 			if normalized != def.Name {
 				val, ok = params[normalized]
+			}
+		}
+		effCli := def.effectiveCliName()
+		if !ok && effCli != "" && effCli != def.Name {
+			val, ok = params[effCli]
+			if !ok {
+				normalizedCli := strings.ReplaceAll(strings.TrimPrefix(strings.TrimPrefix(effCli, "-"), "-"), "-", "_")
+				if normalizedCli != effCli {
+					val, ok = params[normalizedCli]
+				}
 			}
 		}
 		if !ok {
@@ -462,7 +488,7 @@ func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef) []s
 				continue
 			}
 		}
-		cliName := def.CliName
+		cliName := def.effectiveCliName()
 		if cliName == "" {
 			cliName = def.Name
 		}
