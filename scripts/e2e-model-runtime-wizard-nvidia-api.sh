@@ -139,7 +139,7 @@ root_path="$(dirname "$VLLM_MODEL")"
 set +e
 root_json="$(api POST "/api/v1/nodes/$node_id/model-roots" "{\"path\":\"$root_path\",\"description\":\"$PREFIX-$RUN_ID\"}")"
 root_create_rc=$?
-set -e
+set -euo pipefail
 if [ "$root_create_rc" -eq 0 ]; then
   ROOT_ID="$(printf '%s' "$root_json" | json_get id)"
   ROOT_CREATED="1"

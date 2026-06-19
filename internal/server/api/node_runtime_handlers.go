@@ -38,10 +38,23 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 	if newDisplayName == "" {
 		newDisplayName = newName
 	}
-	_, err := h.DB.Exec(`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, slug, managed_by, source, status, created_at, updated_at)
-		SELECT ?, ?, ?, backend_id, backend_version_id, ?, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, 0, 1, ?, slug, 'user', 'clone', status, ?, ?
-		FROM backend_runtimes WHERE id = ?`,
-		newID, newName, newDisplayName, sourceName, tid, now, now, originalID)
+		// Accept overrides from request body for key config fields.
+		imageName := strVal(req, "image_name", strVal(original, "image_name", ""))
+		vendor := strVal(req, "vendor", strVal(original, "vendor", ""))
+		dockerJSON := jsonFieldRaw(req, "docker_json", original["docker_json"])
+		argsOverride := jsonFieldRaw(req, "args_override_json", original["args_override_json"])
+		defaultEnv := jsonFieldRaw(req, "default_env_json", original["default_env_json"])
+		entryOverride := jsonFieldRaw(req, "entrypoint_override_json", original["entrypoint_override_json"])
+		_, err := h.DB.Exec(`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, slug, managed_by, source, status, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'docker', ?, 'if_not_present', ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, 'user', 'clone', 'active', ?, ?)`,
+			newID, newName, newDisplayName,
+			strVal(original, "backend_id", ""), strVal(original, "backend_version_id", ""),
+			sourceName, vendor, imageName,
+			jsonString(entryOverride), jsonString(argsOverride),
+			jsonString(defaultEnv), jsonString(dockerJSON),
+			jsonString(original["model_mount_json"]),
+			jsonString(original["health_check_override_json"]),
+			tid, strVal(original, "slug", ""), now, now)
 	if err != nil {
 		log.OperationFailed(ctx, "backend_runtime.clone", "db_write", opStart, err, "original_id", originalID)
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -50,6 +63,14 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 	log.OperationCompleted(ctx, "backend_runtime.clone", opStart, "id", newID, "original_id", originalID, "tenant_id", tid)
 	writeJSON(w, http.StatusCreated, h.getBackendRuntimeJSON(newID))
 }
+// jsonFieldRaw returns the request value if present, otherwise the fallback value.
+func jsonFieldRaw(req map[string]interface{}, key string, fallback interface{}) interface{} {
+	if v, ok := req[key]; ok && v != nil {
+		return v
+	}
+	return fallback
+}
+
 
 func (h *AgentHandler) uniqueRuntimeName(tenantID, base string) string {
 	base = strings.TrimSpace(base)
