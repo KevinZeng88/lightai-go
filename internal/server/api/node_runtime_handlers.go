@@ -61,9 +61,10 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Auto-create NodeBackendRuntime for online nodes matching the vendor,
-	// so the cloned runtime appears in the deployment wizard selector immediately.
-	h.autoEnableClonedRuntime(newID, vendor, imageName, tid, now)
+	// Note: Cloning a BackendRuntime does NOT auto-create NodeBackendRuntime records.
+	// NodeBackendRuntime must be explicitly enabled by the user via the enable-on-node flow
+	// (POST /api/v1/nodes/{id}/backend-runtimes/enable). This ensures the user confirms
+	// node assignment, Docker image availability, and node-level config before deployment.
 
 	log.OperationCompleted(ctx, "backend_runtime.clone", opStart, "id", newID, "original_id", originalID, "tenant_id", tid)
 	writeJSON(w, http.StatusCreated, h.getBackendRuntimeJSON(newID))
@@ -76,57 +77,6 @@ func jsonFieldRaw(req map[string]interface{}, key string, fallback interface{}) 
 	return fallback
 }
 
-
-// autoEnableClonedRuntime creates NodeBackendRuntime records for the cloned runtime
-// on all online nodes that match the vendor, so it appears in deployment wizard immediately.
-func (h *AgentHandler) autoEnableClonedRuntime(runtimeID, vendor, imageName, tenantID, now string) {
-	rows, err := h.DB.Query(`SELECT id FROM nodes WHERE status = 'online' AND tenant_id = ?`, tenantID)
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var nodeID string
-		if err := rows.Scan(&nodeID); err != nil {
-			continue
-		}
-		// Check if vendor matches: for CPU vendor, always match.
-		// For GPU vendors, check if node has matching GPU.
-		vendorMatch := vendor == "cpu"
-		if !vendorMatch {
-			var gpuCount int
-			h.DB.QueryRow(`SELECT COUNT(*) FROM gpu_devices WHERE node_id = ? AND vendor = ? AND status = 'available'`,
-				nodeID, vendor).Scan(&gpuCount)
-			vendorMatch = gpuCount > 0
-		}
-		if !vendorMatch {
-			continue
-		}
-		// Check if NBR already exists
-		nbrID := nodeID + ":" + runtimeID
-		var existing string
-		if h.DB.QueryRow(`SELECT id FROM node_backend_runtimes WHERE id = ?`, nbrID).Scan(&existing) == nil {
-			continue // already exists
-		}
-		// Evaluate status
-		status := "ready"
-		reason := "auto-enabled from clone"
-		displayName := ""
-		if vendor == "huawei" || vendor == "ascend" {
-			status = "template_only"
-			reason = "vendor requires hardware validation"
-		}
-		h.DB.Exec(`INSERT INTO node_backend_runtimes
-			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available,
-			 driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at,
-			 config_snapshot_json, source_runtime_name, source_runtime_revision, tenant_id, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			nbrID, runtimeID, nodeID, displayName, "docker", imageName, 1, 1,
-			"", "", "{}",
-			status, reason, now,
-			"{}", "", "", tenantID, now, now)
-	}
-}
 
 func (h *AgentHandler) uniqueRuntimeName(tenantID, base string) string {
 	base = strings.TrimSpace(base)

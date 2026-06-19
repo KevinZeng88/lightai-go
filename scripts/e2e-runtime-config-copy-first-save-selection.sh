@@ -113,11 +113,30 @@ print(json.dumps(payload))
   assert_contains "$label: is_editable=1" "$saved_editable" "rue" || log "FAIL: not editable"
   assert_contains "$label: is_builtin=0" "$saved_builtin" "alse" || log "FAIL: builtin"
 
-  # ── Test 2: Reverse assertion — source default NOT present ──
-  log "  --- Test 2: Reverse assertion ---"
+  # ── Test 2: Clone does NOT auto-create NBR ──
+  log "  --- Test 2: Clone does NOT auto-create NBR ---"
+  local nbr_list; nbr_list=$(api_get "nodes/$NODE_ID/backend-runtimes")
+  echo "$nbr_list" > "$ARTIFACT_DIR/${label}-nbrs-before-enable.json"
+  local nbr_status; nbr_status=$(echo "$nbr_list" | python3 -c "
+import json,sys
+for n in json.load(sys.stdin):
+    if n.get('backend_runtime_id') == '$clone_id':
+        print(n.get('status',''))
+        break
+" 2>/dev/null)
+  assert_empty "$label: no auto NBR after clone" "$nbr_status" || log "FAIL: NBR auto-created (should not happen)"
+
+  # ── Test 3: Explicit enable on node ──
+  log "  --- Test 3: Explicit enable on node ---"
+  local enable_resp; enable_resp=$(api_post "nodes/$NODE_ID/backend-runtimes/enable" "{\"backend_runtime_id\":\"$clone_id\",\"image_present\":true,\"docker_available\":true}")
+  echo "$enable_resp" > "$ARTIFACT_DIR/${label}-enable-response.json"
+  local nbr_enabled_status; nbr_enabled_status=$(echo "$enable_resp" | json_field status)
+  assert_eq "$label: explicit enable creates NBR" "ready" "$nbr_enabled_status" || log "NBR status=$nbr_enabled_status (expected ready)"
+
+  # ── Test 4: DryRun after explicit enable — uses user's shm_size ──
+  log "  --- Test 4: DryRun after explicit enable ---"
   local preview; preview=""
   if [ -n "$art_id" ]; then
-    # Create deployment and DryRun
     local dep_payload="{\"name\":\"$PREFIX-${label}-dep\",\"model_artifact_id\":\"$art_id\",\"backend_runtime_id\":\"$clone_id\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8501,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}"
     local dep_resp; dep_resp=$(api_post "deployments" "$dep_payload")
     local dep_id; dep_id=$(echo "$dep_resp" | json_field id)
@@ -132,25 +151,8 @@ print(json.dumps(payload))
     fi
   fi
 
-  # ── Test 3: NBR auto-created ──
-  log "  --- Test 3: NBR auto-created ---"
-  local nbr_id="${NODE_ID}:${clone_id}"
-  local nbr_list; nbr_list=$(api_get "nodes/$NODE_ID/backend-runtimes")
-  echo "$nbr_list" > "$ARTIFACT_DIR/${label}-nbrs.json"
-  local nbr_status; nbr_status=$(echo "$nbr_list" | python3 -c "
-import json,sys
-for n in json.load(sys.stdin):
-    if n.get('backend_runtime_id') == '$clone_id':
-        print(n.get('status',''))
-        break
-" 2>/dev/null)
-  assert_nonempty "$label: NBR exists" "$nbr_status" || log "FAIL: NBR not created"
-  if [ -n "$nbr_status" ]; then
-    assert_eq "$label: NBR status=ready" "ready" "$nbr_status" || log "NBR status=$nbr_status (not ready)"
-  fi
-
-  # ── Test 4: Deployment wizard runtime list includes cloned runtime ──
-  log "  --- Test 4: Wizard selector visibility ---"
+  # ── Test 5: Deployment wizard runtime list includes cloned runtime ──
+  log "  --- Test 5: Wizard selector visibility ---"
   local rt_list; rt_list=$(api_get "backend-runtimes")
   echo "$rt_list" > "$ARTIFACT_DIR/${label}-runtimes-after.json"
   local found; found=$(echo "$rt_list" | python3 -c "
