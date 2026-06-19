@@ -704,3 +704,92 @@ func TestDeploymentWithoutNodeDoesNotIncludeNBRConfig(t *testing.T) {
 		t.Fatal("NBR should still exist after deployment creation without node_id")
 	}
 }
+func TestDeploymentListReturnsAfterRun(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	insertUIPersistenceArtifact(t, h, "art-list-run")
+	insertRuntime(t, database, "rt-list-run", "Runtime List Run", "")
+
+	// Create a deployment
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-list-run","model_artifact_id":"art-list-run","backend_runtime_id":"rt-list-run","placement_json":{"gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		adminSession(), nil))
+	if w.Code != 201 {
+		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	// List deployments — must include the created deployment
+	lw := httptest.NewRecorder()
+	h.HandleListDeployments(lw, newReq("GET", "/x", "", adminSession(), nil))
+	if lw.Code != 200 {
+		t.Fatalf("list deployments code=%d body=%s", lw.Code, lw.Body.String())
+	}
+	var items []map[string]interface{}
+	json.Unmarshal(lw.Body.Bytes(), &items)
+	if len(items) == 0 {
+		t.Fatal("deployment list returned empty — regression: column mismatch in HandleListDeployments")
+	}
+
+	// The created deployment must be in the list
+	found := false
+	for _, item := range items {
+		if item["name"] == "dep-list-run" {
+			found = true
+			if item["status"] != "saved" {
+				t.Fatalf("deployment status = %v, want saved", item["status"])
+			}
+			if item["display_name"] == "" {
+				t.Fatalf("deployment display_name is empty")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("deployment dep-list-run not found in list (%d items)", len(items))
+	}
+}
+
+func TestExtractPreviewHandlesReasoningContent(t *testing.T) {
+	// Chat response with reasoning_content but empty content
+	chatBody := `{"choices":[{"message":{"role":"assistant","reasoning_content":"Let me think...","content":""}}]}`
+	preview := extractPreview([]byte(chatBody), "chat")
+	if !strings.Contains(preview, "[reasoning]") || !strings.Contains(preview, "Let me think") {
+		t.Fatalf("extractPreview did not return reasoning_content: got=%q", preview)
+	}
+
+	// Chat response with normal content
+	chatBody2 := `{"choices":[{"message":{"role":"assistant","content":"Hello world"}}]}`
+	preview2 := extractPreview([]byte(chatBody2), "chat")
+	if preview2 != "Hello world" {
+		t.Fatalf("extractPreview missed content: got=%q", preview2)
+	}
+
+	// Completion response with text
+	compBody := `{"choices":[{"text":"Generated text"}]}`
+	preview3 := extractPreview([]byte(compBody), "completion")
+	if preview3 != "Generated text" {
+		t.Fatalf("extractPreview missed text: got=%q", preview3)
+	}
+
+	// Top-level content field (non-OpenAI format)
+	nativeBody := `{"content":"Native response"}`
+	preview4 := extractPreview([]byte(nativeBody), "chat")
+	if preview4 != "Native response" {
+		t.Fatalf("extractPreview missed top-level content: got=%q", preview4)
+	}
+
+	// Top-level response field
+	respBody := `{"response":"Hello from llama"}`
+	preview5 := extractPreview([]byte(respBody), "chat")
+	if preview5 != "Hello from llama" {
+		t.Fatalf("extractPreview missed top-level response: got=%q", preview5)
+	}
+
+	// Empty content + no reasoning = empty
+	emptyBody := `{"choices":[{"message":{"content":""}}]}`
+	preview6 := extractPreview([]byte(emptyBody), "chat")
+	if preview6 != "" {
+		t.Fatalf("extractPreview should return empty for empty content: got=%q", preview6)
+	}
+}

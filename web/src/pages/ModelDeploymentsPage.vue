@@ -247,7 +247,7 @@ const wizardStarting = ref(false)
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () => { wizardStep.value++ })
 
 onMounted(async () => { await refresh(); await loadRefs() })
-async function refresh() { loading.value = true; try { items.value = await apiClient.get('/deployments') } catch (e: any) {} loading.value = false }
+async function refresh() { loading.value = true; try { items.value = await apiClient.get('/deployments') } catch (e: any) { console.error('deployments refresh failed', e) } loading.value = false }
 const { loadNodes, nodeLabel } = useNodeLabels()
 
 async function loadRefs() {

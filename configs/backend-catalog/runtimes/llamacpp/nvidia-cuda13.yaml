@@ -31,10 +31,8 @@ entrypoint:
 args:
   - -m
   - "{{MODEL_CONTAINER_PATH}}"
-  - --host
-  - "0.0.0.0"
-  - --port
-  - "8080"
+  # --host and --port come from version default_args; not duplicated here
+  # to avoid triggering LLAMA_ARG_HOST / --host warnings in upstream llama-server.
 args_defaults:
   - name: --n-gpu-layers
     value: "-1"

@@ -26,7 +26,7 @@ import (
 
 func (h *AgentHandler) HandleListDeployments(w http.ResponseWriter, r *http.Request) {
 	tid := tenantID(r)
-	q := `SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(config_snapshot_json,'{}'), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments`
+	q := `SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(config_snapshot_json,'{}'), COALESCE(source_backend_runtime_id,''), COALESCE(source_node_backend_runtime_id,''), COALESCE(source_template_name,''), COALESCE(source_template_version,''), COALESCE(source_config_hash,''), COALESCE(copied_at,''), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments`
 	var out []map[string]interface{}
 	var err error
 	if isPlatformAdmin(r) {
@@ -2079,12 +2079,13 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 	chatBody, _ := json.Marshal(map[string]interface{}{
 		"model":      modelName,
 		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
-		"max_tokens": 8, "temperature": 0,
+		"max_tokens": 8, "temperature": 0, "stream": false,
 	})
 
 	startTime := time.Now()
 	httpReq, _ := http.NewRequest("POST", chatURL, bytes.NewReader(chatBody))
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
 	resp, err := client.Do(httpReq)
 	latencyMs := time.Since(startTime).Milliseconds()
 
@@ -2106,6 +2107,7 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 				"message":  "request succeeded but model response was empty",
 				"endpoint": chatURL, "model": modelName,
 				"latency_ms": latencyMs, "response_preview": preview,
+				"raw_response": string(bodyBytes),
 			}
 		}
 		resolvedModel := modelName
@@ -2118,6 +2120,7 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 			"ok": true, "mode": "chat",
 			"endpoint": chatURL, "model": resolvedModel,
 			"latency_ms": latencyMs, "response_preview": preview,
+			"raw_response": string(bodyBytes),
 		}
 	}
 
@@ -2126,11 +2129,12 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 		compURL := strings.TrimRight(endpoint, "/") + "/v1/completions"
 		compBody, _ := json.Marshal(map[string]interface{}{
 			"model":  modelName,
-			"prompt": "ping", "max_tokens": 8, "temperature": 0,
+			"prompt": "ping", "max_tokens": 8, "temperature": 0, "stream": false,
 		})
 		compStart := time.Now()
 		compReq, _ := http.NewRequest("POST", compURL, bytes.NewReader(compBody))
 		compReq.Header.Set("Content-Type", "application/json")
+		compReq.Header.Set("Accept", "application/json")
 		compResp, compErr := client.Do(compReq)
 		compLatency := time.Since(compStart).Milliseconds()
 
@@ -2148,6 +2152,7 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 					"message":  "request succeeded but model response was empty",
 					"endpoint": compURL, "model": modelName,
 					"latency_ms": compLatency, "response_preview": preview,
+					"raw_response": string(compBytes),
 				}
 			}
 			resolvedModel := modelName
@@ -2178,25 +2183,60 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 }
 
 // extractPreview extracts a short response preview from chat or completion JSON.
+// Handles: choices[0].message.content, choices[0].message.reasoning_content,
+// choices[0].text, choices[0].delta.content (stream fallback),
+// top-level content/response/generated_text.
 func extractPreview(bodyBytes []byte, mode string) string {
 	var data map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &data); err != nil {
 		return ""
 	}
+	// Try choices array first (OpenAI-compatible format).
 	choices, _ := data["choices"].([]interface{})
-	if len(choices) == 0 {
-		return ""
-	}
-	choice, _ := choices[0].(map[string]interface{})
-	if mode == "chat" {
-		if msg, ok := choice["message"].(map[string]interface{}); ok {
-			if c, ok := msg["content"]; ok {
-				return fmt.Sprintf("%v", c)
+	if len(choices) > 0 {
+		choice, _ := choices[0].(map[string]interface{})
+		if mode == "chat" {
+			if msg, ok := choice["message"].(map[string]interface{}); ok {
+				// Prefer content, but use reasoning_content if content is empty.
+				if c, ok := msg["content"]; ok {
+					s := fmt.Sprintf("%v", c)
+					if strings.TrimSpace(s) != "" {
+						return s
+					}
+				}
+				if rc, ok := msg["reasoning_content"]; ok {
+					s := fmt.Sprintf("%v", rc)
+					if strings.TrimSpace(s) != "" {
+						return "[reasoning] " + s
+					}
+				}
+			}
+			// Stream delta fallback.
+			if delta, ok := choice["delta"].(map[string]interface{}); ok {
+				if c, ok := delta["content"]; ok {
+					s := fmt.Sprintf("%v", c)
+					if strings.TrimSpace(s) != "" {
+						return s
+					}
+				}
+			}
+		}
+		// text field (completions or plain).
+		if t, ok := choice["text"]; ok {
+			s := fmt.Sprintf("%v", t)
+			if strings.TrimSpace(s) != "" {
+				return s
 			}
 		}
 	}
-	if t, ok := choice["text"]; ok {
-		return fmt.Sprintf("%v", t)
+	// Top-level fields (non-OpenAI formats, e.g. llama.cpp native).
+	for _, key := range []string{"content", "response", "generated_text"} {
+		if v, ok := data[key]; ok {
+			s := fmt.Sprintf("%v", v)
+			if strings.TrimSpace(s) != "" {
+				return s
+			}
+		}
 	}
 	return ""
 }

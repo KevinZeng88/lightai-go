@@ -17,7 +17,7 @@
       <el-table-column prop="container_id" :label="t('instances.container')" width="180" show-overflow-tooltip />
       <el-table-column prop="host_port" :label="t('instances.port')" width="90" />
       <el-table-column prop="endpoint_url" :label="t('instances.endpoint')" min-width="200" show-overflow-tooltip />
-      <el-table-column :label="t('common.actions')" width="320" fixed="right">
+      <el-table-column :label="t('common.actions')" width="420" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="showDetail(row)">{{ t('common.detail') }}</el-button>
           <el-button
@@ -36,6 +36,15 @@
             @click="openLogs(row)"
           >
             {{ t('dockerLogs.title') }}
+          </el-button>
+          <el-button
+            size="small"
+            type="danger"
+            :disabled="row.actual_state !== 'running' && row.actual_state !== 'starting'"
+            :loading="stopping && stoppingId === row.id"
+            @click="doStop(row)"
+          >
+            {{ t('instances.stop') }}
           </el-button>
         </template>
       </el-table-column>
@@ -67,6 +76,12 @@
           <el-descriptions-item :label="t('instances.testPreview')">{{ testResult.response_preview || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testCheckedAt')">{{ testResult.checked_at || '-' }}</el-descriptions-item>
         </el-descriptions>
+        <h4 style="margin-top:12px">{{ t('instances.rawResponse') }}</h4>
+        <el-collapse>
+          <el-collapse-item title="View raw JSON">
+            <pre class="raw-response">{{ testResult.raw_response || testResult.response_preview || '-' }}</pre>
+          </el-collapse-item>
+        </el-collapse>
       </div>
     </el-dialog>
 
@@ -130,11 +145,13 @@ const logsMeta = ref<any>(null)
 const logsRow = ref<any>(null)
 const autoOpenedFailedLogs = ref(false)
 
-// Model smoke test
+// Model smoke test + instance actions
 const testing = ref(false)
 const testVisible = ref(false)
 const testRow = ref<any>(null)
 const testResult = ref<any>(null)
+const stopping = ref(false)
+const stoppingId = ref('')
 
 // Reason code → i18n key mapping for test failures
 const testReasonI18n: Record<string, string> = {
@@ -239,6 +256,21 @@ async function doTest(row: any) {
     testing.value = false
   }
 }
+
+	async function doStop(row: any) {
+	  stopping.value = true
+	  stoppingId.value = row.id
+	  try {
+	    await apiClient.post(`/model-instances/${row.id}/stop`)
+	    ElMessage.success(t('instances.stopped'))
+	    await refresh()
+	  } catch (e: any) {
+	    ElMessage.error(e?.message || t('common.requestFailed'))
+	  } finally {
+	    stopping.value = false
+	    stoppingId.value = ''
+	  }
+	}
 </script>
 
 <style scoped>
