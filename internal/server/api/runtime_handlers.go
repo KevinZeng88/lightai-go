@@ -82,9 +82,14 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 	_ = userID(r) // reserved for audit
 	tid := tenantID(r)
 	now := time.Now().Format(time.RFC3339)
-	name := strVal(req, "name", templateName+"-"+id[:8])
+	name := strings.TrimSpace(strVal(req, "name", templateName+"-"+id[:8]))
 	if name == "-"+id[:8] {
 		name = "runtime-" + id[:8]
+	}
+	name = h.uniqueRuntimeName(tid, name)
+	displayName := strings.TrimSpace(strVal(req, "display_name", name))
+	if displayName == "" {
+		displayName = name
 	}
 
 	backendID := strVal(req, "backend_id", "")
@@ -125,7 +130,7 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 	_, err := h.DB.Exec(
 		`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, source_backend_id, source_backend_version_id, source_version_revision, version_snapshot_json, created_at, updated_at)
 		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		id, name, strVal(req, "display_name", name), backendID, versionID, templateName,
+		id, name, displayName, backendID, versionID, templateName,
 		vendor, "docker",
 		imageName, strVal(req, "image_pull_policy", "if_not_present"),
 		jsonField(req, "entrypoint_override_json", "[]"), jsonField(req, "args_override_json", "[]"), defaultEnvJSON, dockerJSON, modelMountJSON, jsonField(req, "health_check_override_json", "{}"),
@@ -187,6 +192,13 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 			if strings.HasSuffix(f, "_json") || f == "docker_json" {
 				args = append(args, jsonString(v))
 			} else {
+				if s, ok := v.(string); ok {
+					v = strings.TrimSpace(s)
+					if (f == "name" || f == "display_name") && v == "" {
+						writeError(w, http.StatusBadRequest, f+" is required")
+						return
+					}
+				}
 				args = append(args, v)
 			}
 		}
@@ -231,7 +243,7 @@ func (h *AgentHandler) HandleDeleteBackendRuntime(w http.ResponseWriter, r *http
 
 func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
-	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, COALESCE(nbr.config_snapshot_json,'{}'), br.name, br.display_name, br.vendor
+	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, COALESCE(nbr.config_snapshot_json,'{}'), br.name, br.display_name, br.vendor
 		FROM node_backend_runtimes nbr
 		JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id
 		WHERE nbr.node_id = ?
@@ -243,13 +255,22 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var id, runtimeID, nid, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, snapshotJSON, rtName, rtDisplay, vendor string
+		var id, runtimeID, nid, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, snapshotJSON, rtName, rtDisplay, vendor string
 		var imagePresent, dockerAvailable int
-		if err := rows.Scan(&id, &runtimeID, &nid, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &snapshotJSON, &rtName, &rtDisplay, &vendor); err != nil {
+		if err := rows.Scan(&id, &runtimeID, &nid, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &snapshotJSON, &rtName, &rtDisplay, &vendor); err != nil {
 			continue
 		}
+		if displayName == "" {
+			displayName = rtDisplay
+			if displayName == "" {
+				displayName = rtName
+			}
+			if nid != "" {
+				displayName += " - " + nid
+			}
+		}
 		out = append(out, map[string]interface{}{
-			"id": id, "backend_runtime_id": runtimeID, "node_id": nid, "runner_type": runner,
+			"id": id, "backend_runtime_id": runtimeID, "node_id": nid, "name": displayName, "display_name": displayName, "runner_type": runner,
 			"image_ref": imageRef, "image_id": imageID, "image_digest": digest,
 			"image_present": imagePresent == 1, "docker_available": dockerAvailable == 1,
 			"driver_version": driver, "toolkit_version": toolkit, "device_check_json": json.RawMessage(checkJSON),
@@ -292,6 +313,16 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 	}
 	vendor := strVal(rt, "vendor", "")
 	imageRef := strVal(req, "image_ref", strVal(rt, "image_name", ""))
+	displayName := strings.TrimSpace(strVal(req, "display_name", ""))
+	if displayName == "" {
+		displayName = strVal(rt, "display_name", "")
+		if displayName == "" {
+			displayName = strVal(rt, "name", runtimeID)
+		}
+		if nodeID != "" {
+			displayName += " - " + nodeID
+		}
+	}
 	imagePresent := boolVal(req, "image_present", false)
 	dockerAvailable := boolVal(req, "docker_available", false)
 	status, reason := h.evaluateNodeBackendRuntime(nodeID, vendor, imageRef, imagePresent, dockerAvailable)
@@ -317,9 +348,9 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		// silently change the behavior of existing NodeBackendRuntime records.
 		snapshotJSON := h.buildRuntimeConfigSnapshot(rt, runtimeID)
 		_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
-			(id, backend_runtime_id, node_id, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, tenant_id, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			id, runtimeID, nodeID, "docker", imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
+			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, tenant_id, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			id, runtimeID, nodeID, displayName, "docker", imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
 			strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
 			status, reason, now, snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""), tid, now, now)
 		if err != nil {
@@ -372,7 +403,7 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"id": id, "backend_runtime_id": runtimeID, "node_id": nodeID,
+		"id": id, "backend_runtime_id": runtimeID, "node_id": nodeID, "name": displayName, "display_name": displayName,
 		"image_ref": imageRef, "image_present": imagePresent, "docker_available": dockerAvailable,
 		"status": status, "status_reason": reason, "last_checked_at": now,
 	})

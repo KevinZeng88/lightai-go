@@ -3517,3 +3517,27 @@ On container failure, the agent reports:
 - instance.state.updated failed: health check failed or container exited
 
 Status: CLOSED — no remaining observability gaps.
+## UI Persistence / RunPlan Consistency Addendum (2026-06-19)
+
+Deployment configuration is service-level state. It can be saved without starting, saved and started, or previewed through dry-run. Saved deployments use status `saved` until a run is requested.
+
+RunPlan/NodeRunPlan records are immutable execution snapshots. Later edits to ModelArtifact display metadata, BackendRuntime, NodeBackendRuntime, or Deployment config affect only future RunPlans.
+
+Port fields are explicit:
+
+- `host_port`: host access port.
+- `container_port`: Docker exposed container port.
+- `app_port`: backend process listen port, normally equal to `container_port`.
+- `health_port`: host-side health probe port, normally `host_port`.
+- `api_test_port`: host-side model-test port, normally `host_port`.
+
+The server enforces single-active-instance per deployment. Active states (`pending`, `starting`, `provisioning`, `running`, `healthy`, `stopping`) block duplicate start requests with HTTP 409. Failed and stopped deployments can run again and preserve prior instance/runplan history.
+
+Parameter priority is:
+
+1. Deployment explicit parameters and env overrides.
+2. NodeBackendRuntime frozen snapshot and node image override.
+3. BackendRuntime template.
+4. BackendVersion defaults.
+5. Backend defaults.
+6. System fallback.

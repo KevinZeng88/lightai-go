@@ -7,6 +7,20 @@
 
 Date: 2026-06-18
 
+## 2026-06-19 UI Persistence / RunPlan Consistency Round
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-UPR-001 | Runtime clone reused source display name | Clone handler selected original `display_name` | Edit page could show original template name | FIXED | `internal/server/api/node_runtime_handlers.go` | `TestCloneBackendRuntimePersistsIndependentDisplayName` | Closed |
+| MRW-UPR-002 | NodeBackendRuntime had no persisted user-visible name | DB/API only exposed template name plus node | Node runtime config custom name could not survive refresh | FIXED | `internal/server/db/db.go`, `internal/server/api/runtime_handlers.go`, `internal/server/api/node_runtime_handlers.go` | `TestNodeBackendRuntimeDisplayNamePersistence` | Closed |
+| MRW-UPR-003 | Deployment save-only looked like stopped | Create handler used status `stopped` | Saved config could be confused with stopped runtime | FIXED | `internal/server/api/deployment_lifecycle_handlers.go` | `TestDeploymentSaveOnlyAndPatchEditableFields` | Closed |
+| MRW-UPR-004 | Duplicate start could create extra instance/task | Start handler did not check active instance/task before preflight | Double-click/API repeat could duplicate runs | FIXED | `internal/server/api/deployment_lifecycle_handlers.go` | `TestStartDeploymentGuardsActiveInstanceAndTask` | Closed |
+| MRW-UPR-005 | Model smoke test passed empty responses | `tryInference` returned ok for any HTTP 2xx | UI could show success with empty summary | FIXED | `internal/server/api/deployment_lifecycle_handlers.go`, `web/src/pages/ModelInstancesPage.vue` | `TestTryInferenceRequiresNonEmptyResponsePreview`, web tests | Closed |
+| MRW-UPR-006 | Host/container/app port semantics were implicit | Service JSON only had host port | Users could not reason about `-p 8005:8080` vs `--port 8080` | FIXED | `internal/server/runplan/resolver.go`, `web/src/pages/ModelDeploymentsPage.vue`, docs | `TestResolveServicePortSemantics` | Closed |
+| MRW-UPR-007 | Real non-empty model-test E2E was not run in this automated selected E2E | `scripts/e2e-ui-persistence-runplan-selected.sh` validates save/preview/start/idempotency artifacts but does not call a real loaded model; current environment cannot guarantee a loadable real model/GPU for non-empty inference | Release can validate the implementation path, but real model response evidence must be captured on a model-capable host before declaring hardware inference acceptance | DOCUMENTED_BLOCKER | Verification-only: run `POST /api/v1/model-instances/{id}/test` against a running real backend after selected deployment start | Start a real llama.cpp/vLLM/SGLang deployment with a loadable model, then verify `ok=true` and non-empty `response_preview`; save response artifact under `docs/reports/model-runtime-node-wizard/` | Blocker limited to real inference evidence; empty-response guard is FIXED by unit/UI tests |
+
+No problems from this round are left only in chat history.
+
 All P0/P1 problems found in this round are FIXED and verified by the NVIDIA wizard E2E. Remaining items are product-depth work that should not block the validated local NVIDIA Docker wizard path.
 
 | ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |

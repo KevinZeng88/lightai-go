@@ -173,6 +173,11 @@ func (db *DB) Migrate() error {
 			return fmt.Errorf("migrate v20: %w", err)
 		}
 	}
+	if currentVersion < 21 {
+		if err := db.migrateV21(); err != nil {
+			return fmt.Errorf("migrate v21: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -1133,6 +1138,7 @@ func (db *DB) migrateV13() error {
 		id TEXT PRIMARY KEY,
 		backend_runtime_id TEXT NOT NULL REFERENCES backend_runtimes(id),
 		node_id TEXT NOT NULL REFERENCES nodes(id),
+		display_name TEXT NOT NULL DEFAULT '',
 		runner_type TEXT NOT NULL DEFAULT 'docker',
 		image_ref TEXT NOT NULL DEFAULT '',
 		image_id TEXT NOT NULL DEFAULT '',
@@ -1418,6 +1424,18 @@ func (db *DB) migrateV20() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (20, 'V20: backend runtime catalog hardware/runtime columns')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV21 adds a user-visible name to NodeBackendRuntime records.
+func (db *DB) migrateV21() error {
+	if _, err := db.Exec(`ALTER TABLE node_backend_runtimes ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`); err != nil {
+		// Column may already exist from a partially applied development DB.
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (21, 'V21: node backend runtime display names')`); err != nil {
 		return err
 	}
 	return nil

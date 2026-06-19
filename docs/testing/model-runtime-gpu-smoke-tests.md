@@ -370,3 +370,19 @@ bash scripts/smoke-model-backends.sh all
 # 清理残留容器
 bash scripts/smoke-model-backends.sh cleanup
 ```
+
+## 11. UI Persistence / RunPlan Selected Smoke
+
+Use `scripts/e2e-ui-persistence-runplan-selected.sh` against an already running LightAI Server. The script does not start or stop services.
+
+It validates:
+
+- model artifact custom `display_name` is sent to the API;
+- runtime `display_name` is persisted;
+- deployment save-only creates no `ModelInstance`;
+- RunPlan preview includes `host_port=8005` and `container_port=8080`;
+- start returns `instance_id` and `run_plan_id` when the environment is runnable;
+- repeated start while active returns HTTP 409;
+- artifacts are written under `/tmp/lightai-ui-persistence-runplan-selected-*` by default.
+
+Model smoke tests must not pass on HTTP 200 alone. A passing OpenAI-compatible inference response requires non-empty `choices[0].message.content` for chat or non-empty `choices[0].text` for completions. Empty content is reported as `empty_model_response`.

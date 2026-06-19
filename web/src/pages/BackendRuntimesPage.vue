@@ -8,7 +8,9 @@
     </div>
 
     <el-table :data="runtimes" v-loading="loading" stripe>
-      <el-table-column prop="name" :label="$t('runtimes.name')" min-width="180" />
+      <el-table-column :label="$t('runtimes.name')" min-width="200">
+        <template #default="{ row }">{{ row.display_name || row.name }}</template>
+      </el-table-column>
       <el-table-column prop="backend_id" :label="$t('runtimes.backend')" min-width="140" show-overflow-tooltip />
       <el-table-column prop="backend_version_id" :label="$t('runtimes.backendVersion')" min-width="180" show-overflow-tooltip />
       <el-table-column prop="vendor" :label="$t('runtimes.vendor')" width="100" />
@@ -51,6 +53,7 @@
           </el-select>
         </el-form-item>
         <el-form-item :label="$t('runtimes.name')"><el-input v-model="createForm.name" /></el-form-item>
+        <el-form-item :label="$t('runtimes.displayName')"><el-input v-model="createForm.display_name" /></el-form-item>
         <el-form-item :label="$t('runtimes.vendor')"><el-input v-model="createForm.vendor" /></el-form-item>
         <el-form-item :label="$t('runtimes.image')"><el-input v-model="createForm.image_name" /></el-form-item>
       </el-form>
@@ -91,6 +94,7 @@
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('runtimes.name')">{{ selected.name }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.displayName')">{{ selected.display_name }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.sourceTemplate')">{{ selected.source_template_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.vendor')">{{ selected.vendor }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.image')">{{ selected.image_name }}</el-descriptions-item>
         </el-descriptions>
@@ -216,8 +220,9 @@ function onCreateTemplateSelected(templateName: string) {
     counter++
   }
   createForm.value.name = candidate
+  createForm.value.display_name = candidate
 }
-async function doCreate() { creating.value = true; try { await createRuntimeFromTemplate(createForm.value); ElMessage.success(t('runtimes.created')); createVisible.value = false; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.requestFailed')) } creating.value = false }
+async function doCreate() { creating.value = true; try { if (!createForm.value.display_name) createForm.value.display_name = createForm.value.name; await createRuntimeFromTemplate(createForm.value); ElMessage.success(t('runtimes.created')); createVisible.value = false; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.requestFailed')) } creating.value = false }
 function showEdit(row: BackendRuntime) { selected.value = row; editingId = row.id; editForm.display_name = row.display_name; editForm.image_name = row.image_name; editForm.vendor = row.vendor; loadDockerJson(row); editVisible.value = true }
 async function doEdit() { editing.value = true; try { await patchRuntime(editingId, buildPayload()); ElMessage.success(t('runtimes.saved')); editVisible.value = false; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.requestFailed')) } editing.value = false }
 async function handleDelete(row: BackendRuntime) { try { await ElMessageBox.confirm(t('runtimes.deleteConfirm', { name: row.name }), t('common.confirm'), { type: 'warning' }); await deleteRuntime(row.id); ElMessage.success(t('runtimes.deleted')); await refresh() } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.requestFailed')) } }

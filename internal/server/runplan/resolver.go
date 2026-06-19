@@ -133,7 +133,11 @@ type PlacementInfo struct {
 
 // ServiceInfo holds deployment service configuration.
 type ServiceInfo struct {
-	HostPort int `json:"host_port"`
+	HostPort      int `json:"host_port"`
+	ContainerPort int `json:"container_port,omitempty"`
+	AppPort       int `json:"app_port,omitempty"`
+	HealthPort    int `json:"health_port,omitempty"`
+	APITestPort   int `json:"api_test_port,omitempty"`
 }
 
 // NodeInfo holds node data.
@@ -200,10 +204,7 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	hc := buildHealthCheck(in)
 
 	// 10. Build ports.
-	containerPort := in.BackendVersion.DefaultContainerPort
-	if containerPort == 0 {
-		containerPort = 8000
-	}
+	containerPort := effectiveContainerPort(in)
 	hostPort := in.Deployment.Service.HostPort
 
 	// 11. GPU visible env.
@@ -660,9 +661,13 @@ func buildVarMap(in ResolveInput) map[string]string {
 	vars["model_parent_host_path"] = modelHostRoot(in.Artifact)
 	vars["MODEL_PARENT_HOST_PATH"] = vars["model_parent_host_path"]
 
-	port := fmt.Sprintf("%d", in.BackendVersion.DefaultContainerPort)
+	containerPort := effectiveContainerPort(in)
+	appPort := effectiveAppPort(in, containerPort)
+	port := fmt.Sprintf("%d", containerPort)
 	vars["CONTAINER_PORT"] = port
 	vars["container_port"] = port
+	vars["APP_PORT"] = fmt.Sprintf("%d", appPort)
+	vars["app_port"] = vars["APP_PORT"]
 
 	if in.Deployment.Service.HostPort > 0 {
 		vars["HOST_PORT"] = fmt.Sprintf("%d", in.Deployment.Service.HostPort)
@@ -739,19 +744,41 @@ func defaultVisibleEnvKey(vendor string) string {
 
 func computeInputHash(in ResolveInput) string {
 	data, _ := json.Marshal(map[string]interface{}{
-		"backend":       in.Backend.Name,
-		"version":       in.BackendVersion.Version,
-		"runtime":       in.BackendRuntime.ID,
-		"artifact":      in.Artifact.Path,
-		"deployment":    in.Deployment.ID,
-		"host_port":     in.Deployment.Service.HostPort,
-		"parameters":    in.Deployment.Parameters,
-		"env_overrides": in.Deployment.EnvOverrides,
-		"gpu_ids":       in.Deployment.Placement.GPUIds,
-		"node_id":       in.Deployment.Placement.NodeID,
+		"backend":        in.Backend.Name,
+		"version":        in.BackendVersion.Version,
+		"runtime":        in.BackendRuntime.ID,
+		"artifact":       in.Artifact.Path,
+		"deployment":     in.Deployment.ID,
+		"host_port":      in.Deployment.Service.HostPort,
+		"container_port": in.Deployment.Service.ContainerPort,
+		"app_port":       in.Deployment.Service.AppPort,
+		"parameters":     in.Deployment.Parameters,
+		"env_overrides":  in.Deployment.EnvOverrides,
+		"gpu_ids":        in.Deployment.Placement.GPUIds,
+		"node_id":        in.Deployment.Placement.NodeID,
 	})
 	h := sha256.Sum256(data)
 	return fmt.Sprintf("sha256:%x", h[:8])
+}
+
+func effectiveContainerPort(in ResolveInput) int {
+	if in.Deployment != nil && in.Deployment.Service.ContainerPort > 0 {
+		return in.Deployment.Service.ContainerPort
+	}
+	if in.Deployment != nil && in.Deployment.Service.AppPort > 0 {
+		return in.Deployment.Service.AppPort
+	}
+	if in.BackendVersion != nil && in.BackendVersion.DefaultContainerPort > 0 {
+		return in.BackendVersion.DefaultContainerPort
+	}
+	return 8000
+}
+
+func effectiveAppPort(in ResolveInput, containerPort int) int {
+	if in.Deployment != nil && in.Deployment.Service.AppPort > 0 {
+		return in.Deployment.Service.AppPort
+	}
+	return containerPort
 }
 
 func computePlanHash(plan *ResolvedRunPlan) string {

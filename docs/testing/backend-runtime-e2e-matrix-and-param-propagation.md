@@ -438,3 +438,36 @@ Verified:
 - Audit: instance.start.requested vs succeeded vs failed, verified via
   `docs/reports/model-runtime-node-wizard/audit-logs-postfix-20260619033633/`
 - Web: ModelInstancesPage log button enabled when current_run_plan_id exists (any state)
+
+---
+## 12. UI Persistence / Port / Docker Spec Consistency (2026-06-19)
+
+Parameter priority for selected E2E and API tests:
+
+1. Deployment explicit parameters and env overrides.
+2. NodeBackendRuntime frozen snapshot and node image override.
+3. BackendRuntime template settings.
+4. BackendVersion defaults.
+5. Backend defaults.
+6. System fallback.
+
+RunPlan validation must compare:
+
+- `run_plan_json.host_port` and `run_plan_json.container_port`;
+- Equivalent Docker Command Preview `-p host_port:container_port/tcp`;
+- Agent `docker.create.spec` port bindings;
+- health/model-test host-side port, which defaults to `host_port`.
+
+Selected UI/API script:
+
+```bash
+bash scripts/e2e-ui-persistence-runplan-selected.sh
+```
+
+Default artifact path:
+
+```text
+/tmp/lightai-ui-persistence-runplan-selected-*
+```
+
+The script records request payload, deployment JSON, RunPlan preview, start response, RunPlan JSON when available, and repeated-start response.

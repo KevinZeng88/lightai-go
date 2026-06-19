@@ -82,7 +82,7 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		artifactID, backendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(req["parameters_json"]), jsonString(req["env_overrides_json"]),
-		"stopped", "stopped", tid, now, now,
+		"stopped", "saved", tid, now, now,
 	)
 	if err != nil {
 		log.Error("deployment.create.failed", "error", err, "name", name,
@@ -144,17 +144,28 @@ func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Requ
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
-	for _, f := range []string{"display_name", "description"} {
+	for _, f := range []string{"name", "display_name", "description", "model_artifact_id", "backend_runtime_id"} {
 		if v, ok := req[f]; ok {
+			if s, ok := v.(string); ok {
+				v = strings.TrimSpace(s)
+				if f == "name" && v == "" {
+					writeError(w, http.StatusBadRequest, "name is required")
+					return
+				}
+			}
 			sets = append(sets, f+" = ?")
 			args = append(args, v)
 		}
 	}
-	for _, f := range []string{"parameters_json", "env_overrides_json", "service_json"} {
+	for _, f := range []string{"placement_json", "parameters_json", "env_overrides_json", "service_json"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
 			args = append(args, jsonString(v))
 		}
+	}
+	if v, ok := req["replicas"]; ok {
+		sets = append(sets, "replicas = ?")
+		args = append(args, intVal(map[string]interface{}{"replicas": v}, "replicas", 1))
 	}
 	args = append(args, id)
 	if _, err := h.DB.Exec(`UPDATE model_deployments SET `+joinSets(sets)+` WHERE id = ?`, args...); err != nil {
@@ -163,6 +174,52 @@ func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, h.getDeploymentJSON(id))
+}
+
+type activeDeploymentRunResponse struct {
+	Blocked      bool   `json:"blocked"`
+	ReasonCode   string `json:"reason_code"`
+	Message      string `json:"message"`
+	DeploymentID string `json:"deployment_id"`
+	InstanceID   string `json:"instance_id,omitempty"`
+	TaskID       string `json:"task_id,omitempty"`
+	State        string `json:"state,omitempty"`
+}
+
+func (h *AgentHandler) activeDeploymentRun(deployID string) activeDeploymentRunResponse {
+	var instanceID, state string
+	err := h.DB.QueryRow(`SELECT id, actual_state FROM model_instances
+		WHERE deployment_id = ? AND actual_state IN ('pending','starting','provisioning','running','healthy','stopping')
+		ORDER BY created_at DESC LIMIT 1`, deployID).Scan(&instanceID, &state)
+	if err == nil {
+		switch state {
+		case "pending", "starting", "provisioning":
+			return activeDeploymentRunResponse{Blocked: true, ReasonCode: "deployment_starting", Message: "deployment is already starting", DeploymentID: deployID, InstanceID: instanceID, State: state}
+		case "running", "healthy":
+			return activeDeploymentRunResponse{Blocked: true, ReasonCode: "deployment_running", Message: "deployment is already running", DeploymentID: deployID, InstanceID: instanceID, State: state}
+		case "stopping":
+			return activeDeploymentRunResponse{Blocked: true, ReasonCode: "deployment_stopping", Message: "deployment is stopping", DeploymentID: deployID, InstanceID: instanceID, State: state}
+		default:
+			return activeDeploymentRunResponse{Blocked: true, ReasonCode: "deployment_active", Message: "deployment already has an active instance", DeploymentID: deployID, InstanceID: instanceID, State: state}
+		}
+	}
+	var taskID, taskStatus string
+	err = h.DB.QueryRow(`SELECT id, status FROM agent_tasks
+		WHERE deployment_id = ? AND task_type IN ('model_instance_start','model_instance_stop') AND status IN ('pending','in_progress')
+		ORDER BY created_at DESC LIMIT 1`, deployID).Scan(&taskID, &taskStatus)
+	if err == nil {
+		return activeDeploymentRunResponse{Blocked: true, ReasonCode: "deployment_task_active", Message: "deployment already has an active task", DeploymentID: deployID, TaskID: taskID, State: taskStatus}
+	}
+	return activeDeploymentRunResponse{DeploymentID: deployID}
+}
+
+func firstPositive(vals ...int) int {
+	for _, v := range vals {
+		if v > 0 {
+			return v
+		}
+	}
+	return 0
 }
 
 func (h *AgentHandler) HandleDeleteDeployment(w http.ResponseWriter, r *http.Request) {
@@ -279,7 +336,11 @@ type preflightResult struct {
 		GPUIds []string
 	}
 	service struct {
-		HostPort int `json:"host_port"`
+		HostPort      int `json:"host_port"`
+		ContainerPort int `json:"container_port"`
+		AppPort       int `json:"app_port"`
+		HealthPort    int `json:"health_port"`
+		APITestPort   int `json:"api_test_port"`
 	}
 	params            map[string]interface{}
 	envOverrides      map[string]string
@@ -540,10 +601,16 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount, HealthCheckOverride: rtHCOverridePtr(rtHC)},
 		NodeRuntimeOverride: nbrOverride,
 		Artifact:            &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
-		Deployment:          &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{HostPort: pf.service.HostPort}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
-		InstanceID:          instanceID,
-		Node:                &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
-		AssignedGPUs:        pf.gpuInfos,
+		Deployment: &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{
+			HostPort:      pf.service.HostPort,
+			ContainerPort: pf.service.ContainerPort,
+			AppPort:       pf.service.AppPort,
+			HealthPort:    pf.service.HealthPort,
+			APITestPort:   pf.service.APITestPort,
+		}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
+		InstanceID:   instanceID,
+		Node:         &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
+		AssignedGPUs: pf.gpuInfos,
 	})
 	for _, e := range resolveErrs {
 		pf.addErr("unknown", e.Error(), nil)
@@ -601,7 +668,6 @@ func (pf *preflightResult) applyRuntimeVersionSnapshot() {
 	}
 }
 
-
 // rtHCOverridePtr returns a HealthCheckInput pointer only when
 // the override has a non-empty path. An empty override must be nil
 // so the resolver falls back to the BackendVersion health check.
@@ -618,6 +684,11 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	ctx, opStart := log.StartOperation(r.Context(), "deployment.start",
 		"deployment_id", deployID, "operation_id", operationID)
 	_ = opStart // used at end with OperationCompleted
+
+	if active := h.activeDeploymentRun(deployID); active.Blocked {
+		writeJSON(w, http.StatusConflict, active)
+		return
+	}
 
 	// BRR-RV-001: Shared pre-flight validation via preflightDeployment.
 	pfStageStart := time.Now()
@@ -681,9 +752,12 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"volumes":             pf.plan.Mounts,
 		"devices":             pf.plan.Devices,
 		"host_port":           pf.service.HostPort,
-		"container_port":      pf.bvPort,
+		"container_port":      pf.plan.ContainerPort,
+		"app_port":            firstPositive(pf.service.AppPort, pf.plan.ContainerPort),
+		"health_port":         firstPositive(pf.service.HealthPort, pf.service.HostPort),
+		"api_test_port":       firstPositive(pf.service.APITestPort, pf.service.HostPort),
 		"ports": []map[string]interface{}{
-			{"host_port": pf.service.HostPort, "container_port": pf.bvPort},
+			{"host_port": pf.service.HostPort, "container_port": pf.plan.ContainerPort},
 		},
 		"docker": map[string]interface{}{
 			"image":            pf.plan.Image,
@@ -703,9 +777,9 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"health_check": map[string]interface{}{
 			"enabled":          pf.plan.HealthCheck.Path != "",
 			"path":             pf.plan.HealthCheck.Path,
-			"port":             pf.service.HostPort,
+			"port":             firstPositive(pf.service.HealthPort, pf.service.HostPort),
 			"port_source":      "host_port",
-			"container_port":   pf.bvPort,
+			"container_port":   pf.plan.ContainerPort,
 			"scheme":           "http",
 			"expected_status":  pf.plan.HealthCheck.ExpectedStatus,
 			"timeout_seconds":  healthTimeoutSeconds,
@@ -719,7 +793,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"deployment_id", deployID,
 		"instance_id", instanceID,
 		"host_port", pf.service.HostPort,
-		"container_port", pf.bvPort,
+		"container_port", pf.plan.ContainerPort,
 		"health_check_path", pf.plan.HealthCheck.Path,
 		"health_check_port_source", "host_port",
 	)
@@ -737,7 +811,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`INSERT INTO model_instances (id, deployment_id, tenant_id, replica_index, node_id, agent_id, assigned_gpus_json, host_port, container_port, current_run_plan_id, actual_state, desired_state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		instanceID, deployID, tid, 0, pf.placement.NodeID, "", jsonString(pf.placement.GPUIds), pf.service.HostPort, pf.bvPort, runPlanID, "pending", "running", now, now); err != nil {
+		instanceID, deployID, tid, 0, pf.placement.NodeID, "", jsonString(pf.placement.GPUIds), pf.service.HostPort, pf.plan.ContainerPort, runPlanID, "pending", "running", now, now); err != nil {
 		log.Error("deployment.start.instance_insert_failed", "error", err, "instance_id", instanceID, "deployment_id", deployID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -819,7 +893,6 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"docker_preview": pf.commandPreview,
 	})
 }
-
 
 // successStatusFromRaw extracts success_status array from raw health check JSON.
 func successStatusFromRaw(raw string) []int {
@@ -1464,8 +1537,21 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 
 	// --- Phase 1: Resolve model id from /v1/models ---
 	// 1. Try RunPlan / NodeRunPlan resolved model name.
+	var runplanJSON string
 	var runplanModel string
-	h.DB.QueryRow(`SELECT COALESCE(rp.model_name,'') FROM resolved_run_plans rp JOIN model_instances mi ON mi.current_run_plan_id = rp.id WHERE mi.deployment_id = ? ORDER BY rp.created_at DESC LIMIT 1`, deployID).Scan(&runplanModel)
+	h.DB.QueryRow(`SELECT COALESCE(rp.plan_json,'{}') FROM resolved_run_plans rp JOIN model_instances mi ON mi.current_run_plan_id = rp.id WHERE mi.deployment_id = ? ORDER BY rp.created_at DESC LIMIT 1`, deployID).Scan(&runplanJSON)
+	if strings.TrimSpace(runplanJSON) != "" {
+		var plan struct {
+			ModelName       string `json:"model_name"`
+			ServedModelName string `json:"served_model_name"`
+		}
+		if json.Unmarshal([]byte(runplanJSON), &plan) == nil {
+			runplanModel = plan.ServedModelName
+			if runplanModel == "" {
+				runplanModel = plan.ModelName
+			}
+		}
+	}
 
 	modelName, resolutionMethod := resolveModelID(client, endpoint, artifactName, artifactPath, runplanModel)
 
@@ -1621,6 +1707,14 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		preview := extractPreview(bodyBytes, "chat")
+		if strings.TrimSpace(preview) == "" {
+			return map[string]interface{}{
+				"ok": false, "mode": "chat", "reason_code": "empty_model_response",
+				"message":  "request succeeded but model response was empty",
+				"endpoint": chatURL, "model": modelName,
+				"latency_ms": latencyMs, "response_preview": preview,
+			}
+		}
 		resolvedModel := modelName
 		var respData map[string]interface{}
 		json.Unmarshal(bodyBytes, &respData)
@@ -1655,6 +1749,14 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 
 		if compResp.StatusCode >= 200 && compResp.StatusCode < 300 {
 			preview := extractPreview(compBytes, "completion")
+			if strings.TrimSpace(preview) == "" {
+				return map[string]interface{}{
+					"ok": false, "mode": "completion", "reason_code": "empty_model_response",
+					"message":  "request succeeded but model response was empty",
+					"endpoint": compURL, "model": modelName,
+					"latency_ms": compLatency, "response_preview": preview,
+				}
+			}
 			resolvedModel := modelName
 			var compData map[string]interface{}
 			json.Unmarshal(compBytes, &compData)

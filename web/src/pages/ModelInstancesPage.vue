@@ -62,7 +62,9 @@
         <el-descriptions v-else :column="1" border size="small" style="margin-top:12px">
           <el-descriptions-item v-if="testResult.model_resolution_method" :label="t('instances.testResolveMethod')">{{ testResult.model_resolution_method }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testEndpoint')">{{ testResult.endpoint || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testModel')">{{ testResult.model || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testLatency')">{{ testResult.latency_ms != null ? testResult.latency_ms + ' ms' : '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testPreview')">{{ testResult.response_preview || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testCheckedAt')">{{ testResult.checked_at || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -143,6 +145,7 @@ const testReasonI18n: Record<string, string> = {
   models_endpoint_failed: 'instances.testReasonModelsEndpointFailed',
   chat_endpoint_failed: 'instances.testReasonChatFailed',
   completion_endpoint_failed: 'instances.testReasonCompletionFailed',
+  empty_model_response: 'instances.testReasonEmptyResponse',
   inference_endpoint_not_supported: 'instances.testReasonInferenceNotSupported',
   model_test_failed: 'instances.testReasonTestFailed',
 }

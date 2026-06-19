@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"lightai-go/internal/common/log"
@@ -20,13 +22,26 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 		return
 	}
 	tid := tenantID(r)
+	var req map[string]interface{}
+	_ = json.NewDecoder(r.Body).Decode(&req)
 	newID := uuid.NewString()
 	now := time.Now().Format(time.RFC3339)
-	newName := strVal(original, "name", "") + "-clone-" + newID[:8]
+	sourceName := strVal(original, "display_name", "")
+	if sourceName == "" {
+		sourceName = strVal(original, "name", "")
+	}
+	newName := strings.TrimSpace(strVal(req, "name", ""))
+	if newName == "" {
+		newName = h.uniqueRuntimeName(tid, sourceName+"-copy")
+	}
+	newDisplayName := strings.TrimSpace(strVal(req, "display_name", ""))
+	if newDisplayName == "" {
+		newDisplayName = newName
+	}
 	_, err := h.DB.Exec(`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, slug, managed_by, source, status, created_at, updated_at)
-		SELECT ?, ?, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, 0, 1, ?, slug, 'user', 'clone', status, ?, ?
+		SELECT ?, ?, ?, backend_id, backend_version_id, ?, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, 0, 1, ?, slug, 'user', 'clone', status, ?, ?
 		FROM backend_runtimes WHERE id = ?`,
-		newID, newName, tid, now, now, originalID)
+		newID, newName, newDisplayName, sourceName, tid, now, now, originalID)
 	if err != nil {
 		log.OperationFailed(ctx, "backend_runtime.clone", "db_write", opStart, err, "original_id", originalID)
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -34,6 +49,22 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 	}
 	log.OperationCompleted(ctx, "backend_runtime.clone", opStart, "id", newID, "original_id", originalID, "tenant_id", tid)
 	writeJSON(w, http.StatusCreated, h.getBackendRuntimeJSON(newID))
+}
+
+func (h *AgentHandler) uniqueRuntimeName(tenantID, base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "runtime-copy"
+	}
+	candidate := base
+	for i := 2; ; i++ {
+		var count int
+		_ = h.DB.QueryRow(`SELECT COUNT(*) FROM backend_runtimes WHERE tenant_id = ? AND name = ?`, tenantID, candidate).Scan(&count)
+		if count == 0 {
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s-%d", base, i)
+	}
 }
 
 // HandlePatchNodeBackendRuntime updates node-level fields on a NodeBackendRuntime.
@@ -48,8 +79,17 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
 	needsRecheck := false
-	for _, f := range []string{"image_ref", "image_id", "image_digest", "driver_version", "toolkit_version"} {
+	for _, f := range []string{"display_name", "image_ref", "image_id", "image_digest", "driver_version", "toolkit_version"} {
 		if v, ok := req[f]; ok {
+			if f == "display_name" {
+				if s, ok := v.(string); ok {
+					v = strings.TrimSpace(s)
+					if v == "" {
+						writeError(w, http.StatusBadRequest, "display_name is required")
+						return
+					}
+				}
+			}
 			sets = append(sets, f+" = ?")
 			args = append(args, v)
 			// Editing image-ref fields invalidates ready status

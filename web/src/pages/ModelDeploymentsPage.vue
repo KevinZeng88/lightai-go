@@ -7,15 +7,22 @@
       </div>
     </div>
     <el-table :data="items" v-loading="loading" stripe>
-      <el-table-column prop="name" :label="$t('deployments.name')" width="150" />
-      <el-table-column prop="status" :label="$t('deployments.status')" width="100" />
+      <el-table-column :label="$t('deployments.name')" width="180">
+        <template #default="{ row }">{{ row.display_name || row.name }}</template>
+      </el-table-column>
+      <el-table-column prop="status" :label="$t('deployments.status')" width="120">
+        <template #default="{ row }">
+          <el-tag :type="deploymentStatusType(row.status)" size="small">{{ deploymentStatusText(row.status) }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="model_artifact_id" :label="$t('deployments.artifact')" width="200" />
       <el-table-column prop="backend_runtime_id" :label="$t('deployments.runtime')" width="200" />
       <el-table-column :label="$t('common.actions')" width="320">
         <template #default="{ row }">
-          <el-button size="small" @click="doDryRun(row)">{{ $t('deployments.dryRun') }}</el-button>
-          <el-button size="small" type="success" @click="doStart(row)">{{ $t('deployments.start') }}</el-button>
+          <el-button size="small" @click="doDryRun(row)">{{ $t('deployments.viewRunPlan') }}</el-button>
+          <el-button size="small" type="success" :disabled="isRunBlocked(row.status)" @click="doStart(row)">{{ $t('deployments.runExisting') }}</el-button>
           <el-button size="small" type="warning" @click="doStop(row)">{{ $t('deployments.stop') }}</el-button>
+          <el-button size="small" @click="doRestart(row)">{{ $t('deployments.restart') }}</el-button>
           <el-button size="small" type="danger" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
         </template>
       </el-table-column>
@@ -29,6 +36,8 @@
         <el-form-item :label="$t('deployments.runtime')"><el-input v-model="createForm.backend_runtime_id" /></el-form-item>
         <el-form-item :label="$t('deployments.nodeId')"><el-input v-model="createForm.node_id" /></el-form-item>
         <el-form-item :label="$t('deployments.hostPort')"><el-input v-model.number="createForm.host_port" /></el-form-item>
+        <el-form-item :label="$t('deployments.containerPort')"><el-input v-model.number="createForm.container_port" /></el-form-item>
+        <el-form-item :label="$t('deployments.appPort')"><el-input v-model.number="createForm.app_port" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doCreate" :loading="saving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
@@ -122,10 +131,14 @@
         <el-form label-width="120px">
           <el-form-item :label="$t('modelLocations.node')"><el-input v-model="wizardStartNode" disabled /></el-form-item>
           <el-form-item :label="$t('deployments.hostPort')"><el-input v-model.number="wizardHostPort" /></el-form-item>
+          <el-form-item :label="$t('deployments.containerPort')"><el-input v-model.number="wizardContainerPort" /></el-form-item>
+          <el-form-item :label="$t('deployments.appPort')"><el-input v-model.number="wizardAppPort" /></el-form-item>
         </el-form>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="wizardStep=4">{{ $t('common.prev') }}</el-button>
-          <el-button type="primary" @click="doWizardStart" :loading="wizardStarting">{{ $t('startWizard.start') }}</el-button>
+          <el-button @click="doWizardPreview" :loading="wizardStarting">{{ $t('deployments.previewRunPlan') }}</el-button>
+          <el-button @click="doWizardSave" :loading="wizardStarting">{{ $t('deployments.saveConfig') }}</el-button>
+          <el-button type="primary" @click="doWizardStart" :loading="wizardStarting">{{ $t('deployments.saveAndRun') }}</el-button>
         </div>
       </div>
     </el-dialog>
@@ -150,12 +163,12 @@ const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([]); const backends = ref<any[]>([]); const versions = ref<any[]>([])
 const createVisible = ref(false); const dryRunVisible = ref(false); const runPlanVisible = ref(false)
 const dryRunResult = ref<any>(null); const runPlanData = ref('')
-const createForm = ref({ name: '', model_artifact_id: '', backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
+const createForm = ref({ name: '', model_artifact_id: '', backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
 const wizardVisible = ref(false); const wizardStep = ref(0)
 const wizardModelId = ref(''); const wizardBackendId = ref(''); const wizardVersionId = ref(''); const wizardRuntimeId = ref('')
-const wizardStartNode = ref(''); const wizardHostPort = ref(8004)
+const wizardStartNode = ref(''); const wizardHostPort = ref(8004); const wizardContainerPort = ref(0); const wizardAppPort = ref(0); const wizardDeploymentId = ref('')
 const preflightLoading = ref(false); const preflightResult = ref<any>(null)
 const wizardStarting = ref(false)
 
@@ -177,7 +190,7 @@ async function doCreate() {
   saving.value = true
   try {
     createForm.value.placement_json = JSON.stringify({ node_id: createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
-    createForm.value.service_json = JSON.stringify({ host_port: createForm.value.host_port })
+    createForm.value.service_json = JSON.stringify(servicePayload(createForm.value.host_port, createForm.value.container_port, createForm.value.app_port))
     await apiClient.post('/deployments', createForm.value)
     ElMessage.success(t('deployments.created')); createVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
@@ -193,6 +206,9 @@ async function doStart(row: any) {
 }
 async function doStop(row: any) {
   try { await apiClient.post(`/deployments/${row.id}/stop`, {}); ElMessage.success(t('deployments.stopped')); await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
+}
+async function doRestart(row: any) {
+  try { await apiClient.post(`/deployments/${row.id}/stop`, {}); const res = await apiClient.post(`/deployments/${row.id}/start`, {}); runPlanData.value = res.docker_preview || JSON.stringify(res, null, 2); runPlanVisible.value = true; ElMessage.success(t('deployments.restarted')); await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
 }
 async function handleDelete(row: any) {
   try { await ElMessageBox.confirm(t('deployments.deleteConfirm', { name: row.name }), t('common.confirm'), { type: 'warning' }); await apiClient.delete(`/deployments/${row.id}`); ElMessage.success(t('deployments.deleted')); await refresh() } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
@@ -230,7 +246,7 @@ async function onBackendSelected() {
   if (wizardBackendId.value) wizardStep.value = 2
 }
 
-function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardModelId.value = ''; wizardBackendId.value = ''; wizardVersionId.value = ''; wizardRuntimeId.value = ''; versions.value = []; preflightResult.value = null; wizardStartNode.value = ''; loadRefs() }
+function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardModelId.value = ''; wizardBackendId.value = ''; wizardVersionId.value = ''; wizardRuntimeId.value = ''; versions.value = []; preflightResult.value = null; wizardStartNode.value = ''; wizardDeploymentId.value = ''; wizardContainerPort.value = 0; wizardAppPort.value = 0; loadRefs() }
 async function doPreflight() {
   preflightLoading.value = true; wizardStep.value = 4
   try {
@@ -243,14 +259,7 @@ function onPreflightNodeClick(row: any) { wizardStartNode.value = row.node_id }
 async function doWizardStart() {
   wizardStarting.value = true
   try {
-    // Create deployment then start
-    const name = `wizard-${Date.now()}`
-    const deploy = await apiClient.post('/deployments', {
-      name, model_artifact_id: wizardModelId.value, backend_runtime_id: wizardRuntimeId.value,
-      placement_json: { node_id: wizardStartNode.value, gpu_ids: [] },
-      service_json: { host_port: wizardHostPort.value },
-      parameters_json: {}, env_overrides_json: {},
-    })
+    const deploy = await ensureWizardDeployment()
     const res = await apiClient.post(`/deployments/${deploy.id}/start`, {})
     runPlanData.value = res.docker_preview || JSON.stringify(res, null, 2)
     runPlanVisible.value = true; wizardVisible.value = false
@@ -258,6 +267,39 @@ async function doWizardStart() {
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   wizardStarting.value = false
 }
+async function doWizardSave() {
+  wizardStarting.value = true
+  try { await ensureWizardDeployment(); ElMessage.success(t('deployments.saved')); wizardVisible.value = false; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
+  wizardStarting.value = false
+}
+async function doWizardPreview() {
+  wizardStarting.value = true
+  try { const deploy = await ensureWizardDeployment(); dryRunResult.value = await apiClient.post(`/deployments/${deploy.id}/dry-run`, {}); dryRunVisible.value = true; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
+  wizardStarting.value = false
+}
+async function ensureWizardDeployment() {
+  if (wizardDeploymentId.value) return { id: wizardDeploymentId.value }
+  const name = `wizard-${Date.now()}`
+  const deploy = await apiClient.post('/deployments', {
+    name, display_name: name, model_artifact_id: wizardModelId.value, backend_runtime_id: wizardRuntimeId.value,
+    placement_json: { node_id: wizardStartNode.value, gpu_ids: [] },
+    service_json: servicePayload(wizardHostPort.value, wizardContainerPort.value, wizardAppPort.value),
+    parameters_json: {}, env_overrides_json: {},
+  })
+  wizardDeploymentId.value = deploy.id
+  return deploy
+}
+function servicePayload(hostPort: number, containerPort?: number, appPort?: number) {
+  const payload: any = { host_port: hostPort }
+  if (containerPort && containerPort > 0) payload.container_port = containerPort
+  if (appPort && appPort > 0) payload.app_port = appPort
+  payload.health_port = hostPort
+  payload.api_test_port = hostPort
+  return payload
+}
+function isRunBlocked(status: string) { return ['starting', 'pending', 'provisioning', 'running', 'healthy', 'stopping'].includes(status) }
+function deploymentStatusType(status: string) { if (['running', 'healthy'].includes(status)) return 'success'; if (['failed'].includes(status)) return 'danger'; if (['starting', 'pending', 'provisioning', 'stopping'].includes(status)) return 'warning'; return 'info' }
+function deploymentStatusText(status: string) { return t(`deployments.status_${status || 'unknown'}`) }
 </script>
 
 <style scoped>

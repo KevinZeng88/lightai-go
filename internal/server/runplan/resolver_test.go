@@ -105,6 +105,41 @@ func TestResolveBasic(t *testing.T) {
 	}
 }
 
+func TestResolveServicePortSemantics(t *testing.T) {
+	in := makeTestInput()
+	in.Deployment.Service = ServiceInfo{HostPort: 8005}
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan.HostPort != 8005 {
+		t.Fatalf("host_port=%d", plan.HostPort)
+	}
+	if plan.ContainerPort != 8000 {
+		t.Fatalf("container_port=%d want backend default 8000", plan.ContainerPort)
+	}
+	preview := EquivalentCommandPreview(plan)
+	if !strings.Contains(preview, "-p 8005:8000/tcp") {
+		t.Fatalf("preview missing host:container mapping: %s", preview)
+	}
+
+	in2 := makeTestInput()
+	in2.Deployment.Service = ServiceInfo{HostPort: 18005, ContainerPort: 18080, AppPort: 18080, HealthPort: 18005, APITestPort: 18005}
+	plan2, errs2, _ := Resolve(in2)
+	if len(errs2) > 0 {
+		t.Fatalf("unexpected errors: %v", errs2)
+	}
+	if plan2.HostPort != 18005 || plan2.ContainerPort != 18080 {
+		t.Fatalf("ports host=%d container=%d", plan2.HostPort, plan2.ContainerPort)
+	}
+	if !strings.Contains(strings.Join(plan2.Args, " "), "18080") {
+		t.Fatalf("args did not use effective app/container port: %v", plan2.Args)
+	}
+	if !strings.Contains(EquivalentCommandPreview(plan2), "-p 18005:18080/tcp") {
+		t.Fatalf("preview mismatch: %s", EquivalentCommandPreview(plan2))
+	}
+}
+
 func TestResolveImagePriority(t *testing.T) {
 	// Priority 1: NodeRuntimeOverride.image_name
 	in := makeTestInput()
@@ -360,7 +395,6 @@ func TestArgsOverrideAppendOnly(t *testing.T) {
 	}
 }
 
-
 // TestContainerPathSafety validates that dangerous relative paths are rejected
 // and safe paths produce correct container mounts under /models.
 func TestContainerPathSafety(t *testing.T) {
@@ -471,7 +505,7 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 	// use "name":"--host"/"--port" without cli_name.
 	// The resolved RunPlan args must contain --host and --port flags.
 	in := ResolveInput{
-		Backend:  &BackendInfo{ID: "backend.vllm", Name: "vllm", DefaultEnv: map[string]string{}},
+		Backend: &BackendInfo{ID: "backend.vllm", Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			ID:                "vllm-v0.23.0",
 			DefaultEntrypoint: []string{"vllm", "serve"},
@@ -483,7 +517,7 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 				{Name: "--max-model-len"},
 			},
 			DefaultContainerPort: 8000,
-			HealthCheck:         HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
+			HealthCheck:          HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
 			DefaultImages:        map[string]string{"default": "vllm/vllm-openai:latest"},
 		},
 		BackendRuntime: &RuntimeInfo{
@@ -494,19 +528,19 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 			ModelMount:  ModelMountInfo{ContainerPath: "/models", Readonly: true},
 		},
 		Deployment: &DeploymentInfo{
-			ID:         "dep-vllm",
-			Name:       "vllm-test",
-			Parameters: map[string]interface{}{"served_model_name": "test", "max_model_len": float64(4096)},
+			ID:           "dep-vllm",
+			Name:         "vllm-test",
+			Parameters:   map[string]interface{}{"served_model_name": "test", "max_model_len": float64(4096)},
 			EnvOverrides: map[string]string{},
-			Service:    ServiceInfo{HostPort: 8004},
+			Service:      ServiceInfo{HostPort: 8004},
 		},
 		Artifact: &ArtifactInfo{
 			ID:           "art-qwen",
 			Name:         "Qwen3",
 			RelativePath: "Qwen3-0.6B-Instruct-2512",
 		},
-		InstanceID: "inst-vllm-test",
-		Node:       &NodeInfo{ID: "n1", IP: "127.0.0.1"},
+		InstanceID:   "inst-vllm-test",
+		Node:         &NodeInfo{ID: "n1", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
 	}
 	plan, _, _ := Resolve(in)

@@ -7,6 +7,9 @@
       </div>
     </div>
     <el-table :data="items" v-loading="loading" stripe>
+      <el-table-column :label="$t('artifacts.displayName')" min-width="180">
+        <template #default="{ row }">{{ row.display_name || row.name }}</template>
+      </el-table-column>
       <el-table-column prop="name" :label="$t('artifacts.name')" min-width="150" />
       <el-table-column prop="format" :label="$t('artifacts.format')" width="100" />
       <el-table-column prop="size_label" :label="$t('artifacts.size')" width="80" />
@@ -24,6 +27,7 @@
     <el-dialog v-model="dialogVisible" :title="editingId ? $t('common.edit') : $t('common.create')" width="500px">
       <el-form :model="form" label-width="140px">
         <el-form-item :label="$t('artifacts.name')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="$t('artifacts.displayName')"><el-input v-model="form.display_name" /></el-form-item>
         <el-form-item :label="$t('artifacts.path')"><el-input v-model="form.path" /></el-form-item>
         <el-form-item :label="$t('artifacts.format')"><el-select v-model="form.format" filterable allow-create style="width:100%"><el-option v-for="o in formatOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
         <el-form-item :label="$t('artifacts.quantization')"><el-select v-model="form.quantization" filterable allow-create style="width:100%"><el-option v-for="o in quantOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
@@ -36,6 +40,7 @@
       <template v-if="selected">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('artifacts.name')">{{ selected.name }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('artifacts.displayName')">{{ selected.display_name || selected.name }}</el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.format')">{{ selected.format }}</el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.path')">{{ selected.path }}</el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.size')">{{ selected.size_label || '-' }}</el-descriptions-item>
@@ -158,6 +163,7 @@ function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row)
 async function doSave() {
   saving.value = true
   try {
+    if (!form.value.display_name) form.value.display_name = form.value.name
     if (editingId) await apiClient.patch(`/api/v1/model-artifacts/${editingId}`, form.value)
     else await apiClient.post('/api/v1/model-artifacts', form.value)
     ElMessage.success(t('artifacts.saved')); dialogVisible.value = false; await refresh()
