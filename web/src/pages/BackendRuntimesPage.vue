@@ -93,11 +93,11 @@
     <el-dialog v-model="cloneVisible" :title="$t('runtimes.cloneToUserConfig')" width="720px">
       <el-alert v-if="cloneSource" :title="$t('runtimes.cloneSourceTemplate', { name: cloneSource.display_name || cloneSource.name })" type="info" show-icon />
       <el-form :model="cloneForm" label-position="top" class="runtime-form" style="margin-top:12px">
-        <el-form-item :label="$t('runtimes.name')">
-          <el-input v-model="cloneForm.name" />
-        </el-form-item>
         <el-form-item :label="$t('runtimes.displayName')">
-          <el-input v-model="cloneForm.display_name" />
+          <el-input v-model="cloneForm.display_name" @input="onCloneDisplayNameChange" />
+        </el-form-item>
+        <el-form-item v-if="cloneForm.name" :label="$t('runtimes.internalName')">
+          <el-input :model-value="cloneForm.name" disabled />
         </el-form-item>
         <el-form-item :label="$t('runtimes.image')">
           <el-input v-model="cloneForm.image_name" />
@@ -347,11 +347,18 @@ const cloneCommandPreview = computed(() => {
 async function doCloneSave() {
   cloneSaving.value = true; try {
     if (!cloneSource.value) return
-    // Clone with user-provided name/display_name; full config copied from source.
-    await apiClient.post(`/backend-runtimes/${cloneSource.value.id}/clone`, { name: cloneForm.name, display_name: cloneForm.display_name })
+    // Send full payload including user-modified docker_json, args, env, entrypoint.
+    // buildClonePayload() includes all user overrides from the clone dialog.
+    const payload = buildClonePayload()
+    if (!payload.name) payload.name = sanitizeName(payload.display_name || cloneSource.value.display_name || cloneSource.value.name)
+    await apiClient.post(`/backend-runtimes/${cloneSource.value.id}/clone`, payload)
     ElMessage.success(t('runtimes.cloned')); cloneVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   cloneSaving.value = false
+}
+function sanitizeName(s: string): string { return s.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') }
+function onCloneDisplayNameChange(val: string) {
+  cloneForm.name = sanitizeName(val)
 }
 // Legacy quick-clone (without dialog) — replaced by showClone
 async function doClone(row: BackendRuntime) {
