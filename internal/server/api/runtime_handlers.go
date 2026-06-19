@@ -294,6 +294,169 @@ func (h *AgentHandler) HandleCheckNodeBackendRuntime(w http.ResponseWriter, r *h
 	h.upsertNodeBackendRuntime(w, r, true)
 }
 
+// HandleRequestNodeBackendRuntimeCheck is the UI-facing check endpoint.
+// It does NOT accept client-provided image_present/docker_available.
+// Instead, the server queries the agent for Docker image status and
+// evaluates readiness with server-verified evidence.
+// POST /api/v1/nodes/{node_id}/backend-runtimes/{nbr_id}/check-request
+func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("node_id")
+	nbrID := r.PathValue("nbr_id")
+	if nodeID == "" || nbrID == "" {
+		writeError(w, http.StatusBadRequest, "node_id and nbr_id are required")
+		return
+	}
+
+	// Look up NBR.
+	var nbrBackendRuntimeID, nbrImageRef, nbrStatus string
+	if err := h.DB.QueryRow(
+		`SELECT backend_runtime_id, COALESCE(image_ref,''), status FROM node_backend_runtimes WHERE id = ? AND node_id = ?`,
+		nbrID, nodeID,
+	).Scan(&nbrBackendRuntimeID, &nbrImageRef, &nbrStatus); err != nil {
+		writeError(w, http.StatusNotFound, "node backend runtime not found")
+		return
+	}
+
+	// Resolve image_ref: use NBR override, else fall back to BackendRuntime default.
+	rt := h.getBackendRuntimeJSON(nbrBackendRuntimeID)
+	if rt == nil {
+		writeError(w, http.StatusNotFound, "backend runtime not found")
+		return
+	}
+	if nbrImageRef == "" {
+		nbrImageRef = strVal(rt, "image_name", "")
+	}
+	vendor := strVal(rt, "vendor", "")
+
+	// Query Docker images on the node (server-to-agent proxy).
+	dockerAvailable := false
+	imagePresent := false
+	var dockerErr string
+
+	nodeAddr, nodePort := h.getNodeAddress(nodeID)
+	if nodeAddr != "" && nodePort > 0 {
+		agentURL := fmt.Sprintf("http://%s:%d/docker-images?limit=1000", nodeAddr, nodePort)
+		resp, err := http.Get(agentURL)
+		if err != nil {
+			dockerErr = fmt.Sprintf("agent unreachable: %v", err)
+			log.Warn("nbr.check_request.agent_unreachable", "node_id", nodeID, "url", agentURL, "error", err)
+		} else {
+			defer resp.Body.Close()
+			dockerAvailable = true
+			if nbrImageRef != "" {
+				var result struct {
+					Images []struct {
+						RepoTags []string `json:"repotags"`
+						ID       string   `json:"id"`
+					} `json:"images"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+					// Try legacy flat array format.
+					resp.Body.Close()
+					resp2, err2 := http.Get(agentURL)
+					if err2 == nil {
+						defer resp2.Body.Close()
+						var images []map[string]interface{}
+						if json.NewDecoder(resp2.Body).Decode(&images) == nil {
+							for _, img := range images {
+								tags := toStringSlice(img["repotags"])
+								for _, t := range tags {
+									if nbrImageRef == t || strings.Contains(t, nbrImageRef) {
+										imagePresent = true
+										break
+									}
+								}
+								if imagePresent {
+									break
+								}
+							}
+						}
+					}
+				} else {
+					for _, img := range result.Images {
+						for _, t := range img.RepoTags {
+							if nbrImageRef == t || strings.Contains(t, nbrImageRef) {
+								imagePresent = true
+								break
+							}
+						}
+						if imagePresent {
+							break
+						}
+					}
+				}
+			}
+		}
+	} else {
+		dockerErr = "node has no advertised address or metrics port"
+	}
+
+	// Evaluate with server-verified evidence.
+	status, reason := h.evaluateNodeBackendRuntime(nodeID, vendor, nbrImageRef, imagePresent, dockerAvailable)
+	if !dockerAvailable && dockerErr != "" {
+		reason = dockerErr
+	}
+
+	// Update NBR with check results.
+	now := time.Now().Format(time.RFC3339)
+	if _, err := h.DB.Exec(`UPDATE node_backend_runtimes SET
+		image_present=?, docker_available=?,
+		status=?, status_reason=?, last_checked_at=?,
+		updated_at=?
+		WHERE id=?`,
+		boolInt(imagePresent), boolInt(dockerAvailable),
+		status, reason, now,
+		now, nbrID); err != nil {
+		log.Error("nbr check_request update failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	log.Info("nbr.check_request.completed",
+		"node_id", nodeID, "nbr_id", nbrID,
+		"status", status, "image_present", imagePresent, "docker_available", dockerAvailable)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id":                nbrID,
+		"backend_runtime_id": nbrBackendRuntimeID,
+		"node_id":           nodeID,
+		"image_ref":         nbrImageRef,
+		"image_present":     imagePresent,
+		"docker_available":  dockerAvailable,
+		"status":            status,
+		"status_reason":     reason,
+		"last_checked_at":   now,
+	})
+}
+
+// getNodeAddress returns the advertised address and metrics port for a node.
+func (h *AgentHandler) getNodeAddress(nodeID string) (string, int) {
+	var addr string
+	var port int
+	h.DB.QueryRow(
+		`SELECT advertised_address, metrics_port FROM nodes WHERE id = ?`, nodeID,
+	).Scan(&addr, &port)
+	return addr, port
+}
+
+// toStringSlice converts an interface{} that may be []interface{} to []string.
+func toStringSlice(v interface{}) []string {
+	if v == nil {
+		return nil
+	}
+	arr, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, len(arr))
+	for i, item := range arr {
+		if s, ok := item.(string); ok {
+			out[i] = s
+		}
+	}
+	return out
+}
+
 func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.Request, checkOnly bool) {
 	nodeID := r.PathValue("id")
 	var req map[string]interface{}
@@ -342,7 +505,11 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 			reason = "awaiting agent verification of Docker and image availability"
 		}
 	} else if status == "unknown" {
-		reason = "check request did not provide docker/image evidence"
+		// Agent evidence check called without docker/image evidence.
+		// UI must use /check-request endpoint instead.
+		writeError(w, http.StatusBadRequest,
+			"agent check evidence required (image_present, docker_available); UI must call /check-request endpoint instead")
+		return
 	}
 
 	id := nodeID + ":" + runtimeID

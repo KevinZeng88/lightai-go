@@ -224,7 +224,11 @@ function onWizTemplateSelected(templateId: string) {
 async function doCheck() {
   checking.value = true
   try {
-    wizCheckResult.value = await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/check`, { backend_runtime_id: wizTemplateId.value, display_name: wizConfigName.value, image_ref: wizImageRef.value || '' })
+    // First enable (create/update NBR), then trigger server-side check.
+    const nbr: any = await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: wizTemplateId.value, display_name: wizConfigName.value, image_ref: wizImageRef.value || '' })
+    const nbrId = nbr?.id
+    if (!nbrId) { wizCheckResult.value = { status: 'unknown', status_reason: 'failed to create node runtime config' }; checking.value = false; return }
+    wizCheckResult.value = await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/${nbrId}/check-request`, {})
   } catch (e: any) { wizCheckResult.value = { status: 'unknown', status_reason: e?.message || 'check failed' } }
   checking.value = false
 }
@@ -274,7 +278,7 @@ async function doEdit() {
 async function checkRow(row: any) {
   checking.value = true
   try {
-    const result = await apiClient.post(`/nodes/${row.node_id}/backend-runtimes/check`, { backend_runtime_id: row.backend_runtime_id, image_ref: row.image_ref || '' })
+    const result = await apiClient.post(`/nodes/${row.node_id}/backend-runtimes/${row.id}/check-request`, {})
     ElMessage.success(`${translateStatus(result.status, t)}: ${translateStatusReason(result.status_reason, t)}`)
     await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
