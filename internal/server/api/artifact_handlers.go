@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"lightai-go/internal/common/log"
@@ -46,6 +47,18 @@ func (h *AgentHandler) HandleCreateArtifact(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "name required")
 		return
 	}
+	path := strVal(req, "path", "")
+	format := strVal(req, "format", "custom")
+	if path == "" {
+		writeError(w, http.StatusBadRequest, "path required")
+		return
+	}
+	// GGUF is a single-file format; a directory path is semantically wrong and
+	// causes downstream failures (mount, -m argument, etc.).
+	if format == "gguf" && !strings.Contains(path, ".gguf") {
+		writeError(w, http.StatusBadRequest, "GGUF format requires a .gguf file path, not a directory")
+		return
+	}
 
 	id := uuid.NewString()
 	tid := tenantID(r)
@@ -53,7 +66,7 @@ func (h *AgentHandler) HandleCreateArtifact(w http.ResponseWriter, r *http.Reque
 
 	_, err := h.DB.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "source_type", "local_path"),
-		strVal(req, "path", ""), strVal(req, "format", "custom"), strVal(req, "task_type", "chat"),
+		path, format, strVal(req, "task_type", "chat"),
 		strVal(req, "architecture", "custom"), strVal(req, "size_label", ""),
 		strVal(req, "quantization", "unknown"), intVal(req, "default_context_length", 0),
 		int64Val(req, "estimated_vram_bytes", 0), intVal(req, "required_gpu_count", 1),
@@ -102,6 +115,15 @@ func (h *AgentHandler) HandlePatchArtifact(w http.ResponseWriter, r *http.Reques
 	}
 
 	now := time.Now().Format(time.RFC3339)
+
+	// Validate GGUF path when format or path is being changed.
+	newFormat := strVal(req, "format", strVal(existing, "format", "custom"))
+	newPath := strVal(req, "path", strVal(existing, "path", ""))
+	if newFormat == "gguf" && !strings.Contains(newPath, ".gguf") {
+		writeError(w, http.StatusBadRequest, "GGUF format requires a .gguf file path, not a directory")
+		return
+	}
+
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
 	for _, f := range []string{"display_name", "path", "format", "source_type", "task_type", "architecture", "size_label", "quantization"} {

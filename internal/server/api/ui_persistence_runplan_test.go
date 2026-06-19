@@ -793,3 +793,46 @@ func TestExtractPreviewHandlesReasoningContent(t *testing.T) {
 		t.Fatalf("extractPreview should return empty for empty content: got=%q", preview6)
 	}
 }
+
+func TestGGUFFormatRejectsDirectoryPath(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	// GGUF with directory path → rejected
+	w := httptest.NewRecorder()
+	h.HandleCreateArtifact(w, newReq("POST", "/x",
+		`{"name":"bad-gguf","path":"/models/some-model","format":"gguf"}`,
+		adminSession(), nil))
+	if w.Code != 400 {
+		t.Fatalf("expected 400 for GGUF directory path, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), ".gguf") {
+		t.Fatalf("error should mention .gguf: %s", w.Body.String())
+	}
+}
+
+func TestGGUFFormatAcceptsFile(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	w := httptest.NewRecorder()
+	h.HandleCreateArtifact(w, newReq("POST", "/x",
+		`{"name":"good-gguf","path":"/models/model.gguf","format":"gguf"}`,
+		adminSession(), nil))
+	if w.Code != 201 {
+		t.Fatalf("expected 201 for GGUF file path, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestEmptyPathRejected(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	w := httptest.NewRecorder()
+	h.HandleCreateArtifact(w, newReq("POST", "/x",
+		`{"name":"no-path","format":"huggingface"}`,
+		adminSession(), nil))
+	if w.Code != 400 {
+		t.Fatalf("expected 400 for empty path, got %d: %s", w.Code, w.Body.String())
+	}
+}
