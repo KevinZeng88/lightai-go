@@ -88,7 +88,7 @@ func TestGuessQuantFromFilename(t *testing.T) {
 		{"model-q5_k_s.gguf", "Q5_K_S"},
 		{"llama-2-7b-Q8_0.gguf", "Q8_0"},
 		{"model-f16.gguf", "F16"},
-		{"unknown-model.gguf", "UNKNOWN"},
+		{"unknown-model.gguf", "unknown"},
 		{"gemma-4-31b-jang-crack-Q4_K_M.gguf", "Q4_K_M"},
 	}
 	for _, tt := range tests {
