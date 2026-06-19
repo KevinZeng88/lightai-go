@@ -584,6 +584,206 @@ func runtimeBoundaryInsertArtifact(t *testing.T, db *db.DB, id string) {
 		id, "test-model", "Test Model", "local_path", "/tmp/test", "huggingface", "chat", "", now, now)
 }
 
+// ── NBR readiness enforcement tests ─────────────────────────────────────
+
+// TestPreflightDeploymentFailsWhenNoNBRExists verifies that deployment start
+// fails when no NodeBackendRuntime exists on the target node.
+func TestPreflightDeploymentFailsWhenNoNBRExists(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID := "node-no-nbr"
+	runtimeID := "rt-no-nbr"
+	artifactID := "art-no-nbr"
+
+	// Setup: online node + GPU + BR + artifact + model_location, but NO NBR.
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	if _, err := database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		"gpu-no-nbr", nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, database, runtimeID, "Runtime no-nbr", "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	snapshotInsertModelLocation(t, database, "ml-no-nbr", artifactID, nodeID)
+
+	// Create deployment
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-no-nbr","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8010}}`,
+		adminSession(), nil))
+	if w.Code != 201 {
+		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	}
+	var dep map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &dep)
+	depID := dep["id"].(string)
+
+	// Try to start — should fail because no NBR exists.
+	sw := httptest.NewRecorder()
+	h.HandleStartDeployment(sw, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": depID}))
+	if sw.Code == 200 {
+		t.Fatalf("start should have failed without NBR, got code=%d body=%s", sw.Code, sw.Body.String())
+	}
+	var errResp map[string]interface{}
+	json.Unmarshal(sw.Body.Bytes(), &errResp)
+	errMsg := ""
+	if m, ok := errResp["error"]; ok {
+		errMsg = m.(string)
+	}
+	if !strings.Contains(errMsg, "node_backend_runtime_not_ready") && !strings.Contains(errMsg, "no node backend runtime") && !strings.Contains(sw.Body.String(), "node_backend_runtime_not_ready") {
+		t.Fatalf("expected node_backend_runtime_not_ready error, got: %s", sw.Body.String())
+	}
+}
+
+// TestPreflightDeploymentFailsWhenNBRNotReady verifies that deployment start
+// fails when a NodeBackendRuntime exists but status is not 'ready'.
+func TestPreflightDeploymentFailsWhenNBRNotReady(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID := "node-not-ready"
+	runtimeID := "rt-not-ready"
+	artifactID := "art-not-ready"
+
+	// Setup: online node + GPU + BR + artifact + model_location.
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	if _, err := database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		"gpu-not-ready", nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, database, runtimeID, "Runtime not-ready", "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	snapshotInsertModelLocation(t, database, "ml-not-ready", artifactID, nodeID)
+
+	// Enable NBR via UI path (checkOnly=false) — status will be needs_check.
+	ew := httptest.NewRecorder()
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR not-ready","image_ref":"img:test","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+	var nbrResp map[string]interface{}
+	json.Unmarshal(ew.Body.Bytes(), &nbrResp)
+	if nbrResp["status"] != "needs_check" {
+		t.Fatalf("expected NBR status=needs_check, got %v", nbrResp["status"])
+	}
+
+	// Create deployment
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-not-ready","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8011}}`,
+		adminSession(), nil))
+	if w.Code != 201 {
+		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	}
+	var dep map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &dep)
+	depID := dep["id"].(string)
+
+	// Try to start — should fail because NBR status is needs_check.
+	sw := httptest.NewRecorder()
+	h.HandleStartDeployment(sw, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": depID}))
+	if sw.Code == 200 {
+		t.Fatalf("start should have failed with needs_check NBR, got code=%d body=%s", sw.Code, sw.Body.String())
+	}
+	if !strings.Contains(sw.Body.String(), "node_backend_runtime_not_ready") && !strings.Contains(sw.Body.String(), "needs_check") {
+		t.Fatalf("expected node_backend_runtime_not_ready with needs_check, got: %s", sw.Body.String())
+	}
+}
+
+// TestDeploymentCreateRejectsNonReadyNBR verifies that creating a deployment
+// via node_backend_runtime_id rejects NBRs that are not ready.
+func TestDeploymentCreateRejectsNonReadyNBR(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID := "node-rej-nbr"
+	runtimeID := "rt-rej-nbr"
+	artifactID := "art-rej-nbr"
+
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	if _, err := database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		"gpu-rej-nbr", nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, database, runtimeID, "Runtime rej-nbr", "")
+
+	// Enable NBR via UI path — status becomes needs_check.
+	ew := httptest.NewRecorder()
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR rej","image_ref":"img:rej","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+	var nbrResp map[string]interface{}
+	json.Unmarshal(ew.Body.Bytes(), &nbrResp)
+	nbrID := nbrResp["id"].(string)
+
+	// Try to create deployment with node_backend_runtime_id pointing to non-ready NBR.
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-rej-nbr","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nbrID+`","service_json":{"host_port":8015}}`,
+		adminSession(), nil))
+	if w.Code == 201 {
+		t.Fatalf("create should have rejected non-ready NBR, got code=%d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "not ready") && !strings.Contains(w.Body.String(), "needs_check") {
+		t.Fatalf("expected rejection for non-ready NBR, got: %s", w.Body.String())
+	}
+}
+
+// TestPreflightDoesNotAutoCreateNBR verifies that running preflight/start
+// does not implicitly create a NodeBackendRuntime row when none exists.
+func TestPreflightDoesNotAutoCreateNBR(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID := "node-no-auto"
+	runtimeID := "rt-no-auto"
+	artifactID := "art-no-auto"
+
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	if _, err := database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		"gpu-no-auto", nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, database, runtimeID, "Runtime no-auto", "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	snapshotInsertModelLocation(t, database, "ml-no-auto", artifactID, nodeID)
+
+	// Count NBR rows before preflight.
+	var nbrCountBefore int
+	database.QueryRow(`SELECT COUNT(*) FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
+		nodeID, runtimeID).Scan(&nbrCountBefore)
+	if nbrCountBefore != 0 {
+		t.Fatalf("expected 0 NBR rows before test, got %d", nbrCountBefore)
+	}
+
+	// Call standalone preflight (should not create NBR).
+	pw := httptest.NewRecorder()
+	h.HandlePreflightDeployments(pw, newReq("POST", "/x",
+		`{"model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`"}`,
+		adminSession(), nil))
+	// The call should succeed (return a result) but with can_run=false and no candidates.
+	if pw.Code != 200 {
+		t.Fatalf("preflight code=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	// Verify no NBR row was created by the preflight call.
+	var nbrCountAfter int
+	database.QueryRow(`SELECT COUNT(*) FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
+		nodeID, runtimeID).Scan(&nbrCountAfter)
+	if nbrCountAfter != 0 {
+		t.Fatalf("preflight auto-created NBR row! count after=%d", nbrCountAfter)
+	}
+}
+
 // ── Failure observability tests ──────────────────────────────────────────
 
 func TestContainerLogTailSingleLineEscapesNewlines(t *testing.T) {

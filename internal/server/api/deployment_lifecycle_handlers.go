@@ -143,6 +143,44 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 
 	artifactID := strVal(req, "model_artifact_id", "")
 	backendRuntimeID := strVal(req, "backend_runtime_id", "")
+	nodeBackendRuntimeID := strVal(req, "node_backend_runtime_id", "")
+
+	// Resolve node_backend_runtime_id if provided (explicit NBR reference).
+	var sourceNBRID string
+	if nodeBackendRuntimeID != "" {
+		var nbrBackendRuntimeID, nbrNodeID, nbrStatus string
+		if err := h.DB.QueryRow(
+			`SELECT backend_runtime_id, node_id, status FROM node_backend_runtimes WHERE id = ?`,
+			nodeBackendRuntimeID,
+		).Scan(&nbrBackendRuntimeID, &nbrNodeID, &nbrStatus); err != nil {
+			writeError(w, http.StatusBadRequest, "node_backend_runtime_id not found")
+			return
+		}
+		if nbrStatus != "ready" {
+			writeError(w, http.StatusBadRequest,
+				fmt.Sprintf("node backend runtime is not ready (status=%s); please run agent check first", nbrStatus))
+			return
+		}
+		// Validate consistency with explicitly provided backend_runtime_id.
+		if backendRuntimeID != "" && backendRuntimeID != nbrBackendRuntimeID {
+			writeError(w, http.StatusBadRequest, "backend_runtime_id does not match node_backend_runtime_id")
+			return
+		}
+		backendRuntimeID = nbrBackendRuntimeID
+		// Set placement node_id from NBR if not explicitly provided.
+		if placementRaw, ok := req["placement_json"]; ok && placementRaw != nil {
+			if pm, ok := placementRaw.(map[string]interface{}); ok {
+				if existingNode, ok := pm["node_id"].(string); ok && existingNode != "" && existingNode != nbrNodeID {
+					writeError(w, http.StatusBadRequest, "placement node_id does not match node_backend_runtime_id node")
+					return
+				}
+				pm["node_id"] = nbrNodeID
+			}
+		} else {
+			req["placement_json"] = map[string]interface{}{"node_id": nbrNodeID}
+		}
+		sourceNBRID = nodeBackendRuntimeID
+	}
 
 	// REVIEW-022: Validate references at create time.
 	if artifactID != "" {
@@ -179,6 +217,13 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 						if nbrRow.Scan(&nbrSnapshot, &nbrImageRef) == nil && nbrSnapshot != "" && nbrSnapshot != "{}" {
 							configSnapshot = mergeNBRConfigSnapshot(configSnapshot, nbrSnapshot, nbrImageRef)
 						}
+						// Track explicit NBR reference if not already set from node_backend_runtime_id.
+						if sourceNBRID == "" {
+							var nbrid string
+							h.DB.QueryRow(`SELECT id FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
+								nodeID, backendRuntimeID).Scan(&nbrid)
+							sourceNBRID = nbrid
+						}
 					}
 				}
 			}
@@ -190,12 +235,13 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 	requestID := log.RequestIDFromContext(r.Context())
 	now := time.Now().Format(time.RFC3339)
 
-	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, config_snapshot_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, config_snapshot_json, source_node_backend_runtime_id, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "description", ""),
 		artifactID, backendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(req["parameters_json"]), jsonString(req["env_overrides_json"]),
 		configSnapshot,
+		sourceNBRID,
 		"stopped", "saved", tid, now, now,
 	)
 	if err != nil {
@@ -768,7 +814,13 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	var nodeRuntimeStatus string
 	h.DB.QueryRow(`SELECT id, status, COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`, pf.placement.NodeID, pf.runtimeID).Scan(&pf.nodeRuntimeID, &nodeRuntimeStatus, &pf.nbrSnapshot, &pf.nbrImageRef)
 	if pf.nodeRuntimeID == "" || nodeRuntimeStatus != "ready" {
-		pf.addErr("node_backend_runtime_not_ready", fmt.Sprintf("node backend runtime is not ready (status=%s)", nodeRuntimeStatus), map[string]interface{}{"node_id": pf.placement.NodeID, "runtime_id": pf.runtimeID, "node_runtime_id": pf.nodeRuntimeID, "nbr_status": nodeRuntimeStatus})
+		reason := fmt.Sprintf("node backend runtime is not ready (status=%s)", nodeRuntimeStatus)
+		if pf.nodeRuntimeID == "" {
+			reason = "no node backend runtime exists for this node and backend runtime; create a node runtime config first"
+		} else if nodeRuntimeStatus == "needs_check" {
+			reason = "node backend runtime needs agent check before it can be used; run check on the node runtime config first"
+		}
+		pf.addErr("node_backend_runtime_not_ready", reason, map[string]interface{}{"node_id": pf.placement.NodeID, "runtime_id": pf.runtimeID, "node_runtime_id": pf.nodeRuntimeID, "nbr_status": nodeRuntimeStatus})
 		return pf
 	}
 

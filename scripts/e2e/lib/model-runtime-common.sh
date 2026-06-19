@@ -165,6 +165,29 @@ print('false')
   log "nbr enabled status=$(echo "$r" | json_get status 2>/dev/null || echo '?')"
 }
 
+e2e_check_nbr() {
+  log "stage=check_nbr start"
+  local imgs; imgs="$(api_body GET "/api/v1/nodes/$NODE_ID/docker-images" 2>/dev/null || echo '[]')"
+  set +e
+  local ip; ip="$(echo "$imgs" | python3 -c "
+import json,sys
+imgs=json.load(sys.stdin)
+img='${IMAGE_REF}'
+for i in imgs:
+    tags=i.get('repotags',[]) or []
+    for t in tags:
+        if img in str(t):
+            print('true'); sys.exit(0)
+print('false')
+" 2>/dev/null || echo false)"
+  set -e
+  local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/check" \
+    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
+  local st; st="$(echo "$r" | json_get status 2>/dev/null || echo '?')"
+  log "nbr check status=$st"
+  [ "$st" = "ready" ] || { fail "nbr not ready after check (status=$st)"; return 1; }
+}
+
 e2e_create_deployment() {
   local name; name="e2e-${BACKEND_NAME}-${E2E_RUN_ID}"
   local payload; payload="{\"name\":\"$name\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[\"$GPU_ID\"]},\"service_json\":{\"host_port\":$HOST_PORT}"
@@ -274,6 +297,7 @@ e2e_run_default() {
   e2e_scan_model       || return 1
   e2e_create_artifact  || return 1
   e2e_enable_nbr       || return 1
+  e2e_check_nbr        || return 1
   e2e_create_deployment || return 1
   e2e_preflight        || return 1
   e2e_start_deployment || return 1

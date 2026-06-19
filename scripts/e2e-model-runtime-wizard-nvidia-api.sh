@@ -182,8 +182,10 @@ stage_done
 
 # Enable runtime
 stage_start enable_runtime
-api POST "/api/v1/nodes/$node_id/backend-runtimes/enable" "{\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"image_ref\":\"$VLLM_IMAGE\",\"image_present\":true,\"docker_available\":true}" >/tmp/e2e-wiz-nbr.json
-grep -q '"status":"ready"' /tmp/e2e-wiz-nbr.json || fail "runtime not ready"
+api POST "/api/v1/nodes/$node_id/backend-runtimes/enable" "{\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"image_ref\":\"$VLLM_IMAGE\",\"image_present\":true,\"docker_available\":true}" >/dev/null
+# Agent check to set NBR ready (enable sets needs_check until agent verifies)
+api POST "/api/v1/nodes/$node_id/backend-runtimes/check" "{\"backend_runtime_id\":\"runtime.vllm.nvidia-docker\",\"image_ref\":\"$VLLM_IMAGE\",\"image_present\":true,\"docker_available\":true}" >/tmp/e2e-wiz-nbr.json
+grep -q '"status":"ready"' /tmp/e2e-wiz-nbr.json || fail "runtime not ready after check"
 stage_done
 
 # Clone runtime

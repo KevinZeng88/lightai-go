@@ -224,14 +224,13 @@ function onWizTemplateSelected(templateId: string) {
 async function doCheck() {
   checking.value = true
   try {
-    wizCheckResult.value = await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/check`, { backend_runtime_id: wizTemplateId.value, display_name: wizConfigName.value, image_ref: wizImageRef.value || '', image_present: wizImagePresent.value, docker_available: wizRunnerType.value === 'docker' })
+    wizCheckResult.value = await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/check`, { backend_runtime_id: wizTemplateId.value, display_name: wizConfigName.value, image_ref: wizImageRef.value || '' })
   } catch (e: any) { wizCheckResult.value = { status: 'unknown', status_reason: e?.message || 'check failed' } }
   checking.value = false
 }
 
 function onWizardImageSelected(img: any) {
   wizImageRef.value = img.image_ref || ''
-  wizImagePresent.value = img.image_present === true
   wizCheckResult.value = null
 }
 
@@ -239,7 +238,7 @@ async function doCreateConfig() {
   saving.value = true
   try {
     // Enable the selected template on the selected node (creates NodeBackendRuntime only, no BackendRuntime clone)
-    await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: wizTemplateId.value, display_name: wizConfigName.value, image_ref: wizImageRef.value, image_present: wizImagePresent.value, docker_available: wizRunnerType.value === 'docker' })
+    await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: wizTemplateId.value, display_name: wizConfigName.value, image_ref: wizImageRef.value })
     ElMessage.success(t('runnerConfigs.created')); wizardVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   saving.value = false
@@ -275,7 +274,7 @@ async function doEdit() {
 async function checkRow(row: any) {
   checking.value = true
   try {
-    const result = await apiClient.post(`/nodes/${row.node_id}/backend-runtimes/check`, { backend_runtime_id: row.backend_runtime_id, image_ref: row.image_ref || '', image_present: row.image_present === true, docker_available: row.runner_type === 'docker' })
+    const result = await apiClient.post(`/nodes/${row.node_id}/backend-runtimes/check`, { backend_runtime_id: row.backend_runtime_id, image_ref: row.image_ref || '' })
     ElMessage.success(`${translateStatus(result.status, t)}: ${translateStatusReason(result.status_reason, t)}`)
     await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }

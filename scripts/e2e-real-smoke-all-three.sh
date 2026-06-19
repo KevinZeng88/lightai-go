@@ -98,6 +98,9 @@ stop_and_verify() {
 smoke_vllm() {
   log "══════ vLLM Real Smoke ══════"
   local rt="runtime.vllm.nvidia-docker"
+  # Enable NBR and check to set ready (required before deployment start)
+  api_post "nodes/$NODE_ID/backend-runtimes/enable" "{\"backend_runtime_id\":\"$rt\",\"image_ref\":\"vllm/vllm-openai:latest\",\"image_present\":true,\"docker_available\":true}" >/dev/null || true
+  api_post "nodes/$NODE_ID/backend-runtimes/check" "{\"backend_runtime_id\":\"$rt\",\"image_ref\":\"vllm/vllm-openai:latest\",\"image_present\":true,\"docker_available\":true}" >/dev/null || true
   local dep_resp; dep_resp=$(api_post "deployments" "{\"name\":\"$PREFIX-vllm\",\"display_name\":\"vLLM Smoke\",\"model_artifact_id\":\"$HF_ART\",\"backend_runtime_id\":\"$rt\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8191,\"container_port\":8022,\"app_port\":8022},\"parameters_json\":{\"served_model_name\":\"e2e-vllm-smoke\",\"gpu_memory_utilization\":0.85,\"max_model_len\":4096,\"tensor_parallel_size\":1}}")
   local dep_id; dep_id=$(echo "$dep_resp" | json_field id)
   [ -z "$dep_id" ] && { log "FAIL: vLLM deploy create"; echo "vLLM: FAIL" >> "$ARTIFACT_DIR/results.txt"; return; }
@@ -147,6 +150,9 @@ smoke_vllm() {
 smoke_sglang() {
   log "══════ SGLang Real Smoke ══════"
   local rt="runtime.sglang.nvidia-docker"
+  # Enable NBR and check to set ready (required before deployment start)
+  api_post "nodes/$NODE_ID/backend-runtimes/enable" "{\"backend_runtime_id\":\"$rt\",\"image_ref\":\"lmsysorg/sglang:latest\",\"image_present\":true,\"docker_available\":true}" >/dev/null || true
+  api_post "nodes/$NODE_ID/backend-runtimes/check" "{\"backend_runtime_id\":\"$rt\",\"image_ref\":\"lmsysorg/sglang:latest\",\"image_present\":true,\"docker_available\":true}" >/dev/null || true
   local dep_resp; dep_resp=$(api_post "deployments" "{\"name\":\"$PREFIX-sglang\",\"display_name\":\"SGLang Smoke\",\"model_artifact_id\":\"$HF_ART\",\"backend_runtime_id\":\"$rt\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8194,\"container_port\":31000,\"app_port\":31000},\"parameters_json\":{\"served_model_name\":\"e2e-sglang-smoke\",\"tp\":1}}")
   local dep_id; dep_id=$(echo "$dep_resp" | json_field id)
   [ -z "$dep_id" ] && { log "FAIL: SGLang deploy create"; echo "SGLang: FAIL" >> "$ARTIFACT_DIR/results.txt"; return; }
@@ -192,6 +198,9 @@ smoke_sglang() {
 smoke_llamacpp() {
   log "══════ llama.cpp Real Smoke ══════"
   local rt="runtime.llamacpp.nvidia-docker"
+  # Enable NBR and check to set ready (required before deployment start)
+  api_post "nodes/$NODE_ID/backend-runtimes/enable" "{\"backend_runtime_id\":\"$rt\",\"image_ref\":\"ghcr.io/ggml-org/llama.cpp:server-cuda13\",\"image_present\":true,\"docker_available\":true}" >/dev/null || true
+  api_post "nodes/$NODE_ID/backend-runtimes/check" "{\"backend_runtime_id\":\"$rt\",\"image_ref\":\"ghcr.io/ggml-org/llama.cpp:server-cuda13\",\"image_present\":true,\"docker_available\":true}" >/dev/null || true
   local dep_resp; dep_resp=$(api_post "deployments" "{\"name\":\"$PREFIX-llamacpp\",\"display_name\":\"llama.cpp Smoke\",\"model_artifact_id\":\"$GGUF_ART\",\"backend_runtime_id\":\"$rt\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8193,\"container_port\":9090,\"app_port\":9090},\"parameters_json\":{\"ctx_size\":2048,\"n_gpu_layers\":30}}")
   local dep_id; dep_id=$(echo "$dep_resp" | json_field id)
   [ -z "$dep_id" ] && { log "FAIL: llama.cpp deploy create"; echo "llama.cpp: FAIL" >> "$ARTIFACT_DIR/results.txt"; return; }

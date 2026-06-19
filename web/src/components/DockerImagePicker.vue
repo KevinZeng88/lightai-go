@@ -81,12 +81,12 @@ function selectRow(row: any) {
   const ref = imageRef(row)
   selectedRef.value = ref
   manualRef.value = ref
-  emit('select', { ...row, image_ref: ref, image_present: true })
+  emit('select', { ...row, image_ref: ref })
 }
 
 function selectManual() {
   selectedRef.value = manualRef.value
-  emit('select', { image_ref: manualRef.value, image_present: false })
+  emit('select', { image_ref: manualRef.value })
 }
 
 function rowClassName({ row }: { row: any }) {

@@ -176,7 +176,7 @@ R=$(curl -sf -b "$COOKIES" -X POST "$API/backend-runtimes" \
   -d '{"name":"llama-cpp-cuda13","vendor":"nvidia","image_name":"ghcr.io/ggml-org/llama.cpp:server-cuda13","backend_id":"BACKEND_ID_PLACEHOLDER","backend_version_id":"VERSION_ID_PLACEHOLDER"}')
 RID=$(echo "$R" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 pass "BackendRuntime: $RID"
-# Note: RunTemplate concept removed in current baseline; deployment references backend_runtime_id directly.
+# Note: BackendRuntime is a template; NodeBackendRuntime must be enabled and agent-checked (ready) before deployment can start.
 
 # ── Step 6: Get Node and GPU ────────────────────────────────────────────
 

@@ -34,7 +34,14 @@
       <el-form :model="createForm" label-width="140px">
         <el-form-item :label="$t('deployments.name')"><el-input v-model="createForm.name" /></el-form-item>
         <el-form-item :label="$t('deployments.artifact')"><el-input v-model="createForm.model_artifact_id" /></el-form-item>
-        <el-form-item :label="$t('deployments.runtime')"><el-input v-model="createForm.backend_runtime_id" /></el-form-item>
+        <el-form-item :label="$t('deployments.runtime')">
+          <el-select v-model="createForm.node_backend_runtime_id" filterable style="width:100%" :placeholder="$t('startWizard.selectRuntime')">
+            <el-option v-for="nbr in allNBRs" :key="nbr.id" :label="formatNBRLabel(nbr)" :value="nbr.id" :disabled="nbr.status !== 'ready'">
+              <span>{{ formatNBRLabel(nbr) }}</span>
+              <el-tag :type="nbrStatusTagType(nbr.status)" size="small" style="margin-left:8px">{{ nbrStatusText(nbr.status) }}</el-tag>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item :label="$t('deployments.nodeId')"><el-input v-model="createForm.node_id" /></el-form-item>
         <el-form-item :label="$t('deployments.hostPort')"><el-input v-model.number="createForm.host_port" /></el-form-item>
         <el-form-item :label="$t('deployments.containerPort')"><el-input v-model.number="createForm.container_port" /></el-form-item>
@@ -145,7 +152,7 @@
       </div>
 
       <div v-if="wizardStep === 2">
-        <el-select v-model="wizardVersionId" :placeholder="$t('startWizard.selectVersion')" style="width:100%" filterable @change="wizardRuntimeId=''; if($event) { onVersionSelected($event) }">
+        <el-select v-model="wizardVersionId" :placeholder="$t('startWizard.selectVersion')" style="width:100%" filterable @change="wizardNBRId=''; if($event) { onVersionSelected($event) }">
           <el-option v-for="v in versions" :key="v.id" :label="v.display_name || v.version" :value="v.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right">
@@ -155,15 +162,34 @@
       </div>
 
       <div v-if="wizardStep === 3">
-        <el-select v-model="wizardRuntimeId" :placeholder="$t('startWizard.selectRuntime')" style="width:100%" filterable @change="$event && doPreflight()">
-          <el-option v-for="r in filteredRuntimes" :key="r.id" :label="`${r.display_name || r.name} (${r.vendor})${r.is_editable ? '' : ' [' + $t('startWizard.systemBuiltin') + ']'}`" :value="r.id" />
+        <div v-if="wizardVersionId && !nbrsLoaded" style="color:var(--el-text-color-secondary);margin-bottom:8px">
+          {{ $t('common.loading') }}
+        </div>
+        <el-select v-model="wizardNBRId" :placeholder="$t('startWizard.selectRuntime')" style="width:100%" filterable @change="onNBRAutoPreflight">
+          <el-option
+            v-for="nbr in wizardNBRs"
+            :key="nbr.id"
+            :label="formatNBRLabel(nbr)"
+            :value="nbr.id"
+            :disabled="nbr.status !== 'ready'"
+          >
+            <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+              <span style="flex:1;overflow:hidden;text-overflow:ellipsis">{{ formatNBRLabel(nbr) }}</span>
+              <el-tag :type="nbrStatusTagType(nbr.status)" size="small" style="margin-left:8px;flex-shrink:0">{{ nbrStatusText(nbr.status) }}</el-tag>
+            </div>
+          </el-option>
         </el-select>
-        <el-alert v-if="wizardVersionId && filteredRuntimes.length === 0" type="info" :closable="false" style="margin-top:8px">
-          {{ $t('startWizard.noRuntimeForVersion') }}
+        <el-alert v-if="wizardVersionId && wizardNBRs.length === 0 && nbrsLoaded" type="warning" :closable="false" style="margin-top:8px">
+          <template #title>{{ $t('startWizard.noReadyNBR') }}</template>
+          <template #default>
+            <div style="font-size:12px;margin-top:4px">
+              <router-link to="/runner-configs">{{ $t('startWizard.goToRunnerConfigs') }}</router-link>
+            </div>
+          </template>
         </el-alert>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="wizardStep=2">{{ $t('common.prev') }}</el-button>
-          <el-button type="primary" :disabled="!wizardRuntimeId" @click="doPreflight">{{ $t('startWizard.preflight') }}</el-button>
+          <el-button type="primary" :disabled="!wizardNBRId" @click="doPreflight">{{ $t('startWizard.preflight') }}</el-button>
         </div>
       </div>
 
@@ -226,20 +252,22 @@ import { useI18n } from 'vue-i18n'
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
+import { translateStatus } from '@/utils/status'
 
 const { t } = useI18n()
 
 const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([]); const backends = ref<any[]>([]); const versions = ref<any[]>([])
+const allNBRs = ref<any[]>([]); const nbrsLoaded = ref(false)
 const createVisible = ref(false); const dryRunVisible = ref(false); const runPlanVisible = ref(false)
 const dryRunResult = ref<any>(null); const runPlanData = ref('')
 const editVisible = ref(false); const selectedEditRow = ref<any>(null)
 const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '', source_template_name: '', source_backend_runtime_id: '', copied_at: '' })
-const createForm = ref({ name: '', model_artifact_id: '', backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
+const createForm = ref({ name: '', model_artifact_id: '', node_backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
 const wizardVisible = ref(false); const wizardStep = ref(0)
-const wizardModelId = ref(''); const wizardBackendId = ref(''); const wizardVersionId = ref(''); const wizardRuntimeId = ref('')
+const wizardModelId = ref(''); const wizardBackendId = ref(''); const wizardVersionId = ref(''); const wizardNBRId = ref('')
 const wizardStartNode = ref(''); const wizardHostPort = ref(8004); const wizardContainerPort = ref(0); const wizardAppPort = ref(0); const wizardDeploymentId = ref('')
 const preflightLoading = ref(false); const preflightResult = ref<any>(null)
 const wizardStarting = ref(false)
@@ -248,22 +276,100 @@ const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () 
 
 onMounted(async () => { await refresh(); await loadRefs() })
 async function refresh() { loading.value = true; try { items.value = await apiClient.get('/deployments') } catch (e: any) { console.error('deployments refresh failed', e) } loading.value = false }
-const { loadNodes, nodeLabel } = useNodeLabels()
+const { loadNodes, nodeLabel, nodes: nodeItems } = useNodeLabels()
 
 async function loadRefs() {
   try { models.value = await apiClient.get('/model-artifacts') } catch { models.value = [] }
   try { runtimes.value = await apiClient.get('/backend-runtimes') } catch { runtimes.value = [] }
   try { backends.value = await apiClient.get('/backends') } catch { backends.value = [] }
-  loadNodes()
+  await loadNodes()
+  await loadAllNBRs()
+}
+
+async function loadAllNBRs() {
+  nbrsLoaded.value = false
+  try {
+    const nodeIds = nodeItems.value.map((n: any) => n.id)
+    const results: any[] = []
+    for (const nid of nodeIds) {
+      try {
+        const nbrs = await apiClient.get(`/nodes/${nid}/backend-runtimes`)
+        for (const nbr of (nbrs || [])) {
+          results.push({ ...nbr, _node_id: nid })
+        }
+      } catch { /* node may not have any NBRs */ }
+    }
+    allNBRs.value = results
+  } catch { allNBRs.value = [] }
+  nbrsLoaded.value = true
+}
+
+// Wizard NBRs filtered by selected version's backend_runtime_ids
+const wizardNBRs = computed(() => {
+  if (!wizardVersionId.value) return []
+  // Find BR templates that belong to this version
+  const versionRuntimeIds = new Set(
+    runtimes.value
+      .filter((r: any) => r.backend_version_id === wizardVersionId.value)
+      .map((r: any) => r.id)
+  )
+  return allNBRs.value.filter((nbr: any) => versionRuntimeIds.has(nbr.backend_runtime_id))
+})
+
+// NBR display helpers
+function formatNBRLabel(nbr: any): string {
+  const node = nbr._node_id || nbr.node_id || ''
+  const host = nodeLabel(node)
+  const br = runtimes.value.find((r: any) => r.id === nbr.backend_runtime_id)
+  const brName = br?.display_name || br?.name || nbr.backend_runtime_id || ''
+  const img = nbr.image_ref || ''
+  const parts = [host, brName]
+  if (img) parts.push(img)
+  return parts.join(' / ')
+}
+
+function nbrStatusTagType(status: string): string {
+  if (status === 'ready') return 'success'
+  if (status === 'needs_check') return 'warning'
+  if (status === 'missing_image' || status === 'unsupported_device' || status === 'error') return 'danger'
+  if (status === 'disabled') return 'info'
+  return 'info'
+}
+
+function nbrStatusText(status: string): string {
+  return translateStatus(status, t)
+}
+
+function onNBRAutoPreflight() {
+  if (!wizardNBRId.value) return
+  // Auto-set node from NBR
+  const nbr = allNBRs.value.find((n: any) => n.id === wizardNBRId.value)
+  if (nbr) {
+    wizardStartNode.value = nbr._node_id || nbr.node_id || ''
+  }
+  doPreflight()
 }
 
 function showCreate() { createVisible.value = true }
 async function doCreate() {
   saving.value = true
   try {
-    createForm.value.placement_json = JSON.stringify({ node_id: createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
-    createForm.value.service_json = JSON.stringify(servicePayload(createForm.value.host_port, createForm.value.container_port, createForm.value.app_port))
-    await apiClient.post('/deployments', createForm.value)
+    const payload: any = { ...createForm.value }
+    // If node_backend_runtime_id is set, resolve it for placement
+    if (payload.node_backend_runtime_id) {
+      const nbr = allNBRs.value.find((n: any) => n.id === payload.node_backend_runtime_id)
+      if (nbr) {
+        payload.placement_json = JSON.stringify({ node_id: nbr._node_id || nbr.node_id || createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
+      } else {
+        payload.placement_json = JSON.stringify({ node_id: createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
+      }
+    } else {
+      payload.placement_json = JSON.stringify({ node_id: createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
+    }
+    payload.service_json = JSON.stringify(servicePayload(createForm.value.host_port, createForm.value.container_port, createForm.value.app_port))
+    // Remove legacy fields not in create payload
+    delete payload.gpu_ids
+    await apiClient.post('/deployments', payload)
     ElMessage.success(t('deployments.created')); createVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   saving.value = false
@@ -328,12 +434,10 @@ async function doEdit() {
 }
 
 // ---- Start Wizard ----
-const filteredRuntimes = computed(() => runtimes.value.filter((r) => !wizardVersionId.value || r.backend_version_id === wizardVersionId.value))
 
 // Map preflight error code to i18n-keyed user-facing text.
 function preflightErrorText(e: any): string {
   if (!e || typeof e !== 'object') return String(e)
-  // Structured error with code
   if (e.code) {
     const codeMap: Record<string, string> = {
       model_location_missing: 'preflight.reason.modelLocationMissing',
@@ -345,16 +449,14 @@ function preflightErrorText(e: any): string {
     }
     const i18nKey = codeMap[e.code]
     if (i18nKey) return t(i18nKey)
-    // Fallback: show the message but prefixed with code
     return `[${e.code}] ${e.message || ''}`
   }
-  // Legacy string error (backward compat)
   return typeof e === 'string' ? e : (e.message || JSON.stringify(e))
 }
 
 async function onBackendSelected() {
   wizardVersionId.value = ''
-  wizardRuntimeId.value = ''
+  wizardNBRId.value = ''
   try { versions.value = await apiClient.get(`/backends/${wizardBackendId.value}/versions`) } catch { versions.value = [] }
   if (wizardBackendId.value) wizardStep.value = 2
 }
@@ -368,19 +470,39 @@ async function onVersionSelected(versionId: string) {
       if (wizardAppPort.value === 0) wizardAppPort.value = v.default_container_port
     }
   } catch { /* keep defaults */ }
+  // Ensure NBRs are loaded for this version
+  if (allNBRs.value.length === 0) await loadAllNBRs()
   wizardStep.value = 3
 }
 
-function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardModelId.value = ''; wizardBackendId.value = ''; wizardVersionId.value = ''; wizardRuntimeId.value = ''; versions.value = []; preflightResult.value = null; wizardStartNode.value = ''; wizardDeploymentId.value = ''; wizardContainerPort.value = 0; wizardAppPort.value = 0; loadRefs() }
+function startWizard() {
+  wizardVisible.value = true; wizardStep.value = 0
+  wizardModelId.value = ''; wizardBackendId.value = ''; wizardVersionId.value = ''; wizardNBRId.value = ''
+  versions.value = []; preflightResult.value = null; wizardStartNode.value = ''; wizardDeploymentId.value = ''
+  wizardContainerPort.value = 0; wizardAppPort.value = 0
+  loadRefs()
+}
+
 async function doPreflight() {
   preflightLoading.value = true; wizardStep.value = 4
   try {
-    preflightResult.value = await apiClient.post('/deployments/preflight', { model_artifact_id: wizardModelId.value, backend_runtime_id: wizardRuntimeId.value, host_port: wizardHostPort.value })
-    if (preflightResult.value?.candidate_nodes?.length) wizardStartNode.value = preflightResult.value.candidate_nodes[0].node_id
+    // Use node_backend_runtime_id if we selected an NBR
+    const preflightPayload: any = { model_artifact_id: wizardModelId.value, host_port: wizardHostPort.value }
+    if (wizardNBRId.value) {
+      preflightPayload.node_backend_runtime_id = wizardNBRId.value
+    }
+    preflightResult.value = await apiClient.post('/deployments/preflight', preflightPayload)
+    if (preflightResult.value?.candidate_nodes?.length) {
+      wizardStartNode.value = preflightResult.value.candidate_nodes[0].node_id
+    } else if (wizardStartNode.value) {
+      // Keep the NBR's node even if preflight shows no candidates
+    }
   } catch (e: any) { preflightResult.value = { can_run: false, errors: [e?.message || 'preflight failed'], candidate_nodes: [] } }
   preflightLoading.value = false
 }
+
 function onPreflightNodeClick(row: any) { wizardStartNode.value = row.node_id }
+
 async function doWizardStart() {
   wizardStarting.value = true
   try {
@@ -392,28 +514,42 @@ async function doWizardStart() {
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   wizardStarting.value = false
 }
+
 async function doWizardSave() {
   wizardStarting.value = true
   try { await ensureWizardDeployment(); ElMessage.success(t('deployments.saved')); wizardVisible.value = false; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   wizardStarting.value = false
 }
+
 async function doWizardPreview() {
   wizardStarting.value = true
   try { const deploy = await ensureWizardDeployment(); dryRunResult.value = await apiClient.post(`/deployments/${deploy.id}/dry-run`, {}); dryRunVisible.value = true; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   wizardStarting.value = false
 }
+
 async function ensureWizardDeployment() {
   if (wizardDeploymentId.value) return { id: wizardDeploymentId.value }
   const name = `wizard-${Date.now()}`
-  const deploy = await apiClient.post('/deployments', {
-    name, display_name: name, model_artifact_id: wizardModelId.value, backend_runtime_id: wizardRuntimeId.value,
+  const payload: any = {
+    name, display_name: name, model_artifact_id: wizardModelId.value,
     placement_json: { node_id: wizardStartNode.value, gpu_ids: [] },
     service_json: servicePayload(wizardHostPort.value, wizardContainerPort.value, wizardAppPort.value),
     parameters_json: {}, env_overrides_json: {},
-  })
+  }
+  // Send node_backend_runtime_id when we have one selected
+  if (wizardNBRId.value) {
+    payload.node_backend_runtime_id = wizardNBRId.value
+    // Also resolve backend_runtime_id from NBR for backward compat
+    const nbr = allNBRs.value.find((n: any) => n.id === wizardNBRId.value)
+    if (nbr) {
+      payload.backend_runtime_id = nbr.backend_runtime_id
+    }
+  }
+  const deploy = await apiClient.post('/deployments', payload)
   wizardDeploymentId.value = deploy.id
   return deploy
 }
+
 function servicePayload(hostPort: number, containerPort?: number, appPort?: number) {
   const payload: any = { host_port: hostPort }
   if (containerPort && containerPort > 0) payload.container_port = containerPort
@@ -422,6 +558,7 @@ function servicePayload(hostPort: number, containerPort?: number, appPort?: numb
   payload.api_test_port = hostPort
   return payload
 }
+
 // ---- Template Sync ----
 const syncPreviewVisible = ref(false)
 const syncPreviewData = ref<any>(null)

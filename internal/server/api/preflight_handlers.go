@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -10,11 +11,12 @@ import (
 // nodes that have both a valid ModelLocation and a ready NodeBackendRuntime.
 func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ModelArtifactID  string   `json:"model_artifact_id"`
-		BackendRuntimeID string   `json:"backend_runtime_id"`
-		NodeID           string   `json:"node_id"`
-		GPUIds           []string `json:"gpu_ids"`
-		HostPort         int      `json:"host_port"`
+		ModelArtifactID       string   `json:"model_artifact_id"`
+		BackendRuntimeID      string   `json:"backend_runtime_id"`
+		NodeBackendRuntimeID  string   `json:"node_backend_runtime_id"`
+		NodeID                string   `json:"node_id"`
+		GPUIds                []string `json:"gpu_ids"`
+		HostPort              int      `json:"host_port"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
@@ -24,8 +26,41 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "model_artifact_id is required")
 		return
 	}
+
+	// Resolve backend_runtime_id and node_id from node_backend_runtime_id if provided.
+	if req.NodeBackendRuntimeID != "" {
+		var nbrBackendRuntimeID, nbrNodeID, nbrStatus string
+		if err := h.DB.QueryRow(
+			`SELECT backend_runtime_id, node_id, status FROM node_backend_runtimes WHERE id = ?`,
+			req.NodeBackendRuntimeID,
+		).Scan(&nbrBackendRuntimeID, &nbrNodeID, &nbrStatus); err != nil {
+			writeError(w, http.StatusBadRequest, "node_backend_runtime_id not found")
+			return
+		}
+		if nbrStatus != "ready" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"can_run": false, "candidate_nodes": []interface{}{},
+				"errors":  []string{fmt.Sprintf("node backend runtime is not ready (status=%s)", nbrStatus)},
+				"warnings": []string{},
+			})
+			return
+		}
+		// If backend_runtime_id is also provided, validate consistency.
+		if req.BackendRuntimeID != "" && req.BackendRuntimeID != nbrBackendRuntimeID {
+			writeError(w, http.StatusBadRequest, "backend_runtime_id does not match node_backend_runtime_id")
+			return
+		}
+		req.BackendRuntimeID = nbrBackendRuntimeID
+		if req.NodeID == "" {
+			req.NodeID = nbrNodeID
+		} else if req.NodeID != nbrNodeID {
+			writeError(w, http.StatusBadRequest, "node_id does not match node_backend_runtime_id node")
+			return
+		}
+	}
+
 	if req.BackendRuntimeID == "" {
-		writeError(w, http.StatusBadRequest, "backend_runtime_id is required")
+		writeError(w, http.StatusBadRequest, "backend_runtime_id or node_backend_runtime_id is required")
 		return
 	}
 

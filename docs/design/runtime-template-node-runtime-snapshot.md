@@ -202,6 +202,58 @@ Not implemented in current phase. Documented as P2:
    subsequent starts.
 ```
 
+### 2.5 Why Deployment Must Select Ready NBR
+
+BackendRuntime (BR) is a **template layer object** — it describes how a class of backend should run (Docker image, args, env, mounts), but it is NOT bound to any specific node and does NOT carry any readiness guarantee.
+
+NodeBackendRuntime (NBR) is a **node-level config** that represents a BR enabled on a specific node, with actual status fields (`image_present`, `docker_available`) determined by the agent during check. Only `status=ready` NBRs have been verified by the agent and are safe to deploy.
+
+**Deploying without a ready NBR is unsafe because:**
+- The Docker image may not be present on the target node (`missing_image`)
+- The GPU vendor may not match (`unsupported_device`)
+- Docker may not be available (`unknown`)
+- The node may be offline
+
+**Deployment must select a ready NBR, not a BR template, because:**
+- BR is a reusable blueprint; NBR is the verified instance on a specific node
+- Only NBR carries node-specific image overrides validated by agent check
+- RunPlan generation freezes NBR config at deployment time; using BR directly would miss node-level overrides
+
+### 2.6 Correct Operation Flow
+
+```
+1. Create or clone a BackendRuntime template (from Backend + BackendVersion).
+2. On a specific node, explicitly create a NodeBackendRuntime via
+   POST /nodes/{id}/backend-runtimes/enable.
+3. Agent check verifies Docker, image presence, GPU vendor, driver/toolkit,
+   and sets NBR status to ready via POST /nodes/{id}/backend-runtimes/check.
+4. Confirm NBR status = ready.
+5. Create or confirm a ModelLocation on the target node.
+6. Preflight returns intersection of node + ModelLocation + ready NBR.
+7. Generate RunPlan / NodeRunPlan based on the selected NBR snapshot.
+8. Start ModelInstance.
+```
+
+**Forbidden:**
+- Deployment must NOT auto-create NBR when a BR is selected.
+- Preflight must NOT implicitly create or fill in missing NBR.
+- Deployment/start API must NOT auto-create NBR in the background.
+- UI must NOT allow deployment with non-ready NBR.
+- NBR ready status must only come from agent check (not client-trusted fields).
+
+### 2.7 Common Errors and Troubleshooting
+
+| Error | Cause | Resolution |
+|-------|-------|-----------|
+| No ready NBR available | NBR not created or not checked | Go to Runner Configs page, enable and check NBR on target node |
+| NBR status = needs_check | Config was edited after last check | Run agent check on the NBR |
+| NBR status = missing_image | Docker image not present on node | Pull the image or select a different image on the NBR |
+| Docker not available | Docker daemon not running or not installed | Ensure Docker is running on the target node |
+| NBR status = unsupported_device | GPU vendor mismatch (e.g., NVIDIA NBR on MetaX node) | Select or enable an NBR with matching vendor |
+| Model location and NBR node mismatch | Model not stored on the NBR's node | Add model location for that node, or select NBR on a node where the model exists |
+| Permission denied | User/tenant does not own the NBR or model | Contact admin to grant access |
+| BackendRuntime = template only | Trying to deploy using a BackendRuntime directly | Must create and check an NBR first; BR is a blueprint, not a deployable object |
+
 ## 3. Model Mount Per-Node Resolution
 
 ### 3.1 ModelLocation → NodeRunPlan Mount
