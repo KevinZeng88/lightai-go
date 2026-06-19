@@ -553,6 +553,20 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	json.Unmarshal(paramsRaw, &pf.params)
 	json.Unmarshal(envOverridesRaw, &pf.envOverrides)
 
+	// Inject service ports into parameters so mapParametersToArgs uses the
+	// user's app_port instead of the ParameterDef hardcoded default (e.g. --port 8000).
+	// Without this, the resolver silently ignores the deployment port config.
+	if pf.params == nil {
+		pf.params = make(map[string]interface{})
+	}
+	if pf.service.AppPort > 0 {
+		pf.params["--port"] = float64(pf.service.AppPort)
+		pf.params["port"] = float64(pf.service.AppPort)
+	}
+	if pf.service.HostPort > 0 {
+		pf.params["--host-port"] = float64(pf.service.HostPort)
+	}
+
 	// Validate artifact exists.
 	artifact := h.getArtifactJSON(pf.artifactID)
 	if artifact == nil {

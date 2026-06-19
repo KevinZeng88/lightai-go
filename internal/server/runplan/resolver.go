@@ -350,10 +350,34 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 
 	// Deduplicate: remove duplicate consecutive flag-value pairs
 	args = deduplicateArgs(args)
+
+	// Override --port with the effective app_port from the deployment service config.
+	// Without this, mapParametersToArgs always picks up the ParameterDef default
+	// (e.g. 8000) even when the user has set a custom app_port in service_json.
+	appPort := effectiveAppPort(in, effectiveContainerPort(in))
+	args = overridePortArg(args, appPort)
+
 	return args, errors
 }
 
-// deduplicateArgs removes consecutive duplicate --flag value pairs.
+// deduplicateArgs removes consecutive duplicate --flag value pairs.// overridePortArg replaces the value of the last --port flag with the given port.
+// If no --port flag exists, appends it with the given port.
+func overridePortArg(args []string, port int) []string {
+	if port <= 0 {
+		return args
+	}
+	portStr := fmt.Sprintf("%d", port)
+	// Replace last occurrence of --port <value>
+	for i := len(args) - 1; i >= 0; i-- {
+		if args[i] == "--port" && i+1 < len(args) {
+			args[i+1] = portStr
+			return args
+		}
+	}
+	// Not found — append
+	return append(args, "--port", portStr)
+}
+
 func deduplicateArgs(args []string) []string {
 	seen := make(map[string]bool)
 	var result []string
