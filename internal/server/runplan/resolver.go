@@ -351,48 +351,86 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	// Deduplicate: remove duplicate consecutive flag-value pairs
 	args = deduplicateArgs(args)
 
-	// Override --port with the effective app_port from the deployment service config.
-	// Without this, mapParametersToArgs always picks up the ParameterDef default
-	// (e.g. 8000) even when the user has set a custom app_port in service_json.
-	appPort := effectiveAppPort(in, effectiveContainerPort(in))
-	args = overridePortArg(args, appPort)
+	// Apply service-level config to args.  Service fields (app_port, host, etc.)
+	// always take priority over ParameterDef defaults from any layer.
+	args = applyServiceArgs(args, in.Deployment.Service)
 
 	return args, errors
 }
 
-// deduplicateArgs removes consecutive duplicate --flag value pairs.// overridePortArg replaces the value of the last --port flag with the given port.
+// overridePortArg replaces the value of the last --port flag with the given port.
 // If no --port flag exists, appends it with the given port.
+// applyServiceArgs overrides args with values from the deployment service config.
+// Service-level settings (app_port, host) always beat ParameterDef defaults.
+func applyServiceArgs(args []string, svc ServiceInfo) []string {
+	if svc.AppPort > 0 {
+		args = setLastFlagValue(args, "--port", fmt.Sprintf("%d", svc.AppPort))
+	}
+	// --host from service is the bind address (typically 0.0.0.0).
+	// Only override if explicitly set.
+	if svc.HostPort > 0 {
+		// host_port is the external port; app_host is the listen address.
+		// Currently no separate app_host field, so --host remains from args.
+	}
+	return args
+}
+
+// setLastFlagValue replaces the value of the last occurrence of flag, or appends.
+func setLastFlagValue(args []string, flag, value string) []string {
+	for i := len(args) - 1; i >= 0; i-- {
+		if args[i] == flag && i+1 < len(args) {
+			args[i+1] = value
+			return args
+		}
+	}
+	return append(args, flag, value)
+}
+
+// Deprecated: use applyServiceArgs instead.
 func overridePortArg(args []string, port int) []string {
 	if port <= 0 {
 		return args
 	}
 	portStr := fmt.Sprintf("%d", port)
-	// Replace last occurrence of --port <value>
 	for i := len(args) - 1; i >= 0; i-- {
 		if args[i] == "--port" && i+1 < len(args) {
 			args[i+1] = portStr
 			return args
 		}
 	}
-	// Not found — append
 	return append(args, "--port", portStr)
 }
 
+// deduplicateArgs removes duplicate --flag value pairs, keeping the LAST occurrence
+// (highest priority — user parameters from Layer 4 override defaults from Layer 1).
+// Processes in reverse so later values naturally win.
 func deduplicateArgs(args []string) []string {
 	seen := make(map[string]bool)
-	var result []string
+	// First pass: identify all flag keys (in order, so later occurrences win).
+	type flagPair struct{ idx, valIdx int }
+	lastSeen := make(map[string]flagPair)
 	i := 0
 	for i < len(args) {
+		if strings.HasPrefix(args[i], "-") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			lastSeen[args[i]] = flagPair{idx: i, valIdx: i + 1}
+			i += 2
+		} else {
+			i++
+		}
+	}
+	// Second pass: keep only the last occurrence of each flag.
+	var result []string
+	i = 0
+	for i < len(args) {
 		arg := args[i]
-		// For flag-value pairs like "--key value", track the key
 		if strings.HasPrefix(arg, "-") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			key := arg
-			if seen[key] {
-				i += 2 // skip duplicate flag-value pair
-				continue
+			if fp, ok := lastSeen[arg]; ok && fp.idx == i {
+				// This is the last occurrence — keep it.
+				if !seen[arg] {
+					seen[arg] = true
+					result = append(result, arg, args[i+1])
+				}
 			}
-			seen[key] = true
-			result = append(result, arg, args[i+1])
 			i += 2
 		} else {
 			result = append(result, arg)
@@ -405,7 +443,15 @@ func deduplicateArgs(args []string) []string {
 func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef) []string {
 	var args []string
 	for _, def := range defs {
+		// Look up value by ParameterDef name (CLI format e.g. "--served-model-name")
+		// and also by normalized name (snake_case e.g. "served_model_name").
 		val, ok := params[def.Name]
+		if !ok {
+			normalized := strings.ReplaceAll(strings.TrimPrefix(strings.TrimPrefix(def.Name, "-"), "-"), "-", "_")
+			if normalized != def.Name {
+				val, ok = params[normalized]
+			}
+		}
 		if !ok {
 			if def.Default != nil {
 				val = def.Default
@@ -705,9 +751,16 @@ func buildVarMap(in ResolveInput) map[string]string {
 		if v, ok := in.Deployment.Parameters[name]; ok {
 			return v
 		}
+		// Also try the CLI-format name (e.g. "--served-model-name" for "served_model_name").
+		cliName := "--" + strings.ReplaceAll(name, "_", "-")
 		for _, d := range in.BackendVersion.ParameterDefs {
-			if d.Name == name && d.Default != nil {
-				return d.Default
+			n := d.Name
+			// Strip leading -- and convert - to _ for comparison.
+			normalized := strings.ReplaceAll(strings.TrimPrefix(strings.TrimPrefix(n, "-"), "-"), "-", "_")
+			if n == name || n == cliName || normalized == name {
+				if d.Default != nil {
+					return d.Default
+				}
 			}
 		}
 		return nil

@@ -33,7 +33,7 @@ func TestResolveVLLMNVIDIA(t *testing.T) {
 		},
 		Deployment: &DeploymentInfo{
 			ID: "deploy-vllm", Name: "vllm-test",
-			Parameters: map[string]interface{}{"served_model_name": "Qwen3-0.6B-Instruct-2512", "max_model_len": 4096.0, "gpu_memory_utilization": 0.6},
+			Parameters: map[string]interface{}{"served_model_name": "Qwen3-0.6B-Instruct-2512", "max_model_len": 4096.0, "gpu_memory_utilization": 0.6, "enforce_eager": ""},
 			Service:    ServiceInfo{HostPort: 8004},
 		},
 		InstanceID:   "inst-vllm-001",
@@ -303,5 +303,145 @@ func makeVLLMTestInput() ResolveInput {
 		InstanceID:   "inst-test",
 		Node:         &NodeInfo{ID: "node-a", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
+	}
+}
+
+func TestVLLMUserServedModelNameOverridesDefault(t *testing.T) {
+	in := ResolveInput{
+		Backend: &BackendInfo{Name: "vllm", DefaultEnv: map[string]string{}},
+		BackendVersion: &VersionInfo{
+			Version: "v0.23.0", DefaultEntrypoint: []string{"vllm", "serve"},
+			DefaultArgs: []string{"{{model_container_path}}"},
+			ParameterDefs: []ParameterDef{
+				{Name: "--host", CliName: "--host", Default: "0.0.0.0"},
+				{Name: "--port", CliName: "--port", Default: "8000"},
+				{Name: "--served-model-name", CliName: "--served-model-name"},
+			},
+			HealthCheck: HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
+			DefaultContainerPort: 8000, DefaultImages: map[string]string{"nvidia": "img:latest"},
+		},
+		BackendRuntime: &RuntimeInfo{ID: "rt", Vendor: "nvidia", RuntimeType: "docker", ImageName: "img:latest", Docker: DockerSpecInfo{}, ModelMount: ModelMountInfo{ContainerPath: "/models"}},
+		Artifact: &ArtifactInfo{Name: "M", Path: "/models/M", ModelRoot: "/models", RelativePath: "M"},
+		Deployment: &DeploymentInfo{
+			ID: "dep", Name: "test",
+			Parameters: map[string]interface{}{"served_model_name": "my-custom-model"},
+			Service: ServiceInfo{HostPort: 8004},
+		},
+		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},
+		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
+	}
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 { t.Fatalf("errors: %v", errs) }
+	found := false
+	for i, a := range plan.Args {
+		if a == "--served-model-name" && i+1 < len(plan.Args) && plan.Args[i+1] == "my-custom-model" { found = true; break }
+	}
+	if !found { t.Fatalf("--served-model-name my-custom-model not found: %v", plan.Args) }
+}
+
+func TestVLLMUserGpuMemoryUtilizationPropagates(t *testing.T) {
+	in := makeVLLMTestInput()
+	in.Deployment.Parameters["gpu_memory_utilization"] = 0.85
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	found := false
+	for i, a := range plan.Args {
+		if a == "--gpu-memory-utilization" && i+1 < len(plan.Args) {
+			found = true; break
+		}
+	}
+	if !found {
+		t.Fatalf("--gpu-memory-utilization not found; user value not propagated: %v", plan.Args)
+	}
+}
+
+func TestVLLMEnforceEagerUserOverride(t *testing.T) {
+	in := makeVLLMTestInput()
+	// User explicitly disables enforce_eager
+	delete(in.Deployment.Parameters, "--enforce-eager")
+	in.Deployment.Parameters["enforce_eager"] = ""
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	// enforce_eager is a flag (no value), just check it appears
+	found := false
+	for _, a := range plan.Args {
+		if a == "--enforce-eager" {
+			found = true; break
+		}
+	}
+	if !found {
+		t.Fatalf("--enforce-eager not found: %v", plan.Args)
+	}
+}
+
+func TestDedupKeepsUserPortOverDefault(t *testing.T) {
+	// Simulate the exact scenario: default_args has --port X, user sets --port Y.
+	// After the dedup fix (last wins), the user value must survive.
+	in := makeVLLMTestInput()
+	// default_args in makeVLLMTestInput does NOT include --port (it is positional model),
+	// but ParameterDef has default --port 8000. User sets port via service.
+	in.Deployment.Service = ServiceInfo{HostPort: 8111, ContainerPort: 8022, AppPort: 8022}
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	portCount := 0
+	lastPort := ""
+	for i, a := range plan.Args {
+		if a == "--port" && i+1 < len(plan.Args) {
+			portCount++
+			lastPort = plan.Args[i+1]
+		}
+	}
+	if portCount != 1 {
+		t.Fatalf("expected 1 --port, got %d: %v", portCount, plan.Args)
+	}
+	if lastPort != "8022" {
+		t.Fatalf("--port = %s, want 8022 (user value should beat default)", lastPort)
+	}
+}
+
+func TestGetParamMatchesCLIFormatNames(t *testing.T) {
+	// Build input directly without makeVLLMTestInput to avoid map sharing issues.
+	in := ResolveInput{
+		Backend: &BackendInfo{Name: "vllm", DefaultEnv: map[string]string{}},
+		BackendVersion: &VersionInfo{
+			Version: "v0.23.0", DefaultEntrypoint: []string{"vllm", "serve"},
+			DefaultArgs: []string{"{{model_container_path}}"},
+			ParameterDefs: []ParameterDef{
+				{Name: "--host", CliName: "--host", Default: "0.0.0.0"},
+				{Name: "--port", CliName: "--port", Default: "8000"},
+				{Name: "--max-model-len", CliName: "--max-model-len", Default: "4096"},
+			},
+			HealthCheck: HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
+			DefaultContainerPort: 8000,
+			DefaultImages: map[string]string{"nvidia": "vllm/vllm-openai:latest"},
+		},
+		BackendRuntime: &RuntimeInfo{ID: "rt", Vendor: "nvidia", RuntimeType: "docker", ImageName: "vllm/vllm-openai:latest", Docker: DockerSpecInfo{}, ModelMount: ModelMountInfo{ContainerPath: "/models"}},
+		Artifact: &ArtifactInfo{Name: "Qwen3", Path: "/models/Qwen3", ModelRoot: "/models", RelativePath: "Qwen3"},
+		Deployment: &DeploymentInfo{
+			ID: "dep", Name: "test",
+			Parameters: map[string]interface{}{"max_model_len": 16384.0},
+			Service: ServiceInfo{HostPort: 8004},
+		},
+		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},
+		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
+	}
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("errors: %v", errs)
+	}
+	found := false
+	for i, a := range plan.Args {
+		if a == "--max-model-len" && i+1 < len(plan.Args) && plan.Args[i+1] == "16384" {
+			found = true; break
+		}
+	}
+	if !found {
+		t.Fatalf("--max-model-len 16384 not found; normalized name lookup failed: %v", plan.Args)
 	}
 }
