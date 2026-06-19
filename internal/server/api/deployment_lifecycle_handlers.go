@@ -498,6 +498,153 @@ func (pf *preflightResult) addErr(code, message string, ctx map[string]interface
 	pf.errs = append(pf.errs, PreflightError{Code: code, Message: message, Context: ctx})
 }
 
+// addWarn appends a warning string to the result.
+func (pf *preflightResult) addWarn(message string) {
+	pf.warns = append(pf.warns, message)
+}
+
+// validateContextLength checks the user-requested context parameter against
+// the model artifact's default_context_length. It adds errors or warnings
+// to the preflight result as appropriate.
+func (pf *preflightResult) validateContextLength() {
+	// Read model's default_context_length from artifact.
+	modelCtx := intVal(pf.artifact, "default_context_length", 0)
+
+	// Determine which context parameter to check based on backend.
+	var userCtx int
+	var paramName string
+	backendName := pf.backendName
+
+	switch {
+	case strings.Contains(backendName, "vllm"):
+		paramName = "max_model_len"
+		if v, ok := pf.params[paramName]; ok {
+			userCtx = intFromInterface(v)
+		}
+		if userCtx == 0 {
+			if v, ok := pf.params["--max-model-len"]; ok {
+				userCtx = intFromInterface(v)
+				paramName = "--max-model-len"
+			}
+		}
+	case strings.Contains(backendName, "sglang"):
+		paramName = "context_length"
+		if v, ok := pf.params[paramName]; ok {
+			userCtx = intFromInterface(v)
+		}
+		if userCtx == 0 {
+			if v, ok := pf.params["--context-length"]; ok {
+				userCtx = intFromInterface(v)
+				paramName = "--context-length"
+			}
+		}
+	case strings.Contains(backendName, "llamacpp"):
+		paramName = "ctx_size"
+		if v, ok := pf.params[paramName]; ok {
+			userCtx = intFromInterface(v)
+		}
+		if userCtx == 0 {
+			if v, ok := pf.params["n_gpu_layers"]; ok {
+				_ = intFromInterface(v) // not ctx, skip
+			}
+		}
+		if userCtx == 0 {
+			if v, ok := pf.params["--ctx-size"]; ok {
+				userCtx = intFromInterface(v)
+				paramName = "--ctx-size"
+			}
+		}
+	}
+
+	// No user context parameter set — nothing to validate.
+	if userCtx == 0 {
+		return
+	}
+
+	// Build context info for DryRun visibility.
+	ctxInfo := map[string]interface{}{
+		"user_context":  userCtx,
+		"model_context": modelCtx,
+		"param_name":    paramName,
+	}
+
+	// Model context length unknown — warn, don't block.
+	if modelCtx == 0 {
+		pf.addWarn(fmt.Sprintf(
+			"unknown_model_context_length: cannot validate user %s=%d against model; model default_context_length is not set",
+			paramName, userCtx))
+		ctxInfo["status"] = "warning"
+		ctxInfo["code"] = "unknown_model_context_length"
+		pf.commandPreview = fmt.Sprintf("%s\n# context_validation: %s", pf.commandPreview, toJSON(ctxInfo))
+		return
+	}
+
+	// User context within model limits — pass silently.
+	if userCtx <= modelCtx {
+		ctxInfo["status"] = "pass"
+		ctxInfo["code"] = "context_length_ok"
+		return
+	}
+
+	// User context exceeds model context — check for rope_scaling.
+	hasRopeScaling := false
+	if rs, ok := pf.artifact["rope_scaling"]; ok && rs != nil {
+		hasRopeScaling = true
+	}
+	// Also check from metadata_json on the location (if available via artifact metadata)
+	// For now, check if the artifact has a metadata field indicating rope scaling.
+	_ = hasRopeScaling
+
+	ctxInfo["status"] = "error"
+	ctxInfo["code"] = "context_length_exceeded"
+	message := fmt.Sprintf(
+		"user %s=%d exceeds model default_context_length=%d",
+		paramName, userCtx, modelCtx)
+
+	// If rope_scaling is present, warn instead of error.
+	if hasRopeScaling {
+		ctxInfo["status"] = "warning"
+		ctxInfo["code"] = "context_length_exceeded_with_rope"
+		pf.addWarn(message)
+		pf.addWarn("model has rope_scaling; extended context may be supported")
+	} else {
+		pf.addErr("context_length_exceeded", message, map[string]interface{}{
+			"user_context":   userCtx,
+			"model_context":  modelCtx,
+			"param_name":     paramName,
+			"artifact_id":    pf.artifactID,
+		})
+	}
+
+	pf.commandPreview = fmt.Sprintf("%s\n# context_validation: %s", pf.commandPreview, toJSON(ctxInfo))
+}
+
+// intFromInterface converts an interface{} to int, handling float64 (JSON numbers).
+func intFromInterface(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
+	case string:
+		i, _ := strconv.Atoi(n)
+		return i
+	default:
+		return 0
+	}
+}
+
+// toJSON marshals a value to a compact JSON string.
+func toJSON(v interface{}) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
 // preflightDeployment performs all pre-start validation and resolution steps
 // shared between dry-run and real start. It does NOT create any database records.
 // BRR-RV-001: Extracted from HandleStartDeployment so dry-run can use real resolver.
@@ -598,6 +745,10 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	// Apply deployment config snapshot (copied at creation time).
 	// This decouples the deployment from future BackendRuntime template edits.
 	pf.applyDeploymentConfigSnapshot()
+
+	// ── Context Length Validation ──
+	// Compare user-requested context parameter against model's default_context_length.
+	pf.validateContextLength()
 
 	// Fetch node IP.
 	pf.nodeIP = "127.0.0.1"

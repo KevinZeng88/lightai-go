@@ -86,8 +86,45 @@
       </div>
       <!-- Step 3: Scan results & save -->
       <div v-if="wizardStep === 2" v-loading="wizardScanning">
-        <el-alert v-if="scanResult?.error" type="error" :title="scanResult.error" show-icon />
-        <el-descriptions v-if="scanResult && !scanResult.error" :column="2" border size="small">
+        <el-alert v-if="scanResult?.error && !scanResult?.candidates?.length" type="error" :title="scanResult.error" show-icon style="margin-bottom:12px" />
+
+        <!-- Scan status info -->
+        <el-alert v-if="scanResult && !scanResult.error" type="success" :closable="false" style="margin-bottom:12px">
+          <template #title>
+            {{ $t('modelWizard.scanComplete') }}
+            <template v-if="scanResult.candidates?.length === 1 && scanResult.candidates[0].auto_selected">
+              — {{ $t('modelWizard.autoSelected') }}: {{ scanResult.candidates[0].path?.split('/').pop() }}
+            </template>
+            <template v-else-if="scanResult.candidates?.length > 1">
+              — {{ $t('modelWizard.ggufFound', { n: scanResult.candidates.length }) }}
+            </template>
+          </template>
+        </el-alert>
+
+        <!-- Scan directory info -->
+        <div v-if="scanResult?.scan_root" style="margin-bottom:8px;font-size:13px;color:#909399">
+          {{ $t('modelWizard.scanDirectory') }}: {{ scanResult.scan_root }}
+        </div>
+
+        <!-- Multi-candidate selection -->
+        <div v-if="scanResult?.candidates?.length > 1" style="margin-bottom:12px">
+          <div style="font-weight:500;margin-bottom:4px">{{ $t('modelWizard.selectCandidate') }}</div>
+          <el-radio-group v-model="selectedCandidateIdx" @change="onCandidateSelect">
+            <el-radio v-for="(c, idx) in scanResult.candidates" :key="idx" :value="idx" style="display:block;margin:4px 0">
+              {{ c.path?.split('/').pop() }}
+              <el-tag size="small" type="info" style="margin-left:8px">{{ c.format }}</el-tag>
+              <template v-if="c.detected_metadata?.quantization">
+                <el-tag size="small" type="warning" style="margin-left:4px">{{ c.detected_metadata.quantization }}</el-tag>
+              </template>
+              <template v-if="c.detected_metadata?.context_length">
+                <span style="margin-left:8px;font-size:12px;color:#909399">{{ $t('modelWizard.contextLength') }}: {{ c.detected_metadata.context_length }}</span>
+              </template>
+            </el-radio>
+          </el-radio-group>
+        </div>
+
+        <!-- Single candidate detail -->
+        <el-descriptions v-if="activeCandidate && !scanResult?.error" :column="2" border size="small">
           <el-descriptions-item :label="$t('modelWizard.modelName')">
             <span>{{ wizardModelName }}</span>
             <el-tag size="small" type="info" style="margin-left:8px">{{ $t('modelWizard.nameHint') }}</el-tag>
@@ -95,15 +132,24 @@
           <el-descriptions-item :label="$t('modelWizard.displayName')">
             <el-input v-model="wizardDisplayName" size="small" />
           </el-descriptions-item>
-          <el-descriptions-item :label="$t('modelWizard.modelFormat')">{{ scanResult.format || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('modelWizard.architecture')">{{ (typeof scanResult.architecture === 'string') ? scanResult.architecture : JSON.stringify(scanResult.architecture) }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('modelWizard.size')">{{ scanResult.size_label || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('modelWizard.path')">{{ scanResult.absolute_path || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('modelWizard.type')">{{ scanResult.path_type || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.modelFormat')">{{ activeCandidate.format || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.architecture')">{{ activeCandidate.detected_metadata?.architecture || activeCandidate.detected_metadata?.architectures || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.size')">{{ activeCandidate.size_label || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.path')">{{ activeCandidate.path || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.type')">{{ activeCandidate.path_type || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="activeCandidate.detected_metadata?.context_length" :label="$t('modelWizard.contextLength')">{{ activeCandidate.detected_metadata.context_length }}</el-descriptions-item>
+          <el-descriptions-item v-if="activeCandidate.detected_metadata?.quantization" label="Quantization">{{ activeCandidate.detected_metadata.quantization }}</el-descriptions-item>
         </el-descriptions>
+
+        <!-- Warnings -->
+        <el-alert v-if="activeCandidate?.warnings?.length" type="warning" :closable="false" style="margin-top:8px">
+          <ul style="margin:0;padding-left:16px"><li v-for="w in activeCandidate.warnings" :key="w">{{ w }}</li></ul>
+        </el-alert>
+
         <div style="margin-top:12px;text-align:right">
           <el-button @click="wizardStep=1">{{ $t('common.prev') }}</el-button>
-          <el-button type="primary" :disabled="!scanResult || !!scanResult.error" @click="doWizardSave" :loading="wizardSaving">{{ $t('modelWizard.createAndSave') }}</el-button>
+          <el-button @click="doScan" :loading="wizardScanning">{{ $t('modelWizard.rescan') }}</el-button>
+          <el-button type="primary" :disabled="!activeCandidate || !!scanResult?.error" @click="doWizardSave" :loading="wizardSaving">{{ $t('modelWizard.createAndSave') }}</el-button>
         </div>
       </div>
     </el-dialog>
@@ -143,6 +189,8 @@ const wizardVisible = ref(false); const wizardStep = ref(0)
 const wizardNodeId = ref(''); const wizardSelectedEntry = ref<any>(null)
 const wizardScanning = ref(false); const wizardSaving = ref(false)
 const scanResult = ref<any>(null); const wizardModelName = ref(''); const wizardDisplayName = ref('')
+const selectedCandidateIdx = ref(0)
+const activeCandidate = ref<any>(null)
 
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () => { wizardStep.value++ })
 
@@ -190,11 +238,22 @@ async function showDetail(row: any) {
 }
 
 // ---- Wizard ----
-function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardNodeId.value = ''; wizardSelectedEntry.value = null; scanResult.value = null; wizardModelName.value = ''; wizardDisplayName.value = '' }
+function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardNodeId.value = ''; wizardSelectedEntry.value = null; scanResult.value = null; wizardModelName.value = ''; wizardDisplayName.value = ''; selectedCandidateIdx.value = 0; activeCandidate.value = null }
 function onFileSelect(entry: any) {
   wizardSelectedEntry.value = entry
   wizardModelName.value = entry.name
   wizardDisplayName.value = entry.name
+}
+
+function onCandidateSelect(idx: number) {
+  selectedCandidateIdx.value = idx
+  const c = scanResult.value?.candidates?.[idx]
+  if (c) {
+    activeCandidate.value = c
+    const name = c.path?.split('/').pop() || ''
+    wizardModelName.value = name
+    wizardDisplayName.value = name
+  }
 }
 
 async function doScan() {
@@ -206,26 +265,55 @@ async function doScan() {
     const relPath = entry.relative_path || entry.name
     const resp = await apiClient.post(`/nodes/${wizardNodeId.value}/model-paths/scan`, { root_id: entry.root_id, root, relative_path: relPath, path_type: entry.path_type || (entry.is_dir ? 'directory' : 'file') })
     scanResult.value = resp
-    if (resp.discovered_name) { wizardModelName.value = resp.discovered_name; wizardDisplayName.value = resp.discovered_name }
+    // Handle new candidate-based response
+    if (resp.candidates?.length) {
+      // Auto-select: pick the first auto_selected candidate, or the first one
+      let autoIdx = 0
+      for (let i = 0; i < resp.candidates.length; i++) {
+        if (resp.candidates[i].auto_selected) { autoIdx = i; break }
+      }
+      selectedCandidateIdx.value = autoIdx
+      activeCandidate.value = resp.candidates[autoIdx]
+      const name = resp.candidates[autoIdx].path?.split('/').pop() || ''
+      wizardModelName.value = name
+      wizardDisplayName.value = name
+    } else if (resp.discovered_name) {
+      // Legacy flat response fallback
+      activeCandidate.value = resp
+      wizardModelName.value = resp.discovered_name
+      wizardDisplayName.value = resp.discovered_name
+    }
   } catch (e: any) { scanResult.value = { error: e?.message || t('modelWizard.scanFailed') } }
   wizardScanning.value = false
 }
 
 async function doWizardSave() {
+  if (!activeCandidate.value) return
   wizardSaving.value = true
   try {
+    const c = activeCandidate.value
     const artifact = await apiClient.post('/api/v1/model-artifacts', {
-      name: wizardModelName.value, path: scanResult.value.absolute_path,
-      format: scanResult.value.format || 'huggingface', task_type: 'chat',
-      size_label: scanResult.value.size_label || '', source_type: 'local_path',
+      name: wizardModelName.value,
+      path: c.path || scanResult.value?.absolute_path,
+      format: c.format || 'huggingface',
+      task_type: 'chat',
+      size_label: c.size_label || scanResult.value?.size_label || '',
+      source_type: 'local_path',
       display_name: wizardDisplayName.value || wizardModelName.value,
+      architecture: c.detected_metadata?.architecture || 'custom',
+      default_context_length: c.detected_metadata?.context_length || 0,
+      quantization: c.detected_metadata?.quantization || 'unknown',
     })
     await apiClient.post(`/model-artifacts/${artifact.id}/locations`, {
-      node_id: wizardNodeId.value, root_id: scanResult.value.root_id || wizardSelectedEntry.value?.root_id,
-      model_root: scanResult.value.model_root || scanResult.value.root || wizardSelectedEntry.value?.root,
-      relative_path: scanResult.value.relative_path || wizardSelectedEntry.value?.relative_path,
-      path_type: scanResult.value.path_type || 'directory',
-      verification_status: 'verified', match_status: 'exact_match',
+      node_id: wizardNodeId.value,
+      root_id: scanResult.value?.root_id || wizardSelectedEntry.value?.root_id,
+      model_root: scanResult.value?.model_root || scanResult.value?.root || wizardSelectedEntry.value?.root,
+      relative_path: scanResult.value?.relative_path || wizardSelectedEntry.value?.relative_path,
+      absolute_path: c.path || scanResult.value?.absolute_path,
+      path_type: c.path_type || 'directory',
+      verification_status: 'verified',
+      match_status: 'exact_match',
+      discovered_metadata_json: c.detected_metadata || {},
     })
     ElMessage.success(t('artifacts.created')); wizardVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
