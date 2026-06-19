@@ -396,6 +396,9 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	if !dockerAvailable && dockerErr != "" {
 		reason = dockerErr
 	}
+	if status == "missing_image" && nbrImageRef != "" {
+		reason = fmt.Sprintf("docker image %s is not present on node %s", nbrImageRef, nodeID)
+	}
 
 	// Update NBR with check results.
 	now := time.Now().Format(time.RFC3339)
@@ -417,15 +420,16 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 		"status", status, "image_present", imagePresent, "docker_available", dockerAvailable)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"id":                nbrID,
+		"id":                 nbrID,
 		"backend_runtime_id": nbrBackendRuntimeID,
-		"node_id":           nodeID,
-		"image_ref":         nbrImageRef,
-		"image_present":     imagePresent,
-		"docker_available":  dockerAvailable,
-		"status":            status,
-		"status_reason":     reason,
-		"last_checked_at":   now,
+		"node_id":            nodeID,
+		"image_ref":          nbrImageRef,
+		"checked_image_ref":  nbrImageRef,
+		"image_present":      imagePresent,
+		"docker_available":   dockerAvailable,
+		"status":             status,
+		"status_reason":      reason,
+		"last_checked_at":    now,
 	})
 }
 
