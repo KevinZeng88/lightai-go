@@ -156,7 +156,7 @@
 
       <div v-if="wizardStep === 3">
         <el-select v-model="wizardRuntimeId" :placeholder="$t('startWizard.selectRuntime')" style="width:100%" filterable @change="$event && doPreflight()">
-          <el-option v-for="r in filteredRuntimes" :key="r.id" :label="`${r.name} (${r.vendor})`" :value="r.id" />
+          <el-option v-for="r in filteredRuntimes" :key="r.id" :label="`${r.display_name || r.name} (${r.vendor})${r.is_editable ? '' : ' [' + $t('startWizard.systemBuiltin') + ']'}`" :value="r.id" />
         </el-select>
         <el-alert v-if="wizardVersionId && filteredRuntimes.length === 0" type="info" :closable="false" style="margin-top:8px">
           {{ $t('startWizard.noRuntimeForVersion') }}

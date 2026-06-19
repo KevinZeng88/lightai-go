@@ -737,6 +737,8 @@ func defaultVisibleEnvKey(vendor string) string {
 	switch strings.ToLower(vendor) {
 	case "huawei", "ascend":
 		return "ASCEND_VISIBLE_DEVICES"
+	case "metax":
+		return "MACA_VISIBLE_DEVICE"
 	default:
 		return "CUDA_VISIBLE_DEVICES"
 	}
