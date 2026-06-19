@@ -172,6 +172,23 @@ func jsonString(v interface{}) string {
 	return string(b)
 }
 
+// rawJSONBytes returns the raw JSON bytes for a value that may be a DB string,
+// json.RawMessage, or already-parsed map/slice. Avoids double-encoding that
+// json.Marshal would produce on a string (which adds escape quotes).
+func rawJSONBytes(v interface{}) []byte {
+	switch raw := v.(type) {
+	case json.RawMessage:
+		return []byte(raw)
+	case string:
+		return []byte(raw)
+	case []byte:
+		return raw
+	default:
+		b, _ := json.Marshal(v)
+		return b
+	}
+}
+
 func jsonField(dm map[string]interface{}, key, defaultJSON string) string {
 	v, ok := dm[key]
 	if !ok || v == nil {

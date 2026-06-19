@@ -543,15 +543,13 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		return pf
 	}
 
-	// Parse placement/service JSON.
-	placementRaw, _ := json.Marshal(deploy["placement_json"])
-	serviceRaw, _ := json.Marshal(deploy["service_json"])
-	paramsRaw, _ := json.Marshal(deploy["parameters_json"])
-	envOverridesRaw, _ := json.Marshal(deploy["env_overrides_json"])
-	json.Unmarshal(placementRaw, &pf.placement)
-	json.Unmarshal(serviceRaw, &pf.service)
-	json.Unmarshal(paramsRaw, &pf.params)
-	json.Unmarshal(envOverridesRaw, &pf.envOverrides)
+	// Parse placement/service/parameters JSON from DB fields.
+	// DB fields may be string or json.RawMessage – use rawJSONBytes to
+	// avoid double-encoding (json.Marshal on a string adds escape quotes).
+	json.Unmarshal(rawJSONBytes(deploy["placement_json"]), &pf.placement)
+	json.Unmarshal(rawJSONBytes(deploy["service_json"]), &pf.service)
+	json.Unmarshal(rawJSONBytes(deploy["parameters_json"]), &pf.params)
+	json.Unmarshal(rawJSONBytes(deploy["env_overrides_json"]), &pf.envOverrides)
 
 	// Inject service ports into parameters so mapParametersToArgs uses the
 	// user's app_port instead of the ParameterDef hardcoded default (e.g. --port 8000).
