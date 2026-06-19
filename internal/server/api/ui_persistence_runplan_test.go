@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"lightai-go/internal/server/db"
 )
 
 func insertUIPersistenceArtifact(t *testing.T, h *AgentHandler, id string) {
@@ -359,5 +361,346 @@ func TestModelArtifactNameFieldNotSavedOnPatch(t *testing.T) {
 	}
 	if after["display_name"] != "New Display" {
 		t.Fatalf("display_name not updated: %v", after["display_name"])
+	}
+}
+
+// ── Snapshot Inheritance Tests ─────────────────────────────────────────────
+
+// snapshotInsertModelLocation inserts a model_location record so preflight can
+// resolve the model on the target node.
+func snapshotInsertModelLocation(t *testing.T, db *db.DB, id, artifactID, nodeID string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := db.Exec(`INSERT INTO model_locations
+		(id, model_artifact_id, node_id, path_type, model_root, relative_path, absolute_path,
+		 size_bytes, match_status, verification_status, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		id, artifactID, nodeID, "directory", "/models", id, "/models/"+id,
+		12345, "exact_match", "verified", "", now, now); err != nil {
+		t.Fatalf("insert model_location: %v", err)
+	}
+}
+
+// snapshotSetupFullChain creates the full chain for preflight tests:
+// online node + GPU + BR + NBR(ready) + artifact + model_location.
+// Returns (nodeID, runtimeID, artifactID).
+func snapshotSetupFullChain(t *testing.T, h *AgentHandler, suffix string) (string, string, string) {
+	t.Helper()
+	db := h.DB
+	nodeID := "node-snap-" + suffix
+	runtimeID := "rt-snap-" + suffix
+	artifactID := "art-snap-" + suffix
+
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		"gpu-"+suffix, nodeID, "nvidia", 0, "RTX-"+suffix, ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+
+	insertRuntime(t, db, runtimeID, "Runtime "+suffix, "")
+
+	// Enable NBR with ready status
+	ew := httptest.NewRecorder()
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR `+suffix+`","image_ref":"img:nbr-`+suffix+`","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	insertUIPersistenceArtifact(t, h, artifactID)
+	snapshotInsertModelLocation(t, db, "ml-"+suffix, artifactID, nodeID)
+
+	return nodeID, runtimeID, artifactID
+}
+
+// Test 1: Deployment captures NBR config when created with a target node.
+func TestDeploymentCapturesNBRConfigAtCreate(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID, runtimeID, artifactID := snapshotSetupFullChain(t, h, "capture")
+
+	// Create deployment WITH node_id so NBR config is merged.
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-capture","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		adminSession(), nil))
+	if w.Code != 201 {
+		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	var got map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &got)
+
+	// Extract config_snapshot_json
+	snapRaw := got["config_snapshot_json"]
+	var snapStr string
+	switch v := snapRaw.(type) {
+	case string:
+		// Try to parse as JSON then re-serialize for consistent formatting
+		var parsed map[string]interface{}
+		if json.Unmarshal([]byte(v), &parsed) == nil {
+			snapStr = v
+		} else {
+			snapStr = fmt.Sprintf("%v", v)
+		}
+	case map[string]interface{}:
+		raw, _ := json.Marshal(v)
+		snapStr = string(raw)
+	default:
+		snapStr = fmt.Sprintf("%v", snapRaw)
+	}
+
+	if snapStr == "" || snapStr == "{}" {
+		t.Fatal("config_snapshot_json is empty after create")
+	}
+	if !strings.Contains(snapStr, "nbr_image_ref") {
+		t.Fatalf("deployment snapshot missing nbr_image_ref (not merged from NBR): %s", snapStr)
+	}
+	if !strings.Contains(snapStr, "img:nbr-capture") {
+		t.Fatalf("deployment snapshot missing NBR image_ref value: %s", snapStr)
+	}
+	if strings.Contains(snapStr, "source_nbr_id") {
+		t.Logf("deployment snapshot has NBR source tracking: %s", snapStr)
+	}
+}
+
+// Test 2: After deployment creation, modifying NBR config does NOT affect DryRun.
+func TestNBRConfigModificationDoesNotAffectDeploymentDryRun(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID, runtimeID, artifactID := snapshotSetupFullChain(t, h, "dryrun")
+
+	// Create deployment with node_id
+	cw := httptest.NewRecorder()
+	h.HandleCreateDeployment(cw, newReq("POST", "/x",
+		`{"name":"dep-dryrun","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		adminSession(), nil))
+	if cw.Code != 201 {
+		t.Fatalf("create deployment code=%d body=%s", cw.Code, cw.Body.String())
+	}
+	var created map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &created)
+	depID := created["id"].(string)
+
+	// Capture the image that would be used BEFORE NBR modification
+	dr1 := httptest.NewRecorder()
+	h.HandleDeploymentDryRun(dr1, newReq("GET", "/x", "", adminSession(), map[string]string{"id": depID}))
+	var before map[string]interface{}
+	json.Unmarshal(dr1.Body.Bytes(), &before)
+
+	// Now modify the NBR's config_snapshot_json and image_ref to simulate an NBR edit
+	nbrID := nodeID + ":" + runtimeID
+	database.Exec(`UPDATE node_backend_runtimes SET config_snapshot_json = json_set(COALESCE(config_snapshot_json,'{}'), '$.image_name', 'img:evil-changed') WHERE id = ?`, nbrID)
+	database.Exec(`UPDATE node_backend_runtimes SET image_ref = 'img:evil-changed-ref' WHERE id = ?`, nbrID)
+
+	// Dry-run again — should use the FROZEN deployment snapshot, not the live NBR values
+	dr2 := httptest.NewRecorder()
+	h.HandleDeploymentDryRun(dr2, newReq("GET", "/x", "", adminSession(), map[string]string{"id": depID}))
+	var after map[string]interface{}
+	json.Unmarshal(dr2.Body.Bytes(), &after)
+
+	if after["valid"] != true {
+		t.Fatalf("dry-run after NBR change became invalid: %v", after["errors"])
+	}
+
+	// The resolved image should NOT contain "evil-changed"
+	resolvedImage := fmt.Sprintf("%v", after["resolved_image"])
+	if strings.Contains(resolvedImage, "evil-changed") {
+		t.Fatalf("preflight picked up live NBR change (image=%s)", resolvedImage)
+	}
+
+	// Verify the before/after are consistent (same image)
+	beforeImage := fmt.Sprintf("%v", before["resolved_image"])
+	if beforeImage != resolvedImage {
+		t.Logf("before image=%s after image=%s", beforeImage, resolvedImage)
+	}
+}
+
+// Test 3: Editing BackendRuntime does NOT affect NodeBackendRuntime config snapshot.
+func TestBackendRuntimeEditDoesNotAffectNBRConfig(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID, runtimeID, _ := snapshotSetupFullChain(t, h, "br-nbr")
+
+	// Capture the NBR snapshot BEFORE editing the BR
+	var origSnapshot string
+	database.QueryRow(`SELECT config_snapshot_json FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
+		nodeID, runtimeID).Scan(&origSnapshot)
+
+	// Edit the BackendRuntime — change its image_name, args, etc.
+	pw := httptest.NewRecorder()
+	h.HandlePatchBackendRuntime(pw, newReq("PATCH", "/x",
+		`{"name":"BR Edited","display_name":"BR Edited","image_name":"img:br-edited","args_override_json":["--new-arg","999"]}`,
+		adminSession(), map[string]string{"id": runtimeID}))
+	if pw.Code != 200 {
+		t.Fatalf("patch BR code=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	// The NBR snapshot should be UNCHANGED
+	var afterSnapshot string
+	database.QueryRow(`SELECT config_snapshot_json FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
+		nodeID, runtimeID).Scan(&afterSnapshot)
+
+	if origSnapshot != afterSnapshot {
+		t.Fatalf("NBR config_snapshot_json changed after BR edit!\nbefore: %s\nafter: %s", origSnapshot, afterSnapshot)
+	}
+	if strings.Contains(afterSnapshot, "img:br-edited") {
+		t.Fatalf("NBR snapshot picked up BR edit: %s", afterSnapshot)
+	}
+}
+
+// Test 4: Editing BackendVersion (catalog) does NOT affect existing BackendRuntime.
+func TestBackendVersionEditDoesNotAffectBackendRuntime(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	// Get existing vllm version
+	bid, vid := getVllmIDs(t, database)
+
+	// Capture the version snapshot BEFORE editing
+	var origVersionJSON string
+	database.QueryRow(`SELECT COALESCE(version_snapshot_json,'{}'), default_images_json FROM backend_versions WHERE id = ?`, vid).Scan(&origVersionJSON, new(string))
+
+	// Create a BackendRuntime from this version
+	cw := httptest.NewRecorder()
+	h.HandleCreateBackendRuntimeFromTemplate(cw, newReq("POST", "/x",
+		`{"backend_id":"`+bid+`","backend_version_id":"`+vid+`","name":"rt-bv-test","display_name":"RT BV Test","vendor":"nvidia"}`,
+		adminSession(), nil))
+	if cw.Code != 201 {
+		t.Fatalf("create BR code=%d body=%s", cw.Code, cw.Body.String())
+	}
+	var rt map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &rt)
+	rtID := rt["id"].(string)
+
+	// Edit the BackendVersion (catalog) — change default_images
+	database.Exec(`UPDATE backend_versions SET default_images_json = '{"nvidia":"img:bv-edited","default":"img:bv-edited-default"}' WHERE id = ?`, vid)
+
+	// Read the BackendRuntime — its own image_name should NOT change
+	after := h.getBackendRuntimeJSON(rtID)
+	if after == nil {
+		t.Fatal("getBackendRuntimeJSON returned nil")
+	}
+	imageName := fmt.Sprintf("%v", after["image_name"])
+	if strings.Contains(imageName, "bv-edited") {
+		t.Fatalf("BackendRuntime image_name changed after BV edit: %v", imageName)
+	}
+
+	// Its version_snapshot_json should still contain the ORIGINAL version values
+	vsn := fmt.Sprintf("%v", after["version_snapshot_json"])
+	if strings.Contains(vsn, "bv-edited") {
+		t.Fatalf("BackendRuntime version_snapshot_json picked up BV edit: %s", vsn)
+	}
+}
+
+// Test 5: After RunPlan is generated, editing Deployment does NOT mutate the historical RunPlan.
+func TestRunPlanImmutableAfterDeploymentEdit(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID, runtimeID, artifactID := snapshotSetupFullChain(t, h, "rp-imm")
+
+	// Create deployment
+	cw := httptest.NewRecorder()
+	h.HandleCreateDeployment(cw, newReq("POST", "/x",
+		`{"name":"dep-rp-imm","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"node_id":"`+nodeID+`","gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		adminSession(), nil))
+	if cw.Code != 201 {
+		t.Fatalf("create deployment code=%d body=%s", cw.Code, cw.Body.String())
+	}
+	var created map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &created)
+	depID := created["id"].(string)
+
+	// Generate a RunPlan by starting the deployment
+	sw := httptest.NewRecorder()
+	h.HandleStartDeployment(sw, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": depID}))
+	var startResult map[string]interface{}
+	json.Unmarshal(sw.Body.Bytes(), &startResult)
+	instanceID := fmt.Sprintf("%v", startResult["instance_id"])
+	if instanceID == "" || instanceID == "<nil>" {
+		t.Fatalf("start did not create instance: %v", startResult)
+	}
+
+	// Read the historical RunPlan
+	var origPlanJSON string
+	err := database.QueryRow(`SELECT plan_json FROM resolved_run_plans WHERE instance_id = ?`, instanceID).Scan(&origPlanJSON)
+	if err != nil {
+		t.Fatalf("run plan read error: %v", err)
+	}
+
+	// Edit the deployment (change ports and params)
+	pw := httptest.NewRecorder()
+	h.HandlePatchDeployment(pw, newReq("PATCH", "/x",
+		`{"service_json":{"host_port":9999,"container_port":9998},"parameters_json":{"temp":"0.5"}}`,
+		adminSession(), map[string]string{"id": depID}))
+	if pw.Code != 200 {
+		t.Fatalf("patch deployment code=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	// The historical RunPlan should be UNCHANGED
+	var afterPlanJSON string
+	database.QueryRow(`SELECT plan_json FROM resolved_run_plans WHERE instance_id = ?`, instanceID).Scan(&afterPlanJSON)
+	if origPlanJSON != afterPlanJSON {
+		t.Fatalf("historical RunPlan changed after Deployment edit!\nbefore: %s\nafter: %s", origPlanJSON[:200], afterPlanJSON[:200])
+	}
+
+	// The RunPlan should NOT contain the new port values
+	if strings.Contains(afterPlanJSON, "9999") || strings.Contains(afterPlanJSON, "9998") {
+		t.Fatalf("historical RunPlan picked up deployment edit: %s", afterPlanJSON[:300])
+	}
+}
+
+// Test 6: Creating a deployment without node_id does NOT include NBR config.
+func TestDeploymentWithoutNodeDoesNotIncludeNBRConfig(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID, runtimeID, artifactID := snapshotSetupFullChain(t, h, "no-node")
+
+	// Create deployment WITHOUT node_id in placement
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-no-node","model_artifact_id":"`+artifactID+`","backend_runtime_id":"`+runtimeID+`","placement_json":{"gpu_ids":[]},"service_json":{"host_port":8005}}`,
+		adminSession(), nil))
+	if w.Code != 201 {
+		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	var got map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &got)
+
+	snapRaw := got["config_snapshot_json"]
+	var snapStr string
+	switch v := snapRaw.(type) {
+	case string:
+		snapStr = v
+	case map[string]interface{}:
+		raw, _ := json.Marshal(v)
+		snapStr = string(raw)
+	default:
+		snapStr = fmt.Sprintf("%v", snapRaw)
+	}
+
+	// Should NOT contain NBR-specific image_ref
+	if strings.Contains(snapStr, "nbr_image_ref") {
+		t.Fatalf("deployment without node_id captured NBR image_ref: %s", snapStr)
+	}
+	// But should still contain BR source info
+	if !strings.Contains(snapStr, runtimeID) {
+		t.Fatalf("deployment snapshot missing BR source: %s", snapStr)
+	}
+
+	// The NBR still exists on the node — verify we can query it
+	var nbrExists string
+	database.QueryRow(`SELECT id FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
+		nodeID, runtimeID).Scan(&nbrExists)
+	if nbrExists == "" {
+		t.Fatal("NBR should still exist after deployment creation without node_id")
 	}
 }

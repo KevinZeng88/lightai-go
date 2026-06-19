@@ -124,3 +124,60 @@ Manual retesting after the Codex round revealed persistent issues despite the pr
 ### Open Issues
 
 None. All discovered issues are FIXED.
+
+## 2026-06-19 Snapshot Inheritance Model Audit & Fix
+
+### Violation Found
+
+The previous round documented "NBR snapshot > Deployment snapshot > Version snapshot > Live BackendRuntime" as the preflight precedence chain. This implied a runtime multi-source merge model rather than a creation-time snapshot-copy model.
+
+Actual violation discovered at Layer 3 (NBR→Deployment):
+1. `preflightDeployment` re-read live NBR `config_snapshot_json` and applied it OVER the deployment snapshot (lines 590-638, now removed). This meant editing an NBR after deployment creation changed deployment DryRun/Start behavior.
+2. `buildDeploymentRuntimeSnapshot` captured from BackendRuntime only, not from NodeBackendRuntime. Node-level overrides were never frozen in the deployment snapshot.
+3. `config_snapshot_json` was stored as `json.RawMessage` in the `getDeploymentJSON` return map, but `strVal` only handles `string` type assertions. This caused `pf.deployConfigSnapshot` to always be `"{}"` in preflight — meaning the deployment snapshot was NEVER actually applied during preflight.
+
+### Root Cause
+
+Three-part root cause:
+1. **NBR live re-read**: `preflightDeployment` at lines 590-638 applied live NBR snapshot over frozen deployment values.
+2. **Missing NBR capture**: Deployment creation only captured from BR, never from NBR.
+3. **Type mismatch**: `json.RawMessage` ([]byte) stored in deploy map was invisible to `strVal` which does `v.(string)` assertion.
+
+### Changes Made
+
+| Fix | File | Description |
+|-----|------|-------------|
+| `mergeNBRConfigSnapshot` | `deployment_lifecycle_handlers.go` | New function to merge NBR config + image_ref into deployment snapshot |
+| NBR merge at create | `deployment_lifecycle_handlers.go` | `HandleCreateDeployment` now merges NBR config_snapshot_json + image_ref if placement specifies a node |
+| Remove NBR live re-read | `deployment_lifecycle_handlers.go` | Removed lines 590-638 (NBR snapshot override block) from `preflightDeployment` |
+| Freeze nbr_image_ref | `deployment_lifecycle_handlers.go` | After live NBR query, re-applies frozen `nbr_image_ref` from deployment snapshot |
+| Type-aware extract | `deployment_lifecycle_handlers.go` | `preflightDeployment` now extracts `config_snapshot_json` with type switch (handles `json.RawMessage`, `string`, and fallback) |
+| Comment update | `deployment_lifecycle_handlers.go` | Replaced "NBR > Deployment > Version > Live" with snapshot-copy model description |
+| Model fields | `models/runtime.go` | Added `VersionSnapshotJSON` to `BackendRuntime`, `ConfigSnapshotJSON` to `NodeRuntimeOverride` |
+| Design doc rewrite | `docs/lightai-backend-runtime-runplan-docker-design.md` | Full rewrite to chain-copy snapshot model |
+
+### Tests Added
+
+| Test | What it verifies |
+|------|-----------------|
+| `TestDeploymentCapturesNBRConfigAtCreate` | NBR config + image_ref captured in deployment snapshot when node_id specified |
+| `TestNBRConfigModificationDoesNotAffectDeploymentDryRun` | Editing NBR after deployment creation does NOT change DryRun image/config |
+| `TestBackendRuntimeEditDoesNotAffectNBRConfig` | Editing BR does NOT change NBR config_snapshot_json |
+| `TestBackendVersionEditDoesNotAffectBackendRuntime` | Editing BV does NOT change BR version_snapshot_json |
+| `TestRunPlanImmutableAfterDeploymentEdit` | Editing deployment after RunPlan creation does NOT mutate historical RunPlan |
+| `TestDeploymentWithoutNodeDoesNotIncludeNBRConfig` | Deployment without node_id does NOT include NBR overrides |
+
+### Verification Results
+
+| Command | Result |
+| ------- | ------ |
+| `go test ./...` | PASS (10 packages) |
+| `go vet ./...` | PASS |
+| `go build ./...` | PASS |
+| `npm --prefix web run build` | PASS |
+| `npm --prefix web test -- --runInBand` | PASS (679 i18n keys, 569 references, 15 boundary tests) |
+| `git diff --check` | PASS (1 blank-at-EOF warning, cosmetic) |
+
+### Open Issues
+
+None. All discovered issues are FIXED. The manual template sync feature (explicit user-triggered sync from source runtime) was implemented in the previous round.

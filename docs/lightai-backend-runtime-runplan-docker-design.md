@@ -1,6 +1,72 @@
 # Backend Runtime / RunPlan / Docker Semantics
 
-This document records the post-closeout UI persistence and RunPlan consistency rules.
+This document records the layered snapshot inheritance model and RunPlan consistency rules.
+
+## Snapshot Inheritance Model (Chain-Copy)
+
+Each layer copies ALL config from its parent at creation time, then is fully decoupled. Editing a parent does NOT affect children. Only explicit manual sync can pull updates.
+
+```
+BackendVersion  ──create──▶ BackendRuntime (captures version_snapshot_json)
+                                     │
+                                     │  create
+                                     ▼
+                            NodeBackendRuntime (captures config_snapshot_json)
+                                     │
+                                     │  create (with node_id)
+                                     ▼
+                              Deployment (captures config_snapshot_json, merged with NBR overrides)
+                                     │
+                                     │  start
+                                     ▼
+                                RunPlan (immutable, stored as plan_json)
+                                     │
+                                     │  agent execute
+                                     ▼
+                            ModelInstance / Docker Create Spec
+```
+
+### Layer 1: BackendVersion → BackendRuntime
+
+- BackendRuntime captures `version_snapshot_json` (frozen BackendVersion config) at creation time.
+- BackendRuntime stores its own independent config fields (image, args, env, docker, mounts).
+- Editing BackendVersion or reloading catalog does NOT affect existing BackendRuntime records.
+- Editing BackendRuntime does NOT modify the source BackendVersion.
+
+### Layer 2: BackendRuntime → NodeBackendRuntime
+
+- NodeBackendRuntime captures `config_snapshot_json` (frozen BackendRuntime config) at first enable.
+- NodeBackendRuntime stores node-specific overrides (image_ref, display_name, model_root).
+- Editing BackendRuntime does NOT affect existing NodeBackendRuntime records.
+- Editing NodeBackendRuntime does NOT modify the source BackendRuntime.
+
+### Layer 3: NodeBackendRuntime → Deployment
+
+- Deployment captures `config_snapshot_json` at creation time from the BackendRuntime.
+- If placement specifies a target node AND a NodeBackendRuntime exists, the NBR's config_snapshot_json and image_ref are merged into the deployment snapshot.
+- Deployment stores its own service config (ports, parameters, env overrides, placement).
+- preflight/DryRun/Start use ONLY the deployment's config_snapshot_json. There is no live re-read of NBR config.
+- Editing NodeBackendRuntime after Deployment creation does NOT affect Deployment DryRun/Start behavior.
+- Editing Deployment does NOT modify the source NodeBackendRuntime or BackendRuntime.
+
+### Layer 4: Deployment → RunPlan
+
+- RunPlan is generated at instance start time from the deployment's complete config snapshot.
+- RunPlan is stored immutably in `resolved_run_plans.plan_json`. It is never re-derived.
+- Editing Deployment after RunPlan generation does NOT affect historical RunPlans.
+
+### Layer 5: RunPlan → Docker Spec / ModelInstance
+
+- Docker create spec is derived from the stored RunPlan (plan_json), never from live data.
+- The Agent reads the frozen plan, converts to AgentRunSpec, and builds Docker ContainerCreateOptions.
+- ModelInstance references the RunPlan. Deleting/editing Deployment or Runtime does not affect running instances.
+
+## Manual Sync (Explicit Only)
+
+- The template sync feature (preview + apply) is the only mechanism to pull updates from a parent template.
+- There is NO automatic sync. Parent edits never silently propagate to children.
+- Sync produces a diff preview. User must explicitly confirm before changes are applied.
+- Sync does not affect running instances or historical RunPlans.
 
 ## Object Responsibilities
 
@@ -9,8 +75,8 @@ This document records the post-closeout UI persistence and RunPlan consistency r
 - Backend and BackendVersion are system/catalog capability layers and remain read-mostly.
 - BackendRuntime is a user-manageable runtime template. System templates must be cloned before editing.
 - NodeBackendRuntime is a node-level runtime config with its own `display_name`, image evidence, readiness, and frozen runtime snapshot.
-- Deployment stores the service-level config: model artifact, runtime config, placement, service ports, deployment parameters, and env overrides.
-- RunPlan/NodeRunPlan is immutable once generated. Later Deployment or Runtime edits affect only future RunPlans.
+- Deployment stores the service-level config: model artifact, runtime config, placement, service ports, deployment parameters, env overrides, and frozen config snapshot.
+- RunPlan is immutable once generated. Later Deployment or Runtime edits affect only future RunPlans.
 - ModelInstance stores one concrete run: task, container, health, logs, status, and last error.
 
 ## Field Semantics
@@ -32,16 +98,16 @@ This document records the post-closeout UI persistence and RunPlan consistency r
 
 RunPlan JSON, Docker command preview, and Agent Docker create spec must all use the same effective `host_port` and `container_port`.
 
-## Parameter Priority
+## Config Resolution at Start Time
 
-Effective runtime parameters are resolved in this order:
+At start/dry-run time (preflightDeployment), the deployment's `config_snapshot_json` (with merged NBR overrides captured at creation time) is the SOLE source of runtime configuration. The resolution order within the deployment snapshot:
 
 1. Deployment explicit parameters and env overrides.
-2. NodeBackendRuntime frozen snapshot and node image override.
-3. BackendRuntime template settings.
-4. BackendVersion defaults.
-5. Backend defaults.
-6. System fallback.
+2. NBR frozen config (merged into deployment snapshot at creation).
+3. BackendRuntime frozen config (captured in deployment snapshot).
+4. BackendVersion frozen snapshot (captured in BackendRuntime, carried into deployment snapshot).
+
+There is NO live re-read of BackendRuntime, BackendVersion, or NodeBackendRuntime config during preflight/start/dry-run. Node-specific runtime discoveries (GPU IDs, node IP) are read live at start time but are not config parameters.
 
 ## Run Idempotency
 

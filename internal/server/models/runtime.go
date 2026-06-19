@@ -19,6 +19,7 @@ type BackendRuntime struct {
 	DockerJSON              string `json:"docker_json"`
 	ModelMountJSON          string `json:"model_mount_json"`
 	HealthCheckOverrideJSON string `json:"health_check_override_json"`
+	VersionSnapshotJSON     string `json:"version_snapshot_json"`
 	IsBuiltin               bool   `json:"is_builtin"`
 	IsEditable              bool   `json:"is_editable"`
 	TenantID                string `json:"tenant_id"`
@@ -39,6 +40,7 @@ type NodeRuntimeOverride struct {
 	DockerOverrideJSON string `json:"docker_override_json"`
 	ModelRootHostPath  string `json:"model_root_host_path"`
 	IsEnabled          bool   `json:"is_enabled"`
+	ConfigSnapshotJSON string `json:"config_snapshot_json"`
 	CreatedAt          string `json:"created_at"`
 	UpdatedAt          string `json:"updated_at"`
 }

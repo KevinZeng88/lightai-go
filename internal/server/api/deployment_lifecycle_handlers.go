@@ -80,6 +80,55 @@ func (h *AgentHandler) buildDeploymentRuntimeSnapshot(runtimeID string) string {
 	return jsonString(snapshot)
 }
 
+// mergeNBRConfigSnapshot overlays NodeBackendRuntime config values onto a
+// BackendRuntime-based deployment snapshot. The NBR config represents node-specific
+// overrides (image, args, env, docker) that are frozen at deployment creation time.
+// Fields from the NBR snapshot take precedence, while the BR's source tracking and
+// version_snapshot_json are preserved.
+func mergeNBRConfigSnapshot(brSnapshot, nbrSnapshot, imageRef string) string {
+	if nbrSnapshot == "" || nbrSnapshot == "{}" {
+		return brSnapshot
+	}
+	if brSnapshot == "" || brSnapshot == "{}" {
+		return nbrSnapshot
+	}
+	var brMap, nbrMap map[string]interface{}
+	if err := json.Unmarshal([]byte(brSnapshot), &brMap); err != nil {
+		return brSnapshot
+	}
+	if err := json.Unmarshal([]byte(nbrSnapshot), &nbrMap); err != nil {
+		return brSnapshot
+	}
+
+	// Override runtime config fields with NBR values.
+	for _, key := range []string{
+		"vendor", "image_name", "image_pull_policy",
+		"entrypoint_override_json", "args_override_json", "default_env_json",
+		"docker_json", "model_mount_json", "health_check_override_json",
+	} {
+		if v, ok := nbrMap[key]; ok && v != nil {
+			brMap[key] = v
+		}
+	}
+
+	// Capture the NBR's image_ref (the actual Docker image digest on the node).
+	// This freezes the node-level image reference in the deployment snapshot.
+	if imageRef != "" {
+		brMap["nbr_image_ref"] = imageRef
+	}
+
+	// Track which NBR was the source of these overrides (for future manual sync).
+	if nbrID, ok := nbrMap["source_runtime_id"]; ok && nbrID != nil {
+		brMap["source_nbr_id"] = nbrID
+	}
+
+	result, err := json.Marshal(brMap)
+	if err != nil {
+		return brSnapshot
+	}
+	return string(result)
+}
+
 func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Request) {
 	var req map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -115,6 +164,24 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		configSnapshot := "{}"
 		if backendRuntimeID != "" {
 			configSnapshot = h.buildDeploymentRuntimeSnapshot(backendRuntimeID)
+
+			// If placement specifies a target node, merge NodeBackendRuntime config snapshot.
+			// This captures node-level overrides at deployment creation time so the
+			// deployment is fully decoupled from future NBR edits.
+			if placementRaw, ok := req["placement_json"]; ok && placementRaw != nil {
+				if pm, ok := placementRaw.(map[string]interface{}); ok {
+					if nodeID, ok := pm["node_id"].(string); ok && nodeID != "" {
+						var nbrSnapshot, nbrImageRef string
+						nbrRow := h.DB.QueryRow(
+							`SELECT COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE node_id = ? AND backend_runtime_id = ?`,
+							nodeID, backendRuntimeID,
+						)
+						if nbrRow.Scan(&nbrSnapshot, &nbrImageRef) == nil && nbrSnapshot != "" && nbrSnapshot != "{}" {
+							configSnapshot = mergeNBRConfigSnapshot(configSnapshot, nbrSnapshot, nbrImageRef)
+						}
+					}
+				}
+			}
 		}
 
 	id := uuid.NewString()
@@ -447,7 +514,23 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		return pf
 	}
 	pf.deploy = deploy
-	pf.deployConfigSnapshot = strVal(deploy, "config_snapshot_json", "{}")
+	// config_snapshot_json is stored as json.RawMessage in the deploy map.
+	// Use a type-aware extraction instead of strVal (which only handles string).
+	if v, ok := deploy["config_snapshot_json"]; ok {
+		switch raw := v.(type) {
+		case json.RawMessage:
+			pf.deployConfigSnapshot = string(raw)
+		case string:
+			pf.deployConfigSnapshot = raw
+		default:
+			if b, err := json.Marshal(v); err == nil {
+				pf.deployConfigSnapshot = string(b)
+			}
+		}
+	}
+	if pf.deployConfigSnapshot == "" {
+		pf.deployConfigSnapshot = "{}"
+	}
 
 	pf.artifactID = strVal(deploy, "model_artifact_id", "")
 	pf.runtimeID = strVal(deploy, "backend_runtime_id", "")
@@ -587,51 +670,14 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	var defaultArgs []string
 	json.Unmarshal([]byte(pf.bvArgs), &defaultArgs)
 
-	// If NodeBackendRuntime has a config snapshot, use it for runtime configuration
-	// instead of the live BackendRuntime template. This decouples node runs from
-	// future template edits.
-	if pf.nbrSnapshot != "" && pf.nbrSnapshot != "{}" {
+	// If the deployment snapshot has a frozen nbr_image_ref, use it instead
+	// of the live NBR image_ref. This decouples the deployment from NBR changes.
+	if pf.deployConfigSnapshot != "" && pf.deployConfigSnapshot != "{}" {
 		var snap map[string]interface{}
-		if json.Unmarshal([]byte(pf.nbrSnapshot), &snap) == nil {
-			if v, ok := snap["args_override_json"]; ok {
-				var snapArgs []string
-				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapArgs) == nil {
-					argsOverride = snapArgs
-				}
-			}
-			if v, ok := snap["entrypoint_override_json"]; ok {
-				var snapEntry []string
-				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapEntry) == nil && len(snapEntry) > 0 {
-					rtEntryOverride = snapEntry
-					entrypoint = snapEntry
-				}
-			}
-			if v, ok := snap["default_env_json"]; ok {
-				var snapEnv map[string]string
-				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapEnv) == nil {
-					rtEnvMap = snapEnv
-				}
-			}
-			if v, ok := snap["docker_json"]; ok {
-				var snapDocker runplan.DockerSpecInfo
-				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapDocker) == nil {
-					dockerSpec = snapDocker
-				}
-			}
-			if v, ok := snap["model_mount_json"]; ok {
-				var snapMount runplan.ModelMountInfo
-				if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapMount) == nil {
-					modelMount = snapMount
-				}
-			}
-			if v, ok := snap["image_name"]; ok {
+		if json.Unmarshal([]byte(pf.deployConfigSnapshot), &snap) == nil {
+			if v, ok := snap["nbr_image_ref"]; ok {
 				if s, ok := v.(string); ok && s != "" {
-					pf.rtImage = s
-				}
-			}
-			if v, ok := snap["vendor"]; ok {
-				if s, ok := v.(string); ok && s != "" {
-					pf.rtVendor = s
+					pf.nbrImageRef = s
 				}
 			}
 		}
@@ -683,9 +729,12 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 }
 
 // applyDeploymentConfigSnapshot applies the deployment's config_snapshot_json
-// to override live BackendRuntime values. This is called after version_snapshot_json
-// and before the NBR snapshot, so precedence is:
-// NBR snapshot > Deployment snapshot > Version snapshot > Live BackendRuntime.
+// to override live BackendRuntime values. The deployment snapshot is the sole
+// source of truth for runtime configuration at start/dry-run time. It was
+// captured at deployment creation time from the BackendRuntime template and,
+// if a target node was specified, merged with the NodeBackendRuntime config
+// snapshot. There is no live re-read of NBR config during preflight/start.
+// The deployment snapshot fully decouples the deployment from future parent edits.
 func (pf *preflightResult) applyDeploymentConfigSnapshot() {
 	if pf.deployConfigSnapshot == "" || pf.deployConfigSnapshot == "{}" {
 		return
