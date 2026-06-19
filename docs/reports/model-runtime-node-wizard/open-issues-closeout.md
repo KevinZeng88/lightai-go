@@ -250,3 +250,14 @@ Status: All post-closeout review findings are FIXED and verified.
 | P3-001 | Tests hand-inserted failed rows instead of exercising Agent -> Server propagation | Runtime boundary tests did not cover real TaskResult handling | Regression risk in failed diagnostics path | FIXED | `internal/server/api/agent_task_result_test.go`, `cmd/agent/main_test.go`, `internal/agent/runtime/docker_test.go` | Handler-level success/failure/fallback tests PASS | Closed |
 
 No post-closeout review problem remains only in chat. No remaining risk is outside this formal closeout table.
+
+---
+## 2026-06-19 Post-Codex Manual Retest Round
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| MRW-UPR-008 | Model artifact edit name field not savable + display name ambiguous | Backend PATCH `HandlePatchArtifact` excludes `name` from editable fields; wizard labeled both as "模型名称" | Users could edit a field that silently wasn't saved; ambiguous which field was display name | FIXED | `web/src/pages/ModelArtifactsPage.vue`, `web/src/locales/*.ts` | `TestModelArtifactNameFieldNotSavedOnPatch` PASS; web tests PASS | Closed |
+| MRW-UPR-009 | Runtime config name overwritten by template auto-select | `onWizTemplateSelected()` unconditionally overwrites `wizConfigName` | User-entered config name silently replaced by auto-generated name | FIXED | `web/src/pages/RunnerConfigsPage.vue` | Manual verification: entering name before selecting template preserves it | Closed |
+| MRW-UPR-010 | Deployment not decoupled from runtime template edits | `model_deployments` had no config snapshot; preflight always read live BackendRuntime | Runtime template edits silently affected all existing deployments on next start | FIXED | `internal/server/db/db.go` V22, `deployment_lifecycle_handlers.go` | `TestDeploymentCapturesConfigSnapshotAtCreate` PASS | Closed |
+| MRW-UPR-011 | Container/app port defaults display 0 in wizard | Wizard initialized ports to 0; backend resolver handled 0 correctly via 4-tier fallback, but UI was misleading | Users could not see the actual port that would be used | FIXED | `web/src/pages/ModelDeploymentsPage.vue` | Port pre-filled from BackendVersion `default_container_port` on version select | Closed |
+| MRW-UPR-012 | No deployment edit entry in UI | Deployment list had no edit button despite fully functional PATCH API | Users could not modify deployment config after creation | FIXED | `web/src/pages/ModelDeploymentsPage.vue` | `TestDeploymentPatchPortsAndDisplayName` PASS; web tests PASS | Closed |

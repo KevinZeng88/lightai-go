@@ -179,6 +179,12 @@ func (db *DB) Migrate() error {
 		}
 	}
 
+	if currentVersion < 22 {
+		if err := db.migrateV22(); err != nil {
+			return fmt.Errorf("migrate v22: %w", err)
+		}
+	}
+
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
 	db.seedTargetBackendCatalog()
@@ -1436,6 +1442,23 @@ func (db *DB) migrateV21() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (21, 'V21: node backend runtime display names')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV22 adds config_snapshot_json to model_deployments so each deployment
+// captures a frozen copy of the runtime configuration at creation time.
+// This decouples deployments from future BackendRuntime / NodeBackendRuntime edits.
+func (db *DB) migrateV22() error {
+	_, err := db.Exec(`ALTER TABLE model_deployments ADD COLUMN config_snapshot_json TEXT NOT NULL DEFAULT '{}'`)
+	if err != nil {
+		// Column may already exist from a partially applied development DB;
+		// log the error but don't fail the migration.
+		log.Warn("db.migrateV22 add column warning", "error", err)
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (22, 'V22: deployment config snapshot for RunPlan consistency')`); err != nil {
 		return err
 	}
 	return nil

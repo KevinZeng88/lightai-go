@@ -77,3 +77,50 @@ One environment-gated verification item remains formally tracked as `DOCUMENTED_
 - `MRW-UPR-007`: real non-empty model inference E2E requires a running backend with a loadable model/GPU. The implementation and empty-response guard are covered by unit/UI tests; the selected E2E records deployment/runplan/start/idempotency artifacts but does not claim a real non-empty inference pass.
 
 No problems from this round remain only in chat history.
+
+## 2026-06-19 Post-Codex Manual Retest Round
+
+### Issues Found After Codex Commit 52603ce
+
+Manual retesting after the Codex round revealed persistent issues despite the previous round claiming ACCEPTABLE_WITH_BLOCKER:
+
+| ID | Issue | Root Cause | Fix |
+| -- | ----- | ---------- | --- |
+| MRW-UPR-008 | Model artifact edit shows "制品名称" field not saved | Backend PATCH ignores `name` field; frontend showed it as editable | Frontend: `name` field now shows as readonly with hint tag; wizard step 3 clarifies display_name vs internal name with separate fields |
+| MRW-UPR-009 | Runtime config name overwritten by template selection | `onWizTemplateSelected()` unconditionally overwrote user-entered `wizConfigName` | Guard: only auto-generate if `wizConfigName` is empty |
+| MRW-UPR-010 | Deployment not decoupled from runtime template | `model_deployments` had no config snapshot; preflight read live BackendRuntime values | DB V22: added `config_snapshot_json` to `model_deployments`; capture at create; preflight applies: NBR snapshot > Deployment snapshot > Version snapshot > Live BackendRuntime |
+| MRW-UPR-011 | Container/app port defaults display 0 in wizard | Wizard initialized ports to 0; backend resolved correctly but UI was misleading | Fetch BackendVersion `default_container_port` on version selection; pre-fill wizard fields |
+| MRW-UPR-012 | No deployment edit entry | Frontend deployment list had no edit button despite existing PATCH API | Added edit button and dialog with fields: display_name, model_artifact_id, backend_runtime_id, host_port, container_port, app_port |
+
+### Changed Files
+
+- `internal/server/db/db.go` — V22 migration: `config_snapshot_json` column on `model_deployments`
+- `internal/server/api/deployment_lifecycle_handlers.go` — `buildDeploymentRuntimeSnapshot`, capture at create, return in get/list, `applyDeploymentConfigSnapshot` in preflight
+- `internal/server/models/deployment.go` — added `ConfigSnapshotJSON` field
+- `web/src/pages/ModelArtifactsPage.vue` — removed name from edit form; wizard display name field and name hint
+- `web/src/pages/RunnerConfigsPage.vue` — `onWizTemplateSelected` guards against overwrite
+- `web/src/pages/ModelDeploymentsPage.vue` — edit button, edit dialog, port pre-fill from version
+- `web/src/locales/zh-CN.ts` — new keys: `modelWizard.displayName`, `modelWizard.nameHint`, `deployments.displayName`, `deployments.editDeployment`, `common.readonly`
+- `web/src/locales/en-US.ts` — same new keys
+- `internal/server/api/ui_persistence_runplan_test.go` — 3 new tests
+
+### Tests Added
+
+- `TestDeploymentCapturesConfigSnapshotAtCreate` — snapshot non-empty after create, contains source_runtime_id
+- `TestDeploymentPatchPortsAndDisplayName` — edit round-trip for ports and display name
+- `TestModelArtifactNameFieldNotSavedOnPatch` — confirms name is read-only on PATCH
+
+### Verification Results
+
+| Command | Result |
+| ------- | ------ |
+| `go test ./...` | PASS (10 packages) |
+| `go vet ./...` | PASS |
+| `go build ./...` | PASS |
+| `npm --prefix web run build` | PASS |
+| `npm --prefix web test -- --runInBand` | PASS (668 i18n keys, 556 references) |
+| `bash -n scripts/*.sh scripts/e2e/lib/*.sh` | PASS |
+
+### Open Issues
+
+None. All discovered issues are FIXED.

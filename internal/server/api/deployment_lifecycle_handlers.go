@@ -24,7 +24,7 @@ import (
 
 func (h *AgentHandler) HandleListDeployments(w http.ResponseWriter, r *http.Request) {
 	tid := tenantID(r)
-	q := `SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at FROM model_deployments`
+	q := `SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(config_snapshot_json,'{}'), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments`
 	var out []map[string]interface{}
 	var err error
 	if isPlatformAdmin(r) {
@@ -38,6 +38,33 @@ func (h *AgentHandler) HandleListDeployments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// buildDeploymentRuntimeSnapshot captures a frozen config snapshot from a
+// BackendRuntime template. It is called at deployment creation time so the
+// deployment is decoupled from future BackendRuntime edits.
+func (h *AgentHandler) buildDeploymentRuntimeSnapshot(runtimeID string) string {
+	rt := h.getBackendRuntimeJSON(runtimeID)
+	if rt == nil {
+		return "{}"
+	}
+	snapshot := map[string]interface{}{
+		"source_runtime_id":          runtimeID,
+		"source_runtime_name":        strVal(rt, "name", ""),
+		"source_runtime_revision":    strVal(rt, "updated_at", ""),
+		"vendor":                     strVal(rt, "vendor", ""),
+		"runtime_type":               strVal(rt, "runtime_type", "docker"),
+		"image_name":                 strVal(rt, "image_name", ""),
+		"image_pull_policy":          strVal(rt, "image_pull_policy", "if_not_present"),
+		"entrypoint_override_json":   rt["entrypoint_override_json"],
+		"args_override_json":         rt["args_override_json"],
+		"default_env_json":           rt["default_env_json"],
+		"docker_json":                rt["docker_json"],
+		"model_mount_json":           rt["model_mount_json"],
+		"health_check_override_json": rt["health_check_override_json"],
+		"version_snapshot_json":      rt["version_snapshot_json"],
+	}
+	return jsonString(snapshot)
 }
 
 func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Request) {
@@ -71,17 +98,24 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		}
 	}
 
+		// Capture frozen config snapshot from BackendRuntime at deployment creation time.
+		configSnapshot := "{}"
+		if backendRuntimeID != "" {
+			configSnapshot = h.buildDeploymentRuntimeSnapshot(backendRuntimeID)
+		}
+
 	id := uuid.NewString()
 	tid := tenantID(r)
 	actorID := actorIDFromSession(r)
 	requestID := log.RequestIDFromContext(r.Context())
 	now := time.Now().Format(time.RFC3339)
 
-	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, config_snapshot_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "description", ""),
 		artifactID, backendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(req["parameters_json"]), jsonString(req["env_overrides_json"]),
+		configSnapshot,
 		"stopped", "saved", tid, now, now,
 	)
 	if err != nil {
@@ -329,8 +363,9 @@ type preflightResult struct {
 	artifactID  string
 	artifact    map[string]interface{}
 	runtimeID   string
-	nbrSnapshot string // config_snapshot_json from NodeBackendRuntime
-	nbrImageRef string // image_ref from NodeBackendRuntime
+	nbrSnapshot          string // config_snapshot_json from NodeBackendRuntime
+	nbrImageRef          string // image_ref from NodeBackendRuntime
+	deployConfigSnapshot string // config_snapshot_json from ModelDeployment
 	placement   struct {
 		NodeID string
 		GPUIds []string
@@ -399,6 +434,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		return pf
 	}
 	pf.deploy = deploy
+	pf.deployConfigSnapshot = strVal(deploy, "config_snapshot_json", "{}")
 
 	pf.artifactID = strVal(deploy, "model_artifact_id", "")
 	pf.runtimeID = strVal(deploy, "backend_runtime_id", "")
@@ -450,6 +486,10 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	h.DB.QueryRow(`SELECT name, default_env_json FROM inference_backends WHERE id = ?`, pf.rtBackendID).Scan(&pf.backendName, &pf.backendDefaultEnv)
 	h.DB.QueryRow(`SELECT default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json FROM backend_versions WHERE id = ?`, pf.rtVersionID).Scan(&pf.bvEntrypoint, &pf.bvArgs, &pf.bvBackendParams, &pf.bvParamDefs, &pf.bvHC, &pf.bvPort, &pf.bvDefaultImages, &pf.bvEnv)
 	pf.applyRuntimeVersionSnapshot()
+
+	// Apply deployment config snapshot (copied at creation time).
+	// This decouples the deployment from future BackendRuntime template edits.
+	pf.applyDeploymentConfigSnapshot()
 
 	// Fetch node IP.
 	pf.nodeIP = "127.0.0.1"
@@ -627,6 +667,76 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	}
 
 	return pf
+}
+
+// applyDeploymentConfigSnapshot applies the deployment's config_snapshot_json
+// to override live BackendRuntime values. This is called after version_snapshot_json
+// and before the NBR snapshot, so precedence is:
+// NBR snapshot > Deployment snapshot > Version snapshot > Live BackendRuntime.
+func (pf *preflightResult) applyDeploymentConfigSnapshot() {
+	if pf.deployConfigSnapshot == "" || pf.deployConfigSnapshot == "{}" {
+		return
+	}
+	var snap map[string]interface{}
+	if err := json.Unmarshal([]byte(pf.deployConfigSnapshot), &snap); err != nil {
+		return
+	}
+	if v, ok := snap["vendor"]; ok {
+		if s, ok := v.(string); ok && s != "" {
+			pf.rtVendor = s
+		}
+	}
+	if v, ok := snap["image_name"]; ok {
+		if s, ok := v.(string); ok && s != "" {
+			pf.rtImage = s
+		}
+	}
+	if v, ok := snap["args_override_json"]; ok {
+		var snapArgs []string
+		if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapArgs) == nil {
+			if raw, err := json.Marshal(snapArgs); err == nil {
+				pf.rtArgsOverride = string(raw)
+			}
+		}
+	}
+	if v, ok := snap["entrypoint_override_json"]; ok {
+		var snapEntry []string
+		if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapEntry) == nil && len(snapEntry) > 0 {
+			if raw, err := json.Marshal(snapEntry); err == nil {
+				pf.rtEntryOverride = string(raw)
+			}
+		}
+	}
+	if v, ok := snap["default_env_json"]; ok {
+		var snapEnv map[string]string
+		if raw, _ := json.Marshal(v); json.Unmarshal(raw, &snapEnv) == nil {
+			if raw, err := json.Marshal(snapEnv); err == nil {
+				pf.rtDefaultEnv = string(raw)
+			}
+		}
+	}
+	if v, ok := snap["docker_json"]; ok {
+		if raw, err := json.Marshal(v); err == nil {
+			pf.rtDockerJSON = string(raw)
+		}
+	}
+	if v, ok := snap["model_mount_json"]; ok {
+		if raw, err := json.Marshal(v); err == nil {
+			pf.rtModelMount = string(raw)
+		}
+	}
+	if v, ok := snap["health_check_override_json"]; ok {
+		if raw, err := json.Marshal(v); err == nil {
+			pf.rtHC = string(raw)
+		}
+	}
+	if v, ok := snap["version_snapshot_json"]; ok {
+		if raw, err := json.Marshal(v); err == nil {
+			pf.rtVersionSnapshot = string(raw)
+			// Re-apply version snapshot with the deployment's frozen version
+			pf.applyRuntimeVersionSnapshot()
+		}
+	}
 }
 
 func (pf *preflightResult) applyRuntimeVersionSnapshot() {
@@ -1448,13 +1558,13 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 // ==========================================================================
 
 func (h *AgentHandler) getDeploymentJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at FROM model_deployments WHERE id = ?`, id)
-	var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, ds, status, tid, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(config_snapshot_json,'{}'), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments WHERE id = ?`, id)
+	var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, css, ds, status, tid, ca, ua string
 	var replicas int
-	if err := row.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &ds, &status, &tid, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &css, &ds, &status, &tid, &ca, &ua); err != nil {
 		return nil
 	}
-	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua}
+	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "config_snapshot_json": json.RawMessage(css), "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua}
 }
 
 func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]map[string]interface{}, error) {

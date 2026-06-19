@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -246,5 +247,117 @@ func TestTryInferenceRequiresNonEmptyResponsePreview(t *testing.T) {
 	}
 	if result["reason_code"] != "empty_model_response" {
 		t.Fatalf("reason=%v", result["reason_code"])
+	}
+}
+
+
+func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	insertUIPersistenceArtifact(t, h, "art-snap")
+	insertRuntime(t, database, "rt-snap", "llama.cpp NVIDIA CUDA Runtime", "")
+
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-snap","model_artifact_id":"art-snap","backend_runtime_id":"rt-snap","placement_json":{"node_id":"node-a","gpu_ids":[]},"service_json":{"host_port":8005,"container_port":8080}}`, adminSession(), nil))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	snapRaw := got["config_snapshot_json"]
+	if snapRaw == nil {
+		t.Fatal("config_snapshot_json missing in response")
+	}
+	// snapshot may come back as map[string]interface{} or string
+	var snapStr string
+	switch v := snapRaw.(type) {
+	case string:
+		snapStr = v
+	case map[string]interface{}:
+		snapStr = fmt.Sprintf("%v", v)
+	default:
+		// Try json.RawMessage or re-marshal
+		if raw, err := json.Marshal(snapRaw); err == nil {
+			snapStr = string(raw)
+		}
+	}
+	if snapStr == "" || snapStr == "{}" || snapStr == "map[]" {
+		t.Fatalf("config_snapshot_json empty after create: %s", snapStr)
+	}
+	if !strings.Contains(snapStr, "rt-snap") {
+		t.Fatalf("snapshot missing source_runtime_id: %s", snapStr)
+	}
+	// Verify deployment detail also returns snapshot
+	detail := h.getDeploymentJSON(got["id"].(string))
+	if detail == nil {
+		t.Fatal("getDeploymentJSON returned nil")
+	}
+	if snap2, _ := detail["config_snapshot_json"]; snap2 == nil || fmt.Sprintf("%v", snap2) == "{}" {
+		t.Fatalf("deployment detail missing snapshot: %v", snap2)
+	}
+}
+
+func TestDeploymentPatchPortsAndDisplayName(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	insertUIPersistenceArtifact(t, h, "art-edit")
+	insertRuntime(t, database, "rt-edit", "Runtime Edit", "")
+
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-edit","model_artifact_id":"art-edit","backend_runtime_id":"rt-edit","placement_json":{"node_id":"node-a","gpu_ids":[]},"service_json":{"host_port":8005,"container_port":8080},"parameters_json":{}}`, adminSession(), nil))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create deployment code=%d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	depID := got["id"].(string)
+
+	// Patch display_name and ports
+	pw := httptest.NewRecorder()
+	h.HandlePatchDeployment(pw, newReq("PATCH", "/x", `{"display_name":"Edited Display","service_json":{"host_port":9000,"container_port":8081,"app_port":8081}}`, adminSession(), map[string]string{"id": depID}))
+	if pw.Code != http.StatusOK {
+		t.Fatalf("patch code=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	// Verify updated values
+	after := h.getDeploymentJSON(depID)
+	if after == nil {
+		t.Fatal("getDeploymentJSON returned nil")
+	}
+	if after["display_name"] != "Edited Display" {
+		t.Fatalf("display_name not updated: %v", after["display_name"])
+	}
+	svcRaw := after["service_json"]
+	var svc map[string]interface{}
+	if raw, ok := svcRaw.(json.RawMessage); ok {
+		json.Unmarshal(raw, &svc)
+	}
+	if hp, _ := svc["host_port"]; fmt.Sprintf("%v", hp) != "9000" {
+		t.Fatalf("host_port not updated: %v", svc)
+	}
+}
+
+func TestModelArtifactNameFieldNotSavedOnPatch(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	insertUIPersistenceArtifact(t, h, "art-name-patch")
+
+	// PATCH with new name - should be ignored
+	pw := httptest.NewRecorder()
+	h.HandlePatchArtifact(pw, newReq("PATCH", "/x", `{"name":"renamed-art","display_name":"New Display"}`, adminSession(), map[string]string{"id": "art-name-patch"}))
+	if pw.Code != http.StatusOK {
+		t.Fatalf("patch code=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	// Verify name unchanged, display_name updated
+	after := h.getArtifactJSON("art-name-patch")
+	if after == nil {
+		t.Fatal("getArtifactJSON returned nil")
+	}
+	if after["name"] != "art-name-patch" {
+		t.Fatalf("name was changed when it should be read-only: %v", after["name"])
+	}
+	if after["display_name"] != "New Display" {
+		t.Fatalf("display_name not updated: %v", after["display_name"])
 	}
 }

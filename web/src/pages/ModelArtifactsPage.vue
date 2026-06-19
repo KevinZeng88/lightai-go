@@ -26,7 +26,7 @@
     <!-- Simple Create Dialog -->
     <el-dialog v-model="dialogVisible" :title="editingId ? $t('common.edit') : $t('common.create')" width="500px">
       <el-form :model="form" label-width="140px">
-        <el-form-item :label="$t('artifacts.name')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="$t('artifacts.name')"><el-input v-model="form.name" disabled /><el-tag size="small" type="info" style="margin-left:8px">{{ $t('common.readonly') }}</el-tag></el-form-item>
         <el-form-item :label="$t('artifacts.displayName')"><el-input v-model="form.display_name" /></el-form-item>
         <el-form-item :label="$t('artifacts.path')"><el-input v-model="form.path" /></el-form-item>
         <el-form-item :label="$t('artifacts.format')"><el-select v-model="form.format" filterable allow-create style="width:100%"><el-option v-for="o in formatOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
@@ -89,7 +89,11 @@
         <el-alert v-if="scanResult?.error" type="error" :title="scanResult.error" show-icon />
         <el-descriptions v-if="scanResult && !scanResult.error" :column="2" border size="small">
           <el-descriptions-item :label="$t('modelWizard.modelName')">
-            <el-input v-model="wizardModelName" size="small" />
+            <span>{{ wizardModelName }}</span>
+            <el-tag size="small" type="info" style="margin-left:8px">{{ $t('modelWizard.nameHint') }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item :label="$t('modelWizard.displayName')">
+            <el-input v-model="wizardDisplayName" size="small" />
           </el-descriptions-item>
           <el-descriptions-item :label="$t('modelWizard.modelFormat')">{{ scanResult.format || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('modelWizard.architecture')">{{ (typeof scanResult.architecture === 'string') ? scanResult.architecture : JSON.stringify(scanResult.architecture) }}</el-descriptions-item>
@@ -138,7 +142,7 @@ let editingId = ''
 const wizardVisible = ref(false); const wizardStep = ref(0)
 const wizardNodeId = ref(''); const wizardSelectedEntry = ref<any>(null)
 const wizardScanning = ref(false); const wizardSaving = ref(false)
-const scanResult = ref<any>(null); const wizardModelName = ref('')
+const scanResult = ref<any>(null); const wizardModelName = ref(''); const wizardDisplayName = ref('')
 
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () => { wizardStep.value++ })
 
@@ -186,10 +190,11 @@ async function showDetail(row: any) {
 }
 
 // ---- Wizard ----
-function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardNodeId.value = ''; wizardSelectedEntry.value = null; scanResult.value = null; wizardModelName.value = '' }
+function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardNodeId.value = ''; wizardSelectedEntry.value = null; scanResult.value = null; wizardModelName.value = ''; wizardDisplayName.value = '' }
 function onFileSelect(entry: any) {
   wizardSelectedEntry.value = entry
   wizardModelName.value = entry.name
+  wizardDisplayName.value = entry.name
 }
 
 async function doScan() {
@@ -201,7 +206,7 @@ async function doScan() {
     const relPath = entry.relative_path || entry.name
     const resp = await apiClient.post(`/nodes/${wizardNodeId.value}/model-paths/scan`, { root_id: entry.root_id, root, relative_path: relPath, path_type: entry.path_type || (entry.is_dir ? 'directory' : 'file') })
     scanResult.value = resp
-    if (resp.discovered_name) wizardModelName.value = resp.discovered_name
+    if (resp.discovered_name) { wizardModelName.value = resp.discovered_name; wizardDisplayName.value = resp.discovered_name }
   } catch (e: any) { scanResult.value = { error: e?.message || t('modelWizard.scanFailed') } }
   wizardScanning.value = false
 }
@@ -213,7 +218,7 @@ async function doWizardSave() {
       name: wizardModelName.value, path: scanResult.value.absolute_path,
       format: scanResult.value.format || 'huggingface', task_type: 'chat',
       size_label: scanResult.value.size_label || '', source_type: 'local_path',
-      display_name: wizardModelName.value,
+      display_name: wizardDisplayName.value || wizardModelName.value,
     })
     await apiClient.post(`/model-artifacts/${artifact.id}/locations`, {
       node_id: wizardNodeId.value, root_id: scanResult.value.root_id || wizardSelectedEntry.value?.root_id,

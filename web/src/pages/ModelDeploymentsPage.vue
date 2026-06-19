@@ -19,6 +19,7 @@
       <el-table-column prop="backend_runtime_id" :label="$t('deployments.runtime')" width="200" />
       <el-table-column :label="$t('common.actions')" width="320">
         <template #default="{ row }">
+          <el-button size="small" @click="showEdit(row)">{{ $t('common.edit') }}</el-button>
           <el-button size="small" @click="doDryRun(row)">{{ $t('deployments.viewRunPlan') }}</el-button>
           <el-button size="small" type="success" :disabled="isRunBlocked(row.status)" @click="doStart(row)">{{ $t('deployments.runExisting') }}</el-button>
           <el-button size="small" type="warning" @click="doStop(row)">{{ $t('deployments.stop') }}</el-button>
@@ -44,6 +45,41 @@
 
     <el-dialog v-model="dryRunVisible" :title="$t('common.dryRunTitle')" width="700px">
       <pre v-if="dryRunResult" style="white-space:pre-wrap;max-height:400px;overflow:auto">{{ JSON.stringify(dryRunResult, null, 2) }}</pre>
+    </el-dialog>
+
+    <el-dialog v-model="editVisible" :title="$t('deployments.editDeployment')" width="600px">
+      <el-form :model="editForm" label-width="160px">
+        <el-form-item :label="$t('deployments.name')">
+          <span>{{ editForm.original_name }}</span>
+          <el-tag size="small" type="info" style="margin-left:8px">{{ $t('common.readonly') }}</el-tag>
+        </el-form-item>
+        <el-form-item :label="$t('deployments.displayName')">
+          <el-input v-model="editForm.display_name" />
+        </el-form-item>
+        <el-form-item :label="$t('deployments.artifact')">
+          <el-select v-model="editForm.model_artifact_id" filterable style="width:100%">
+            <el-option v-for="m in models" :key="m.id" :label="`${m.display_name || m.name}`" :value="m.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="$t('deployments.runtime')">
+          <el-select v-model="editForm.backend_runtime_id" filterable style="width:100%">
+            <el-option v-for="r in runtimes" :key="r.id" :label="`${r.display_name || r.name} (${r.vendor})`" :value="r.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="$t('deployments.hostPort')">
+          <el-input v-model.number="editForm.host_port" />
+        </el-form-item>
+        <el-form-item :label="$t('deployments.containerPort')">
+          <el-input v-model.number="editForm.container_port" />
+        </el-form-item>
+        <el-form-item :label="$t('deployments.appPort')">
+          <el-input v-model.number="editForm.app_port" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="doEdit" :loading="saving">{{ $t('common.save') }}</el-button>
+      </template>
     </el-dialog>
 
     <!-- Start Wizard -->
@@ -75,7 +111,7 @@
       </div>
 
       <div v-if="wizardStep === 2">
-        <el-select v-model="wizardVersionId" :placeholder="$t('startWizard.selectVersion')" style="width:100%" filterable @change="wizardRuntimeId=''; $event && (wizardStep=3)">
+        <el-select v-model="wizardVersionId" :placeholder="$t('startWizard.selectVersion')" style="width:100%" filterable @change="wizardRuntimeId=''; if($event) { onVersionSelected($event) }">
           <el-option v-for="v in versions" :key="v.id" :label="v.display_name || v.version" :value="v.id" />
         </el-select>
         <div style="margin-top:12px;text-align:right">
@@ -163,6 +199,8 @@ const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([]); const backends = ref<any[]>([]); const versions = ref<any[]>([])
 const createVisible = ref(false); const dryRunVisible = ref(false); const runPlanVisible = ref(false)
 const dryRunResult = ref<any>(null); const runPlanData = ref('')
+const editVisible = ref(false); const selectedEditRow = ref<any>(null)
+const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '' })
 const createForm = ref({ name: '', model_artifact_id: '', backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
@@ -214,6 +252,44 @@ async function handleDelete(row: any) {
   try { await ElMessageBox.confirm(t('deployments.deleteConfirm', { name: row.name }), t('common.confirm'), { type: 'warning' }); await apiClient.delete(`/deployments/${row.id}`); ElMessage.success(t('deployments.deleted')); await refresh() } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
 }
 
+// ---- Deployment Edit ----
+function showEdit(row: any) {
+  selectedEditRow.value = row
+  editForm.value.original_name = row.name || row.display_name || ''
+  editForm.value.display_name = row.display_name || ''
+  editForm.value.model_artifact_id = row.model_artifact_id || ''
+  editForm.value.backend_runtime_id = row.backend_runtime_id || ''
+  try {
+    const svc = typeof row.service_json === 'string' ? JSON.parse(row.service_json) : (row.service_json || {})
+    editForm.value.host_port = svc.host_port || 8000
+    editForm.value.container_port = svc.container_port || 0
+    editForm.value.app_port = svc.app_port || 0
+  } catch {
+    editForm.value.host_port = 8000
+    editForm.value.container_port = 0
+    editForm.value.app_port = 0
+  }
+  editVisible.value = true
+}
+
+async function doEdit() {
+  if (!selectedEditRow.value) return
+  saving.value = true
+  try {
+    const payload: any = {
+      display_name: editForm.value.display_name,
+      model_artifact_id: editForm.value.model_artifact_id,
+      backend_runtime_id: editForm.value.backend_runtime_id,
+      service_json: servicePayload(editForm.value.host_port, editForm.value.container_port, editForm.value.app_port),
+    }
+    await apiClient.patch(`/deployments/${selectedEditRow.value.id}`, payload)
+    ElMessage.success(t('deployments.saved'))
+    editVisible.value = false
+    await refresh()
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
+  saving.value = false
+}
+
 // ---- Start Wizard ----
 const filteredRuntimes = computed(() => runtimes.value.filter((r) => !wizardVersionId.value || r.backend_version_id === wizardVersionId.value))
 
@@ -244,6 +320,18 @@ async function onBackendSelected() {
   wizardRuntimeId.value = ''
   try { versions.value = await apiClient.get(`/backends/${wizardBackendId.value}/versions`) } catch { versions.value = [] }
   if (wizardBackendId.value) wizardStep.value = 2
+}
+
+async function onVersionSelected(versionId: string) {
+  if (!versionId) return
+  try {
+    const v = versions.value.find((ver: any) => ver.id === versionId)
+    if (v?.default_container_port && v.default_container_port > 0) {
+      wizardContainerPort.value = v.default_container_port
+      if (wizardAppPort.value === 0) wizardAppPort.value = v.default_container_port
+    }
+  } catch { /* keep defaults */ }
+  wizardStep.value = 3
 }
 
 function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardModelId.value = ''; wizardBackendId.value = ''; wizardVersionId.value = ''; wizardRuntimeId.value = ''; versions.value = []; preflightResult.value = null; wizardStartNode.value = ''; wizardDeploymentId.value = ''; wizardContainerPort.value = 0; wizardAppPort.value = 0; loadRefs() }

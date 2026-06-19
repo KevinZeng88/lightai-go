@@ -203,17 +203,20 @@ function startWizard() { wizardVisible.value = true; step.value = 0; wizTemplate
 function onWizTemplateSelected(templateId: string) {
   const template = templates.value.find((t: any) => t.id === templateId)
   if (!template) return
-  const suffix = t('runnerConfigs.customSuffix')
-  const baseName = `${template.name}${suffix}`
-  // Auto-append number if name conflicts with existing configs
-  const existingNames = new Set(items.value.map((c: any) => c.name))
-  let candidate = baseName
-  let counter = 2
-  while (existingNames.has(candidate)) {
-    candidate = `${baseName} ${counter}`
-    counter++
+  // Only auto-generate name if user hasn't entered a custom one
+  if (!wizConfigName.value || wizConfigName.value.trim() === '') {
+    const suffix = t('runnerConfigs.customSuffix')
+    const baseName = `${template.name}${suffix}`
+    // Auto-append number if name conflicts with existing configs
+    const existingNames = new Set(items.value.map((c: any) => c.name))
+    let candidate = baseName
+    let counter = 2
+    while (existingNames.has(candidate)) {
+      candidate = `${baseName} ${counter}`
+      counter++
+    }
+    wizConfigName.value = candidate
   }
-  wizConfigName.value = candidate
   // Auto-advance: this step has only one select control
   step.value = 2
 }

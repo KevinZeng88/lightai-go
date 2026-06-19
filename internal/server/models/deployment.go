@@ -13,8 +13,9 @@ type ModelDeployment struct {
 	PlacementJSON    string `json:"placement_json"`
 	ServiceJSON      string `json:"service_json"`
 	ParametersJSON   string `json:"parameters_json"`
-	EnvOverridesJSON string `json:"env_overrides_json"`
-	DesiredState     string `json:"desired_state"`
+	EnvOverridesJSON     string `json:"env_overrides_json"`
+	ConfigSnapshotJSON   string `json:"config_snapshot_json"`
+	DesiredState         string `json:"desired_state"`
 	Status           string `json:"status"`
 	TenantID         string `json:"tenant_id"`
 	OwnerID          string `json:"owner_id"`
