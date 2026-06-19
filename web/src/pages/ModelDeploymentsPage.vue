@@ -77,8 +77,42 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="doEdit" :loading="saving">{{ $t('common.save') }}</el-button>
+        <div style="display:flex;justify-content:space-between;width:100%">
+          <div>
+            <el-button v-if="editForm.source_template_name" @click="doTemplateSyncPreview" size="small">{{ $t('deployments.previewTemplateDiff') }}</el-button>
+            <el-button v-if="editForm.source_template_name" @click="doTemplateSyncApply" size="small" type="warning">{{ $t('deployments.applyTemplateChanges') }}</el-button>
+          </div>
+          <div>
+            <el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button>
+            <el-button type="primary" @click="doEdit" :loading="saving">{{ $t('common.save') }}</el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="syncPreviewVisible" :title="$t('deployments.templateSyncPreview')" width="700px">
+      <div v-if="syncPreviewData">
+        <el-alert v-if="syncPreviewData.template_changed" type="warning" :closable="false" style="margin-bottom:12px">
+          {{ $t('deployments.templateChanged') }}: {{ syncPreviewData.source_template_name }}
+        </el-alert>
+        <el-alert v-else type="success" :closable="false" style="margin-bottom:12px">
+          {{ $t('deployments.templateUnchanged') }}
+        </el-alert>
+        <el-table v-if="syncPreviewData.diffs?.length" :data="syncPreviewData.diffs" stripe size="small">
+          <el-table-column prop="field" :label="$t('deployments.syncField')" width="200" />
+          <el-table-column :label="$t('deployments.syncDeployValue')">
+            <template #default="{ row }"><code>{{ JSON.stringify(row.deploy_value) }}</code></template>
+          </el-table-column>
+          <el-table-column :label="$t('deployments.syncTemplateValue')">
+            <template #default="{ row }"><code>{{ JSON.stringify(row.template_value) }}</code></template>
+          </el-table-column>
+        </el-table>
+        <div v-if="!syncPreviewData.diffs?.length" style="padding:12px;color:var(--el-text-color-secondary)">
+          {{ $t('deployments.noDiffs') }}
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="syncPreviewVisible = false">{{ $t('common.cancel') }}</el-button>
       </template>
     </el-dialog>
 
@@ -200,7 +234,7 @@ const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = re
 const createVisible = ref(false); const dryRunVisible = ref(false); const runPlanVisible = ref(false)
 const dryRunResult = ref<any>(null); const runPlanData = ref('')
 const editVisible = ref(false); const selectedEditRow = ref<any>(null)
-const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '' })
+const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '', source_template_name: '', source_backend_runtime_id: '', copied_at: '' })
 const createForm = ref({ name: '', model_artifact_id: '', backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
@@ -259,6 +293,9 @@ function showEdit(row: any) {
   editForm.value.display_name = row.display_name || ''
   editForm.value.model_artifact_id = row.model_artifact_id || ''
   editForm.value.backend_runtime_id = row.backend_runtime_id || ''
+  editForm.value.source_template_name = row.source_template_name || ''
+  editForm.value.source_backend_runtime_id = row.source_backend_runtime_id || ''
+  editForm.value.copied_at = row.copied_at || ''
   try {
     const svc = typeof row.service_json === 'string' ? JSON.parse(row.service_json) : (row.service_json || {})
     editForm.value.host_port = svc.host_port || 8000
@@ -385,6 +422,33 @@ function servicePayload(hostPort: number, containerPort?: number, appPort?: numb
   payload.api_test_port = hostPort
   return payload
 }
+// ---- Template Sync ----
+const syncPreviewVisible = ref(false)
+const syncPreviewData = ref<any>(null)
+
+async function doTemplateSyncPreview() {
+  if (!selectedEditRow.value) return
+  try {
+    syncPreviewData.value = await apiClient.post(`/deployments/${selectedEditRow.value.id}/template-sync/preview`, {})
+    syncPreviewVisible.value = true
+  } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
+}
+
+async function doTemplateSyncApply() {
+  if (!selectedEditRow.value) return
+  try {
+    await ElMessageBox.confirm(
+      t('deployments.syncConfirm'),
+      t('deployments.applyTemplateChanges'),
+      { type: 'warning', confirmButtonText: t('common.yes'), cancelButtonText: t('common.no') }
+    )
+    const res = await apiClient.post(`/deployments/${selectedEditRow.value.id}/template-sync/apply`, { strategy: 'preserve_overrides' })
+    ElMessage.success(t('deployments.synced'))
+    editVisible.value = false
+    await refresh()
+  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e?.message || t('common.failed')) }
+}
+
 function isRunBlocked(status: string) { return ['starting', 'pending', 'provisioning', 'running', 'healthy', 'stopping'].includes(status) }
 function deploymentStatusType(status: string) { if (['running', 'healthy'].includes(status)) return 'success'; if (['failed'].includes(status)) return 'danger'; if (['starting', 'pending', 'provisioning', 'stopping'].includes(status)) return 'warning'; return 'info' }
 function deploymentStatusText(status: string) { return t(`deployments.status_${status || 'unknown'}`) }

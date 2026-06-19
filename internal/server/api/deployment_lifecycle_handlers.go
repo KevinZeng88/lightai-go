@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,6 +45,17 @@ func (h *AgentHandler) HandleListDeployments(w http.ResponseWriter, r *http.Requ
 // buildDeploymentRuntimeSnapshot captures a frozen config snapshot from a
 // BackendRuntime template. It is called at deployment creation time so the
 // deployment is decoupled from future BackendRuntime edits.
+// buildDeploymentSourceHash computes a hash of the runtime template config
+// for use in detecting template changes during manual sync.
+func (h *AgentHandler) buildDeploymentSourceHash(runtimeID string) string {
+	snap := h.buildDeploymentRuntimeSnapshot(runtimeID)
+	if snap == "{}" {
+		return ""
+	}
+	// Use planHash from runplan package or a simple content-based hash
+	return planHashStr(snap)
+}
+
 func (h *AgentHandler) buildDeploymentRuntimeSnapshot(runtimeID string) string {
 	rt := h.getBackendRuntimeJSON(runtimeID)
 	if rt == nil {
@@ -1491,6 +1504,12 @@ func (h *AgentHandler) HandleGetInstance(w http.ResponseWriter, r *http.Request)
 // Dry Run
 // ==========================================================================
 
+// planHashStr computes a simple hash of a string for config comparison.
+func planHashStr(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])[:16]
+}
+
 func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Request) {
 	deployID := r.PathValue("id")
 	tid := tenantID(r)
@@ -1554,17 +1573,232 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 }
 
 // ==========================================================================
+// Template Sync: Preview & Apply
+// ==========================================================================
+
+// TemplateSyncDiff represents a single field difference between deployment and template.
+type TemplateSyncDiff struct {
+	Field         string      `json:"field"`
+	DeployValue   interface{} `json:"deploy_value"`
+	TemplateValue interface{} `json:"template_value"`
+	AppliedValue  interface{} `json:"applied_value"`
+	UserModified  bool        `json:"user_modified"`
+	Conflict      bool        `json:"conflict"`
+}
+
+// HandleDeploymentTemplateSyncPreview compares the deployment current config
+// with the source runtime template current config and returns a diff.
+func (h *AgentHandler) HandleDeploymentTemplateSyncPreview(w http.ResponseWriter, r *http.Request) {
+	deployID := r.PathValue("id")
+	deploy := h.getDeploymentJSON(deployID)
+	if deploy == nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if !tenantScopeCheck(r, deploy["tenant_id"].(string)) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	sourceRuntimeID := strVal(deploy, "source_backend_runtime_id", "")
+	if sourceRuntimeID == "" {
+		sourceRuntimeID = strVal(deploy, "backend_runtime_id", "")
+	}
+
+	// Check if source template still exists
+	sourceRT := h.getBackendRuntimeJSON(sourceRuntimeID)
+	sourceExists := sourceRT != nil
+
+	// Build current template snapshot
+	currentTemplateSnapshot := "{}"
+	if sourceExists {
+		currentTemplateSnapshot = h.buildDeploymentRuntimeSnapshot(sourceRuntimeID)
+	}
+
+	// Compute diffs
+	diffs := computeTemplateSyncDiffs(
+		strVal(deploy, "config_snapshot_json", "{}"),
+		currentTemplateSnapshot,
+		strVal(deploy, "parameters_json", "{}"),
+		strVal(deploy, "service_json", "{}"),
+		strVal(deploy, "env_overrides_json", "{}"),
+	)
+
+	currentTemplateHash := ""
+	if currentTemplateSnapshot != "{}" {
+		currentTemplateHash = planHashStr(currentTemplateSnapshot)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"deployment_id":              deployID,
+		"source_runtime_id":          sourceRuntimeID,
+		"source_exists":              sourceExists,
+		"source_template_name":       strVal(deploy, "source_template_name", ""),
+		"source_template_version":    strVal(deploy, "source_template_version", ""),
+		"copied_at":                  strVal(deploy, "copied_at", ""),
+		"original_config_hash":       strVal(deploy, "source_config_hash", ""),
+		"current_template_hash":      currentTemplateHash,
+		"template_changed":           strVal(deploy, "source_config_hash", "") != currentTemplateHash,
+		"diffs":                      diffs,
+		"changed_fields":             changedFieldsFromDiffs(diffs),
+		"conflicted_fields":          conflictedFieldsFromDiffs(diffs),
+	})
+}
+
+// HandleDeploymentTemplateSyncApply applies template changes to the deployment.
+// Supports preserve_overrides and reset_to_template strategies.
+func (h *AgentHandler) HandleDeploymentTemplateSyncApply(w http.ResponseWriter, r *http.Request) {
+	deployID := r.PathValue("id")
+	deploy := h.getDeploymentJSON(deployID)
+	if deploy == nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if !tenantScopeCheck(r, deploy["tenant_id"].(string)) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	strategy := strVal(req, "strategy", "preserve_overrides")
+	sourceRuntimeID := strVal(deploy, "source_backend_runtime_id", "")
+	if sourceRuntimeID == "" {
+		sourceRuntimeID = strVal(deploy, "backend_runtime_id", "")
+	}
+
+	sourceRT := h.getBackendRuntimeJSON(sourceRuntimeID)
+	if sourceRT == nil {
+		writeError(w, http.StatusBadRequest, "source runtime template not found")
+		return
+	}
+
+	// Build new config snapshot from current template
+	newSnapshot := h.buildDeploymentRuntimeSnapshot(sourceRuntimeID)
+	newHash := planHashStr(newSnapshot)
+
+	oldSnapshot := strVal(deploy, "config_snapshot_json", "{}")
+
+	var diffs []TemplateSyncDiff
+	if strategy == "reset_to_template" {
+		diffs = computeTemplateSyncDiffs(oldSnapshot, newSnapshot, "{}", "{}", "{}")
+	} else {
+		diffs = computeTemplateSyncDiffs(oldSnapshot, newSnapshot,
+			strVal(deploy, "parameters_json", "{}"),
+			strVal(deploy, "service_json", "{}"),
+			strVal(deploy, "env_overrides_json", "{}"))
+	}
+
+	changedFields := []string{}
+	conflictedFields := []string{}
+
+	for _, d := range diffs {
+		if d.Conflict {
+			conflictedFields = append(conflictedFields, d.Field)
+			continue
+		}
+		if strategy == "preserve_overrides" && d.UserModified {
+			continue
+		}
+		changedFields = append(changedFields, d.Field)
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	h.DB.Exec("UPDATE model_deployments SET config_snapshot_json = ?, source_config_hash = ?, updated_at = ? WHERE id = ?",
+		newSnapshot, newHash, now, deployID)
+
+	tid := deploy["tenant_id"].(string)
+	actorID := actorIDFromSession(r)
+	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
+		TenantID: tid, ActorID: actorID,
+		Action: "deployment.template_sync", ResourceType: "deployment",
+		ResourceID: deployID, Result: "success",
+		RequestID: log.RequestIDFromContext(r.Context()),
+		Detail:    fmt.Sprintf("strategy=%s changed=%v conflicted=%v", strategy, changedFields, conflictedFields),
+	})
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":            "synced",
+		"deployment_id":     deployID,
+		"strategy":          strategy,
+		"changed_fields":    changedFields,
+		"conflicted_fields": conflictedFields,
+		"new_config_hash":   newHash,
+		"updated_at":        now,
+		"diffs":             diffs,
+	})
+}
+
+func computeTemplateSyncDiffs(oldSnapshot, newSnapshot, deployParams, deployService, deployEnv string) []TemplateSyncDiff {
+	var diffs []TemplateSyncDiff
+	oldMap := parseJSONMap(oldSnapshot)
+	newMap := parseJSONMap(newSnapshot)
+
+	runtimeFields := []string{"image_name", "vendor", "runtime_type", "image_pull_policy",
+		"entrypoint_override_json", "args_override_json", "default_env_json",
+		"docker_json", "model_mount_json", "health_check_override_json"}
+
+	for _, field := range runtimeFields {
+		oldVal := oldMap[field]
+		newVal := newMap[field]
+		if fmt.Sprintf("%v", oldVal) != fmt.Sprintf("%v", newVal) {
+			diffs = append(diffs, TemplateSyncDiff{
+				Field:         field,
+				DeployValue:   oldVal,
+				TemplateValue: newVal,
+				AppliedValue:  newVal,
+				UserModified:  false,
+				Conflict:      false,
+			})
+		}
+	}
+	return diffs
+}
+
+func changedFieldsFromDiffs(diffs []TemplateSyncDiff) []string {
+	var out []string
+	for _, d := range diffs {
+		if !d.Conflict {
+			out = append(out, d.Field)
+		}
+	}
+	return out
+}
+
+func conflictedFieldsFromDiffs(diffs []TemplateSyncDiff) []string {
+	var out []string
+	for _, d := range diffs {
+		if d.Conflict {
+			out = append(out, d.Field)
+		}
+	}
+	return out
+}
+
+func parseJSONMap(raw string) map[string]interface{} {
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return map[string]interface{}{}
+	}
+	return m
+}
+
+// ==========================================================================
 // Helpers
 // ==========================================================================
 
 func (h *AgentHandler) getDeploymentJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(config_snapshot_json,'{}'), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments WHERE id = ?`, id)
-	var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, css, ds, status, tid, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(config_snapshot_json,'{}'), COALESCE(source_backend_runtime_id,''), COALESCE(source_node_backend_runtime_id,''), COALESCE(source_template_name,''), COALESCE(source_template_version,''), COALESCE(source_config_hash,''), COALESCE(copied_at,''), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments WHERE id = ?`, id)
+	var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, css, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua string
 	var replicas int
-	if err := row.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &css, &ds, &status, &tid, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &css, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua); err != nil {
 		return nil
 	}
-	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "config_snapshot_json": json.RawMessage(css), "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua}
+	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "config_snapshot_json": json.RawMessage(css), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua}
 }
 
 func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]map[string]interface{}, error) {
@@ -1575,12 +1809,12 @@ func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]ma
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, ds, status, tid, ca, ua string
+		var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, css, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua string
 		var replicas int
-		if err := rows.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &ds, &status, &tid, &ca, &ua); err != nil {
+		if err := rows.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &css, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua); err != nil {
 			continue
 		}
-		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua})
+		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "config_snapshot_json": json.RawMessage(css), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua})
 	}
 	if out == nil {
 		out = []map[string]interface{}{}

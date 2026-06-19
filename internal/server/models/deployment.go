@@ -14,8 +14,14 @@ type ModelDeployment struct {
 	ServiceJSON      string `json:"service_json"`
 	ParametersJSON   string `json:"parameters_json"`
 	EnvOverridesJSON     string `json:"env_overrides_json"`
-	ConfigSnapshotJSON   string `json:"config_snapshot_json"`
-	DesiredState         string `json:"desired_state"`
+	ConfigSnapshotJSON          string `json:"config_snapshot_json"`
+	SourceBackendRuntimeID      string `json:"source_backend_runtime_id"`
+	SourceNodeBackendRuntimeID  string `json:"source_node_backend_runtime_id"`
+	SourceTemplateName          string `json:"source_template_name"`
+	SourceTemplateVersion       string `json:"source_template_version"`
+	SourceConfigHash            string `json:"source_config_hash"`
+	CopiedAt                    string `json:"copied_at"`
+	DesiredState                string `json:"desired_state"`
 	Status           string `json:"status"`
 	TenantID         string `json:"tenant_id"`
 	OwnerID          string `json:"owner_id"`

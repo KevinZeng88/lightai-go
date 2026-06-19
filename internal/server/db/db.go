@@ -184,6 +184,11 @@ func (db *DB) Migrate() error {
 			return fmt.Errorf("migrate v22: %w", err)
 		}
 	}
+	if currentVersion < 23 {
+		if err := db.migrateV23(); err != nil {
+			return fmt.Errorf("migrate v23: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -1459,6 +1464,29 @@ func (db *DB) migrateV22() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (22, 'V22: deployment config snapshot for RunPlan consistency')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV23 adds source template metadata columns to model_deployments
+// so deployments can trace their origin and support manual template sync.
+func (db *DB) migrateV23() error {
+	cols := []string{
+		`ALTER TABLE model_deployments ADD COLUMN source_backend_runtime_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE model_deployments ADD COLUMN source_node_backend_runtime_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE model_deployments ADD COLUMN source_template_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE model_deployments ADD COLUMN source_template_version TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE model_deployments ADD COLUMN source_config_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE model_deployments ADD COLUMN copied_at TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range cols {
+		if _, err := db.Exec(stmt); err != nil {
+			log.Warn("db.migrateV23 add column warning", "error", err)
+		}
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (23, 'V23: deployment source template metadata for manual sync')`); err != nil {
 		return err
 	}
 	return nil

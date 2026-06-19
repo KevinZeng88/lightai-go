@@ -192,6 +192,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("PATCH /api/v1/deployments/{id}", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchDeployment)))
 	mux.Handle("DELETE /api/v1/deployments/{id}", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteDeployment)))
 	mux.Handle("POST /api/v1/deployments/{id}/dry-run", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeploymentDryRun)))
+	mux.Handle("POST /api/v1/deployments/{id}/template-sync/preview", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeploymentTemplateSyncPreview)))
+	mux.Handle("POST /api/v1/deployments/{id}/template-sync/apply", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeploymentTemplateSyncApply)))
 	mux.Handle("POST /api/v1/deployments/preflight", mdWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePreflightDeployments)))
 	mux.Handle("POST /api/v1/deployments/{id}/start", mdStartChain(http.HandlerFunc(cfg.AgentHandler.HandleStartDeployment)))
 	mux.Handle("POST /api/v1/deployments/{id}/stop", mdStopChain(http.HandlerFunc(cfg.AgentHandler.HandleStopDeployment)))
