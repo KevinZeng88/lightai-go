@@ -43,8 +43,49 @@
           <el-descriptions-item :label="$t('artifacts.displayName')">{{ selected.display_name || selected.name }}</el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.format')">{{ selected.format }}</el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.path')">{{ selected.path }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('artifacts.size')">{{ selected.size_label || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailPathType" :label="$t('artifacts.pathType')">{{ detailPathType }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailFileSize" :label="$t('artifacts.fileSize')">{{ detailFileSize }}</el-descriptions-item>
+          <el-descriptions-item v-if="selected.size_label" :label="$t('artifacts.size')">{{ selected.size_label }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailParamCount" :label="$t('artifacts.paramCount')">{{ detailParamCount }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailCtxLen" :label="$t('artifacts.contextLength')">{{ detailCtxLen }}</el-descriptions-item>
+          <el-descriptions-item v-if="selected.quantization && selected.quantization !== 'unknown'" :label="$t('artifacts.quantization')">{{ selected.quantization }}</el-descriptions-item>
+          <el-descriptions-item v-if="selected.architecture && selected.architecture !== 'custom'" :label="$t('artifacts.architecture')">{{ selected.architecture }}</el-descriptions-item>
         </el-descriptions>
+
+        <!-- GGUF metadata -->
+        <template v-if="isGGUF && detailMeta">
+          <h4 style="margin-top:12px">GGUF Metadata</h4>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item v-if="detailMeta.embedding_length" :label="$t('artifacts.embeddingLength')">{{ detailMeta.embedding_length }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.block_count" :label="$t('artifacts.blockCount')">{{ detailMeta.block_count }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.vocab_size" :label="$t('artifacts.vocabSize')">{{ detailMeta.vocab_size }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.head_count" label="Head count">{{ detailMeta.head_count }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.head_count_kv" label="Head count KV">{{ detailMeta.head_count_kv }}</el-descriptions-item>
+          </el-descriptions>
+        </template>
+
+        <!-- HF metadata -->
+        <template v-if="isHF && detailMeta">
+          <h4 style="margin-top:12px">HuggingFace Metadata</h4>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item v-if="detailMeta.model_type" :label="$t('artifacts.modelType')">{{ detailMeta.model_type }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.architectures" :label="$t('artifacts.architecture')">{{ Array.isArray(detailMeta.architectures) ? detailMeta.architectures.join(', ') : detailMeta.architectures }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.torch_dtype" :label="$t('artifacts.torchDtype')">{{ detailMeta.torch_dtype }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.max_position_embeddings" :label="$t('artifacts.maxPositionEmbeddings')">{{ detailMeta.max_position_embeddings }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.rope_scaling" :label="$t('artifacts.ropeScaling')">{{ JSON.stringify(detailMeta.rope_scaling) }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.hidden_size" :label="$t('artifacts.hiddenSize')">{{ detailMeta.hidden_size }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.num_hidden_layers" :label="$t('artifacts.numHiddenLayers')">{{ detailMeta.num_hidden_layers }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.num_attention_heads" :label="$t('artifacts.numAttentionHeads')">{{ detailMeta.num_attention_heads }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.vocab_size" :label="$t('artifacts.vocabSize')">{{ detailMeta.vocab_size }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.quantization_config" :label="$t('artifacts.quantizationConfig')">{{ JSON.stringify(detailMeta.quantization_config) }}</el-descriptions-item>
+          </el-descriptions>
+        </template>
+
+        <!-- Warnings -->
+        <el-alert v-if="detailMeta?.warnings?.length" type="warning" :closable="false" style="margin-top:8px" :title="$t('artifacts.warnings')">
+          <ul style="margin:0;padding-left:16px"><li v-for="w in detailMeta.warnings" :key="w">{{ w }}</li></ul>
+        </el-alert>
+
         <h4 style="margin-top:16px">{{ $t('modelLocations.title') }}</h4>
         <el-button size="small" type="primary" @click="showAddLocation" style="margin-bottom:8px">{{ $t('modelLocations.addLocation') }}</el-button>
         <el-table :data="locations" stripe size="small">
@@ -169,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
@@ -199,6 +240,42 @@ const addLocVisible = ref(false); const addLocNodeId = ref(''); const addLocPath
 
 const formatOptions = ['gguf', 'safetensors', 'huggingface', 'pt', 'onnx', 'other']
 const quantOptions = ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'FP16', 'BF16', 'FP8', 'INT8', 'INT4', 'none', 'other']
+
+// Computed metadata from selected artifact + first location
+const detailMeta = computed(() => {
+  const loc = locations.value?.[0]
+  if (!loc) return null
+  // Prefer discovered_metadata_json from location, fall back to artifact fields
+  const meta = loc.discovered_metadata_json || {}
+  if (!meta.architecture && selected.value?.architecture && selected.value.architecture !== 'custom') {
+    meta.architecture = selected.value.architecture
+  }
+  if (!meta.quantization && selected.value?.quantization && selected.value.quantization !== 'unknown') {
+    meta.quantization = selected.value.quantization
+  }
+  if (!meta.context_length && selected.value?.default_context_length) {
+    meta.context_length = selected.value.default_context_length
+  }
+  return meta
+})
+const isGGUF = computed(() => selected.value?.format === 'gguf')
+const isHF = computed(() => selected.value?.format === 'huggingface' || selected.value?.format === 'safetensors')
+const detailPathType = computed(() => locations.value?.[0]?.path_type || '')
+const detailFileSize = computed(() => {
+  const bytes = detailMeta.value?.file_size_bytes || locations.value?.[0]?.size_bytes
+  if (!bytes || bytes === 0) return ''
+  return formatBytesHuman(bytes)
+})
+const detailParamCount = computed(() => detailMeta.value?.parameter_count || '')
+const detailCtxLen = computed(() => detailMeta.value?.context_length || detailMeta.value?.max_position_embeddings || selected.value?.default_context_length || '')
+
+function formatBytesHuman(bytes: number): string {
+  if (!bytes || bytes === 0) return ''
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
+  let i = 0; let size = bytes
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
+  return size.toFixed(1) + ' ' + units[i]
+}
 
 onMounted(async () => { await refresh(); loadNodes() })
 

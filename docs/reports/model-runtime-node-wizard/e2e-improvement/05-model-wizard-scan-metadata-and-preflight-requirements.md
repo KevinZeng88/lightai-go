@@ -517,3 +517,217 @@ bash scripts/e2e-dryrun-parameter-matrix-enhanced.sh
 git diff --check
 git status --short
 ```
+
+---
+
+## 15. Closeout: HF Server Scan Fix (2026-06-19)
+
+### 15.1 Problem
+
+HF directory scan returns proper candidates via agent-direct call but returns empty candidates through the server proxy (`POST /api/v1/nodes/{id}/model-paths/scan`). GGUF scan works through the same proxy. This is a product defect within scope — NOT a DOCUMENTED_BLOCKER.
+
+### 15.2 Root Cause Investigation
+
+The proxy handler at `internal/server/api/agent_proxy_handlers.go:78-134`:
+1. Resolves root via `resolveNodeModelRoot(nodeID, root_id, root)` — line 93
+2. Validates relative path via `safeRelativePath(relPath)` — line 98
+3. Forwards to agent at `http://{ip}:{port}/model-paths/scan?extra_roots=...` — lines 103-109
+4. Unmarshals agent response, adds root metadata fields, re-marshals — lines 118-129
+
+The agent-direct response (confirmed working):
+```json
+{"scan_root":"/home/kzeng/models/Qwen3-0.6B-Instruct-2512","candidates":[{...}],"warnings":[]}
+```
+
+The proxy response (empty):
+```json
+{"scan_root":null,"candidates":[],"root_id":"...",...}
+```
+
+Possible causes:
+- Agent receives different payload from proxy vs direct call
+- `resolveNodeModelRoot` returns a different root path than expected
+- Response mapping loses candidate data during unmarshal/remarshal
+- Working directory or permission issue on agent side
+
+### 15.3 Fix Requirements
+
+1. Fix must make `POST /api/v1/nodes/{id}/model-paths/scan` return proper candidates for HF directories
+2. Agent-direct scan must NOT be the primary UI path — server proxy is the main path
+3. Both GGUF and HF must work through the same proxy
+4. Fix must be minimal — no API route changes, no agent protocol changes
+
+### 15.4 Acceptance Criteria
+
+Server API scan of `/home/kzeng/models/Qwen3-0.6B-Instruct-2512` must return:
+- `candidates` non-empty
+- `candidates[0].path_type = "directory"`
+- `candidates[0].format = "huggingface"`
+- `candidates[0].detected_metadata.model_type` non-empty
+- `candidates[0].detected_metadata.architectures` non-empty
+- `candidates[0].detected_metadata.context_length` or `max_position_embeddings` non-empty
+- `candidates[0].detected_metadata.file_size_bytes` non-empty
+
+---
+
+## 16. Closeout: Model Metadata Persistence and Attribute Display
+
+### 16.1 Problem
+
+Scan results show metadata in the wizard (step 3), but after saving the artifact:
+1. The detail drawer only shows name, displayName, format, path, size
+2. Saved metadata (architecture, quantization, context_length, etc.) is not displayed
+3. User must re-scan to see metadata — defeats the purpose of persistence
+
+### 16.2 Metadata Storage (Verify/Implement)
+
+The `doWizardSave` function in `ModelArtifactsPage.vue` already saves:
+- `architecture`, `default_context_length`, `quantization` on `ModelArtifact`
+- `discovered_metadata_json` on `ModelLocation`
+
+These must be verified working and displayed in the detail view.
+
+If metadata is NOT being saved:
+- Fix `doWizardSave` to include all scanned metadata fields
+- Use existing `discovered_metadata_json` on `model_locations` table (no migration needed)
+- Use existing columns on `model_artifacts`: `architecture`, `quantization`, `default_context_length`
+
+### 16.3 Attribute Display Requirements
+
+The model detail drawer (`ModelArtifactsPage.vue` detail drawer, lines 39-63) must display saved metadata:
+
+**General fields (always show if present)**:
+| Field | Source | Display |
+|-------|--------|---------|
+| format | artifact.format | plain text |
+| path_type | location.path_type | plain text |
+| path | artifact.path or location.absolute_path | plain text |
+| file_size_bytes | metadata.file_size_bytes or location.size_bytes | human-readable (e.g. "5.2 GiB") |
+| parameter_count | metadata.parameter_count | if known (e.g. "0.6B", "9B"), else "unknown"/"未知" |
+| context_length | artifact.default_context_length or metadata.context_length | number |
+| warnings | location.discovered_metadata_json.warnings | list, prominent display |
+
+**GGUF-specific fields**:
+| Field | Source |
+|-------|--------|
+| architecture | artifact.architecture or metadata.architecture |
+| quantization | artifact.quantization or metadata.quantization |
+| embedding_length | metadata.embedding_length |
+| block_count | metadata.block_count |
+| vocab_size | metadata.vocab_size |
+
+**HF-specific fields**:
+| Field | Source |
+|-------|--------|
+| model_type | metadata.model_type |
+| architectures | metadata.architectures (array → comma-separated) |
+| torch_dtype | metadata.torch_dtype |
+| max_position_embeddings | metadata.max_position_embeddings |
+| rope_scaling | metadata.rope_scaling (JSON) |
+| hidden_size | metadata.hidden_size |
+| num_hidden_layers | metadata.num_hidden_layers |
+| num_attention_heads | metadata.num_attention_heads |
+| vocab_size | metadata.vocab_size |
+| quantization_config | metadata.quantization_config (JSON) |
+
+### 16.4 Display Rules
+
+- **unknown values**: display as "unknown" or "未知", not as blank or fake value
+- **warnings**: prominent display (alert or warning-colored text)
+- **file_size_bytes**: format to human-readable (KiB, MiB, GiB) — reuse existing `size_label` logic
+- **parameter_count vs file_size_bytes**: MUST be separate, MUST NOT be confused
+- **i18n**: all labels must have zh-CN and en-US entries; no key leakage
+- **fields with no value**: hide the row entirely (don't show "unknown" for absent fields)
+- **GGUF vs HF fields**: show only fields relevant to the artifact's format
+- **metadata source**: read from `discovered_metadata_json` on the location (API includes locations in artifact detail)
+
+### 16.5 i18n Keys Required
+
+| Key | zh-CN | en-US |
+|-----|-------|-------|
+| `artifacts.pathType` | "路径类型" | "Path type" |
+| `artifacts.fileSize` | "文件大小" | "File size" |
+| `artifacts.paramCount` | "参数量" | "Parameters" |
+| `artifacts.contextLength` | "上下文长度" | "Context length" |
+| `artifacts.embeddingLength` | "嵌入维度" | "Embedding length" |
+| `artifacts.blockCount` | "层数" | "Block count" |
+| `artifacts.vocabSize` | "词表大小" | "Vocab size" |
+| `artifacts.modelType` | "模型类型" | "Model type" |
+| `artifacts.torchDtype` | "数据类型" | "Torch dtype" |
+| `artifacts.maxPositionEmbeddings` | "最大位置编码" | "Max position embeddings" |
+| `artifacts.ropeScaling` | "RoPE扩展" | "RoPE scaling" |
+| `artifacts.hiddenSize` | "隐藏层大小" | "Hidden size" |
+| `artifacts.numHiddenLayers` | "隐藏层数" | "Hidden layers" |
+| `artifacts.numAttentionHeads` | "注意力头数" | "Attention heads" |
+| `artifacts.quantizationConfig` | "量化配置" | "Quantization config" |
+| `artifacts.warnings` | "警告" | "Warnings" |
+
+---
+
+## 17. Closeout E2E Acceptance Criteria
+
+### 17.1 HF Server Scan E2E
+
+- Call `POST /api/v1/nodes/{id}/model-paths/scan` for HF directory
+- Response must contain non-empty `candidates` array
+- Candidate: `path_type=directory`, `format=huggingface`
+- Metadata: `model_type`, `architectures`, `context_length`/`max_position_embeddings`, `file_size_bytes` non-empty
+- Save request, response, assertions
+
+### 17.2 GGUF Server Scan E2E
+
+- Call `POST /api/v1/nodes/{id}/model-paths/scan` for GGUF directory
+- Response: single candidate, `auto_selected=true`
+- Candidate: `path_type=file`, `format=gguf`
+- Metadata: `quantization`, `context_length`, `file_size_bytes` non-empty
+
+### 17.3 Metadata Persistence E2E
+
+- Scan GGUF → save artifact + location
+- Re-fetch artifact detail via `GET /api/v1/model-artifacts/{id}`
+- Verify `architecture`, `quantization`, `default_context_length` present
+- Verify `locations[0].discovered_metadata_json` contains scan metadata
+
+### 17.4 Attribute Display UI Smoke
+
+- Save GGUF artifact with metadata
+- Open detail drawer
+- Verify displayed: format, path_type, quantization, context_length, file_size_bytes
+- No i18n key leakage
+
+### 17.5 Context Preflight Regression
+
+- Existing context validation tests must still pass
+- HF proxy fix must not break preflight
+
+---
+
+## 18. Closeout Modification File List
+
+| File | Change | Why |
+|------|--------|-----|
+| `internal/server/api/agent_proxy_handlers.go` | Fix HF proxy scan | Root cause fix |
+| `web/src/pages/ModelArtifactsPage.vue` | Metadata display in detail drawer | User-facing requirement |
+| `web/src/api/models.ts` | TypeScript types for metadata | Type safety |
+| `web/src/locales/zh-CN.ts` | 16 metadata field labels | i18n |
+| `web/src/locales/en-US.ts` | 16 metadata field labels | i18n |
+| `scripts/e2e/` — new scripts | HF/GGUF server scan, persistence, display E2E | Verification |
+
+---
+
+## 19. Closeout Verification
+
+```bash
+bash -n scripts/e2e/*.sh scripts/e2e/lib/*.sh
+go vet ./internal/server/... ./internal/agent/...
+go test ./internal/server/... ./internal/agent/...
+npm --prefix web run build
+# E2E run
+bash scripts/e2e/e2e-model-scan-server-hf.sh
+bash scripts/e2e/e2e-model-scan-server-gguf.sh
+bash scripts/e2e/e2e-metadata-persistence.sh
+bash scripts/e2e/e2e-model-attribute-display.sh
+git diff --check
+git diff --stat
+git status --short
+```

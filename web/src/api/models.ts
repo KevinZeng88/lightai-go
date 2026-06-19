@@ -15,10 +15,38 @@ export interface ModelLocation {
   id: string; model_artifact_id: string; node_id: string
   path_type: string; model_root: string; relative_path: string; absolute_path: string
   size_bytes: number; checksum: string; manifest_digest: string
+  discovered_metadata_json?: Record<string, any>
   match_status: string; verification_status: string
   manual_override: boolean; override_reason: string
   last_scanned_at: string; last_error: string
   tenant_id: string; created_at: string; updated_at: string
+}
+
+export interface DetectedMetadata {
+  format?: string
+  architecture?: string
+  architectures?: string[]
+  model_type?: string
+  context_length?: number
+  max_position_embeddings?: number
+  quantization?: string
+  quantization_config?: any
+  file_size_bytes?: number
+  parameter_count?: string
+  embedding_length?: number
+  block_count?: number
+  vocab_size?: number
+  head_count?: number
+  head_count_kv?: number
+  torch_dtype?: string
+  rope_scaling?: any
+  hidden_size?: number
+  num_hidden_layers?: number
+  num_attention_heads?: number
+  num_key_value_heads?: number
+  has_tokenizer?: boolean
+  safetensors_count?: number
+  warnings?: string[]
 }
 
 export function listModelArtifacts(): Promise<ModelArtifact[]> {
