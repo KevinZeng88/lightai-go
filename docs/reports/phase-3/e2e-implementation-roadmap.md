@@ -795,3 +795,51 @@ npm --prefix web test
 8. Implement Step 7 Lifecycle Chain.
 9. Then start Step 2/8 shell harness conversion.
 10. Run Step 9 real container smoke only after API workflows pass.
+
+## Execution Update: 2026-06-20
+
+The roadmap has been executed through Step 9 with the following status:
+
+| Step | Status | Output |
+| --- | --- | --- |
+| Step 1 | DONE | `internal/server/api/api_workflow_test_helper_test.go`, `internal/server/api/fake_agent_test.go` |
+| Step 3 | DONE | `internal/server/api/workflow_nbr_probe_test.go` |
+| Step 4 | DONE | `internal/server/api/workflow_backend_runtime_test.go` |
+| Step 5 | DONE | `internal/server/api/workflow_model_wizard_test.go` |
+| Step 6 | DONE | `internal/server/api/workflow_deployment_runplan_test.go` |
+| Step 7 | DONE | `internal/server/api/workflow_lifecycle_test.go` |
+| Step 2 | DONE, minimal harness | `scripts/e2e/lib/env.sh`, `api-client.sh`, `assert.sh`, `resources.sh`, `docker.sh`, `report.sh`, `cleanup.sh` |
+| Step 8 | DONE, first batch | `e2e-clone-template-parameter-persistence.sh`, `e2e-deployment-visibility-selected.sh`, `e2e-runtime-config-web-check-flow.sh` |
+| Step 9 | PARTIAL WITH FORMAL BLOCKERS | llama.cpp PASS; vLLM and SGLang reached real container start but failed due current Docker/GPU runtime compatibility |
+
+Step 8 verification results:
+
+```bash
+bash -n scripts/e2e*.sh scripts/e2e/lib/*.sh scripts/smoke-model-backends.sh scripts/verify-local.sh
+LIGHTAI_E2E_PASSWORD=test1234 bash scripts/e2e-clone-template-parameter-persistence.sh
+LIGHTAI_E2E_PASSWORD=test1234 bash scripts/e2e-deployment-visibility-selected.sh
+LIGHTAI_E2E_PASSWORD=test1234 bash scripts/e2e-runtime-config-web-check-flow.sh
+```
+
+The three converted scripts pass in the controlled local environment after setting the admin password to `test1234` and running real server/agent sessions.
+
+Step 9 verification results:
+
+```bash
+LIGHTAI_E2E_PASSWORD=test1234 timeout 420s bash scripts/e2e-model-runtime-wizard-nvidia-llamacpp.sh
+LIGHTAI_E2E_PASSWORD=test1234 timeout 600s bash scripts/e2e-model-runtime-wizard-nvidia-vllm.sh
+LIGHTAI_E2E_PASSWORD=test1234 timeout 600s bash scripts/e2e-model-runtime-wizard-nvidia-sglang.sh
+```
+
+Outcome:
+
+- llama.cpp: PASS.
+- vLLM: DOCUMENTED_BLOCKER in `docs/reports/phase-3/open-issues-closeout.md`.
+- SGLang: DOCUMENTED_BLOCKER in `docs/reports/phase-3/open-issues-closeout.md`.
+
+Implementation notes:
+
+- Real server/agent were held by foreground tool sessions because the execution environment reaped `nohup` children started through `scripts/start-server.sh` and `scripts/start-agent.sh`.
+- `bin/lightai-server` and `bin/lightai-agent` are local ignored build artifacts and are not committed.
+- Admin password in the existing DB was reset with `scripts/reset-password.sh --password test1234` for local verification.
+- A real bug was fixed: Agent `/docker-image-inspect` now preserves Docker stderr in error responses, allowing server-side `missing_image` mapping to distinguish Docker not-found from generic inspect errors.

@@ -818,3 +818,47 @@ Do not do the following in this E2E harness phase:
 3. Should shell fixture mode be allowed to start server/agent automatically, or should the first harness only support existing-env mode?
 4. Should evidence for local shell E2E be written under `docs/reports/...` by default, or under `/tmp` unless explicitly promoting a run?
 5. Should the existing untracked `docs/reports/phase-3/api-first-e2e-review-and-plan.md` be committed as an input audit artifact in the same docs series?
+
+## 17. Implementation Status as of 2026-06-20
+
+This strategy has now moved from design into implementation for the API-first E2E spine.
+
+Completed Go API workflow layers:
+
+- Step 1: Go API Workflow harness using real `SetupRoutes`, real mux, real login/cookie/CSRF, test DB, `WorkflowClient`, and fake Agent.
+- Step 3: NBR Probe Chain API Workflow.
+- Step 4: BackendRuntime CRUD Chain API Workflow.
+- Step 5: Model Wizard Chain API Workflow using the current `ModelLocation.discovered_metadata_json` contract.
+- Step 6: Deployment Preflight / RunPlan Chain API Workflow.
+- Step 7: Start / Logs / Stop Lifecycle API Workflow using real router and agent task-result API.
+
+Completed shell harness work:
+
+- Added `scripts/e2e/lib/env.sh`.
+- Added `scripts/e2e/lib/api-client.sh`.
+- Added `scripts/e2e/lib/assert.sh`.
+- Added `scripts/e2e/lib/resources.sh`.
+- Added `scripts/e2e/lib/docker.sh`.
+- Added `scripts/e2e/lib/report.sh`.
+- Added `scripts/e2e/lib/cleanup.sh`.
+- Converted first low-risk scripts:
+  - `scripts/e2e-clone-template-parameter-persistence.sh`
+  - `scripts/e2e-deployment-visibility-selected.sh`
+  - `scripts/e2e-runtime-config-web-check-flow.sh`
+
+Important contract corrections found during shell/real-agent verification:
+
+- API-only deployment shell workflow must create a `NodeBackendRuntime` and pass `node_backend_runtime_id`; using a `BackendRuntime` template directly is invalid.
+- Runtime check scripts must accept `ready_with_warnings` when ImageInspect succeeds but Version Probe is intentionally not implemented.
+- Missing-image tests must use the explicit not-found ImageInspect path. The real Agent must preserve Docker stderr so the server can distinguish not-found from generic inspect failure.
+- `/docker-images` returns an object with `images[]`, not a bare array, in current real Agent/server proxy responses.
+
+Real local container smoke outcome:
+
+| Backend | Result | Evidence |
+| --- | --- | --- |
+| llama.cpp | PASS: product API chain created artifact/location/NBR/deployment, started real container, `/v1/models` passed, instance test/logs/stop succeeded | `docs/reports/model-runtime-node-wizard/e2e-llamacpp-20260620224306/` |
+| vLLM | DOCUMENTED_BLOCKER: product API chain reached real container start, but container exited because the image could not infer CUDA device type in the current WSL/NVIDIA runtime environment | `docs/reports/model-runtime-node-wizard/e2e-matrix-20260620224523/` |
+| SGLang | DOCUMENTED_BLOCKER: product API chain reached real container start, but container exited because SGLang/Triton platform detection fell back and device selection failed in the current WSL/NVIDIA runtime environment | `docs/reports/model-runtime-node-wizard/e2e-sglang-20260620224604/` |
+
+The two blocked real-container results are environment/runtime compatibility blockers, not API workflow design blockers. They are tracked formally in `docs/reports/phase-3/open-issues-closeout.md`.

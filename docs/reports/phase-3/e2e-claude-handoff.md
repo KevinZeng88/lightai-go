@@ -258,6 +258,43 @@ Use existing local environment and preserve evidence on failure.
 Ask the user before starting implementation if not already confirmed:
 
 1. Should workflow tests use real login/cookie/CSRF by default?
+
+## Current Handoff Update: 2026-06-20
+
+The next executor should treat Steps 1, 3, 4, 5, 6, 7, 2, and the first Step 8 batch as implemented.
+
+Do not reimplement these unless a new regression appears:
+
+- Go workflow harness.
+- NBR Probe Chain.
+- BackendRuntime CRUD Chain.
+- Model Wizard Chain.
+- Deployment Preflight / RunPlan Chain.
+- Lifecycle Start / Logs / Stop Chain.
+- Shell helper layer under `scripts/e2e/lib/`.
+- First converted shell scripts:
+  - `scripts/e2e-clone-template-parameter-persistence.sh`
+  - `scripts/e2e-deployment-visibility-selected.sh`
+  - `scripts/e2e-runtime-config-web-check-flow.sh`
+
+Real smoke state:
+
+- llama.cpp passed through the LightAI product API path.
+- vLLM and SGLang are not API harness failures. They reached real container start and failed inside the container due current Docker/GPU runtime compatibility in the local WSL/NVIDIA environment.
+- The blockers are formally tracked in `docs/reports/phase-3/open-issues-closeout.md`.
+
+Important fix already made:
+
+- `cmd/agent/main.go` preserves Docker stderr for `docker image inspect` failures.
+- `cmd/agent/exec_cmd_test.go` verifies command stderr is included in failures.
+
+Recommended next tasks:
+
+1. Convert more tier A API-only shell scripts one at a time.
+2. Convert tier B real-agent/Docker scripts after the API-only set is stable.
+3. For vLLM/SGLang, first validate the host Docker GPU runtime outside LightAI with a minimal image-specific command. Do not change LightAI APIs until the external runtime baseline is proven.
+4. Keep `ready_with_warnings` as an acceptable positive image-check state until Version Probe is intentionally designed.
+5. Do not add Version Probe, Script Probe, or Backend Match catalog as a side effect of smoke failures.
 2. Should all fake-agent workflow tests be included in `go test ./...` immediately?
 3. Should shell harness first support only existing-env mode, or also fixture mode?
 4. Should shell evidence default to `/tmp` or `docs/reports/...`?

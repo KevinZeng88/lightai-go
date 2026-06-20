@@ -150,18 +150,24 @@ e2e_enable_nbr() {
   set +e
   local ip; ip="$(echo "$imgs" | python3 -c "
 import json,sys
-imgs=json.load(sys.stdin)
+payload=json.load(sys.stdin)
+imgs=payload.get('images', []) if isinstance(payload, dict) else payload
 img='${IMAGE_REF}'
 for i in imgs:
-    tags=i.get('repotags',[]) or []
-    for t in tags:
-        if img in str(t):
+    refs=[i.get('image_ref','')]
+    repo=i.get('repository','')
+    tag=i.get('tag','')
+    if repo and tag:
+        refs.append(f'{repo}:{tag}')
+    for ref in refs:
+        if img == str(ref):
             print('true'); sys.exit(0)
 print('false')
 " 2>/dev/null || echo false)"
   set -e
   local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/enable" \
-    "{\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
+    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
+  api_body PATCH "/api/v1/nodes/$NODE_ID/backend-runtimes/$NODE_ID:$BACKEND_RUNTIME_ID" "{\"image_ref\":\"$IMAGE_REF\"}" >/dev/null 2>&1 || true
   log "nbr enabled status=$(echo "$r" | json_get status 2>/dev/null || echo '?')"
 }
 
@@ -171,18 +177,23 @@ e2e_check_nbr() {
   set +e
   local ip; ip="$(echo "$imgs" | python3 -c "
 import json,sys
-imgs=json.load(sys.stdin)
+payload=json.load(sys.stdin)
+imgs=payload.get('images', []) if isinstance(payload, dict) else payload
 img='${IMAGE_REF}'
 for i in imgs:
-    tags=i.get('repotags',[]) or []
-    for t in tags:
-        if img in str(t):
+    refs=[i.get('image_ref','')]
+    repo=i.get('repository','')
+    tag=i.get('tag','')
+    if repo and tag:
+        refs.append(f'{repo}:{tag}')
+    for ref in refs:
+        if img == str(ref):
             print('true'); sys.exit(0)
 print('false')
 " 2>/dev/null || echo false)"
   set -e
   local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/check" \
-    "{\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
+    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
   local st; st="$(echo "$r" | json_get status 2>/dev/null || echo '?')"
   log "nbr check status=$st"
   [ "$st" = "ready" ] || { fail "nbr not ready after check (status=$st)"; return 1; }
