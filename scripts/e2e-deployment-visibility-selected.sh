@@ -1,81 +1,47 @@
-#!/bin/bash
-# e2e-deployment-visibility-selected.sh — Deployment visibility E2E.
-# Category: API-only E2E (no containers, no GPU usage beyond API queries)
-# Verifies: deployment list/detail/status/visibility lifecycle.
-#
-# Each deployment detail must include: id, name, display_name, status,
-# desired_state, model_artifact_id, backend_runtime_id, placement_json,
-# service_json, config_snapshot_json, created_at, updated_at.
+#!/usr/bin/env bash
+# Deployment visibility API-only E2E.
+# Verifies deployment list/detail/dry-run/delete visibility without starting containers.
 
 set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/e2e/lib/e2e-assert.sh"
+export LIGHTAI_E2E_PREFIX="${LIGHTAI_E2E_PREFIX:-e2e-deploy-vis}"
+export LIGHTAI_E2E_ARTIFACT_DIR="${LIGHTAI_E2E_ARTIFACT_DIR:-${ARTIFACT_DIR:-$SCRIPT_DIR/../tmp/e2e-deploy-vis-$(date +%Y%m%d-%H%M%S)-$$}}"
 
-SERVER_URL="${SERVER_URL:-http://127.0.0.1:18080}"
-USERNAME="${LIGHTAI_E2E_USERNAME:-admin}"
-PASSWORD="${LIGHTAI_E2E_PASSWORD:-Commvault!234}"
-RUN_ID="${LIGHTAI_E2E_RUN_ID:-$(date +%Y%m%d-%H%M%S)-$$}"
-ARTIFACT_DIR="${LIGHTAI_E2E_ARTIFACT_DIR:-/tmp/lightai-e2e-deploy-vis-$RUN_ID}"
-COOKIE_JAR="${COOKIE_JAR:-/tmp/lightai-e2e-cookies-$RUN_ID.txt}"
-PREFIX="e2e-deploy-vis"
-mkdir -p "$ARTIFACT_DIR"
+source "$SCRIPT_DIR/e2e/lib/env.sh"
+source "$SCRIPT_DIR/e2e/lib/api-client.sh"
+source "$SCRIPT_DIR/e2e/lib/assert.sh"
+source "$SCRIPT_DIR/e2e/lib/resources.sh"
+source "$SCRIPT_DIR/e2e/lib/cleanup.sh"
 
-log()   { printf '[%s] [deploy-vis] %s\n' "$(date '+%H:%M:%S')" "$*"; }
+e2e_with_cleanup_trap
 
-api_get() {
-  curl -sS -b "$COOKIE_JAR" -H "Origin: $SERVER_URL" -X GET "$SERVER_URL/api/v1/$1"
-}
-api_post() {
-  local a=(-sS -b "$COOKIE_JAR" -H "Origin: $SERVER_URL" -H "Content-Type: application/json")
-  [ -n "${CSRF_TOKEN:-}" ] && a+=(-H "X-CSRF-Token: $CSRF_TOKEN")
-  curl "${a[@]}" -X POST -d "$2" "$SERVER_URL/api/v1/$1"
-}
-api_delete() {
-  local a=(-sS -b "$COOKIE_JAR" -H "Origin: $SERVER_URL")
-  [ -n "${CSRF_TOKEN:-}" ] && a+=(-H "X-CSRF-Token: $CSRF_TOKEN")
-  curl "${a[@]}" -X DELETE "$SERVER_URL/api/v1/$1"
-}
-
+log() { printf '[%s] [deploy-vis] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 json_field() { python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$1',''))" 2>/dev/null; }
 
-# ── login ──
-log "Logging in..."
-resp="$(curl -sS -X POST "$SERVER_URL/api/v1/auth/login" \
-  -H "Origin: $SERVER_URL" -H "Content-Type: application/json" \
-  -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" -c "$COOKIE_JAR")"
-CSRF_TOKEN="$(echo "$resp" | json_field csrf_token)"
-[ -n "$CSRF_TOKEN" ] || { log "FATAL: Login failed"; exit 1; }
-log "Logged in"
+e2e_wait_server_ready 30
+e2e_login
 
-# ── discover resources ──
-NODE_ID=$(api_get "nodes" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if len(d)>0 else '')" 2>/dev/null)
-[ -n "$NODE_ID" ] || { log "FATAL: No online node"; exit 1; }
-log "Node: $NODE_ID"
-
-ART_ID=$(api_get "model-artifacts" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if len(d)>0 else '')" 2>/dev/null)
-[ -n "$ART_ID" ] || { log "FATAL: No model artifacts"; exit 1; }
-
-RUNTIME_ID=$(api_get "backend-runtimes" | python3 -c "
+NODE_ID="$(e2e_api_get "nodes" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if len(d)>0 else '')" 2>/dev/null)"
+[ -n "$NODE_ID" ] || e2e_die "no node found"
+ART_ID="$(e2e_api_get "model-artifacts" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if len(d)>0 else '')" 2>/dev/null)"
+[ -n "$ART_ID" ] || e2e_die "no model artifacts found"
+RUNTIME_ID="$(e2e_api_get "backend-runtimes" | python3 -c "
 import json,sys
 for r in json.load(sys.stdin):
-    if 'vllm' in r.get('id','') and r.get('vendor','')=='nvidia':
-        print(r['id']); break
-" 2>/dev/null)
-[ -n "$RUNTIME_ID" ] || { log "FATAL: No vLLM runtime"; exit 1; }
-log "Runtime: $RUNTIME_ID artifact: $ART_ID"
+    if 'vllm' in r.get('id','') and r.get('vendor','') == 'nvidia':
+        print(r['id'])
+        break
+" 2>/dev/null)"
+[ -n "$RUNTIME_ID" ] || e2e_die "no vLLM NVIDIA runtime found"
+log "node=$NODE_ID artifact=$ART_ID runtime=$RUNTIME_ID"
 
-# ═══════════════════════════════════════════════════════════════
-# Test 1: List deployments — all rows return valid JSON
-# ═══════════════════════════════════════════════════════════════
-log "=== Test 1: Deployment list integrity ==="
-LIST_JSON=$(api_get "deployments")
-echo "$LIST_JSON" > "$ARTIFACT_DIR/deployment-list.json"
-
-LIST_COUNT=$(echo "$LIST_JSON" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null)
-assert_nonempty "deployment list returns array" "$LIST_COUNT" || log "FAIL: list not array"
-
-# Every deployment in the list must have required fields
-echo "$LIST_JSON" | python3 -c "
+log "test=list integrity"
+LIST_JSON="$(e2e_api_get "deployments")"
+printf '%s\n' "$LIST_JSON" > "$LIGHTAI_E2E_ARTIFACT_DIR/deployment-list.json"
+LIST_COUNT="$(printf '%s' "$LIST_JSON" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null)"
+assert_nonempty "deployment list returns array" "$LIST_COUNT"
+printf '%s' "$LIST_JSON" | python3 -c "
 import json,sys
 deps = json.load(sys.stdin)
 required = ['id','name','status','desired_state','model_artifact_id','backend_runtime_id','placement_json','service_json','created_at','updated_at']
@@ -85,126 +51,79 @@ for i, d in enumerate(deps):
             print(f'MISSING:{i}:{f}')
             sys.exit(1)
 print('OK: all {} deployments have required fields'.format(len(deps)))
-" > "$ARTIFACT_DIR/list-field-check.txt" 2>&1
-assert_contains "all list rows have required fields" "$(cat "$ARTIFACT_DIR/list-field-check.txt")" "OK" || log "FAIL: field validation"
+" > "$LIGHTAI_E2E_ARTIFACT_DIR/list-field-check.txt" 2>&1
+assert_contains "all list rows have required fields" "$(cat "$LIGHTAI_E2E_ARTIFACT_DIR/list-field-check.txt")" "OK"
 
-log "Deployment list integrity done"
+log "test=create and detail"
+DEP_NAME="$(e2e_resource_name "visibility")"
+CREATE_RESP="$(e2e_api_post "deployments" "{\"name\":\"$DEP_NAME\",\"display_name\":\"Visibility Test\",\"model_artifact_id\":\"$ART_ID\",\"backend_runtime_id\":\"$RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8291,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}" 201)"
+printf '%s\n' "$CREATE_RESP" > "$LIGHTAI_E2E_ARTIFACT_DIR/create-response.json"
+DEP_ID="$(printf '%s' "$CREATE_RESP" | json_field id)"
+[ -n "$DEP_ID" ] || e2e_die "deployment create did not return id"
+e2e_register_resource deployment "$DEP_ID" "/api/v1/deployments/$DEP_ID"
+e2e_cleanup_add "curl -sS -b '$LIGHTAI_E2E_COOKIE_JAR' -H 'Origin: $LIGHTAI_SERVER_URL' -H 'X-CSRF-Token: $E2E_CSRF_TOKEN' -X DELETE '$LIGHTAI_SERVER_URL/api/v1/deployments/$DEP_ID' >/dev/null 2>&1 || true"
 
-# ═══════════════════════════════════════════════════════════════
-# Test 2: Create deployment → verify list/detail/status
-# ═══════════════════════════════════════════════════════════════
-log "=== Test 2: Create + detail visibility ==="
-DEP_NAME="${PREFIX}-visibility-test"
-
-CREATE_RESP=$(api_post "deployments" "{\"name\":\"$DEP_NAME\",\"display_name\":\"Visibility Test\",\"model_artifact_id\":\"$ART_ID\",\"backend_runtime_id\":\"$RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8291,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}")
-echo "$CREATE_RESP" > "$ARTIFACT_DIR/create-response.json"
-DEP_ID=$(echo "$CREATE_RESP" | json_field id)
-[ -n "$DEP_ID" ] || { log "FATAL: Deployment create failed"; exit 1; }
-log "Created deployment: $DEP_ID"
-
-# Verify it appears in list
-LIST2=$(api_get "deployments")
-echo "$LIST2" > "$ARTIFACT_DIR/deployment-list2.json"
-FOUND_NAME=$(echo "$LIST2" | python3 -c "
+LIST2="$(e2e_api_get "deployments")"
+printf '%s\n' "$LIST2" > "$LIGHTAI_E2E_ARTIFACT_DIR/deployment-list2.json"
+FOUND_NAME="$(printf '%s' "$LIST2" | python3 -c "
 import json,sys
 for d in json.load(sys.stdin):
     if d.get('id') == '$DEP_ID':
         print(d.get('name',''))
         break
-" 2>/dev/null)
-assert_eq "deployment appears in list" "$DEP_NAME" "$FOUND_NAME" || log "FAIL: deployment not in list"
+" 2>/dev/null)"
+assert_eq "deployment appears in list" "$DEP_NAME" "$FOUND_NAME"
 
-# Verify detail fields
-DETAIL=$(api_get "deployments/$DEP_ID")
-echo "$DETAIL" > "$ARTIFACT_DIR/deployment-detail.json"
+DETAIL="$(e2e_api_get "deployments/$DEP_ID")"
+printf '%s\n' "$DETAIL" > "$LIGHTAI_E2E_ARTIFACT_DIR/deployment-detail.json"
+assert_eq "detail name matches" "$DEP_NAME" "$(printf '%s' "$DETAIL" | json_field name)"
+assert_eq "detail status=saved" "saved" "$(printf '%s' "$DETAIL" | json_field status)"
+assert_eq "detail desired_state=stopped" "stopped" "$(printf '%s' "$DETAIL" | json_field desired_state)"
+assert_eq "detail artifact matches" "$ART_ID" "$(printf '%s' "$DETAIL" | json_field model_artifact_id)"
+assert_eq "detail runtime matches" "$RUNTIME_ID" "$(printf '%s' "$DETAIL" | json_field backend_runtime_id)"
+DETAIL_PLACEMENT="$(printf '%s' "$DETAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('placement_json',{})))" 2>/dev/null)"
+assert_contains "detail placement has node" "$DETAIL_PLACEMENT" "$NODE_ID"
+DETAIL_CONFIG="$(printf '%s' "$DETAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('config_snapshot_json') is not None)" 2>/dev/null)"
+assert_eq "detail has config_snapshot_json" "True" "$DETAIL_CONFIG"
+PLACEMENT_TYPE="$(printf '%s' "$DETAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); print(type(d.get('placement_json')).__name__)" 2>/dev/null)"
+assert_eq "placement_json is dict" "dict" "$PLACEMENT_TYPE"
 
-DETAIL_NAME=$(echo "$DETAIL" | json_field name)
-DETAIL_STATUS=$(echo "$DETAIL" | json_field status)
-DETAIL_DESIRED=$(echo "$DETAIL" | json_field desired_state)
-DETAIL_ART=$(echo "$DETAIL" | json_field model_artifact_id)
-DETAIL_RT=$(echo "$DETAIL" | json_field backend_runtime_id)
-DETAIL_PLACEMENT=$(echo "$DETAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('placement_json',{})))" 2>/dev/null)
-DETAIL_CONFIG=$(echo "$DETAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('config_snapshot_json') is not None)" 2>/dev/null)
+log "test=dry-run visibility"
+DR_RESP="$(e2e_api_post "deployments/$DEP_ID/dry-run" "{}" 200)"
+printf '%s\n' "$DR_RESP" > "$LIGHTAI_E2E_ARTIFACT_DIR/dryrun-response.json"
+assert_eq "dryrun valid=true" "True" "$(printf '%s' "$DR_RESP" | json_field valid)"
+DR_PREVIEW="$(printf '%s' "$DR_RESP" | json_field command_preview)"
+assert_nonempty "dryrun has command_preview" "$DR_PREVIEW"
+assert_nonempty "dryrun has resolved_image" "$(printf '%s' "$DR_RESP" | json_field resolved_image)"
+assert_eq "dryrun selected_node" "$NODE_ID" "$(printf '%s' "$DR_RESP" | json_field selected_node)"
+assert_nonempty "dryrun has selected_model_location" "$(printf '%s' "$DR_RESP" | json_field selected_model_location)"
+assert_nonempty "dryrun has selected_runtime" "$(printf '%s' "$DR_RESP" | json_field selected_runtime)"
+assert_contains "dryrun preview has docker run" "$DR_PREVIEW" "docker run"
 
-assert_eq "detail name matches" "$DEP_NAME" "$DETAIL_NAME" || log "FAIL: detail name"
-assert_eq "detail status=saved" "saved" "$DETAIL_STATUS" || log "FAIL: detail status"
-assert_eq "detail desired_state=stopped" "stopped" "$DETAIL_DESIRED" || log "FAIL: detail desired_state"
-assert_eq "detail artifact matches" "$ART_ID" "$DETAIL_ART" || log "FAIL: detail artifact"
-assert_eq "detail runtime matches" "$RUNTIME_ID" "$DETAIL_RT" || log "FAIL: detail runtime"
-assert_contains "detail placement has node" "$DETAIL_PLACEMENT" "$NODE_ID" || log "FAIL: detail placement"
-assert_eq "detail has config_snapshot_json" "True" "$DETAIL_CONFIG" || log "FAIL: detail config snapshot"
-
-# Verify placement_json is an object (not string)
-PLACEMENT_TYPE=$(echo "$DETAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); p=d.get('placement_json'); print(type(p).__name__)" 2>/dev/null)
-assert_eq "placement_json is dict" "dict" "$PLACEMENT_TYPE" || log "FAIL: placement_json type=$PLACEMENT_TYPE"
-
-log "Create + detail visibility done"
-
-# ═══════════════════════════════════════════════════════════════
-# Test 3: DryRun returns valid preview
-# ═══════════════════════════════════════════════════════════════
-log "=== Test 3: DryRun visibility ==="
-DR_RESP=$(api_post "deployments/$DEP_ID/dry-run" '{}')
-echo "$DR_RESP" > "$ARTIFACT_DIR/dryrun-response.json"
-
-DR_VALID=$(echo "$DR_RESP" | json_field valid)
-DR_PREVIEW=$(echo "$DR_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('command_preview',''))" 2>/dev/null)
-DR_IMAGE=$(echo "$DR_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('resolved_image',''))" 2>/dev/null)
-DR_NODE=$(echo "$DR_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('selected_node',''))" 2>/dev/null)
-DR_LOC=$(echo "$DR_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('selected_model_location',''))" 2>/dev/null)
-DR_RT=$(echo "$DR_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('selected_runtime',''))" 2>/dev/null)
-
-assert_eq "dryrun valid=true" "True" "$DR_VALID" || log "FAIL: dryrun valid"
-assert_nonempty "dryrun has command_preview" "$DR_PREVIEW" || log "FAIL: dryrun preview empty"
-assert_nonempty "dryrun has resolved_image" "$DR_IMAGE" || log "FAIL: dryrun image"
-assert_eq "dryrun selected_node" "$NODE_ID" "$DR_NODE" || log "FAIL: dryrun node"
-assert_nonempty "dryrun selected_model_location" "$DR_LOC" || log "FAIL: dryrun model location"
-assert_nonempty "dryrun selected_runtime" "$DR_RT" || log "FAIL: dryrun runtime"
-assert_contains "dryrun preview has docker run" "$DR_PREVIEW" "docker run" || log "FAIL: dryrun docker run"
-
-log "DryRun visibility done"
-
-# ═══════════════════════════════════════════════════════════════
-# Test 4: Deployment delete → verify removal from list
-# ═══════════════════════════════════════════════════════════════
-log "=== Test 4: Delete visibility ==="
-api_delete "deployments/$DEP_ID" > "$ARTIFACT_DIR/delete-response.json"
-
-LIST3=$(api_get "deployments")
-STILL_THERE=$(echo "$LIST3" | python3 -c "
+log "test=delete visibility"
+e2e_api_delete "deployments/$DEP_ID" "" 200 > "$LIGHTAI_E2E_ARTIFACT_DIR/delete-response.json"
+LIST3="$(e2e_api_get "deployments")"
+STILL_THERE="$(printf '%s' "$LIST3" | python3 -c "
 import json,sys
 for d in json.load(sys.stdin):
     if d.get('id') == '$DEP_ID':
         print('yes')
         break
-" 2>/dev/null)
-assert_empty "deployment removed from list after delete" "$STILL_THERE" || log "FAIL: deployment still in list"
+" 2>/dev/null)"
+assert_empty "deployment removed from list after delete" "$STILL_THERE"
 
-log "Delete visibility done"
-
-# ═══════════════════════════════════════════════════════════════
-# Test 5: List does NOT contain stale/non-existent deployments
-# ═══════════════════════════════════════════════════════════════
-log "=== Test 5: No stale entries ==="
-# Verify all existing deployments have valid IDs (are fetchable)
+log "test=no stale entries"
 STALE_COUNT=0
 while IFS= read -r did; do
   [ -z "$did" ] && continue
-  local_detail=$(api_get "deployments/$did" 2>/dev/null)
-  local_check=$(echo "$local_detail" | json_field id 2>/dev/null)
-  if [ "$local_check" != "$did" ]; then
+  detail="$(e2e_api_get "deployments/$did")"
+  check_id="$(printf '%s' "$detail" | json_field id)"
+  if [ "$check_id" != "$did" ]; then
     log "STALE: deployment $did not fetchable"
     STALE_COUNT=$((STALE_COUNT + 1))
   fi
-done < <(echo "$LIST3" | python3 -c "import json,sys; [print(d['id']) for d in json.load(sys.stdin)]" 2>/dev/null)
-assert_eq "no stale deployments" "0" "$STALE_COUNT" || log "FAIL: $STALE_COUNT stale"
+done < <(printf '%s' "$LIST3" | python3 -c "import json,sys; [print(d['id']) for d in json.load(sys.stdin)]" 2>/dev/null)
+assert_eq "no stale deployments" "0" "$STALE_COUNT"
 
-log "Stale check done"
-
-# ── summary ──
-echo ""
-echo "Artifacts: $ARTIFACT_DIR"
-echo "Key files:"
-echo "  deployment-list.json deployment-list2.json create-response.json"
-echo "  deployment-detail.json dryrun-response.json delete-response.json"
+log "Artifacts: $LIGHTAI_E2E_ARTIFACT_DIR"
 assert_summary

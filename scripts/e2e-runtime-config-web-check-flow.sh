@@ -4,20 +4,33 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export LIGHTAI_E2E_PREFIX="${LIGHTAI_E2E_PREFIX:-e2e-web-check}"
+export LIGHTAI_E2E_ARTIFACT_DIR="${LIGHTAI_E2E_ARTIFACT_DIR:-${ARTIFACT_DIR:-$SCRIPT_DIR/../tmp/e2e-web-check-$(date +%Y%m%d-%H%M%S)-$$}}"
 source "$SCRIPT_DIR/e2e/lib/model-runtime-common.sh"
+source "$SCRIPT_DIR/e2e/lib/env.sh"
+source "$SCRIPT_DIR/e2e/lib/api-client.sh"
+source "$SCRIPT_DIR/e2e/lib/assert.sh"
+source "$SCRIPT_DIR/e2e/lib/resources.sh"
+source "$SCRIPT_DIR/e2e/lib/docker.sh"
+source "$SCRIPT_DIR/e2e/lib/cleanup.sh"
 
-SERVER_URL="${SERVER_URL:-http://127.0.0.1:18080}"
-ARTIFACT_DIR="${ARTIFACT_DIR:-/tmp/lightai-web-check-flow-$(date +%Y%m%d%H%M%S)}"
+SERVER_URL="$LIGHTAI_SERVER_URL"
+ARTIFACT_DIR="$LIGHTAI_E2E_ARTIFACT_DIR"
+COOKIE_JAR="$LIGHTAI_E2E_COOKIE_JAR"
 mkdir -p "$ARTIFACT_DIR"
 
 log() { printf '[%s] [web-check] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 fail() { log "FAIL: $*"; exit 1; }
+e2e_with_cleanup_trap
 
 # ── pre-check: Docker images available ──────────────────────────────────
+e2e_wait_server_ready 30 || fail "server readiness"
+e2e_require_docker || fail "docker readiness"
 log "docker_images: $(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | tr '\n' ' ')"
 
 # ── login + query node ─────────────────────────────────────────────────
 e2e_login || fail "login"
+CSRF_TOKEN="$E2E_CSRF_TOKEN"
 e2e_query_node || fail "no node"
 log "node_id=$NODE_ID"
 
@@ -27,7 +40,7 @@ IMAGE_VLLM="vllm/vllm-openai:latest"
 BACKEND_RUNTIME_ID_VLLM="runtime.vllm.nvidia-docker"
 
 # Verify image exists locally
-docker image inspect "$IMAGE_VLLM" >/dev/null 2>&1 || fail "vllm image $IMAGE_VLLM not found"
+e2e_require_image "$IMAGE_VLLM" || fail "vllm image $IMAGE_VLLM not found"
 log "image $IMAGE_VLLM exists locally"
 
 # Enable NBR
@@ -38,6 +51,8 @@ echo "$enable_resp" > "$ARTIFACT_DIR/scene1-enable.json"
 
 nbr_id="$(echo "$enable_resp" | json_get id)"
 [ -n "$nbr_id" ] || fail "enable did not return nbr_id"
+e2e_register_resource node_backend_runtime "$nbr_id" "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr_id"
+e2e_cleanup_add "curl -sS -b '$LIGHTAI_E2E_COOKIE_JAR' -H 'Origin: $LIGHTAI_SERVER_URL' -H 'X-CSRF-Token: $E2E_CSRF_TOKEN' -X DELETE '$LIGHTAI_SERVER_URL/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr_id' >/dev/null 2>&1 || true"
 log "nbr_id=$nbr_id"
 
 nbr_status="$(echo "$enable_resp" | json_get status)"
@@ -82,6 +97,8 @@ echo "$enable2_resp" > "$ARTIFACT_DIR/scene2-enable.json"
 
 nbr2_id="$(echo "$enable2_resp" | json_get id)"
 [ -n "$nbr2_id" ] || fail "enable did not return nbr_id for scene 2"
+e2e_register_resource node_backend_runtime "$nbr2_id" "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr2_id"
+e2e_cleanup_add "curl -sS -b '$LIGHTAI_E2E_COOKIE_JAR' -H 'Origin: $LIGHTAI_SERVER_URL' -H 'X-CSRF-Token: $E2E_CSRF_TOKEN' -X DELETE '$LIGHTAI_SERVER_URL/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr2_id' >/dev/null 2>&1 || true"
 log "nbr2_id=$nbr2_id"
 
 # Call check-request
@@ -131,6 +148,8 @@ if docker image inspect "$IMAGE_LLAMACPP" >/dev/null 2>&1; then
     "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID_LLAMACPP\",\"image_ref\":\"$IMAGE_LLAMACPP\"}")"
   nbr4_id="$(echo "$enable4_resp" | json_get id)"
   [ -n "$nbr4_id" ] || fail "llamacpp enable did not return nbr_id"
+  e2e_register_resource node_backend_runtime "$nbr4_id" "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr4_id"
+  e2e_cleanup_add "curl -sS -b '$LIGHTAI_E2E_COOKIE_JAR' -H 'Origin: $LIGHTAI_SERVER_URL' -H 'X-CSRF-Token: $E2E_CSRF_TOKEN' -X DELETE '$LIGHTAI_SERVER_URL/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr4_id' >/dev/null 2>&1 || true"
 
   check4_resp="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr4_id/check-request" '{}')"
   echo "$check4_resp" > "$ARTIFACT_DIR/scene4-llamacpp-check.json"
@@ -151,6 +170,8 @@ if [ "$check_status" = "ready" ]; then
     "{\"name\":\"$art_name\",\"display_name\":\"$art_name\",\"path\":\"/tmp/$art_name\",\"format\":\"huggingface\",\"task_type\":\"chat\"}")"
   art_id="$(echo "$art_resp" | json_get id)"
   [ -n "$art_id" ] || { log "SKIP: artifact create failed — cannot test preflight"; art_id=""; }
+  [ -n "$art_id" ] && e2e_register_resource model_artifact "$art_id" "/api/v1/model-artifacts/$art_id"
+  [ -n "$art_id" ] && e2e_cleanup_add "curl -sS -b '$LIGHTAI_E2E_COOKIE_JAR' -H 'Origin: $LIGHTAI_SERVER_URL' -H 'X-CSRF-Token: $E2E_CSRF_TOKEN' -X DELETE '$LIGHTAI_SERVER_URL/api/v1/model-artifacts/$art_id' >/dev/null 2>&1 || true"
 
   if [ -n "$art_id" ]; then
     # Add model location
