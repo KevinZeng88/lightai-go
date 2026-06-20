@@ -21,6 +21,7 @@ type ResolveInput struct {
 	InstanceID          string
 	Node                *NodeInfo
 	AssignedGPUs        []GPUInfo
+	ProcessStartConfig  *ProcessStartConfig // nil if none (legacy behavior)
 }
 
 // BackendInfo is the minimal backend data needed for resolution.
@@ -189,15 +190,35 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 		return nil, errors, warnings
 	}
 
-	// 4. Resolve entrypoint: BackendRuntime.entrypoint_override > BackendVersion.default_entrypoint.
+	// 4. Resolve entrypoint.
+	// Phase 3: process_start_config takes priority over legacy mechanism.
+	// Missing process_start_config → legacy behavior (BR override > BV default).
 	entrypoint := in.BackendVersion.DefaultEntrypoint
 	if len(in.BackendRuntime.EntrypointOverride) > 0 {
 		entrypoint = in.BackendRuntime.EntrypointOverride
+	}
+	if in.ProcessStartConfig != nil {
+		switch in.ProcessStartConfig.EntrypointMode {
+		case "image_default":
+			entrypoint = nil // Docker preserves image ENTRYPOINT
+		case "custom":
+			if len(in.ProcessStartConfig.Entrypoint) > 0 {
+				entrypoint = in.ProcessStartConfig.Entrypoint
+			}
+		}
+		// Unknown modes fall through to whatever was resolved above (legacy).
 	}
 
 	// 5. Build final args.
 	args, argErrs := buildArgs(in, vars)
 	errors = append(errors, argErrs...)
+
+	// Prepend command_prefix to Cmd (Layer 3).
+	// command_prefix is added AFTER buildArgs() returns — it does NOT enter
+	// Layer 4 dedup or applyServiceArgs.
+	if in.ProcessStartConfig != nil && len(in.ProcessStartConfig.CommandPrefix) > 0 {
+		args = append(in.ProcessStartConfig.CommandPrefix, args...)
+	}
 
 	// 6. Build final env.
 	env, envWarns := buildEnv(in, vars)

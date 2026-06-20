@@ -64,8 +64,13 @@ func EquivalentCommandPreview(plan *ResolvedRunPlan) string {
 	for _, a := range plan.ExtraArgs {
 		parts = append(parts, a)
 	}
+	// Image + optional explicit entrypoint + args.
+	// When Entrypoint is nil (image_default mode), Docker preserves the
+	// image's built-in ENTRYPOINT — only Cmd (args) is shown.
 	parts = append(parts, plan.Image)
-	parts = append(parts, plan.Entrypoint...)
+	if len(plan.Entrypoint) > 0 {
+		parts = append(parts, "--entrypoint", strings.Join(plan.Entrypoint, " "))
+	}
 	parts = append(parts, plan.Args...)
 
 	return strings.Join(parts, " ")

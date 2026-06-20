@@ -894,9 +894,10 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 			HealthPort:    pf.service.HealthPort,
 			APITestPort:   pf.service.APITestPort,
 		}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
-		InstanceID:   instanceID,
-		Node:         &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
-		AssignedGPUs: pf.gpuInfos,
+		InstanceID:         instanceID,
+		Node:               &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
+		AssignedGPUs:       pf.gpuInfos,
+		ProcessStartConfig: pf.processStartConfig,
 	})
 	for _, e := range resolveErrs {
 		pf.addErr("unknown", e.Error(), nil)
