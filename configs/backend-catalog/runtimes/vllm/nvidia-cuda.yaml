@@ -23,7 +23,7 @@ model_mount:
 docker_options:
   gpus: all
   ipc_mode: host
-  shm_size: ""
+  shm_size: "16gb"
   runtime: nvidia
 env_schema:
   - name: HF_TOKEN

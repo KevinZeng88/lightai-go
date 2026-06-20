@@ -595,8 +595,8 @@ func TestNvidiaGpuDeviceRequestAll(t *testing.T) {
 		t.Fatalf("expected 1 DeviceRequest, got %d", len(c.DeviceRequests))
 	}
 	dr := c.DeviceRequests[0]
-	if dr.Driver != "nvidia" {
-		t.Errorf("DeviceRequest.Driver = %q, want nvidia", dr.Driver)
+	if dr.Driver != "" {
+		t.Errorf("DeviceRequest.Driver = %q, want empty (matching docker run --gpus CLI)", dr.Driver)
 	}
 	if len(dr.Capabilities) != 1 || len(dr.Capabilities[0]) != 1 || dr.Capabilities[0][0] != "gpu" {
 		t.Errorf("DeviceRequest.Capabilities = %v, want [[gpu]]", dr.Capabilities)
@@ -624,8 +624,8 @@ func TestNvidiaGpuDeviceRequestSpecific(t *testing.T) {
 		t.Fatalf("expected 1 DeviceRequest, got %d", len(c.DeviceRequests))
 	}
 	dr := c.DeviceRequests[0]
-	if dr.Driver != "nvidia" {
-		t.Errorf("DeviceRequest.Driver = %q, want nvidia", dr.Driver)
+	if dr.Driver != "" {
+		t.Errorf("DeviceRequest.Driver = %q, want empty (matching docker run --gpus CLI)", dr.Driver)
 	}
 	if len(dr.DeviceIDs) != 2 || dr.DeviceIDs[0] != "0" || dr.DeviceIDs[1] != "1" {
 		t.Errorf("DeviceRequest.DeviceIDs = %v, want [0 1]", dr.DeviceIDs)

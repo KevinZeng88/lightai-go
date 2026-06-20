@@ -451,12 +451,14 @@ func (d *DockerRuntimeDriver) buildCreateOptions(spec AgentRunSpec) ContainerCre
 	}
 
 	// GPU DeviceRequests — structured GPU access via Docker API.
-	// NVIDIA GPUs use DeviceRequest with driver="nvidia".
+	// Use Driver="" (empty) to match docker run --gpus CLI behavior.
+	// Driver="nvidia" is NOT compatible with all nvidia-container-toolkit versions.
+	// nil/empty DeviceIDs means all GPUs (maps to Count=-1 in Docker SDK).
 	// MetaX and other vendors use raw device passthrough (/dev/dri, etc.)
 	// via opts.Devices, not DeviceRequest.
-	if spec.Vendor == "nvidia" && len(spec.GPUDeviceIDs) > 0 {
+	if spec.Vendor == "nvidia" {
 		dr := DeviceRequest{
-			Driver:       "nvidia",
+			Driver:       "",
 			Capabilities: [][]string{{"gpu"}},
 			DeviceIDs:    spec.GPUDeviceIDs,
 		}
