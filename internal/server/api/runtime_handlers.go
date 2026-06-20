@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/server/runplan"
 
 	"github.com/google/uuid"
 )
@@ -543,6 +544,29 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	probeResults["level4"] = map[string]interface{}{
 		"version_probed": false,
 		"probe_error":    "version probe deferred to future NBR Image Probe design",
+	}
+
+	// ---- Process Start Detection (Layer 3) ----
+	// Generate process_start_detection from backend_family + image inspect evidence.
+	// This is a read-only system suggestion; it does NOT write process_start_config.
+	backendFamily := runplan.DeriveBackendFamily(backendID)
+	if inspectSuccess {
+		l2, _ := probeResults["level2"].(map[string]interface{})
+		imageEntrypoint, _ := l2["entrypoint"].([]string)
+		imageCmd, _ := l2["cmd"].([]string)
+		detection := runplan.DetectProcessStart(backendFamily, nbrImageRef, imageEntrypoint, imageCmd)
+		probeResults["process_start_detection"] = detection
+	} else {
+		probeResults["process_start_detection"] = &runplan.ProcessStartDetection{
+			Status:     "image_not_inspected",
+			Confidence: "low",
+			Source:     "backend_profile+image_inspect",
+			Evidence: &runplan.DetectionEvidence{
+				BackendFamily: backendFamily,
+				ImageRef:      nbrImageRef,
+			},
+			Warnings: []string{"image inspect data not available; cannot detect process start config"},
+		}
 	}
 
 	// ---- Evaluate final status from probe results ----
