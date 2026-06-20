@@ -1,0 +1,1 @@
+{"name":"e2e-vllm-20260621033950","model_artifact_id":"fab295d8-751a-463f-bf0b-ea9dae5b5d66","node_backend_runtime_id":"node-70894186-093c-403d-87d1-08f17a690521:vllm-v0.23.0-nvidia-cuda","placement_json":{"node_id":"node-70894186-093c-403d-87d1-08f17a690521","gpu_ids":["be899678-7a6b-4391-9001-b56172d1f505"]},"service_json":{"host_port":8004}}
