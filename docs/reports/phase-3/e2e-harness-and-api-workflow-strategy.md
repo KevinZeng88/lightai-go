@@ -560,7 +560,7 @@ Use these assertion templates in Go API Workflow and shell E2E:
 | Upstream/downstream ID use | Downstream API uses IDs returned by previous API, never hard-coded except system catalog IDs |
 | List/detail consistency | A resource selected from list can be fetched by detail using the same ID |
 | Check/probe/preflight usability | Result from check/probe/preflight can be used in the next API step |
-| JSON field preservation | Assert `config_snapshot_json`, `probe_results_json`, `run_plan_json`, `diagnostics_json`, `metadata_json`, `locations_json`, `capabilities_json` are not dropped |
+| JSON field preservation | Assert workflow-specific JSON fields keep their API contract and type, for example `config_snapshot_json`, `probe_results_json`, `run_plan_json`, `diagnostics_json`, and ModelLocation `discovered_metadata_json` |
 | Error status mapping | Agent unreachable, Docker error, inspect error, not found, validation error map to exact statuses |
 | Operation traceability | `operation_id`, audit records, task logs, diagnostics, and run plan IDs are correlated |
 | Cleanup success | Resources created by the test are deleted or confirmed absent |
@@ -625,9 +625,16 @@ Flow:
 
 Assertions:
 
-- `size`, `format`, `arch`, `checksum`, `capabilities_json`, and `locations_json` are preserved.
+- Current API contract: `ModelArtifact` is the logical model object; `ModelLocation` is the node/path/file-level evidence object.
+- The current API does not expose artifact-level `metadata_json`, `capabilities_json`, or `locations_json`; this is not a bug in Step 5.
+- Scan metadata and capabilities currently belong to `ModelLocation.discovered_metadata_json`.
+- Artifact detail exposes ModelLocation records through the `locations` array.
+- Tests should verify `locations[]` and each location's `node_id`, path, checksum, size, format, arch, capabilities, and discovered metadata.
+- Tests should not require artifact-level canonical metadata/capabilities fields.
 - Multi-node locations are not mixed.
 - Location deletion does not delete unrelated artifacts or locations.
+
+Do not use the E2E harness work to redesign ModelArtifact. If future product requirements need model-level filtering, canonical capabilities, or cross-location consistency checks, design artifact-level canonical metadata/capabilities separately.
 
 ### D. Deployment / Preflight / RunPlan
 

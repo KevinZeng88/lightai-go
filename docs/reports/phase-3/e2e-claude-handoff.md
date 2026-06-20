@@ -186,7 +186,15 @@ Create:
 internal/server/api/workflow_model_wizard_test.go
 ```
 
-Use fake Agent for browse/scan. Verify `metadata_json`, `locations_json`, `capabilities_json`, size/format/arch/checksum, and cleanup.
+Use fake Agent for browse/scan. Step 5 is expected to validate the current API contract:
+
+- `ModelArtifact` is the logical model object.
+- `ModelLocation` is the node/path/file-level evidence object.
+- Artifact detail exposes locations through `locations[]`.
+- Scan metadata/capabilities are stored on `ModelLocation.discovered_metadata_json`.
+- Verify location-level `node_id`, path, checksum, size, format, arch, capabilities, discovered metadata, multi-location separation, and cleanup.
+
+Do not refactor ModelArtifact merely because older strategy text mentioned artifact-level `metadata_json`, `capabilities_json`, or `locations_json`. Artifact-level canonical metadata/capabilities is a future product design topic, not part of the current E2E harness work.
 
 ### Task 5: Deployment Preflight / RunPlan Chain
 

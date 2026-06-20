@@ -410,7 +410,16 @@ go test ./internal/server/api/... -count=1
 
 **Goal**
 
-Verify ModelArtifact and ModelLocation API workflow and JSON field preservation.
+Verify ModelArtifact and ModelLocation API workflow using the current field contract.
+
+Current contract clarification:
+
+- `ModelArtifact` is the logical model object.
+- `ModelLocation` is the node/path/file-level evidence object.
+- The API does not currently expose artifact-level `metadata_json`, `capabilities_json`, or `locations_json`; this is not a bug.
+- Scan metadata/capabilities are currently stored on `ModelLocation.discovered_metadata_json`.
+- Artifact detail exposes ModelLocation records through `locations[]`.
+- API workflow tests should assert location-level scan metadata preservation, not force artifact-level canonical metadata.
 
 **Input**
 
@@ -438,10 +447,14 @@ internal/server/api/workflow_model_wizard_test.go
 
 **Acceptance**
 
-- `metadata_json`, `locations_json`, and `capabilities_json` are preserved.
-- `size`, `format`, `arch`, `checksum`, and path fields keep type and value.
+- `ModelLocation.discovered_metadata_json` preserves scan metadata/capabilities with object/array types.
+- Artifact detail returns `locations[]` with the created locations.
+- Each location preserves `node_id`, path, checksum, size, format, arch, capabilities, and discovered metadata.
 - Multiple locations do not mix node IDs.
 - Cleanup removes created artifact/location/root.
+- No artifact-level canonical metadata/capabilities redesign is required.
+
+If future requirements need model-level filtering, model-level capability, or cross-location consistency checks, add a separate design for artifact-level canonical metadata/capabilities. That is outside the Step 5/6 E2E harness scope.
 
 **Risk**
 
