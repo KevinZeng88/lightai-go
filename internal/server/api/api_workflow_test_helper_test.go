@@ -208,6 +208,36 @@ func (app *workflowTestApp) EnableNodeBackendRuntime(t *testing.T, nodeID, runti
 	return id
 }
 
+func (app *workflowTestApp) AgentJSON(t *testing.T, method, path string, body interface{}, wantStatus int) WorkflowResponse {
+	t.Helper()
+
+	bodyReader, err := marshalWorkflowBody(body)
+	if err != nil {
+		t.Fatalf("%s %s marshal agent body: %v", method, path, err)
+	}
+	req, err := http.NewRequest(method, app.Server.URL+path, bodyReader)
+	if err != nil {
+		t.Fatalf("%s %s build agent request: %v", method, path, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+workflowAgentToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	httpResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s agent request failed: %v", method, path, err)
+	}
+	defer httpResp.Body.Close()
+
+	respBody, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		t.Fatalf("%s %s read agent response: %v", method, path, err)
+	}
+	if httpResp.StatusCode != wantStatus {
+		t.Fatalf("%s %s agent status=%d want=%d body=%s", method, path, httpResp.StatusCode, wantStatus, string(respBody))
+	}
+	return WorkflowResponse{StatusCode: httpResp.StatusCode, Body: respBody}
+}
+
 type WorkflowClient struct {
 	baseURL   string
 	origin    string
