@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -616,6 +617,43 @@ func (h *AgentHandler) HandleGetNodeDockerImages(w http.ResponseWriter, r *http.
 	}
 	defer resp.Body.Close()
 	// Agent returns {images: [...], count: N} or a flat array (legacy).
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		writeError(w, http.StatusBadGateway, "invalid agent response")
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleGetNodeDockerImageInspect proxies to the Agent's /docker-image-inspect endpoint.
+func (h *AgentHandler) HandleGetNodeDockerImageInspect(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	imageRef := r.URL.Query().Get("ref")
+	if imageRef == "" {
+		writeError(w, http.StatusBadRequest, "ref query parameter is required")
+		return
+	}
+	var addr string
+	var port int
+	err := h.DB.QueryRow(
+		`SELECT advertised_address, metrics_port FROM nodes WHERE id = ?`, nodeID,
+	).Scan(&addr, &port)
+	if err != nil {
+		http.Error(w, `{"error":"node not found"}`, http.StatusNotFound)
+		return
+	}
+	if addr == "" || port == 0 {
+		http.Error(w, `{"error":"node has no advertised address or metrics port"}`, http.StatusBadRequest)
+		return
+	}
+	agentURL := fmt.Sprintf("http://%s:%d/docker-image-inspect?ref=%s", addr, port, url.QueryEscape(imageRef))
+	resp, err := http.Get(agentURL)
+	if err != nil {
+		log.Warn("failed to query agent docker image inspect", "node_id", nodeID, "url", agentURL, "error", err)
+		writeError(w, http.StatusBadGateway, "agent unreachable")
+		return
+	}
+	defer resp.Body.Close()
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		writeError(w, http.StatusBadGateway, "invalid agent response")

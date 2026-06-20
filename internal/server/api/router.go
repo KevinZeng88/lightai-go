@@ -105,6 +105,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("DELETE /api/v1/nodes/{id}/model-roots/{root_id}", nodeModelRootWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteNodeModelRoot)))
 
 	mux.Handle("GET /api/v1/nodes/{id}/docker-images", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeDockerImages)))
+	mux.Handle("GET /api/v1/nodes/{id}/docker-image-inspect", resourceChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeDockerImageInspect)))
 	mux.Handle("GET /api/v1/nodes/{id}/files", nodeFileReadChain(http.HandlerFunc(cfg.AgentHandler.HandleProxyNodeFiles)))
 	mux.Handle("POST /api/v1/nodes/{id}/model-paths/scan", nodeFileReadChain(http.HandlerFunc(cfg.AgentHandler.HandleProxyNodeModelScan)))
 

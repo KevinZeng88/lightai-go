@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -243,7 +244,7 @@ func (h *AgentHandler) HandleDeleteBackendRuntime(w http.ResponseWriter, r *http
 
 func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
-	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, COALESCE(nbr.config_snapshot_json,'{}'), br.name, br.display_name, br.vendor
+	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, COALESCE(nbr.config_snapshot_json,'{}'), COALESCE(nbr.probe_results_json,'{}'), br.name, br.display_name, br.vendor
 		FROM node_backend_runtimes nbr
 		JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id
 		WHERE nbr.node_id = ?
@@ -255,9 +256,9 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var id, runtimeID, nid, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, snapshotJSON, rtName, rtDisplay, vendor string
+		var id, runtimeID, nid, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, snapshotJSON, probeResultsJSON, rtName, rtDisplay, vendor string
 		var imagePresent, dockerAvailable int
-		if err := rows.Scan(&id, &runtimeID, &nid, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &snapshotJSON, &rtName, &rtDisplay, &vendor); err != nil {
+		if err := rows.Scan(&id, &runtimeID, &nid, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &snapshotJSON, &probeResultsJSON, &rtName, &rtDisplay, &vendor); err != nil {
 			continue
 		}
 		if displayName == "" {
@@ -277,6 +278,7 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 			"status": status, "status_reason": reason, "last_checked_at": checked, "tenant_id": tid,
 			"created_at": ca, "updated_at": ua,
 			"config_snapshot_json": json.RawMessage(snapshotJSON),
+			"probe_results_json":   json.RawMessage(probeResultsJSON),
 			"backend_runtime":      map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
 		})
 	}
@@ -295,6 +297,13 @@ func (h *AgentHandler) HandleCheckNodeBackendRuntime(w http.ResponseWriter, r *h
 }
 
 // HandleRequestNodeBackendRuntimeCheck is the UI-facing check endpoint.
+// It implements a multi-level Image Capability Probe:
+//
+//	Level 1: Docker image list (evidence only, NOT authoritative).
+//	Level 2: Docker ImageInspect (AUTHORITATIVE existence check).
+//	Level 3: Backend type matching (best-effort, lenient).
+//	Level 4: Version probe (deferred to future design).
+//
 // It does NOT accept client-provided image_present/docker_available.
 // Instead, the server queries the agent for Docker image status and
 // evaluates readiness with server-verified evidence.
@@ -328,96 +337,246 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	}
 	vendor := strVal(rt, "vendor", "")
 
-	// Query Docker images on the node (server-to-agent proxy).
+	// Initialize probe results (4 levels).
+	probeStart := time.Now()
+	probeResults := map[string]interface{}{
+		"level1": map[string]interface{}{},
+		"level2": map[string]interface{}{},
+		"level3": map[string]interface{}{},
+		"level4": map[string]interface{}{},
+	}
 	dockerAvailable := false
 	imagePresent := false
-	var dockerErr string
+	inspectSuccess := false
+	inspectNotFound := false
+	var imageID, imageDigest, dockerErr string
 
 	nodeAddr, nodePort := h.getNodeAddress(nodeID)
+	agentID := ""
 	if nodeAddr != "" && nodePort > 0 {
-		agentURL := fmt.Sprintf("http://%s:%d/docker-images?limit=1000", nodeAddr, nodePort)
+		agentID = fmt.Sprintf("%s:%d", nodeAddr, nodePort)
+	}
+
+	// ---- Level 1: Docker image list (evidence only, NOT authoritative) ----
+	// The /docker-images list is used for UI selection and supporting evidence.
+	// It does NOT determine missing_image. Only ImageInspect (Level 2) is authoritative.
+	if agentID == "" {
+		dockerErr = "node has no advertised address or metrics port"
+		probeResults["level1"] = map[string]interface{}{
+			"image_present": false,
+			"source":        "docker_images_list",
+			"error":         dockerErr,
+		}
+	} else {
+		agentURL := fmt.Sprintf("http://%s/docker-images?limit=1000", agentID)
 		resp, err := http.Get(agentURL)
 		if err != nil {
 			dockerErr = fmt.Sprintf("agent unreachable: %v", err)
 			log.Warn("nbr.check_request.agent_unreachable", "node_id", nodeID, "url", agentURL, "error", err)
+			probeResults["level1"] = map[string]interface{}{
+				"image_present": false,
+				"source":        "docker_images_list",
+				"error":         dockerErr,
+			}
 		} else {
 			defer resp.Body.Close()
-			dockerAvailable = true
-			if nbrImageRef != "" {
-				var result struct {
-					Images []struct {
-						RepoTags []string `json:"repotags"`
-						ID       string   `json:"id"`
-					} `json:"images"`
+			if resp.StatusCode != 200 {
+				dockerErr = fmt.Sprintf("agent returned HTTP %d", resp.StatusCode)
+				probeResults["level1"] = map[string]interface{}{
+					"image_present": false,
+					"source":        "docker_images_list",
+					"error":         dockerErr,
 				}
-				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-					// Try legacy flat array format.
-					resp.Body.Close()
-					resp2, err2 := http.Get(agentURL)
-					if err2 == nil {
-						defer resp2.Body.Close()
-						var images []map[string]interface{}
-						if json.NewDecoder(resp2.Body).Decode(&images) == nil {
-							for _, img := range images {
-								tags := toStringSlice(img["repotags"])
-								for _, t := range tags {
-									if nbrImageRef == t || strings.Contains(t, nbrImageRef) {
-										imagePresent = true
-										break
-									}
-								}
-								if imagePresent {
-									break
+			} else {
+				dockerAvailable = true
+				if nbrImageRef != "" {
+					var result map[string]interface{}
+					if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
+						imagesRaw, _ := result["images"].([]interface{})
+						for _, imgRaw := range imagesRaw {
+							img, _ := imgRaw.(map[string]interface{})
+							if img == nil {
+								continue
+							}
+							imgRef := strVal(img, "image_ref", "")
+							if imgRef == "" {
+								repo := strVal(img, "repository", "")
+								tag := strVal(img, "tag", "")
+								if repo != "" && tag != "" && tag != "<none>" {
+									imgRef = repo + ":" + tag
 								}
 							}
-						}
-					}
-				} else {
-					for _, img := range result.Images {
-						for _, t := range img.RepoTags {
-							if nbrImageRef == t || strings.Contains(t, nbrImageRef) {
+							if imgRef == "" {
+								continue
+							}
+							if nbrImageRef == imgRef || strings.Contains(imgRef, nbrImageRef) || strings.Contains(nbrImageRef, imgRef) {
 								imagePresent = true
+								imageID = strVal(img, "image_id", "")
+								imageDigest = strVal(img, "digest", "")
+								probeResults["level1"] = map[string]interface{}{
+									"image_present": true,
+									"source":        "docker_images_list",
+									"image_ref":     imgRef,
+									"image_id":      imageID,
+									"digest":        imageDigest,
+									"created_at":    strVal(img, "created_at", ""),
+									"size":          strVal(img, "size", ""),
+								}
 								break
 							}
 						}
-						if imagePresent {
-							break
+						if !imagePresent {
+							probeResults["level1"] = map[string]interface{}{
+								"image_present": false,
+								"source":        "docker_images_list",
+								"image_ref":     nbrImageRef,
+								"note":          "image not in docker images list; authoritative check via ImageInspect",
+							}
 						}
 					}
 				}
 			}
 		}
+	}
+
+	// ---- Level 2: Docker ImageInspect (AUTHORITATIVE existence check) ----
+	// ImageInspect is the single source of truth for image existence.
+	// Only ImageInspect returning a clear "not found" error produces missing_image.
+	if agentID != "" && nbrImageRef != "" {
+		inspectURL := fmt.Sprintf("http://%s/docker-image-inspect?ref=%s", agentID, url.QueryEscape(nbrImageRef))
+		inspectResp, err := http.Get(inspectURL)
+		if err != nil {
+			log.Warn("nbr.check_request.inspect_failed", "node_id", nodeID, "url", inspectURL, "error", err)
+			probeResults["level2"] = map[string]interface{}{
+				"inspect_success": false,
+				"error":           fmt.Sprintf("inspect request failed: %v", err),
+			}
+		} else {
+			defer inspectResp.Body.Close()
+			var inspectResult map[string]interface{}
+			if err := json.NewDecoder(inspectResp.Body).Decode(&inspectResult); err == nil {
+				if inspectData, ok := inspectResult["inspect"].(map[string]interface{}); ok {
+					inspectSuccess = true
+					// Authoritative: if ImageInspect succeeds, image exists — even if
+					// Level 1 (docker images list) didn't find it.
+					imagePresent = true
+					entrypoint := toStringSlice(inspectData["Entrypoint"])
+					cmd := toStringSlice(inspectData["Cmd"])
+					repoTags := toStringSlice(inspectData["RepoTags"])
+					repoDigests := toStringSlice(inspectData["RepoDigests"])
+					var config map[string]interface{}
+					if c, _ := inspectData["Config"].(map[string]interface{}); c != nil {
+						config = c
+					} else if c, _ := inspectData["ContainerConfig"].(map[string]interface{}); c != nil {
+						config = c
+					}
+					var labels map[string]interface{}
+					var exposedPorts map[string]interface{}
+					var env []string
+					if config != nil {
+						if l, _ := config["Labels"].(map[string]interface{}); l != nil {
+							labels = l
+						}
+						if ep, _ := config["ExposedPorts"].(map[string]interface{}); ep != nil {
+							exposedPorts = ep
+						}
+						env = toStringSlice(config["Env"])
+					}
+					probeResults["level2"] = map[string]interface{}{
+						"inspect_success": true,
+						"image_id":        strVal(inspectData, "Id", ""),
+						"repotags":        repoTags,
+						"repodigests":     repoDigests,
+						"architecture":    strVal(inspectData, "Architecture", ""),
+						"os":              strVal(inspectData, "Os", ""),
+						"size_bytes":      inspectData["Size"],
+						"created":         strVal(inspectData, "Created", ""),
+						"entrypoint":      entrypoint,
+						"cmd":             cmd,
+						"env":             env,
+						"exposed_ports":   exposedPorts,
+						"labels":          labels,
+					}
+				} else if inspectErr, _ := inspectResult["error"].(string); inspectErr != "" {
+					// Check if the error indicates the image was not found.
+					// Docker CLI returns "no such image" or "not found" patterns.
+					if strings.Contains(strings.ToLower(inspectErr), "no such image") ||
+						strings.Contains(strings.ToLower(inspectErr), "not found") ||
+						strings.Contains(strings.ToLower(inspectErr), "does not exist") {
+						inspectNotFound = true
+					}
+					probeResults["level2"] = map[string]interface{}{
+						"inspect_success":   false,
+						"inspect_not_found": inspectNotFound,
+						"error":             inspectErr,
+					}
+				}
+			}
+		}
 	} else {
-		dockerErr = "node has no advertised address or metrics port"
+		probeResults["level2"] = map[string]interface{}{
+			"inspect_success": false,
+			"error":           "agent not reachable or no image_ref for inspect",
+		}
 	}
 
-	// Evaluate with server-verified evidence.
-	status, reason := h.evaluateNodeBackendRuntime(nodeID, vendor, nbrImageRef, imagePresent, dockerAvailable)
-	if !dockerAvailable && dockerErr != "" {
-		reason = dockerErr
-	}
-	if status == "missing_image" && nbrImageRef != "" {
-		reason = fmt.Sprintf("docker image %s is not present on node %s", nbrImageRef, nodeID)
+	// ---- Level 3: Backend type matching (best-effort, lenient) ----
+	backendID := strVal(rt, "backend_id", "")
+	if inspectSuccess {
+		l2, _ := probeResults["level2"].(map[string]interface{})
+		repoTags, _ := l2["repotags"].([]string)
+		labels, _ := l2["labels"].(map[string]interface{})
+		probeResults["level3"] = matchBackendType(backendID, vendor, repoTags, labels)
+	} else {
+		probeResults["level3"] = map[string]interface{}{
+			"backend_match_status": "not_checked",
+			"confirmed_match":      false,
+			"blocking":             false,
+			"warning":              true,
+			"match_detail":         "inspect data not available for backend type matching",
+		}
 	}
 
-	// Update NBR with check results.
+	// ---- Level 4: Version probe (DEFERRED) ----
+	// The /version-probe agent endpoint is not yet enabled. It requires security
+	// review (--pull=never, --network=none, --cap-drop=ALL, etc.) before deployment.
+	probeResults["level4"] = map[string]interface{}{
+		"version_probed": false,
+		"probe_error":    "version probe deferred to future NBR Image Probe design",
+	}
+
+	// ---- Evaluate final status from probe results ----
+	status, reason := evaluateProbeStatus(nodeID, vendor, nbrImageRef, agentID,
+		imagePresent, dockerAvailable, dockerErr, inspectSuccess, inspectNotFound, probeResults)
+
+	// ---- Update NBR with check results ----
 	now := time.Now().Format(time.RFC3339)
+	probeJSON := jsonString(probeResults)
 	if _, err := h.DB.Exec(`UPDATE node_backend_runtimes SET
 		image_present=?, docker_available=?,
+		driver_version=?, toolkit_version=?, device_check_json=?,
 		status=?, status_reason=?, last_checked_at=?,
+		probe_results_json=?,
 		updated_at=?
 		WHERE id=?`,
 		boolInt(imagePresent), boolInt(dockerAvailable),
+		strVal(rt, "driver_version", ""), strVal(rt, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
 		status, reason, now,
+		probeJSON,
 		now, nbrID); err != nil {
 		log.Error("nbr check_request update failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	log.Info("nbr.check_request.completed",
-		"node_id", nodeID, "nbr_id", nbrID,
-		"status", status, "image_present", imagePresent, "docker_available", dockerAvailable)
+	probeDuration := time.Since(probeStart).Milliseconds()
+	log.Info("nbr.check_request.probe",
+		"node_id", nodeID, "agent_id", agentID, "nbr_id", nbrID,
+		"image_ref", nbrImageRef, "vendor", vendor, "backend_id", backendID,
+		"status", status, "reason", reason,
+		"l1_list_found", imagePresent, "l1_docker_available", dockerAvailable,
+		"l2_inspect_success", inspectSuccess, "l2_inspect_not_found", inspectNotFound,
+		"duration_ms", probeDuration)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"id":                 nbrID,
@@ -430,6 +589,7 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 		"status":             status,
 		"status_reason":      reason,
 		"last_checked_at":    now,
+		"probe_results":      probeResults,
 	})
 }
 
@@ -648,6 +808,161 @@ func boolInt(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+// evaluateProbeStatus determines the final NBR status from probe results.
+// ImageInspect (Level 2) is the AUTHORITATIVE source for image existence.
+// missing_image is ONLY returned when ImageInspect explicitly says "not found".
+// docker-images list (Level 1) is evidence only and never produces missing_image.
+func evaluateProbeStatus(nodeID, vendor, imageRef, agentID string,
+	imagePresent, dockerAvailable bool,
+	dockerErr string,
+	inspectSuccess, inspectNotFound bool,
+	probeResults map[string]interface{}) (string, string) {
+
+	if agentID == "" {
+		return "agent_unreachable", dockerErr
+	}
+	if !dockerAvailable && dockerErr != "" {
+		if strings.Contains(dockerErr, "agent unreachable") {
+			return "agent_unreachable", dockerErr
+		}
+		return "docker_error", dockerErr
+	}
+	if imageRef == "" {
+		return "evidence_missing", "no image_ref configured for this node backend runtime"
+	}
+
+	// Authoritative check: ImageInspect result.
+	if inspectNotFound {
+		return "missing_image", fmt.Sprintf("docker image %s is not present on node %s (ImageInspect: not found)", imageRef, nodeID)
+	}
+	if !inspectSuccess {
+		l2, _ := probeResults["level2"].(map[string]interface{})
+		l2Err := ""
+		if l2 != nil {
+			l2Err = strVal(l2, "error", "")
+		}
+		if l2Err == "" {
+			l2Err = "docker image inspect failed"
+		}
+		return "inspect_failed", fmt.Sprintf("docker inspect failed for image %s: %s", imageRef, l2Err)
+	}
+
+	// ImageInspect succeeded — image exists. Check for warnings.
+	var warnings []string
+
+	l3, _ := probeResults["level3"].(map[string]interface{})
+	if l3 != nil {
+		matchStatus, _ := l3["backend_match_status"].(string)
+		if matchStatus == "confirmed_mismatch" {
+			return "runtime_image_mismatch", fmt.Sprintf("image %s does not match expected backend", imageRef)
+		}
+		if matchStatus == "declared_match_unverified" || matchStatus == "ambiguous" {
+			warnings = append(warnings, fmt.Sprintf("backend match: %s", matchStatus))
+		}
+	}
+
+	l4, _ := probeResults["level4"].(map[string]interface{})
+	if l4 != nil && !boolVal(l4, "version_probed", false) {
+		warnings = append(warnings, "version not probed")
+	}
+
+	if len(warnings) > 0 {
+		return "ready_with_warnings", fmt.Sprintf("image %s verified (inspect ok); warnings: %s", imageRef, strings.Join(warnings, "; "))
+	}
+	return "ready", fmt.Sprintf("runtime verified for node (image=%s)", imageRef)
+}
+
+// matchBackendType checks whether the Docker image's RepoTags and labels are
+// consistent with the expected Backend. Returns a map with structured fields:
+//
+//	backend_match_status: confirmed_match | probable_match | declared_match_unverified | ambiguous | not_checked
+//	confirmed_match: true/false — only true when pattern/label match is strong
+//	blocking: true/false — only true for confirmed_mismatch
+//	warning: true/false
+//
+// IMPORTANT: vendor is NOT used to derive backend (vendor=nvidia != vllm).
+// Vendor-built images that don't match known patterns are treated leniently.
+func matchBackendType(backendID, vendor string, repoTags []string, labels map[string]interface{}) map[string]interface{} {
+	result := map[string]interface{}{
+		"backend_match_status": "not_checked",
+		"confirmed_match":      false,
+		"blocking":             false,
+		"warning":              false,
+		"match_method":         "",
+		"match_detail":         "",
+		"backend_id":           backendID,
+	}
+
+	allTags := strings.Join(repoTags, " ")
+	allTagsLower := strings.ToLower(allTags)
+
+	labelStr := ""
+	if labels != nil {
+		parts := make([]string, 0, len(labels))
+		for k, v := range labels {
+			if vs, ok := v.(string); ok {
+				parts = append(parts, k+"="+vs)
+			}
+		}
+		labelStr = strings.ToLower(strings.Join(parts, " "))
+	}
+
+	baseID := backendID
+	if strings.HasPrefix(baseID, "backend.") {
+		baseID = baseID[len("backend."):]
+	}
+	patterns := map[string][]string{
+		"vllm":     {"vllm", "vllm-openai"},
+		"sglang":   {"sglang", "lmsysorg/sglang"},
+		"llamacpp": {"llama.cpp", "llama-cpp", "llamacpp", "ghcr.io/ggml-org/llama.cpp"},
+		"ollama":   {"ollama"},
+	}
+
+	expectedPatterns, ok := patterns[baseID]
+	if !ok {
+		result["backend_match_status"] = "declared_match_unverified"
+		result["confirmed_match"] = false
+		result["warning"] = true
+		result["match_method"] = "unknown_backend"
+		result["match_detail"] = fmt.Sprintf("backend_id '%s' has no matching patterns; declared match not verified", baseID)
+		return result
+	}
+
+	for _, p := range expectedPatterns {
+		if strings.Contains(allTagsLower, p) {
+			result["backend_match_status"] = "confirmed_match"
+			result["confirmed_match"] = true
+			result["match_method"] = "repo_pattern"
+			result["match_detail"] = fmt.Sprintf("repo tags match pattern '%s' for backend '%s'", p, backendID)
+			return result
+		}
+		if strings.Contains(labelStr, p) {
+			result["backend_match_status"] = "confirmed_match"
+			result["confirmed_match"] = true
+			result["match_method"] = "label_match"
+			result["match_detail"] = fmt.Sprintf("labels match pattern '%s' for backend '%s'", p, backendID)
+			return result
+		}
+	}
+
+	// No pattern matched. Not a mismatch — just unverified.
+	result["backend_match_status"] = "declared_match_unverified"
+	result["confirmed_match"] = false
+	result["blocking"] = false
+	result["warning"] = true
+	result["match_method"] = "no_pattern_match"
+	result["match_detail"] = fmt.Sprintf("no pattern matched for backend '%s' (expected: %v) in repo tags %v; declared match not verified", backendID, expectedPatterns, repoTags)
+	return result
+}
+
+// getVersionProbeConfig extracts the version_probe configuration from a
+// BackendRuntime template's version_snapshot_json. Returns nil if not configured.
+// NOTE: Version probe execution is DEFERRED. This function exists to support
+// future catalog-driven probe configuration.
+func getVersionProbeConfig(rt map[string]interface{}) map[string]interface{} {
+	return nil
 }
 
 func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {

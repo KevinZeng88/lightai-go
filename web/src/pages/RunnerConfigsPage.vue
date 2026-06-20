@@ -89,12 +89,36 @@
           <el-form-item v-if="wizImageRef" :label="$t('runnerConfigs.selectImage')"><span>{{ wizImageRef }}</span></el-form-item>
         </el-form>
         <div v-if="wizCheckResult" style="margin-top:8px">
-          <el-alert :type="wizCheckResult.status==='ready'?'success':'warning'" :title="translateStatus(wizCheckResult.status, t)" :description="translateStatusReason(wizCheckResult.status_reason, t)" show-icon :closable="false" />
+          <el-alert :type="wizCheckResult.status==='ready'||wizCheckResult.status==='ready_with_warnings'?'success':wizCheckResult.status==='missing_image'||wizCheckResult.status==='agent_unreachable'||wizCheckResult.status==='inspect_failed'||wizCheckResult.status==='runtime_image_mismatch'||wizCheckResult.status==='docker_error'?'error':'warning'" :title="translateStatus(wizCheckResult.status, t)" :description="translateStatusReason(wizCheckResult.status_reason, t)" show-icon :closable="false" />
+          <div v-if="wizCheckResult.probe_results" style="margin-top:8px">
+            <el-collapse>
+              <el-collapse-item title="Image Metadata" name="level2" v-if="wizCheckResult.probe_results.level2?.inspect_success">
+                <el-descriptions :column="2" border size="small">
+                  <el-descriptions-item label="Image ID">{{ (wizCheckResult.probe_results.level2?.image_id || '').slice(7,19) || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="Architecture">{{ wizCheckResult.probe_results.level2?.architecture || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="OS">{{ wizCheckResult.probe_results.level2?.os || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="Created">{{ (wizCheckResult.probe_results.level2?.created || '').slice(0,19) || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="Size">{{ formatBytes(wizCheckResult.probe_results.level2?.size_bytes) }}</el-descriptions-item>
+                  <el-descriptions-item label="Entrypoint">{{ (wizCheckResult.probe_results.level2?.entrypoint || []).join(', ') || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="CMD">{{ (wizCheckResult.probe_results.level2?.cmd || []).join(', ') || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="Exposed Ports">{{ Object.keys(wizCheckResult.probe_results.level2?.exposed_ports || {}).join(', ') || '-' }}</el-descriptions-item>
+                  <el-descriptions-item :span="2" label="RepoTags">{{ (wizCheckResult.probe_results.level2?.repotags || []).join(', ') || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </el-collapse-item>
+              <el-collapse-item title="Backend Match" name="level3" v-if="wizCheckResult.probe_results.level3">
+                <p>{{ wizCheckResult.probe_results.level3.match_detail || 'Not checked' }}</p>
+              </el-collapse-item>
+              <el-collapse-item title="Version Probe" name="level4" v-if="wizCheckResult.probe_results.level4">
+                <p v-if="wizCheckResult.probe_results.level4.version_probed">Version: {{ wizCheckResult.probe_results.level4.version_string }}</p>
+                <p v-else>Not probed: {{ wizCheckResult.probe_results.level4.probe_error || 'no probe data' }}</p>
+              </el-collapse-item>
+            </el-collapse>
+          </div>
         </div>
         <div style="margin-top:12px;text-align:right">
           <el-button @click="step=wizRunnerType==='docker'?3:2">{{ $t('common.prev') }}</el-button>
           <el-button @click="doCheck" :loading="checking">{{ $t('runnerConfigs.check') }}</el-button>
-          <el-button type="primary" :disabled="!wizCheckResult || wizCheckResult.status === 'unknown'" @click="doCreateConfig" :loading="saving">{{ $t('runnerConfigs.create') }}</el-button>
+          <el-button type="primary" :disabled="!wizCheckResult || (wizCheckResult.status !== 'ready' && wizCheckResult.status !== 'ready_with_warnings')" @click="doCreateConfig" :loading="saving">{{ $t('runnerConfigs.create') }}</el-button>
         </div>
       </div>
     </el-dialog>
@@ -111,7 +135,30 @@
           </el-descriptions-item>
           <el-descriptions-item :label="$t('nodeRuntime.imageRef')">{{ selected.image_ref || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runnerConfigs.template')">{{ selected.template_name || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('nodeRuntime.statusReason')" :span="2">{{ translateStatusReason(selected.status_reason, t) }}</el-descriptions-item>
         </el-descriptions>
+        <el-collapse v-if="selected?.probe_results_json && typeof selected.probe_results_json === 'object' && Object.keys(selected.probe_results_json).length > 0" style="margin-top:12px">
+          <el-collapse-item title="Image Metadata" name="level2" v-if="selected.probe_results_json.level2?.inspect_success">
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="Image ID">{{ (selected.probe_results_json.level2?.image_id || '').slice(7,19) || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Architecture">{{ selected.probe_results_json.level2?.architecture || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="OS">{{ selected.probe_results_json.level2?.os || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Created">{{ (selected.probe_results_json.level2?.created || '').slice(0,19) || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Size">{{ formatBytes(selected.probe_results_json.level2?.size_bytes) }}</el-descriptions-item>
+              <el-descriptions-item label="Entrypoint">{{ (selected.probe_results_json.level2?.entrypoint || []).join(', ') || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="CMD">{{ (selected.probe_results_json.level2?.cmd || []).join(', ') || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Exposed Ports">{{ Object.keys(selected.probe_results_json.level2?.exposed_ports || {}).join(', ') || '-' }}</el-descriptions-item>
+              <el-descriptions-item :span="2" label="RepoTags">{{ (selected.probe_results_json.level2?.repotags || []).join(', ') || '-' }}</el-descriptions-item>
+            </el-descriptions>
+          </el-collapse-item>
+          <el-collapse-item title="Backend Match" name="level3" v-if="selected.probe_results_json.level3">
+            <p>{{ selected.probe_results_json.level3.match_detail || 'Not checked' }}</p>
+          </el-collapse-item>
+          <el-collapse-item title="Version Probe" name="level4" v-if="selected.probe_results_json.level4">
+            <p v-if="selected.probe_results_json.level4.version_probed">Version: {{ selected.probe_results_json.level4.version_string }}</p>
+            <p v-else>Not probed: {{ selected.probe_results_json.level4.probe_error || 'no probe data' }}</p>
+          </el-collapse-item>
+        </el-collapse>
       </template>
     </el-drawer>
 
@@ -154,6 +201,16 @@ const wizNodeId = ref(''); const wizImageRef = ref(''); const wizImagePresent = 
 const wizConfigName = ref(''); const wizCheckResult = ref<any>(null)
 
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(step, () => { step.value++ })
+
+function formatBytes(bytes: any): string {
+  if (bytes == null || bytes === 0) return '-'
+  const n = Number(bytes)
+  if (isNaN(n)) return '-'
+  if (n < 1024) return n + ' B'
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB'
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB'
+  return (n / 1073741824).toFixed(2) + ' GB'
+}
 
 onMounted(async () => { await loadRefs(); await refresh() })
 

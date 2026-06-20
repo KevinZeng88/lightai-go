@@ -189,6 +189,11 @@ func (db *DB) Migrate() error {
 			return fmt.Errorf("migrate v23: %w", err)
 		}
 	}
+	if currentVersion < 24 {
+		if err := db.migrateV24(); err != nil {
+			return fmt.Errorf("migrate v24: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -1487,6 +1492,21 @@ func (db *DB) migrateV23() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (23, 'V23: deployment source template metadata for manual sync')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV24 adds probe_results_json to node_backend_runtimes so each
+// NodeBackendRuntime stores the full Image Capability Probe evidence
+// (image existence, Docker inspect metadata, backend type match, version probe).
+func (db *DB) migrateV24() error {
+	if _, err := db.Exec(`ALTER TABLE node_backend_runtimes ADD COLUMN probe_results_json TEXT NOT NULL DEFAULT '{}'`); err != nil {
+		// Column may already exist from a partially applied development DB.
+		log.Warn("db.migrateV24 add column warning", "error", err)
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (24, 'V24: node_backend_runtimes image capability probe results')`); err != nil {
 		return err
 	}
 	return nil

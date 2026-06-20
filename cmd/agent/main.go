@@ -338,6 +338,36 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]interface{}{"images": images, "count": len(images)})
 		})
 
+		// Docker image inspect endpoint.
+		healthMux.HandleFunc("GET /docker-image-inspect", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			ref := strings.TrimSpace(r.URL.Query().Get("ref"))
+			if ref == "" {
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "ref query parameter is required"})
+				return
+			}
+			out, err := execCmd("docker", "image", "inspect", ref, "--format", "{{json .}}")
+			if err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"error": "docker image inspect failed",
+					"ref":   ref,
+				})
+				return
+			}
+			var inspectData interface{}
+			if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &inspectData); err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"error": "failed to parse inspect output",
+					"ref":   ref,
+				})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": ref,
+				"inspect":   inspectData,
+			})
+		})
+
 		// File browser endpoint.
 		healthMux.HandleFunc("GET /files", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")

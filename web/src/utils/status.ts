@@ -61,6 +61,13 @@ const STATUS_REASON_MAP: Record<string, string> = {
   'awaiting agent verification of Docker and image availability': 'runtime.statusReason.awaitingAgentCheck',
   'node has no advertised address or metrics port': 'runtime.statusReason.agentUnreachable',
   'agent unreachable': 'runtime.statusReason.agentUnreachable',
+  'docker image': 'runtime.statusReason.missingImage',
+  'docker inspect failed for image': 'runtime.statusReason.inspectFailed',
+  'does not match expected backend': 'runtime.statusReason.backendMismatch',
+  'version probe failed': 'runtime.statusReason.versionProbeFailed',
+  'version probe timed out': 'runtime.statusReason.versionProbeFailed',
+  'image_present=false': 'runtime.statusReason.missingImage',
+  'no image_ref configured': 'runtime.statusReason.evidenceMissing',
 }
 
 export function translateStatusReason(reason: string, t: (key: string, params?: any) => string): string {

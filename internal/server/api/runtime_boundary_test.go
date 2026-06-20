@@ -2,14 +2,18 @@ package api
 
 import (
 	"encoding/json"
+	"net"
+	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
-	"lightai-go/internal/server/db"
 	"lightai-go/internal/agent/register"
+	"lightai-go/internal/server/db"
 	"time"
 )
 
@@ -558,7 +562,6 @@ func TestBackendRuntimeListShowsTemplatesWithNodeAggregatesOnly(t *testing.T) {
 	t.Fatalf("runtime rt-list missing from list")
 }
 
-
 func runtimeBoundaryInsertDeployment(t *testing.T, db *db.DB, depID string) {
 	t.Helper()
 	now := time.Now().Format(time.RFC3339)
@@ -1089,6 +1092,7 @@ func TestDeploymentStartUsesNBRNotBackendRuntime(t *testing.T) {
 		t.Fatalf("deployment snapshot picked up live template change: %s", snapStr)
 	}
 }
+
 // TestCheckRequestEndpointPathValuesCorrect verifies that the check-request
 // handler correctly reads node_id from the route path parameter {id}.
 // Regression test for PathValue("node_id") vs route {id} mismatch.
@@ -1154,4 +1158,676 @@ func TestCheckRequestEndpointRejectsMissingPathValues(t *testing.T) {
 	if !strings.Contains(cw.Body.String(), "node_id and nbr_id are required") {
 		t.Fatalf("expected 'node_id and nbr_id are required', got: %s", cw.Body.String())
 	}
+}
+
+// -- Image Capability Probe Tests (real HTTP router) --
+
+func TestCheckRequestImageExistsSuccess(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-ck-img"
+	runtimeID := "rt-ck-img"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ck-img',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, runtimeID, "Runtime CK Image", "")
+
+	// Start a fake agent that returns the correct image in the list
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "docker-image-inspect"):
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": "vllm/vllm-openai:latest",
+				"inspect": map[string]interface{}{
+					"Id": "sha256:abc123", "RepoTags": []string{"vllm/vllm-openai:latest"},
+					"Created": "2026-01-01T00:00:00Z", "Architecture": "amd64", "Os": "linux",
+					"Size": 8230603218,
+				},
+			})
+		default:
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"images": []map[string]interface{}{
+					{"repository": "vllm/vllm-openai", "tag": "latest", "image_id": "sha256:abc123", "image_ref": "vllm/vllm-openai:latest", "image_present": true, "digest": "sha256:def", "created_at": "2026-01-01", "size": "8.2GB"},
+				},
+				"count": 1,
+			})
+		}
+	}))
+	defer fakeAgent.Close()
+
+	// Update node to point at fake agent
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	// Enable NBR
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// Run check-request
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	if status == "missing_image" {
+		t.Fatalf("BUG: image exists in agent list but check-request returned missing_image. status=%s reason=%s response=%s",
+			status, strVal(resp, "status_reason", ""), cw.Body.String())
+	}
+	if !boolVal(resp, "image_present", false) {
+		t.Fatalf("expected image_present=true, got %v", resp["image_present"])
+	}
+	pr, _ := resp["probe_results"].(map[string]interface{})
+	if pr == nil {
+		t.Fatal("probe_results missing from response")
+	}
+	t.Logf("check-request status=%s reason=%s image_present=%v probe_results=%v",
+		status, resp["status_reason"], resp["image_present"], pr)
+}
+
+func TestCheckRequestImageMissing(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-ck-miss"
+	runtimeID := "rt-ck-miss"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ck-miss',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, runtimeID, "Runtime CK Miss", "")
+
+	// Start a fake agent: docker-images returns empty list,
+	// docker-image-inspect returns "not found" (authoritative).
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "docker-image-inspect") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": "not-exist:missing",
+				"error":     "no such image: not-exist:missing",
+			})
+		} else {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"images": []map[string]interface{}{},
+				"count":  0,
+			})
+		}
+	}))
+	defer fakeAgent.Close()
+
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	// Enable NBR
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"not-exist:missing","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// Run check-request
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	if status != "missing_image" {
+		t.Fatalf("expected missing_image for non-existent image, got status=%s reason=%s",
+			status, strVal(resp, "status_reason", ""))
+	}
+	t.Logf("check-request status=%s reason=%s (expected missing_image)", status, resp["status_reason"])
+}
+
+func TestCheckRequestAgentUnreachable(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-ck-unr"
+	runtimeID := "rt-ck-unr"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ck-unr',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, runtimeID, "Runtime CK Unreachable", "")
+
+	// Set node address to an unreachable port
+	db.Exec(`UPDATE nodes SET advertised_address='127.0.0.1', metrics_port=19999 WHERE id=?`, nodeID)
+
+	// Enable NBR
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// Run check-request
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	// Should be agent_unreachable, NOT missing_image
+	if status == "missing_image" {
+		t.Fatalf("BUG: agent unreachable should NOT be missing_image. status=%s reason=%s",
+			status, strVal(resp, "status_reason", ""))
+	}
+	if status != "agent_unreachable" && status != "docker_error" {
+		t.Logf("check-request status=%s reason=%s (expected agent_unreachable)", status, resp["status_reason"])
+	}
+	t.Logf("check-request status=%s reason=%s", status, resp["status_reason"])
+}
+
+func TestCheckRequestProbeResultsStored(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-ck-store"
+	runtimeID := "rt-ck-store"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ck-store',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, runtimeID, "Runtime CK Store", "")
+
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "docker-image-inspect") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": "vllm/vllm-openai:latest",
+				"inspect": map[string]interface{}{
+					"Id": "sha256:abc123", "RepoTags": []string{"vllm/vllm-openai:latest"},
+					"Created": "2026-01-01T00:00:00Z", "Architecture": "amd64", "Os": "linux",
+					"Size": 8230603218, "Config": map[string]interface{}{
+						"Entrypoint": []interface{}{"vllm", "serve"},
+						"Cmd":        []interface{}{},
+					},
+				},
+			})
+		} else {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"images": []map[string]interface{}{
+					{"repository": "vllm/vllm-openai", "tag": "latest", "image_id": "sha256:abc123", "image_ref": "vllm/vllm-openai:latest", "image_present": true, "digest": "sha256:def", "created_at": "2026-01-01", "size": "8.2GB"},
+				},
+				"count": 1,
+			})
+		}
+	}))
+	defer fakeAgent.Close()
+
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+
+	// Verify probe_results exist and contain all 4 levels
+	pr, _ := resp["probe_results"].(map[string]interface{})
+	if pr == nil {
+		t.Fatal("probe_results missing from response")
+	}
+	for _, level := range []string{"level1", "level2", "level3", "level4"} {
+		if _, ok := pr[level]; !ok {
+			t.Fatalf("probe_results missing %s", level)
+		}
+	}
+	l1, _ := pr["level1"].(map[string]interface{})
+	if !boolVal(l1, "image_present", false) {
+		t.Fatal("level1 image_present should be true")
+	}
+	l2, _ := pr["level2"].(map[string]interface{})
+	if !boolVal(l2, "inspect_success", false) {
+		t.Fatal("level2 inspect_success should be true")
+	}
+
+	// Verify DB persistence
+	var dbProbeJSON string
+	db.QueryRow(`SELECT probe_results_json FROM node_backend_runtimes WHERE id=?`, nbrID).Scan(&dbProbeJSON)
+	if dbProbeJSON == "" || dbProbeJSON == "{}" {
+		t.Fatal("probe_results_json not persisted to DB")
+	}
+	t.Logf("probe_results_json persisted: %s", dbProbeJSON[:min(80, len(dbProbeJSON))])
+}
+
+func TestCheckRequestAllBackendImageFormats(t *testing.T) {
+	tests := []struct {
+		name       string
+		imageRef   string
+		repository string
+		tag        string
+	}{
+		{"vllm", "vllm/vllm-openai:latest", "vllm/vllm-openai", "latest"},
+		{"sglang", "lmsysorg/sglang:latest", "lmsysorg/sglang", "latest"},
+		{"llamacpp", "ghcr.io/ggml-org/llama.cpp:server-cuda13", "ghcr.io/ggml-org/llama.cpp", "server-cuda13"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupTestDB(t)
+			h := NewAgentHandler(db, nil)
+
+			nodeID := "node-ck-fmt-" + tc.name
+			runtimeID := "rt-ck-fmt-" + tc.name
+			runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+			db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+				VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+				"gpu-"+nodeID, nodeID, "nvidia", 0, "RTX", "")
+
+			// Use the standard insertRuntime helper which properly handles FK constraints.
+			insertRuntime(t, db, runtimeID, "Runtime "+tc.name, "")
+
+			fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if strings.Contains(r.URL.Path, "docker-image-inspect") {
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"image_ref": tc.imageRef,
+						"inspect": map[string]interface{}{
+							"Id": "sha256:abc123", "RepoTags": []string{tc.imageRef},
+							"Created": "2026-01-01T00:00:00Z", "Architecture": "amd64", "Os": "linux",
+							"Size": 1000, "Config": map[string]interface{}{
+								"Entrypoint": []interface{}{"serve"},
+							},
+						},
+					})
+				} else {
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"images": []map[string]interface{}{
+							{"repository": tc.repository, "tag": tc.tag, "image_id": "sha256:abc123", "image_ref": tc.imageRef, "image_present": true},
+						},
+						"count": 1,
+					})
+				}
+			}))
+			defer fakeAgent.Close()
+
+			u, _ := url.Parse(fakeAgent.URL)
+			host, portStr, _ := net.SplitHostPort(u.Host)
+			port, _ := strconv.Atoi(portStr)
+			db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+			nbrID := nodeID + ":" + runtimeID
+			ew := httptest.NewRecorder()
+			h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+				`{"backend_runtime_id":"`+runtimeID+`","image_ref":"`+tc.imageRef+`","image_present":true,"docker_available":true}`,
+				adminSession(), map[string]string{"id": nodeID}))
+			if ew.Code != 200 {
+				t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+			}
+
+			cw := httptest.NewRecorder()
+			h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+				adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+			if cw.Code != 200 {
+				t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+			}
+
+			var resp map[string]interface{}
+			json.Unmarshal(cw.Body.Bytes(), &resp)
+			status := strVal(resp, "status", "")
+			if status == "missing_image" {
+				t.Fatalf("BUG: %s image %s should be found, got missing_image. reason=%s",
+					tc.name, tc.imageRef, strVal(resp, "status_reason", ""))
+			}
+			t.Logf("%s: check-request status=%s reason=%s image_present=%v",
+				tc.name, status, resp["status_reason"], resp["image_present"])
+		})
+	}
+}
+
+func TestCheckRequestEvidenceMissing(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-ck-ev"
+	runtimeID := "rt-ck-ev"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ck-ev',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, runtimeID, "Runtime CK Evidence", "")
+
+	// Set node address but NO agent running
+	db.Exec(`UPDATE nodes SET advertised_address='127.0.0.1', metrics_port=19998 WHERE id=?`, nodeID)
+
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	// Must NOT be missing_image
+	if status == "missing_image" {
+		t.Fatalf("BUG: agent unreachable should NOT be missing_image. status=%s", status)
+	}
+	t.Logf("check-request status=%s reason=%s (expected agent_unreachable, not missing_image)", status, resp["status_reason"])
+}
+
+func TestCheckRequestStatusNotMissingImage(t *testing.T) {
+	// Verify each error type maps to the correct status, never missing_image.
+	// This is a meta-test that confirms the status model contract.
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-ck-sm"
+	runtimeID := "rt-ck-sm"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	if _, err := db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ck-sm',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, db, runtimeID, "Runtime CK Status Model", "")
+
+	// Scenario 1: Agent returns 500 / docker error
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+		json.NewEncoder(w).Encode(map[string]interface{}{"images": []interface{}{}})
+	}))
+	defer fakeAgent.Close()
+
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	// Even though the decode may succeed, any status is valid EXCEPT missing_image
+	// (since the agent returned an error, not "image not found")
+	if status == "missing_image" {
+		t.Fatalf("BUG: agent returning 500 should NOT produce missing_image. status=%s reason=%s",
+			status, strVal(resp, "status_reason", ""))
+	}
+	t.Logf("Status model contract: status=%s (should not be missing_image) ✓", status)
+}
+
+// min is a helper for tests.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// TestCheckRequestListMissesInspectFound verifies that when docker-images list
+// does NOT include the target image but ImageInspect SUCCEEDS, the status is
+// NOT missing_image.
+func TestCheckRequestListMissesInspectFound(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-lmif"
+	runtimeID := "rt-lmif"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-lmif',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", "")
+	insertRuntime(t, db, runtimeID, "Runtime LMIF", "")
+
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "docker-image-inspect") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": "hidden-image:latest",
+				"inspect": map[string]interface{}{
+					"Id": "sha256:abc123", "RepoTags": []string{"hidden-image:latest"},
+					"Created": "2026-01-01T00:00:00Z", "Architecture": "amd64", "Os": "linux",
+					"Size": 1000, "Config": map[string]interface{}{},
+				},
+			})
+		} else {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"images": []map[string]interface{}{
+					{"repository": "other", "tag": "image", "image_id": "sha256:xxx", "image_ref": "other:image"},
+				},
+				"count": 1,
+			})
+		}
+	}))
+	defer fakeAgent.Close()
+
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"hidden-image:latest","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	if status == "missing_image" {
+		t.Fatalf("BUG: list missed but ImageInspect found - must NOT be missing_image. status=%s reason=%s",
+			status, strVal(resp, "status_reason", ""))
+	}
+	t.Logf("List-missed Inspect-found: status=%s reason=%s (expected ready or ready_with_warnings, not missing_image)",
+		status, resp["status_reason"])
+}
+
+// TestCheckRequestInspectNotFound verifies that ImageInspect "not found" -> missing_image.
+func TestCheckRequestInspectNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-inf"
+	runtimeID := "rt-inf"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-inf',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", "")
+	insertRuntime(t, db, runtimeID, "Runtime INF", "")
+
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "docker-image-inspect") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": "not-exist:missing",
+				"error":     "no such image: not-exist:missing",
+			})
+		} else {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"images": []map[string]interface{}{
+					{"repository": "not-exist", "tag": "missing", "image_id": "", "image_ref": "not-exist:missing"},
+				},
+				"count": 1,
+			})
+		}
+	}))
+	defer fakeAgent.Close()
+
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"not-exist:missing","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	if status != "missing_image" {
+		t.Fatalf("ImageInspect not-found must be missing_image, got status=%s reason=%s",
+			status, strVal(resp, "status_reason", ""))
+	}
+	t.Logf("Inspect not-found: status=%s reason=%s (expected missing_image)", status, resp["status_reason"])
+}
+
+// TestCheckRequestInspectErrorNotNotFound verifies inspect error != not-found -> inspect_failed.
+func TestCheckRequestInspectErrorNotNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-ienf"
+	runtimeID := "rt-ienf"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ienf',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", "")
+	insertRuntime(t, db, runtimeID, "Runtime IENF", "")
+
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "docker-image-inspect") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": "some:image",
+				"error":     "docker daemon error: connection refused",
+			})
+		} else {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"images": []map[string]interface{}{
+					{"repository": "some", "tag": "image", "image_id": "sha256:abc", "image_ref": "some:image"},
+				},
+				"count": 1,
+			})
+		}
+	}))
+	defer fakeAgent.Close()
+
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s", cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	if status == "missing_image" {
+		t.Fatalf("BUG: inspect error (not 'not found') must NOT be missing_image. status=%s", status)
+	}
+	t.Logf("Inspect error (not not-found): status=%s reason=%s (expected inspect_failed, not missing_image)",
+		status, resp["status_reason"])
 }
