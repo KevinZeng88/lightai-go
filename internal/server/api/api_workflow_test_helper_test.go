@@ -148,6 +148,66 @@ func (app *workflowTestApp) InsertOnlineNode(t *testing.T, nodeID string, fakeAg
 	return nodeID
 }
 
+func (app *workflowTestApp) InsertGPU(t *testing.T, nodeID, vendor string) string {
+	t.Helper()
+
+	gpuID := "gpu-" + nodeID + "-" + vendor
+	now := time.Now().Format(time.RFC3339)
+	_, err := app.DB.Exec(
+		`INSERT INTO gpu_devices (
+			id, node_id, vendor, index_num, name, uuid, tenant_id,
+			memory_total_bytes, health, status, collected_at, reported_at, created_at, updated_at
+		) VALUES (?, ?, ?, 0, ?, ?, ?, 1024, 'healthy', 'available', ?, ?, ?, ?)`,
+		gpuID,
+		nodeID,
+		vendor,
+		"Workflow "+vendor+" GPU",
+		"uuid-"+gpuID,
+		app.DB.DefaultTenantID(),
+		now,
+		now,
+		now,
+		now,
+	)
+	if err != nil {
+		t.Fatalf("insert GPU: %v", err)
+	}
+	return gpuID
+}
+
+func (app *workflowTestApp) FindBackendRuntimeID(t *testing.T, backendName, vendor string) string {
+	t.Helper()
+
+	resp := app.Client.JSON(t, http.MethodGet, "/api/v1/backend-runtimes", nil, http.StatusOK)
+	var runtimes []map[string]interface{}
+	resp.Decode(t, &runtimes)
+	for _, runtime := range runtimes {
+		id, _ := runtime["id"].(string)
+		runtimeVendor, _ := runtime["vendor"].(string)
+		if runtimeVendor == vendor && strings.Contains(strings.ToLower(id), strings.ToLower(backendName)) {
+			return id
+		}
+	}
+	t.Fatalf("backend runtime not found backend=%q vendor=%q in %#v", backendName, vendor, runtimes)
+	return ""
+}
+
+func (app *workflowTestApp) EnableNodeBackendRuntime(t *testing.T, nodeID, runtimeID, imageRef string) string {
+	t.Helper()
+
+	resp := app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+nodeID+"/backend-runtimes/enable", map[string]interface{}{
+		"backend_runtime_id": runtimeID,
+		"image_ref":          imageRef,
+	}, http.StatusOK)
+	var enabled map[string]interface{}
+	resp.Decode(t, &enabled)
+	id, _ := enabled["id"].(string)
+	if id == "" {
+		t.Fatalf("enable node backend runtime response missing id: %#v", enabled)
+	}
+	return id
+}
+
 type WorkflowClient struct {
 	baseURL   string
 	origin    string
