@@ -426,7 +426,7 @@ func (h *ResourceHandler) MarkStaleGPUs(nodeID string, threshold time.Duration) 
 
 	// Query GPUs before update for state transition logging.
 	rows, err := h.DB.Query(
-		`SELECT id, gpu_index, vendor, health, status FROM gpu_devices
+		`SELECT id, index_num, vendor, health, status FROM gpu_devices
 		 WHERE node_id = ? AND status != 'unavailable' AND collected_at < ?`,
 		nodeID, cutoff,
 	)

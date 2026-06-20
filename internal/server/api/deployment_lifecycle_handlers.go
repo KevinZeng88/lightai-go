@@ -807,7 +807,10 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	for _, gid := range pf.placement.GPUIds {
 		var idx int
 		var vendor string
-		h.DB.QueryRow(`SELECT gpu_index, vendor FROM gpu_devices WHERE id = ?`, gid).Scan(&idx, &vendor)
+		if err := h.DB.QueryRow(`SELECT index_num, vendor FROM gpu_devices WHERE id = ?`, gid).Scan(&idx, &vendor); err != nil {
+			log.Warn("preflight.gpu_lookup_failed", "gpu_id", gid, "error", err)
+			continue
+		}
 		pf.gpuInfos = append(pf.gpuInfos, runplan.GPUInfo{Index: idx, Vendor: vendor})
 	}
 
