@@ -593,6 +593,44 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	})
 }
 
+// HandleProbeNodeBackendRuntime triggers a recheck of the NBR on the target node.
+// Delegates to the existing check-request logic. Same response schema.
+// POST /api/v1/nodes/{id}/backend-runtimes/{nbr_id}/probe
+func (h *AgentHandler) HandleProbeNodeBackendRuntime(w http.ResponseWriter, r *http.Request) {
+	h.HandleRequestNodeBackendRuntimeCheck(w, r)
+}
+
+// HandleGetNodeBackendRuntimeProbe returns the latest probe snapshot for an NBR.
+// This is a read-only endpoint — it does NOT trigger any Docker checks.
+// Returns 200 with probe_results_json (may be empty {}) on success.
+// GET /api/v1/nodes/{id}/backend-runtimes/{nbr_id}/probe
+func (h *AgentHandler) HandleGetNodeBackendRuntimeProbe(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	nbrID := r.PathValue("nbr_id")
+	if nodeID == "" || nbrID == "" {
+		writeError(w, http.StatusBadRequest, "node_id and nbr_id are required")
+		return
+	}
+
+	var probeJSON string
+	var status string
+	err := h.DB.QueryRow(
+		`SELECT COALESCE(probe_results_json,'{}'), status FROM node_backend_runtimes WHERE id = ? AND node_id = ?`,
+		nbrID, nodeID,
+	).Scan(&probeJSON, &status)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "node backend runtime not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id":                 nbrID,
+		"node_id":            nodeID,
+		"status":             status,
+		"probe_results_json": json.RawMessage(probeJSON),
+	})
+}
+
 // getNodeAddress returns the advertised address and metrics port for a node.
 func (h *AgentHandler) getNodeAddress(nodeID string) (string, int) {
 	var addr string

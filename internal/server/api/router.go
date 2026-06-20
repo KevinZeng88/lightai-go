@@ -163,6 +163,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/check", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCheckNodeBackendRuntime)))
 	mux.Handle("PATCH /api/v1/nodes/{id}/backend-runtimes/{nbr_id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchNodeBackendRuntime)))
 	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/{nbr_id}/check-request", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleRequestNodeBackendRuntimeCheck)))
+	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/{nbr_id}/probe", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleProbeNodeBackendRuntime)))
+	mux.Handle("GET /api/v1/nodes/{id}/backend-runtimes/{nbr_id}/probe", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetNodeBackendRuntimeProbe)))
 	mux.Handle("DELETE /api/v1/nodes/{id}/backend-runtimes/{nbr_id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteNodeBackendRuntime)))
 
 	// BackendRuntime clone.

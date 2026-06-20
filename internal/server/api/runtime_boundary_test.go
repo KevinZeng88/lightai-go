@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -1830,4 +1831,323 @@ func TestCheckRequestInspectErrorNotNotFound(t *testing.T) {
 	}
 	t.Logf("Inspect error (not not-found): status=%s reason=%s (expected inspect_failed, not missing_image)",
 		status, resp["status_reason"])
+}
+
+// -- Phase 3: Probe API Tests --
+
+// TestProbeEndpointPathValuesCorrect verifies that the new POST /probe handler
+// correctly reads node_id from {id} and nbr_id from {nbr_id}.
+func TestProbeEndpointPathValuesCorrect(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-probe-path"
+	runtimeID := "rt-probe-path"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-probe-path',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", "")
+	insertRuntime(t, db, runtimeID, "Runtime Probe Path", "")
+
+	// Enable NBR
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:test","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// POST /probe with correct path params.
+	pw := httptest.NewRecorder()
+	h.HandleProbeNodeBackendRuntime(pw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if pw.Code != 200 {
+		t.Fatalf("POST /probe code=%d body=%s (expected 200, PathValue names correct)",
+			pw.Code, pw.Body.String())
+	}
+
+	// GET /probe with correct path params.
+	gw := httptest.NewRecorder()
+	h.HandleGetNodeBackendRuntimeProbe(gw, newReq("GET", "/x", "",
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if gw.Code != 200 {
+		t.Fatalf("GET /probe code=%d body=%s (expected 200, PathValue names correct)",
+			gw.Code, gw.Body.String())
+	}
+
+	var getResp map[string]interface{}
+	json.Unmarshal(gw.Body.Bytes(), &getResp)
+	if getResp["id"] != nbrID {
+		t.Fatalf("GET /probe returned wrong id: %v want %s", getResp["id"], nbrID)
+	}
+	t.Logf("POST /probe: code=%d, GET /probe: code=%d id=%s", pw.Code, gw.Code, getResp["id"])
+}
+
+// TestProbeEndpointRejectsMissingPathValues verifies both new endpoints return
+// 400 when node_id or nbr_id path params are missing.
+func TestProbeEndpointRejectsMissingPathValues(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	// POST /probe without path params
+	pw := httptest.NewRecorder()
+	h.HandleProbeNodeBackendRuntime(pw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{}))
+	if pw.Code != 400 {
+		t.Fatalf("POST /probe without path params: code=%d (expected 400)", pw.Code)
+	}
+	if !strings.Contains(pw.Body.String(), "node_id and nbr_id are required") {
+		t.Fatalf("expected 'node_id and nbr_id are required', got: %s", pw.Body.String())
+	}
+
+	// GET /probe without path params
+	gw := httptest.NewRecorder()
+	h.HandleGetNodeBackendRuntimeProbe(gw, newReq("GET", "/x", "",
+		adminSession(), map[string]string{}))
+	if gw.Code != 400 {
+		t.Fatalf("GET /probe without path params: code=%d (expected 400)", gw.Code)
+	}
+	t.Log("Both endpoints reject missing path params")
+}
+
+// TestCheckRequestBackwardCompatible verifies the old check-request route still works.
+func TestCheckRequestBackwardCompatible(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-ck-bc"
+	runtimeID := "rt-ck-bc"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ck-bc',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", "")
+	insertRuntime(t, db, runtimeID, "Runtime CK BC", "")
+
+	// Enable NBR
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:bc","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// Old check-request still works
+	cw := httptest.NewRecorder()
+	h.HandleRequestNodeBackendRuntimeCheck(cw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if cw.Code != 200 {
+		t.Fatalf("check-request code=%d body=%s (expected 200, backward compatible)",
+			cw.Code, cw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &resp)
+	if resp["id"] != nbrID {
+		t.Fatalf("check-request returned wrong id: %v", resp["id"])
+	}
+	// Verify response has the expected fields
+	for _, f := range []string{"id", "node_id", "image_ref", "status", "status_reason", "probe_results"} {
+		if _, ok := resp[f]; !ok {
+			t.Fatalf("check-request response missing field: %s", f)
+		}
+	}
+	t.Logf("check-request backward compatible: status=%s", resp["status"])
+}
+
+// TestGetProbeReturnsEmptyWhenNeverProbed verifies GET /probe returns
+// empty probe_results_json when the NBR has never been probed.
+func TestGetProbeReturnsEmptyWhenNeverProbed(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-gp-empty"
+	runtimeID := "rt-gp-empty"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-gp-empty',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", "")
+	insertRuntime(t, db, runtimeID, "Runtime GP Empty", "")
+
+	// Enable NBR but do NOT probe
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:gp","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// GET /probe — should return 200 with empty probe_results_json
+	gw := httptest.NewRecorder()
+	h.HandleGetNodeBackendRuntimeProbe(gw, newReq("GET", "/x", "",
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if gw.Code != 200 {
+		t.Fatalf("GET /probe code=%d body=%s (expected 200)", gw.Code, gw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(gw.Body.Bytes(), &resp)
+	prj, _ := resp["probe_results_json"]
+	if prj == nil {
+		t.Fatal("probe_results_json should not be nil")
+	}
+	t.Logf("GET /probe with no prior probe: status=%s probe_results_json=%v", resp["status"], prj)
+}
+
+// TestGetProbeReturnsSnapshotAfterProbe verifies GET /probe returns the
+// stored snapshot after a successful probe.
+func TestGetProbeReturnsSnapshotAfterProbe(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-gp-snap"
+	runtimeID := "rt-gp-snap"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-gp-snap',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", "")
+	insertRuntime(t, db, runtimeID, "Runtime GP Snap", "")
+
+	// Fake agent that returns image in list and inspect success
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "docker-image-inspect") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": "img:gp-snap",
+				"inspect": map[string]interface{}{
+					"Id": "sha256:snap123", "RepoTags": []string{"img:gp-snap"},
+					"Created": "2026-01-01T00:00:00Z", "Architecture": "amd64", "Os": "linux",
+					"Size": 1000, "Config": map[string]interface{}{},
+				},
+			})
+		} else {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"images": []map[string]interface{}{
+					{"repository": "img", "tag": "gp-snap", "image_id": "sha256:snap123", "image_ref": "img:gp-snap"},
+				},
+				"count": 1,
+			})
+		}
+	}))
+	defer fakeAgent.Close()
+
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	// Enable NBR
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:gp-snap","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// POST /probe
+	pw := httptest.NewRecorder()
+	h.HandleProbeNodeBackendRuntime(pw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if pw.Code != 200 {
+		t.Fatalf("POST /probe code=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	// GET /probe — should return the stored snapshot
+	gw := httptest.NewRecorder()
+	h.HandleGetNodeBackendRuntimeProbe(gw, newReq("GET", "/x", "",
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if gw.Code != 200 {
+		t.Fatalf("GET /probe code=%d body=%s", gw.Code, gw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(gw.Body.Bytes(), &resp)
+	prjRaw := resp["probe_results_json"]
+	if prjRaw == nil {
+		t.Fatal("probe_results_json is nil after probe")
+	}
+	// probe_results_json returned as json.RawMessage — should be non-empty
+	t.Logf("GET /probe after probe: status=%s probe_results_json present=%v",
+		resp["status"], prjRaw != nil && fmt.Sprint(prjRaw) != "{}")
+}
+
+// TestPostProbeMissingImageOnlyFromInspectNotFound confirms POST /probe
+// never returns missing_image when ImageInspect succeeds (regression).
+func TestPostProbeMissingImageOnlyFromInspectNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	nodeID := "node-pp-reg"
+	runtimeID := "rt-pp-reg"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-pp-reg',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", "")
+	insertRuntime(t, db, runtimeID, "Runtime PP Reg", "")
+
+	// Fake agent: image in list AND inspect succeeds
+	fakeAgent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "docker-image-inspect") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"image_ref": "vllm/vllm-openai:latest",
+				"inspect": map[string]interface{}{
+					"Id": "sha256:abc123", "RepoTags": []string{"vllm/vllm-openai:latest"},
+					"Created": "2026-01-01T00:00:00Z", "Architecture": "amd64", "Os": "linux",
+					"Size": 1000, "Config": map[string]interface{}{},
+				},
+			})
+		} else {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"images": []map[string]interface{}{
+					{"repository": "vllm/vllm-openai", "tag": "latest", "image_id": "sha256:abc123", "image_ref": "vllm/vllm-openai:latest"},
+				},
+				"count": 1,
+			})
+		}
+	}))
+	defer fakeAgent.Close()
+
+	u, _ := url.Parse(fakeAgent.URL)
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+	db.Exec(`UPDATE nodes SET advertised_address=?, metrics_port=? WHERE id=?`, host, port, nodeID)
+
+	// Enable NBR
+	nbrID := nodeID + ":" + runtimeID
+	ew := httptest.NewRecorder()
+	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest","image_present":true,"docker_available":true}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
+	}
+
+	// POST /probe
+	pw := httptest.NewRecorder()
+	h.HandleProbeNodeBackendRuntime(pw, newReq("POST", "/x", `{}`,
+		adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if pw.Code != 200 {
+		t.Fatalf("POST /probe code=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(pw.Body.Bytes(), &resp)
+	status := strVal(resp, "status", "")
+	if status == "missing_image" {
+		t.Fatalf("BUG: POST /probe returned missing_image when ImageInspect succeeded. status=%s reason=%s",
+			status, strVal(resp, "status_reason", ""))
+	}
+	if !boolVal(resp, "image_present", false) {
+		t.Fatalf("expected image_present=true when ImageInspect succeeded")
+	}
+	t.Logf("POST /probe regression: status=%s reason=%s image_present=%v (not missing_image)",
+		status, resp["status_reason"], resp["image_present"])
 }

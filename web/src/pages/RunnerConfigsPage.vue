@@ -158,6 +158,27 @@
             <p v-if="selected.probe_results_json.level4.version_probed">{{ selected.probe_results_json.level4.version_string }}</p>
             <p v-else>{{ $t('nodeRuntimeProbe.notProbed') }}: {{ selected.probe_results_json.level4.probe_error || $t('nodeRuntimeProbe.notProbed') }}</p>
           </el-collapse-item>
+          <el-collapse-item :title="$t('nodeRuntimeProbe.backendMatch')" name="level3" v-if="selected.probe_results_json.level3">
+            <p>{{ selected.probe_results_json.level3.match_detail || $t('nodeRuntimeProbe.notChecked') }}</p>
+          </el-collapse-item>
+          <el-collapse-item :title="$t('nodeRuntimeProbe.versionProbe')" name="level4" v-if="selected.probe_results_json.level4">
+            <p v-if="selected.probe_results_json.level4.version_probed">{{ selected.probe_results_json.level4.version_string }}</p>
+            <p v-else>{{ $t('nodeRuntimeProbe.notProbed') }}: {{ selected.probe_results_json.level4.probe_error || $t('nodeRuntimeProbe.notProbed') }}</p>
+          </el-collapse-item>
+        </el-collapse>
+        <!-- Diagnostic notices -->
+        <el-alert v-if="isShellWrapper(selected.probe_results_json?.level2?.entrypoint)" type="info" :title="$t('nodeRuntimeProbe.shellWrapper')" show-icon :closable="false" style="margin-top:8px" />
+        <el-alert v-if="isVendorImage(selected.probe_results_json?.level3)" type="warning" :title="$t('nodeRuntimeProbe.vendorImage')" show-icon :closable="false" style="margin-top:8px" />
+        <el-alert v-if="isBlockingError(selected.status)" type="error" :title="translateStatus(selected.status, t)" :description="translateStatusReason(selected.status_reason, t)" show-icon :closable="false" style="margin-top:8px" />
+        <!-- Run Parameters (read-only from config_snapshot_json) -->
+        <el-collapse v-if="selected?.config_snapshot_json && Object.keys(selected.config_snapshot_json).length > 0" style="margin-top:12px">
+          <el-collapse-item :title="$t('nodeRuntimeProbe.runParams')" name="runParams">
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item :label="$t('nodeRuntimeProbe.imageRef')">{{ selected.config_snapshot_json.image_name || '-' }}</el-descriptions-item>
+              <el-descriptions-item :label="$t('nodeRuntimeProbe.vendor')">{{ selected.config_snapshot_json.vendor || '-' }}</el-descriptions-item>
+            </el-descriptions>
+            <p style="margin-top:8px;font-size:12px;color:var(--el-text-color-secondary)">{{ $t('nodeRuntimeProbe.runParamsNote') }}</p>
+          </el-collapse-item>
         </el-collapse>
       </template>
     </el-drawer>
@@ -202,6 +223,22 @@ const wizConfigName = ref(''); const wizCheckResult = ref<any>(null)
 
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(step, () => { step.value++ })
 
+function isShellWrapper(entrypoint: any): boolean {
+  if (!entrypoint || !Array.isArray(entrypoint) || entrypoint.length === 0) return false
+  const ep = entrypoint[0]
+  if (!ep || typeof ep !== 'string') return false
+  const shells = ['bash', 'sh', '/bin/bash', '/bin/sh', '/usr/bin/bash', '/usr/bin/sh',
+    'python', 'python3', '/usr/bin/python', '/usr/bin/python3', '/usr/local/bin/python', '/usr/local/bin/python3']
+  return shells.includes(ep) || shells.some(s => ep.endsWith('/' + s))
+}
+function isVendorImage(level3: any): boolean {
+  if (!level3) return false
+  return level3.backend_match_status === 'declared_match_unverified'
+}
+function isBlockingError(status: string): boolean {
+  return status === 'missing_image' || status === 'inspect_failed' ||
+    status === 'docker_error' || status === 'agent_unreachable'
+}
 function formatBytes(bytes: any): string {
   if (bytes == null || bytes === 0) return '-'
   const n = Number(bytes)
@@ -244,6 +281,7 @@ async function refresh() {
         last_checked_at: nbr.last_checked_at,
         status_reason: nbr.status_reason,
         config_snapshot_json: nbr.config_snapshot_json || {},
+        probe_results_json: nbr.probe_results_json || {},
         backend_runtime_id: nbr.backend_runtime_id,
     }))
   } catch {}
