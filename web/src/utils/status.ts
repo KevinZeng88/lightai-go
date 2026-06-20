@@ -19,12 +19,17 @@ export function getStatusType(status: string): StatusType {
     case 'leased':
     case 'syncing':
     case 'needs_check':
+    case 'ready_with_warnings':
       return 'warning'
     case 'error':
     case 'failed':
     case 'unhealthy':
     case 'unsupported_device':
     case 'missing_image':
+    case 'inspect_failed':
+    case 'docker_error':
+    case 'agent_unreachable':
+    case 'runtime_image_mismatch':
       return 'danger'
     case 'offline':
     case 'unavailable':
@@ -35,6 +40,7 @@ export function getStatusType(status: string): StatusType {
     case 'deleted':
     case 'released':
     case 'template_only':
+    case 'evidence_missing':
       return 'info'
     default:
       return 'info'
@@ -68,6 +74,8 @@ const STATUS_REASON_MAP: Record<string, string> = {
   'version probe timed out': 'runtime.statusReason.versionProbeFailed',
   'image_present=false': 'runtime.statusReason.missingImage',
   'no image_ref configured': 'runtime.statusReason.evidenceMissing',
+  'declared match not verified': 'runtime.statusReason.backendMismatch',
+  'backend match: declared_match_unverified': 'runtime.statusReason.backendMismatch',
 }
 
 export function translateStatusReason(reason: string, t: (key: string, params?: any) => string): string {
