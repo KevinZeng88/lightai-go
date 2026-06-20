@@ -22,6 +22,8 @@ model_mount:
   readonly: true
 docker_options:
   gpus: all
+  gpu_driver: ""
+  gpu_capabilities: [["gpu"]]
 env_schema:
   - name: NVIDIA_VISIBLE_DEVICES
     node_specific: true

@@ -25,6 +25,8 @@ docker_options:
   ipc_mode: host
   shm_size: 32g
   runtime: nvidia
+  gpu_driver: ""
+  gpu_capabilities: [["gpu"]]
 env_schema:
   - name: HF_TOKEN
     optional: true

@@ -463,10 +463,15 @@ func (d *DockerRuntimeDriver) buildCreateOptions(spec AgentRunSpec) ContainerCre
 		if len(caps) == 0 {
 			caps = [][]string{{"gpu"}}
 		}
+		count := -1 // explicit all-GPU policy when no specific DeviceIDs
+		if len(spec.GPUDeviceIDs) > 0 {
+			count = 0 // specific GPUs — use DeviceIDs
+		}
 		dr := DeviceRequest{
 			Driver:       driver,
 			Capabilities: caps,
 			DeviceIDs:    spec.GPUDeviceIDs,
+			Count:        count,
 		}
 		opts.DeviceRequests = append(opts.DeviceRequests, dr)
 	}

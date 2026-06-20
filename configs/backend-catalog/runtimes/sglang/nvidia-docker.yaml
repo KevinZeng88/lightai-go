@@ -13,6 +13,8 @@ model_mount:
 docker_options:
   ipc_mode: host
   shm_size: 32gb
+  gpu_driver: ""
+  gpu_capabilities: [["gpu"]]
 env:
   CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
 verification:

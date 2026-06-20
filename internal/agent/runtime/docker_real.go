@@ -124,16 +124,19 @@ func (r *RealDockerClient) ContainerCreate(ctx context.Context, opts ContainerCr
 	}
 
 	// DeviceRequests (GPU driver requests, e.g. NVIDIA --gpus).
+	// Count policy is explicit from the LightAI DeviceRequest:
+	//   Count=-1 → all GPUs (maps to Docker Count=-1)
+	//   Count=0 + DeviceIDs → specific GPUs (maps to Docker DeviceIDs)
 	// Docker API: do NOT set both Count and DeviceIDs simultaneously.
 	for _, dr := range opts.DeviceRequests {
 		req := container.DeviceRequest{
 			Driver:       dr.Driver,
 			Capabilities: dr.Capabilities,
 		}
-		if len(dr.DeviceIDs) > 0 {
+		if dr.Count < 0 {
+			req.Count = dr.Count // explicit all-GPU policy
+		} else if len(dr.DeviceIDs) > 0 {
 			req.DeviceIDs = dr.DeviceIDs
-		} else {
-			req.Count = -1 // all GPUs
 		}
 		hostCfg.DeviceRequests = append(hostCfg.DeviceRequests, req)
 	}

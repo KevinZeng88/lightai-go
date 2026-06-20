@@ -64,9 +64,10 @@ type DeviceMapping struct {
 // This mirrors container.DeviceRequest from the Docker SDK but lives in our
 // own types so the interface stays SDK-free.
 type DeviceRequest struct {
-	Driver       string     // device driver name, e.g. "nvidia"
-	DeviceIDs    []string   // device IDs, e.g. ["0","1"]; nil or empty means all
+	Driver       string     // device driver name, "" matches docker run --gpus CLI
+	DeviceIDs    []string   // device IDs, e.g. ["0","1"]; empty → all GPUs
 	Capabilities [][]string // e.g. [["gpu"]], [["gpu","compute"]]
+	Count        int        // -1 → all GPUs; 0 → use DeviceIDs; explicit policy, not implicit
 }
 
 // PortBinding maps a host port to a container port.
