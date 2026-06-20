@@ -1139,7 +1139,9 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 			"security_options": pf.plan.SecurityOptions,
 			"ulimits":          pf.plan.Ulimits,
 			"group_add":        pf.plan.GroupAdd,
-			"gpu_device_ids":   gpuDeviceIDs,
+			"gpu_device_ids":    gpuDeviceIDs,
+			"gpu_driver":        pf.plan.GpuDriver,
+			"gpu_capabilities":  pf.plan.GpuCapabilities,
 		},
 		"health_check": map[string]interface{}{
 			"enabled":          pf.plan.HealthCheck.Path != "",

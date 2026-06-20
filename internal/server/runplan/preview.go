@@ -40,6 +40,9 @@ func EquivalentCommandPreview(plan *ResolvedRunPlan) string {
 	}
 	if len(plan.GPUDeviceIDs) > 0 {
 		parts = append(parts, "--gpus", fmt.Sprintf("\"device=%s\"", strings.Join(plan.GPUDeviceIDs, ",")))
+	} else if plan.GpuDriver != "" || len(plan.GpuCapabilities) > 0 {
+		// All GPUs with explicit driver/caps — equivalent to --gpus all
+		parts = append(parts, "--gpus", "all")
 	}
 	for _, d := range plan.Devices {
 		if d.Permissions != "" {

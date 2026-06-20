@@ -92,6 +92,8 @@ type RuntimeInfo struct {
 }
 
 // DockerSpecInfo holds Docker runtime configuration.
+// All fields come from docker_json in the catalog, NBR, or user config.
+// No field has an implicit code default — defaults are in the catalog seed or YAML.
 type DockerSpecInfo struct {
 	Privileged       bool              `json:"privileged"`
 	IPCMode          string            `json:"ipc_mode"`
@@ -103,6 +105,10 @@ type DockerSpecInfo struct {
 	SecurityOptions  []string          `json:"security_options"`
 	Devices          []DeviceMapping   `json:"devices"`
 	GroupAdd         []string          `json:"group_add"`
+	// GPU driver for DeviceRequest. Empty string ("") matches docker run --gpus CLI.
+	// Set per vendor in catalog: NVIDIA uses "", MetaX/Huawei use raw devices (no DeviceRequest).
+	GpuDriver        string     `json:"gpu_driver,omitempty"`
+	GpuCapabilities  [][]string `json:"gpu_capabilities,omitempty"` // e.g. [["gpu"]], [["gpu","compute"]]
 }
 
 // ModelMountInfo holds model mount configuration.
@@ -278,6 +284,8 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 
 		GPUDeviceIDs:     gpuIDs,
 		GPUVisibleEnvKey: gpuVisibleKey,
+		GpuDriver:        docker.GpuDriver,
+		GpuCapabilities:  docker.GpuCapabilities,
 
 		SecurityOptions: docker.SecurityOptions,
 		ExtraArgs:       []string{},

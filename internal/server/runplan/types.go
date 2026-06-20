@@ -25,6 +25,8 @@ type ResolvedRunPlan struct {
 
 	GPUDeviceIDs     []string `json:"gpu_device_ids,omitempty"`
 	GPUVisibleEnvKey string   `json:"gpu_visible_env_key,omitempty"`
+	GpuDriver        string   `json:"gpu_driver,omitempty"`        // DeviceRequest driver, e.g. "" for docker run --gpus CLI
+	GpuCapabilities  [][]string `json:"gpu_capabilities,omitempty"` // e.g. [["gpu"]]
 
 	SecurityOptions []string `json:"security_options,omitempty"`
 	ExtraArgs       []string `json:"extra_args,omitempty"`

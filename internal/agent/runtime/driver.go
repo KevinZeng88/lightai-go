@@ -90,6 +90,8 @@ type DockerSpec struct {
 	Ulimits         map[string]string `json:"ulimits,omitempty"`
 	RestartPolicy   string            `json:"restart_policy,omitempty"`
 	GPUDeviceIDs    []string          `json:"gpu_device_ids,omitempty"`
+	GpuDriver       string            `json:"gpu_driver,omitempty"`       // DeviceRequest driver, from docker_json
+	GpuCapabilities [][]string        `json:"gpu_capabilities,omitempty"` // DeviceRequest capabilities, from docker_json
 }
 
 // VolumeSpec describes a volume mount.

@@ -57,6 +57,10 @@ func EquivalentCommandPreview(spec *AgentRunSpec) string {
 		if spec.Vendor == "nvidia" {
 			parts = append(parts, "--gpus", fmt.Sprintf(`"device=%s"`, strings.Join(spec.Docker.GPUDeviceIDs, ",")))
 		}
+	} else if spec.Docker.GpuDriver != "" || len(spec.Docker.GpuCapabilities) > 0 {
+		if spec.Vendor == "nvidia" {
+			parts = append(parts, "--gpus", "all")
+		}
 	}
 
 	// Raw devices.
