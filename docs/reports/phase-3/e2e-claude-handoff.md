@@ -279,9 +279,10 @@ Do not reimplement these unless a new regression appears:
 
 Real smoke state:
 
-- llama.cpp passed through the LightAI product API path.
+- llama.cpp passed through the LightAI product API path (product chain verified; committed file evidence is incomplete — see E2E-004 in `docs/reports/phase-3/open-issues-closeout.md`).
 - vLLM and SGLang are not API harness failures. They reached real container start and failed inside the container due current Docker/GPU runtime compatibility in the local WSL/NVIDIA environment.
-- The blockers are formally tracked in `docs/reports/phase-3/open-issues-closeout.md`.
+- The blockers and evidence gap are formally tracked in `docs/reports/phase-3/open-issues-closeout.md`.
+- Overall E2E status: **PASS_WITH_DOCUMENTED_EXTERNAL_BLOCKERS**.
 
 Important fix already made:
 

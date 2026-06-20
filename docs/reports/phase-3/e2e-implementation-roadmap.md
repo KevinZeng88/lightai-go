@@ -810,7 +810,7 @@ The roadmap has been executed through Step 9 with the following status:
 | Step 7 | DONE | `internal/server/api/workflow_lifecycle_test.go` |
 | Step 2 | DONE, minimal harness | `scripts/e2e/lib/env.sh`, `api-client.sh`, `assert.sh`, `resources.sh`, `docker.sh`, `report.sh`, `cleanup.sh` |
 | Step 8 | DONE, first batch | `e2e-clone-template-parameter-persistence.sh`, `e2e-deployment-visibility-selected.sh`, `e2e-runtime-config-web-check-flow.sh` |
-| Step 9 | PARTIAL WITH FORMAL BLOCKERS | llama.cpp PASS; vLLM and SGLang reached real container start but failed due current Docker/GPU runtime compatibility |
+| Step 9 | PARTIAL WITH FORMAL BLOCKERS | llama.cpp PASS (product chain verified, evidence files incomplete — see E2E-004); vLLM and SGLang reached real container start but failed due current Docker/GPU runtime compatibility |
 
 Step 8 verification results:
 
@@ -833,9 +833,10 @@ LIGHTAI_E2E_PASSWORD=test1234 timeout 600s bash scripts/e2e-model-runtime-wizard
 
 Outcome:
 
-- llama.cpp: PASS.
-- vLLM: DOCUMENTED_BLOCKER in `docs/reports/phase-3/open-issues-closeout.md`.
-- SGLang: DOCUMENTED_BLOCKER in `docs/reports/phase-3/open-issues-closeout.md`.
+- llama.cpp: PASS (product API chain correct; evidence files incomplete — see E2E-004 in `docs/reports/phase-3/open-issues-closeout.md`).
+- vLLM: DOCUMENTED_BLOCKER (E2E-002).
+- SGLang: DOCUMENTED_BLOCKER (E2E-003).
+- Overall E2E status: **PASS_WITH_DOCUMENTED_EXTERNAL_BLOCKERS**.
 
 Implementation notes:
 

@@ -857,8 +857,10 @@ Real local container smoke outcome:
 
 | Backend | Result | Evidence |
 | --- | --- | --- |
-| llama.cpp | PASS: product API chain created artifact/location/NBR/deployment, started real container, `/v1/models` passed, instance test/logs/stop succeeded | `docs/reports/model-runtime-node-wizard/e2e-llamacpp-20260620224306/` |
+| llama.cpp | PASS (product chain verified; committed file evidence incomplete — see E2E-004): product API chain created artifact/location/NBR/deployment, started real container, `/v1/models` passed, instance test/logs/stop succeeded (verified in foreground tool session) | `docs/reports/model-runtime-node-wizard/e2e-llamacpp-20260620224306/` |
 | vLLM | DOCUMENTED_BLOCKER: product API chain reached real container start, but container exited because the image could not infer CUDA device type in the current WSL/NVIDIA runtime environment | `docs/reports/model-runtime-node-wizard/e2e-matrix-20260620224523/` |
 | SGLang | DOCUMENTED_BLOCKER: product API chain reached real container start, but container exited because SGLang/Triton platform detection fell back and device selection failed in the current WSL/NVIDIA runtime environment | `docs/reports/model-runtime-node-wizard/e2e-sglang-20260620224604/` |
 
 The two blocked real-container results are environment/runtime compatibility blockers, not API workflow design blockers. They are tracked formally in `docs/reports/phase-3/open-issues-closeout.md`.
+
+**Overall E2E status: PASS_WITH_DOCUMENTED_EXTERNAL_BLOCKERS.**
