@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Shared environment bootstrap for LightAI local E2E scripts.
+
+if [ "${LIGHTAI_E2E_ENV_SH:-}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+LIGHTAI_E2E_ENV_SH=1
+
+set -euo pipefail
+
+E2E_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+E2E_REPO_ROOT="$(cd "$E2E_LIB_DIR/../../.." && pwd)"
+
+LIGHTAI_E2E_MODE="${LIGHTAI_E2E_MODE:-existing-env}"
+LIGHTAI_SERVER_URL="${LIGHTAI_SERVER_URL:-${SERVER_URL:-http://127.0.0.1:18080}}"
+LIGHTAI_AGENT_URL="${LIGHTAI_AGENT_URL:-${AGENT_URL:-http://127.0.0.1:19091}}"
+LIGHTAI_E2E_USERNAME="${LIGHTAI_E2E_USERNAME:-${E2E_USERNAME:-admin}}"
+LIGHTAI_E2E_PASSWORD="${LIGHTAI_E2E_PASSWORD:-${E2E_PASSWORD:-test1234}}"
+LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD="${LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD:-$LIGHTAI_E2E_PASSWORD}"
+
+LIGHTAI_E2E_RUN_ID="${LIGHTAI_E2E_RUN_ID:-$(date +%Y%m%d-%H%M%S)-$$}"
+LIGHTAI_E2E_PREFIX="${LIGHTAI_E2E_PREFIX:-e2e-$LIGHTAI_E2E_RUN_ID}"
+LIGHTAI_E2E_ARTIFACT_ROOT="${LIGHTAI_E2E_ARTIFACT_ROOT:-${ARTIFACT_ROOT:-$E2E_REPO_ROOT/tmp/e2e}}"
+LIGHTAI_E2E_ARTIFACT_DIR="${LIGHTAI_E2E_ARTIFACT_DIR:-${ARTIFACT_DIR:-$LIGHTAI_E2E_ARTIFACT_ROOT/$LIGHTAI_E2E_RUN_ID}}"
+LIGHTAI_E2E_COOKIE_JAR="${LIGHTAI_E2E_COOKIE_JAR:-${COOKIE_JAR:-$LIGHTAI_E2E_ARTIFACT_DIR/cookies.txt}}"
+
+VLLM_IMAGE="${VLLM_IMAGE:-vllm/vllm-openai:latest}"
+SGLANG_IMAGE="${SGLANG_IMAGE:-lmsysorg/sglang:latest}"
+LLAMACPP_IMAGE="${LLAMACPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda13}"
+HF_MODEL_PATH="${HF_MODEL_PATH:-/home/kzeng/models/Qwen3-0.6B-Instruct-2512}"
+GGUF_MODEL_PATH="${GGUF_MODEL_PATH:-/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf}"
+
+mkdir -p "$LIGHTAI_E2E_ARTIFACT_DIR"/{requests,responses,logs}
+
+e2e_log() {
+  printf '[%s] [e2e] %s\n' "$(date '+%H:%M:%S')" "$*"
+}
+
+e2e_die() {
+  e2e_log "FATAL: $*"
+  return 1
+}
+
+e2e_require_cmd() {
+  local cmd="$1"
+  command -v "$cmd" >/dev/null 2>&1 || e2e_die "required command not found: $cmd"
+}
+
+e2e_note_env() {
+  cat > "$LIGHTAI_E2E_ARTIFACT_DIR/env.txt" <<EOF
+LIGHTAI_E2E_MODE=$LIGHTAI_E2E_MODE
+LIGHTAI_SERVER_URL=$LIGHTAI_SERVER_URL
+LIGHTAI_AGENT_URL=$LIGHTAI_AGENT_URL
+LIGHTAI_E2E_USERNAME=$LIGHTAI_E2E_USERNAME
+LIGHTAI_E2E_RUN_ID=$LIGHTAI_E2E_RUN_ID
+LIGHTAI_E2E_PREFIX=$LIGHTAI_E2E_PREFIX
+VLLM_IMAGE=$VLLM_IMAGE
+SGLANG_IMAGE=$SGLANG_IMAGE
+LLAMACPP_IMAGE=$LLAMACPP_IMAGE
+HF_MODEL_PATH=$HF_MODEL_PATH
+GGUF_MODEL_PATH=$GGUF_MODEL_PATH
+EOF
+}
+
+e2e_note_env
