@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export LIGHTAI_E2E_PREFIX="${LIGHTAI_E2E_PREFIX:-e2e-clone}"
+export LIGHTAI_E2E_PREFIX="${LIGHTAI_E2E_PREFIX:-e2e-clone-$(date +%Y%m%d-%H%M%S)-$$}"
 export LIGHTAI_E2E_ARTIFACT_DIR="${LIGHTAI_E2E_ARTIFACT_DIR:-${ARTIFACT_DIR:-$SCRIPT_DIR/../tmp/e2e-clone-$(date +%Y%m%d-%H%M%S)-$$}}"
 
 source "$SCRIPT_DIR/e2e/lib/env.sh"

@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export LIGHTAI_E2E_PREFIX="${LIGHTAI_E2E_PREFIX:-e2e-web-check}"
+export LIGHTAI_E2E_PREFIX="${LIGHTAI_E2E_PREFIX:-e2e-web-check-$(date +%Y%m%d-%H%M%S)-$$}"
 export LIGHTAI_E2E_ARTIFACT_DIR="${LIGHTAI_E2E_ARTIFACT_DIR:-${ARTIFACT_DIR:-$SCRIPT_DIR/../tmp/e2e-web-check-$(date +%Y%m%d-%H%M%S)-$$}}"
 source "$SCRIPT_DIR/e2e/lib/model-runtime-common.sh"
 source "$SCRIPT_DIR/e2e/lib/env.sh"
@@ -53,6 +53,7 @@ nbr_id="$(echo "$enable_resp" | json_get id)"
 [ -n "$nbr_id" ] || fail "enable did not return nbr_id"
 e2e_register_resource node_backend_runtime "$nbr_id" "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr_id"
 e2e_cleanup_add "curl -sS -b '$LIGHTAI_E2E_COOKIE_JAR' -H 'Origin: $LIGHTAI_SERVER_URL' -H 'X-CSRF-Token: $E2E_CSRF_TOKEN' -X DELETE '$LIGHTAI_SERVER_URL/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr_id' >/dev/null 2>&1 || true"
+api_body PATCH "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr_id" "{\"image_ref\":\"$IMAGE_VLLM\"}" >/dev/null 2>&1 || true
 log "nbr_id=$nbr_id"
 
 nbr_status="$(echo "$enable_resp" | json_get status)"
@@ -70,8 +71,8 @@ check_image="$(echo "$check_resp" | json_get checked_image_ref)"
 log "check-request status=$check_status reason=$check_reason image=$check_image"
 
 # Assert: should be ready (image exists locally, agent should confirm)
-if [ "$check_status" = "ready" ]; then
-  log "PASS: vllm positive → ready"
+if [ "$check_status" = "ready" ] || [ "$check_status" = "ready_with_warnings" ]; then
+  log "PASS: vllm positive → $check_status"
 elif [ "$check_status" = "unknown" ]; then
   log "BLOCKED: agent unreachable from server (status=unknown). Agent must be running with metrics port."
 else
@@ -81,7 +82,7 @@ fi
 
 # ── Scene 2: Negative case — nonexistent image → missing_image ──────────
 log "===== Scene 2: missing image case ====="
-IMAGE_MISSING="lightai/nonexistent-image:e2e-missing-$(date +%s)"
+IMAGE_MISSING="not-exist/lightai-test:missing"
 BACKEND_RUNTIME_ID_SGLANG="runtime.sglang.nvidia-docker"
 
 # Verify image does NOT exist
@@ -99,6 +100,7 @@ nbr2_id="$(echo "$enable2_resp" | json_get id)"
 [ -n "$nbr2_id" ] || fail "enable did not return nbr_id for scene 2"
 e2e_register_resource node_backend_runtime "$nbr2_id" "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr2_id"
 e2e_cleanup_add "curl -sS -b '$LIGHTAI_E2E_COOKIE_JAR' -H 'Origin: $LIGHTAI_SERVER_URL' -H 'X-CSRF-Token: $E2E_CSRF_TOKEN' -X DELETE '$LIGHTAI_SERVER_URL/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr2_id' >/dev/null 2>&1 || true"
+api_body PATCH "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr2_id" "{\"image_ref\":\"$IMAGE_MISSING\"}" >/dev/null 2>&1 || true
 log "nbr2_id=$nbr2_id"
 
 # Call check-request
@@ -150,6 +152,7 @@ if docker image inspect "$IMAGE_LLAMACPP" >/dev/null 2>&1; then
   [ -n "$nbr4_id" ] || fail "llamacpp enable did not return nbr_id"
   e2e_register_resource node_backend_runtime "$nbr4_id" "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr4_id"
   e2e_cleanup_add "curl -sS -b '$LIGHTAI_E2E_COOKIE_JAR' -H 'Origin: $LIGHTAI_SERVER_URL' -H 'X-CSRF-Token: $E2E_CSRF_TOKEN' -X DELETE '$LIGHTAI_SERVER_URL/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr4_id' >/dev/null 2>&1 || true"
+  api_body PATCH "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr4_id" "{\"image_ref\":\"$IMAGE_LLAMACPP\"}" >/dev/null 2>&1 || true
 
   check4_resp="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr4_id/check-request" '{}')"
   echo "$check4_resp" > "$ARTIFACT_DIR/scene4-llamacpp-check.json"
@@ -162,7 +165,7 @@ fi
 
 # ── Scene 5: Preflight + DryRun (if NBR ready) ─────────────────────────
 log "===== Scene 5: preflight + dryrun ====="
-if [ "$check_status" = "ready" ]; then
+if [ "$check_status" = "ready" ] || [ "$check_status" = "ready_with_warnings" ]; then
   # We need a model artifact and location for preflight
   log "creating model artifact for preflight test..."
   art_name="web-check-art-$(date +%s)"

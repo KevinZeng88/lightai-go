@@ -349,7 +349,7 @@ func main() {
 			out, err := execCmd("docker", "image", "inspect", ref, "--format", "{{json .}}")
 			if err != nil {
 				json.NewEncoder(w).Encode(map[string]interface{}{
-					"error": "docker image inspect failed",
+					"error": "docker image inspect failed: " + err.Error(),
 					"ref":   ref,
 				})
 				return
@@ -1325,6 +1325,12 @@ func execCmd(name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	out, err := cmd.Output()
 	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr := strings.TrimSpace(string(exitErr.Stderr))
+			if stderr != "" {
+				return "", fmt.Errorf("%w: %s", err, stderr)
+			}
+		}
 		return "", err
 	}
 	return string(out), nil
