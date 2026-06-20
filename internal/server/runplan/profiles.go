@@ -25,6 +25,20 @@ type ProcessStartDetectionHints struct {
 	AvoidIfEntrypointAlreadyStartsBackend bool `json:"avoid_if_entrypoint_already_starts_backend,omitempty"`
 }
 
+// ProcessStartConfig is the user-accepted authoritative Layer 3 configuration.
+// It is stored in NBR.config_snapshot_json.process_start_config and
+// frozen into Deployment.config_snapshot_json.
+type ProcessStartConfig struct {
+	EntrypointMode string   `json:"entrypoint_mode"`           // "image_default" | "custom"
+	Entrypoint     []string `json:"entrypoint,omitempty"`      // only when mode=custom
+	CommandPrefix  []string `json:"command_prefix,omitempty"`  // prepended to Cmd
+	ShellMode      bool     `json:"shell_mode,omitempty"`      // v1 default false
+	ProfileID      string   `json:"profile_id,omitempty"`      // profile that was accepted
+	Source         string   `json:"source,omitempty"`          // "user_accepted_detection" | "user_override"
+	Confidence     string   `json:"confidence,omitempty"`      // "high" | "medium" | "low"
+	Warnings       []string `json:"warnings,omitempty"`
+}
+
 // ProcessStartDetection is the system-generated suggestion for how to start
 // a container process for a given backend_family + image combination.
 type ProcessStartDetection struct {

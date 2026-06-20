@@ -76,6 +76,7 @@ func (h *AgentHandler) buildDeploymentRuntimeSnapshot(runtimeID string) string {
 		"model_mount_json":           rt["model_mount_json"],
 		"health_check_override_json": rt["health_check_override_json"],
 		"version_snapshot_json":      rt["version_snapshot_json"],
+		"process_start_config":       rt["process_start_config_json"],
 	}
 	return jsonString(snapshot)
 }
@@ -105,6 +106,7 @@ func mergeNBRConfigSnapshot(brSnapshot, nbrSnapshot, imageRef string) string {
 		"vendor", "image_name", "image_pull_policy",
 		"entrypoint_override_json", "args_override_json", "default_env_json",
 		"docker_json", "model_mount_json", "health_check_override_json",
+		"process_start_config",
 	} {
 		if v, ok := nbrMap[key]; ok && v != nil {
 			brMap[key] = v
@@ -492,8 +494,9 @@ type preflightResult struct {
 	rtVersionID       string
 	rtModelMount      string
 	rtHC              string
-	rtVersionSnapshot string
-	backendName       string
+	rtVersionSnapshot   string
+	processStartConfig  *runplan.ProcessStartConfig // from config_snapshot_json.process_start_config (Layer 3)
+	backendName         string
 	backendDefaultEnv string
 	bvEntrypoint      string
 	bvArgs            string
@@ -981,6 +984,13 @@ func (pf *preflightResult) applyDeploymentConfigSnapshot() {
 			pf.rtVersionSnapshot = string(raw)
 			// Re-apply version snapshot with the deployment's frozen version
 			pf.applyRuntimeVersionSnapshot()
+		}
+	}
+	// Process Start Config (Layer 3) — from frozen deployment snapshot.
+	if v, ok := snap["process_start_config"]; ok {
+		var psc runplan.ProcessStartConfig
+		if raw, err := json.Marshal(v); err == nil && json.Unmarshal(raw, &psc) == nil {
+			pf.processStartConfig = &psc
 		}
 	}
 }
