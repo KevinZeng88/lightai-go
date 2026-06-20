@@ -1,0 +1,1 @@
+{"checked_at":"2026-06-21T03:22:14+08:00","endpoint":"http://127.0.0.1:8006/v1/completions","latency_ms":1,"message":"completions returned HTTP 404","model_resolution_method":"runplan","ok":false,"reason_code":"completion_endpoint_failed"}
