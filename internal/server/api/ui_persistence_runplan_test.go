@@ -126,7 +126,9 @@ func TestDeploymentSaveOnlyAndPatchEditableFields(t *testing.T) {
 	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
 		`{"backend_runtime_id":"rt-save","image_ref":"img:test","image_present":true,"docker_available":true}`,
 		adminSession(), map[string]string{"id": "node-save"}))
-	if nbrW.Code != 200 { t.Fatalf("nbr enable code=%d", nbrW.Code) }
+	if nbrW.Code != 200 {
+		t.Fatalf("nbr enable code=%d", nbrW.Code)
+	}
 
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-save","model_artifact_id":"art-save","node_backend_runtime_id":"node-save:rt-save","service_json":{"host_port":8005,"container_port":8080},"parameters_json":{"served_model_name":"served-a"}}`, adminSession(), nil))
@@ -261,6 +263,32 @@ func TestTryInferenceRequiresNonEmptyResponsePreview(t *testing.T) {
 	}
 }
 
+func TestTryInferenceModeCompletionUsesCompletionsEndpoint(t *testing.T) {
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/completions":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"model":"model-a","choices":[{"text":"pong"}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	result := tryInferenceWithMode(srv.Client(), srv.URL, "model-a", "completion", "ping")
+	if result["ok"] != true {
+		t.Fatalf("completion mode failed: %#v", result)
+	}
+	if result["mode"] != "completion" {
+		t.Fatalf("mode=%v", result["mode"])
+	}
+	if len(paths) != 1 || paths[0] != "/v1/completions" {
+		t.Fatalf("completion mode paths=%v", paths)
+	}
+}
 
 func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
 	database := setupTestDB(t)
@@ -275,7 +303,9 @@ func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
 	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
 		`{"backend_runtime_id":"rt-snap","image_ref":"img:test","image_present":true,"docker_available":true}`,
 		adminSession(), map[string]string{"id": "node-snap"}))
-	if nbrW.Code != 200 { t.Fatalf("nbr enable code=%d", nbrW.Code) }
+	if nbrW.Code != 200 {
+		t.Fatalf("nbr enable code=%d", nbrW.Code)
+	}
 
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-snap","model_artifact_id":"art-snap","node_backend_runtime_id":"node-snap:rt-snap","service_json":{"host_port":8005,"container_port":8080}}`, adminSession(), nil))
@@ -330,7 +360,9 @@ func TestDeploymentPatchPortsAndDisplayName(t *testing.T) {
 	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
 		`{"backend_runtime_id":"rt-edit","image_ref":"img:test","image_present":true,"docker_available":true}`,
 		adminSession(), map[string]string{"id": "node-edit"}))
-	if nbrW.Code != 200 { t.Fatalf("nbr enable code=%d", nbrW.Code) }
+	if nbrW.Code != 200 {
+		t.Fatalf("nbr enable code=%d", nbrW.Code)
+	}
 
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-edit","model_artifact_id":"art-edit","node_backend_runtime_id":"node-edit:rt-edit","service_json":{"host_port":8005,"container_port":8080},"parameters_json":{}}`, adminSession(), nil))
@@ -744,7 +776,9 @@ func TestDeploymentListReturnsAfterRun(t *testing.T) {
 	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
 		`{"backend_runtime_id":"rt-list-run","image_ref":"img:test","image_present":true,"docker_available":true}`,
 		adminSession(), map[string]string{"id": "node-lr"}))
-	if nbrW.Code != 200 { t.Fatalf("nbr enable code=%d", nbrW.Code) }
+	if nbrW.Code != 200 {
+		t.Fatalf("nbr enable code=%d", nbrW.Code)
+	}
 
 	// Create a deployment
 	w := httptest.NewRecorder()

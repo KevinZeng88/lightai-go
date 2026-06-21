@@ -16,7 +16,27 @@
         </template>
       </el-table-column>
       <el-table-column prop="model_artifact_id" :label="$t('deployments.artifact')" width="200" />
-      <el-table-column prop="backend_runtime_id" :label="$t('deployments.runtime')" width="200" />
+      <el-table-column :label="$t('deployments.backend')" width="140">
+        <template #default="{ row }">{{ runtimeContext(row).backend || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('deployments.backendVersion')" width="150">
+        <template #default="{ row }">{{ runtimeContext(row).version || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('deployments.runtime')" min-width="200" show-overflow-tooltip>
+        <template #default="{ row }">{{ runtimeContext(row).runtime || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('runtimes.image')" min-width="220" show-overflow-tooltip>
+        <template #default="{ row }">{{ runtimeContext(row).image || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('deployments.node')" width="160" show-overflow-tooltip>
+        <template #default="{ row }">{{ deploymentContext(row).node || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('deployments.endpoint')" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">{{ deploymentContext(row).endpoint || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('deployments.recentError')" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">{{ deploymentContext(row).lastError || '-' }}</template>
+      </el-table-column>
       <el-table-column :label="$t('common.actions')" width="320">
         <template #default="{ row }">
           <el-button size="small" @click="showEdit(row)">{{ $t('common.edit') }}</el-button>
@@ -53,8 +73,24 @@
       <template #footer><el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doCreate" :loading="saving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="dryRunVisible" :title="$t('common.dryRunTitle')" width="700px">
-      <pre v-if="dryRunResult" style="white-space:pre-wrap;max-height:400px;overflow:auto">{{ JSON.stringify(dryRunResult, null, 2) }}</pre>
+    <el-dialog v-model="dryRunVisible" :title="$t('common.dryRunTitle')" width="820px">
+      <template v-if="dryRunResult">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item :label="$t('runtimes.image')">{{ dryRunSummary(dryRunResult).image || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.command')">{{ dryRunSummary(dryRunResult).command || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.detailEnv')">{{ dryRunSummary(dryRunResult).env || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.extraMounts')">{{ dryRunSummary(dryRunResult).volumes || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.ports')">{{ dryRunSummary(dryRunResult).ports || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.devices')">{{ dryRunSummary(dryRunResult).devices || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('backends.healthCheck')">{{ dryRunSummary(dryRunResult).health || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.commandPreview')">{{ dryRunSummary(dryRunResult).preview || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-collapse style="margin-top:12px">
+          <el-collapse-item :title="$t('runnerConfigs.advancedJson')">
+            <pre class="json-preview">{{ JSON.stringify(dryRunResult, null, 2) }}</pre>
+          </el-collapse-item>
+        </el-collapse>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="editVisible" :title="$t('deployments.editDeployment')" width="600px">
@@ -84,6 +120,14 @@
         </el-form-item>
         <el-form-item :label="$t('deployments.appPort')">
           <el-input v-model.number="editForm.app_port" />
+        </el-form-item>
+        <el-divider>{{ $t('deployments.existingOverrides') }}</el-divider>
+        <el-alert :title="$t('deployments.overrideHint')" type="info" show-icon :closable="false" style="margin-bottom:8px" />
+        <el-form-item :label="$t('runtimes.detailEnv')">
+          <el-input v-model="editForm.env_overrides_text" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.keyValueLines')" />
+        </el-form-item>
+        <el-form-item :label="$t('deployments.parameters')">
+          <el-input v-model="editForm.parameters_text" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -243,8 +287,10 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="runPlanVisible" :title="$t('common.runPlanTitle')" width="700px">
-      <pre v-if="runPlanData" style="white-space:pre-wrap;max-height:400px;overflow:auto">{{ runPlanData }}</pre>
+    <el-dialog v-model="runPlanVisible" :title="$t('common.runPlanTitle')" width="820px">
+      <el-descriptions v-if="runPlanData" :column="1" border size="small">
+        <el-descriptions-item :label="$t('runtimes.commandPreview')">{{ runPlanData }}</el-descriptions-item>
+      </el-descriptions>
     </el-dialog>
   </div>
 </template>
@@ -261,12 +307,12 @@ import { translateStatus } from '@/utils/status'
 const { t } = useI18n()
 
 const loading = ref(false); const saving = ref(false)
-const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([]); const backends = ref<any[]>([]); const versions = ref<any[]>([])
+const items = ref<any[]>([]); const models = ref<any[]>([]); const runtimes = ref<any[]>([]); const backends = ref<any[]>([]); const versions = ref<any[]>([]); const instances = ref<any[]>([])
 const allNBRs = ref<any[]>([]); const nbrsLoaded = ref(false)
 const createVisible = ref(false); const dryRunVisible = ref(false); const runPlanVisible = ref(false)
 const dryRunResult = ref<any>(null); const runPlanData = ref('')
 const editVisible = ref(false); const selectedEditRow = ref<any>(null)
-const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '', source_template_name: '', source_backend_runtime_id: '', copied_at: '' })
+const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '', source_template_name: '', source_backend_runtime_id: '', copied_at: '', env_overrides_text: '', parameters_text: '{}' })
 const createForm = ref({ name: '', model_artifact_id: '', node_backend_runtime_id: '', node_id: '', accelerator_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
@@ -279,7 +325,14 @@ const wizardStarting = ref(false)
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () => { wizardStep.value++ })
 
 onMounted(async () => { await refresh(); await loadRefs() })
-async function refresh() { loading.value = true; try { items.value = await apiClient.get('/deployments') } catch (e: any) { console.error('deployments refresh failed', e) } loading.value = false }
+async function refresh() {
+  loading.value = true
+  try {
+    items.value = await apiClient.get('/deployments')
+    try { instances.value = await apiClient.get('/model-instances') } catch { instances.value = [] }
+  } catch (e: any) { console.error('deployments refresh failed', e) }
+  loading.value = false
+}
 const { loadNodes, nodeLabel, nodes: nodeItems } = useNodeLabels()
 
 async function loadRefs() {
@@ -348,6 +401,80 @@ function nbrStatusTagType(status: string): string {
 
 function nbrStatusText(status: string): string {
   return translateStatus(status, t)
+}
+
+function asObject(value: any): Record<string, any> {
+  if (!value) return {}
+  if (typeof value === 'object' && !Array.isArray(value)) return value
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    } catch { return {} }
+  }
+  return {}
+}
+
+function runtimeContext(row: any) {
+  const rt = runtimes.value.find((r: any) => r.id === row.backend_runtime_id)
+  const nbr = allNBRs.value.find((n: any) => n.id === row.source_node_backend_runtime_id)
+  const snapshot = asObject(row.config_snapshot_json)
+  const image = snapshot.image_name || snapshot.image || nbr?.image_ref || rt?.image_name || ''
+  return {
+    backend: rt?.backend_id || '',
+    version: rt?.backend_version_id || row.source_template_version || '',
+    runtime: nbr ? formatNBRLabel(nbr) : (row.source_template_name || rt?.display_name || rt?.name || row.backend_runtime_id),
+    image,
+  }
+}
+
+function deploymentContext(row: any) {
+  const list = instances.value.filter((it: any) => it.deployment_id === row.id)
+  const latest = list[0] || {}
+  const placement = asObject(row.placement_json)
+  return {
+    node: latest.node_id ? nodeLabel(latest.node_id) : nodeLabel(placement.node_id || ''),
+    endpoint: latest.endpoint_url || '',
+    lastError: latest.last_error || '',
+  }
+}
+
+function summarizeList(value: any): string {
+  if (Array.isArray(value)) return value.map((v) => typeof v === 'object' ? JSON.stringify(v) : String(v)).join('\n')
+  if (value && typeof value === 'object') return Object.entries(value).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n')
+  return value ? String(value) : ''
+}
+
+function asArray(value: any): any[] {
+  if (Array.isArray(value)) return value
+  if (value == null || value === '') return []
+  return [value]
+}
+
+function parseKeyValueLines(value: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const raw of (value || '').split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    const idx = line.indexOf('=')
+    if (idx > 0) out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
+  }
+  return out
+}
+
+function dryRunSummary(result: any) {
+  const plan = asObject(result?.run_plan_json || result?.plan_json || result?.plan || result?.resolved_run_plan)
+  const docker = asObject(plan.docker || plan.docker_run_spec || plan)
+  return {
+    image: docker.image || plan.image || '',
+    command: summarizeList([...asArray(docker.entrypoint), ...asArray(docker.command), ...asArray(docker.args)].filter(Boolean)),
+    env: summarizeList(docker.env || plan.env),
+    volumes: summarizeList(docker.volumes || plan.volumes),
+    ports: summarizeList(docker.ports || plan.ports),
+    devices: summarizeList(docker.devices || plan.devices),
+    health: summarizeList(plan.health_check || docker.health_check),
+    preview: result?.docker_preview || result?.command_preview || '',
+  }
 }
 
 function onNBRAutoPreflight() {
@@ -422,6 +549,9 @@ function showEdit(row: any) {
     editForm.value.container_port = 0
     editForm.value.app_port = 0
   }
+  const envOverrides = asObject(row.env_overrides_json)
+  editForm.value.env_overrides_text = Object.entries(envOverrides).map(([k, v]) => `${k}=${v}`).join('\n')
+  editForm.value.parameters_text = JSON.stringify(asObject(row.parameters_json), null, 2)
   editVisible.value = true
 }
 
@@ -433,6 +563,8 @@ async function doEdit() {
       display_name: editForm.value.display_name,
       model_artifact_id: editForm.value.model_artifact_id,
       service_json: servicePayload(editForm.value.host_port, editForm.value.container_port, editForm.value.app_port),
+      env_overrides_json: parseKeyValueLines(editForm.value.env_overrides_text),
+      parameters_json: JSON.parse(editForm.value.parameters_text || '{}'),
     }
     await apiClient.patch(`/deployments/${selectedEditRow.value.id}`, payload)
     ElMessage.success(t('deployments.saved'))

@@ -2,11 +2,14 @@
   <div class="page-container">
     <div class="page-header">
       <h2>{{ t('instances.title') }}</h2>
-      <el-button :icon="RefreshRight" :loading="loading" @click="refresh">{{ t('common.refresh') }}</el-button>
+      <div class="header-actions">
+        <el-checkbox v-model="showStopped">{{ t('instances.showStopped') }}</el-checkbox>
+        <el-button :icon="RefreshRight" :loading="loading" @click="refresh">{{ t('common.refresh') }}</el-button>
+      </div>
     </div>
 
-    <el-table :data="items" v-loading="loading" stripe>
-      <el-table-column prop="id" label="ID" width="200" />
+    <el-table :data="visibleItems" v-loading="loading" stripe>
+      <el-table-column prop="id" :label="t('instances.instance')" width="200" show-overflow-tooltip />
       <el-table-column prop="deployment_id" :label="t('instances.deployment')" width="200" />
       <el-table-column prop="actual_state" :label="t('instances.state')" width="120">
         <template #default="{ row }">
@@ -51,6 +54,16 @@
     </el-table>
 
     <el-dialog v-model="testVisible" :title="t('instances.testResult')" width="560px">
+      <el-form label-position="top" style="margin-bottom:12px">
+        <el-form-item :label="t('instances.testMode')">
+          <el-select v-model="testMode" style="width:100%">
+            <el-option :label="testModeText('auto')" value="auto" />
+            <el-option :label="testModeText('chat')" value="chat" />
+            <el-option :label="testModeText('completion')" value="completion" />
+          </el-select>
+        </el-form-item>
+        <el-button type="primary" :loading="testing" :disabled="!testRow" @click="runSelectedTest">{{ t('instances.runTest') }}</el-button>
+      </el-form>
       <div v-if="testResult" class="test-result">
         <el-alert
           :type="testResult.ok ? 'success' : 'error'"
@@ -60,7 +73,7 @@
           :closable="false"
         />
         <el-descriptions v-if="testResult.ok" :column="1" border size="small" style="margin-top:12px">
-          <el-descriptions-item :label="t('instances.testMode')">{{ testResult.mode === 'completion' ? 'Completion' : 'Chat' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.testMode')">{{ testModeText(testResult.mode || testMode) }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testEndpoint')">{{ testResult.endpoint }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testModel')">{{ testResult.model }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testResolveMethod')">{{ testResult.model_resolution_method || '-' }}</el-descriptions-item>
@@ -78,20 +91,44 @@
         </el-descriptions>
         <h4 style="margin-top:12px">{{ t('instances.rawResponse') }}</h4>
         <el-collapse>
-          <el-collapse-item title="View raw JSON">
+          <el-collapse-item :title="t('runnerConfigs.advancedJson')">
             <pre class="raw-response">{{ testResult.raw_response || testResult.response_preview || '-' }}</pre>
           </el-collapse-item>
         </el-collapse>
       </div>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" :title="t('instances.detail')" width="640px">
-      <div v-if="selected" class="detail-grid">
-        <div v-for="(v, k) in selected" :key="k" class="detail-row">
-          <strong>{{ k }}:</strong>
-          <span>{{ typeof v === 'object' ? JSON.stringify(v) : v }}</span>
-        </div>
-      </div>
+    <el-dialog v-model="detailVisible" :title="t('instances.detail')" width="760px">
+      <template v-if="selected">
+        <h4>{{ t('instances.sectionBasic') }}</h4>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="t('instances.instance')">{{ selected.id }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.state')"><StatusTag :status="selected.actual_state || 'unknown'" /></el-descriptions-item>
+          <el-descriptions-item :label="t('instances.deployment')">{{ selected.deployment_id || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.node')">{{ selected.node_id || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('common.createdAt')">{{ selected.created_at || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.startedAt')">{{ selected.started_at || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <h4>{{ t('instances.sectionRuntime') }}</h4>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="t('instances.container')">{{ selected.container_id || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.endpoint')">{{ selected.endpoint_url || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('instances.port')">{{ selected.host_port || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('deployments.containerPort')">{{ selected.container_port || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <h4>{{ t('instances.sectionDiagnostics') }}</h4>
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item :label="t('dockerLogs.taskId')">{{ selected.current_run_plan_id || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('deployments.recentError')">{{ selected.last_error || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-collapse style="margin-top:12px">
+          <el-collapse-item :title="t('runnerConfigs.advancedJson')">
+            <pre class="raw-response">{{ JSON.stringify(selected, null, 2) }}</pre>
+          </el-collapse-item>
+        </el-collapse>
+      </template>
     </el-dialog>
 
     <el-drawer v-model="logsVisible" :title="t('dockerLogs.title')" size="60%">
@@ -129,11 +166,14 @@ import { ElMessage } from 'element-plus'
 import { CopyDocument, Document, RefreshRight } from '@element-plus/icons-vue'
 import { apiClient } from '@/api/client'
 import StatusTag from '@/components/StatusTag.vue'
+import { formatTestFailure, recommendedTestMode, testModeLabel } from '@/utils/modelCapabilities.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const loading = ref(false)
 const items = ref<any[]>([])
+const deployments = ref<any[]>([])
+const models = ref<any[]>([])
 const selected = ref<any>(null)
 const detailVisible = ref(false)
 const logsVisible = ref(false)
@@ -152,6 +192,8 @@ const testRow = ref<any>(null)
 const testResult = ref<any>(null)
 const stopping = ref(false)
 const stoppingId = ref('')
+const showStopped = ref(false)
+const testMode = ref('auto')
 
 // Reason code → i18n key mapping for test failures
 const testReasonI18n: Record<string, string> = {
@@ -172,6 +214,8 @@ for (let i = 400; i < 600; i++) {
 
 const testErrorMessage = computed(() => {
   if (!testResult.value || testResult.value.ok) return ''
+  const formatted = formatTestFailure(testResult.value)
+  if (formatted) return formatted
   const code = testResult.value.reason_code || ''
   const key = testReasonI18n[code]
   if (key) return t(key, { code, message: testResult.value.message || '' })
@@ -179,6 +223,8 @@ const testErrorMessage = computed(() => {
   if (code.startsWith('http_')) return t('instances.testReasonHttpError', { code, message: testResult.value.message || '' })
   return testResult.value.message || code
 })
+
+const visibleItems = computed(() => items.value.filter((it) => showStopped.value || it.actual_state !== 'stopped'))
 
 onMounted(async () => {
   await refresh()
@@ -188,6 +234,8 @@ async function refresh() {
   loading.value = true
   try {
     items.value = await apiClient.get('/model-instances')
+    try { deployments.value = await apiClient.get('/deployments') } catch { deployments.value = [] }
+    try { models.value = await apiClient.get('/model-artifacts') } catch { models.value = [] }
     if (!autoOpenedFailedLogs.value) {
       const failed = items.value.find((it) => it.actual_state === 'failed' && it.current_run_plan_id)
       if (failed) {
@@ -206,6 +254,16 @@ async function refresh() {
 function showDetail(row: any) {
   selected.value = row
   detailVisible.value = true
+}
+
+function modelForInstance(row: any): any {
+  const dep = deployments.value.find((d: any) => d.id === row.deployment_id)
+  const model = models.value.find((m: any) => m.id === dep?.model_artifact_id)
+  return model || { name: row.model || row.deployment_id || '' }
+}
+
+function testModeText(mode: string): string {
+  return testModeLabel(mode || 'auto', locale.value)
 }
 
 async function openLogs(row: any) {
@@ -245,13 +303,19 @@ async function copyLogs() {
 
 async function doTest(row: any) {
   testRow.value = row
-  testing.value = true
+  testMode.value = recommendedTestMode(modelForInstance(row))
   testVisible.value = true
+  await runSelectedTest()
+}
+
+async function runSelectedTest() {
+  if (!testRow.value) return
+  testing.value = true
   testResult.value = null
   try {
-    testResult.value = await apiClient.post(`/model-instances/${row.id}/test`, { mode: 'chat', prompt: 'ping', timeout_seconds: 30 })
+    testResult.value = await apiClient.post(`/model-instances/${testRow.value.id}/test`, { mode: testMode.value, prompt: 'ping', timeout_seconds: 30 })
   } catch (e: any) {
-    testResult.value = { ok: false, reason_code: 'network_error', message: e?.message || t('common.requestFailed') }
+    testResult.value = { ok: false, mode: testMode.value, reason_code: 'network_error', message: e?.message || t('common.requestFailed') }
   } finally {
     testing.value = false
   }

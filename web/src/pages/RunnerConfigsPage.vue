@@ -137,6 +137,49 @@
           <el-descriptions-item :label="$t('runnerConfigs.template')">{{ selected.template_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('nodeRuntime.statusReason')" :span="2">{{ translateStatusReason(selected.status_reason, t) }}</el-descriptions-item>
         </el-descriptions>
+        <h4 style="margin-top:16px">{{ $t('runnerConfigs.sectionImageCommand') }}</h4>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="$t('nodeRuntime.imageRef')">{{ runParamSummary(selected).image || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.entrypoint')">{{ runParamSummary(selected).entrypoint || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.command')" :span="2">{{ runParamSummary(selected).command || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.args')" :span="2">{{ runParamSummary(selected).args || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <h4 style="margin-top:16px">{{ $t('runnerConfigs.sectionEnv') }}</h4>
+        <el-table :data="runParamSummary(selected).envRows" stripe size="small" empty-text="-">
+          <el-table-column prop="key" :label="$t('runnerConfigs.envKey')" width="260" />
+          <el-table-column prop="value" :label="$t('runnerConfigs.envValue')" show-overflow-tooltip />
+        </el-table>
+
+        <h4 style="margin-top:16px">{{ $t('runnerConfigs.sectionVolumesPorts') }}</h4>
+        <el-table :data="runParamSummary(selected).volumeRows" stripe size="small" empty-text="-">
+          <el-table-column prop="host" :label="$t('runnerConfigs.hostPath')" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="container" :label="$t('runnerConfigs.containerPath')" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="readonly" :label="$t('runnerConfigs.readonly')" width="90" />
+        </el-table>
+        <el-table :data="runParamSummary(selected).portRows" stripe size="small" empty-text="-" style="margin-top:8px">
+          <el-table-column prop="host" :label="$t('deployments.hostPort')" width="160" />
+          <el-table-column prop="container" :label="$t('deployments.containerPort')" width="180" />
+          <el-table-column prop="protocol" :label="$t('runnerConfigs.protocol')" width="120" />
+        </el-table>
+
+        <h4 style="margin-top:16px">{{ $t('runnerConfigs.sectionDevicesSecurity') }}</h4>
+        <el-alert v-if="runParamSummary(selected).riskText" type="warning" :title="runParamSummary(selected).riskText" show-icon :closable="false" style="margin-bottom:8px" />
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="$t('runtimes.devices')">{{ runParamSummary(selected).devices || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.groupAdd')">{{ runParamSummary(selected).groupAdd || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.privileged')">{{ runParamSummary(selected).privileged || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.ipcMode')">{{ runParamSummary(selected).ipc || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.securityOpt')">{{ runParamSummary(selected).securityOpt || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.shmSize')">{{ runParamSummary(selected).shmSize || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.ulimits')" :span="2">{{ runParamSummary(selected).ulimits || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <h4 style="margin-top:16px">{{ $t('runnerConfigs.sectionHealthPreview') }}</h4>
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item :label="$t('backends.healthCheck')">{{ runParamSummary(selected).health || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.commandPreview')">{{ runParamSummary(selected).preview || '-' }}</el-descriptions-item>
+        </el-descriptions>
         <el-collapse v-if="selected?.probe_results_json && typeof selected.probe_results_json === 'object' && Object.keys(selected.probe_results_json).length > 0" style="margin-top:12px">
           <el-collapse-item :title="$t('nodeRuntimeProbe.imageMetadata')" name="level2" v-if="selected.probe_results_json.level2?.inspect_success">
             <el-descriptions :column="2" border size="small">
@@ -170,14 +213,10 @@
         <el-alert v-if="isShellWrapper(selected.probe_results_json?.level2?.entrypoint)" type="info" :title="$t('nodeRuntimeProbe.shellWrapper')" show-icon :closable="false" style="margin-top:8px" />
         <el-alert v-if="isVendorImage(selected.probe_results_json?.level3)" type="warning" :title="$t('nodeRuntimeProbe.vendorImage')" show-icon :closable="false" style="margin-top:8px" />
         <el-alert v-if="isBlockingError(selected.status)" type="error" :title="translateStatus(selected.status, t)" :description="translateStatusReason(selected.status_reason, t)" show-icon :closable="false" style="margin-top:8px" />
-        <!-- Run Parameters (read-only from config_snapshot_json) -->
+        <!-- Advanced diagnostic JSON -->
         <el-collapse v-if="selected?.config_snapshot_json && Object.keys(selected.config_snapshot_json).length > 0" style="margin-top:12px">
-          <el-collapse-item :title="$t('nodeRuntimeProbe.runParams')" name="runParams">
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item :label="$t('nodeRuntimeProbe.imageRef')">{{ selected.config_snapshot_json.image_name || '-' }}</el-descriptions-item>
-              <el-descriptions-item :label="$t('nodeRuntimeProbe.vendor')">{{ selected.config_snapshot_json.vendor || '-' }}</el-descriptions-item>
-            </el-descriptions>
-            <p style="margin-top:8px;font-size:12px;color:var(--el-text-color-secondary)">{{ $t('nodeRuntimeProbe.runParamsNote') }}</p>
+          <el-collapse-item :title="$t('runnerConfigs.advancedJson')" name="runParams">
+            <pre class="preview">{{ JSON.stringify(selected.config_snapshot_json, null, 2) }}</pre>
           </el-collapse-item>
         </el-collapse>
       </template>
@@ -188,7 +227,29 @@
       <el-form label-position="top">
         <el-form-item :label="$t('runnerConfigs.configName')"><el-input v-model="editConfigName" /></el-form-item>
         <el-form-item :label="$t('nodeRuntime.imageRef')"><el-input v-model="editImageRef" /></el-form-item>
-        <el-form-item :label="$t('runnerConfigs.snapshotJson')"><el-input v-model="editSnapshotText" type="textarea" :rows="10" /></el-form-item>
+        <h4>{{ $t('runnerConfigs.sectionImageCommand') }}</h4>
+        <el-form-item :label="$t('runnerConfigs.args')"><el-input v-model="editArgsText" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.lineSeparated')" /></el-form-item>
+        <h4>{{ $t('runnerConfigs.sectionEnv') }}</h4>
+        <el-form-item :label="$t('runtimes.env')"><el-input v-model="editEnvText" type="textarea" :rows="4" :placeholder="$t('runnerConfigs.keyValueLines')" /></el-form-item>
+        <h4>{{ $t('runnerConfigs.sectionVolumesPorts') }}</h4>
+        <el-form-item :label="$t('runtimes.extraMounts')"><el-input v-model="editVolumesText" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.volumeLines')" /></el-form-item>
+        <el-form-item :label="$t('runnerConfigs.ports')"><el-input v-model="editPortsText" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.portLines')" /></el-form-item>
+        <h4>{{ $t('runnerConfigs.sectionDevicesSecurity') }}</h4>
+        <el-alert :title="$t('runnerConfigs.highRiskWarning')" type="warning" show-icon :closable="false" style="margin-bottom:8px" />
+        <el-form-item :label="$t('runtimes.devices')"><el-input v-model="editDevicesText" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.volumeLines')" /></el-form-item>
+        <el-form-item :label="$t('runtimes.groupAdd')"><el-input v-model="editGroupAddText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.lineSeparated')" /></el-form-item>
+        <el-form-item :label="$t('runtimes.securityOpt')"><el-input v-model="editSecurityOptText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.lineSeparated')" /></el-form-item>
+        <el-form-item :label="$t('runtimes.privileged')"><el-switch v-model="editPrivileged" /></el-form-item>
+        <el-form-item :label="$t('runtimes.ipcMode')"><el-input v-model="editIpcMode" /></el-form-item>
+        <el-form-item :label="$t('runtimes.shmSize')"><el-input v-model="editShmSize" /></el-form-item>
+        <el-form-item :label="$t('runtimes.ulimits')"><el-input v-model="editUlimitsText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.keyValueLines')" /></el-form-item>
+        <h4>{{ $t('runnerConfigs.sectionHealthPreview') }}</h4>
+        <el-form-item :label="$t('backends.healthCheck')"><el-input v-model="editHealthText" type="textarea" :rows="4" /></el-form-item>
+        <el-collapse>
+          <el-collapse-item :title="$t('runnerConfigs.advancedJson')">
+            <el-form-item :label="$t('runnerConfigs.snapshotJson')"><el-input v-model="editSnapshotText" type="textarea" :rows="8" /></el-form-item>
+          </el-collapse-item>
+        </el-collapse>
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button>
@@ -214,6 +275,9 @@ const { t } = useI18n()
 const loading = ref(false); const saving = ref(false); const checking = ref(false)
 const items = ref<any[]>([]); const templates = ref<any[]>([]); const selected = ref<any>(null); const detailVisible = ref(false)
 const editVisible = ref(false); const editConfigName = ref(''); const editImageRef = ref(''); const editSnapshotText = ref('{}')
+const editArgsText = ref(''); const editEnvText = ref(''); const editVolumesText = ref(''); const editPortsText = ref('')
+const editDevicesText = ref(''); const editGroupAddText = ref(''); const editSecurityOptText = ref('')
+const editPrivileged = ref(false); const editIpcMode = ref(''); const editShmSize = ref(''); const editUlimitsText = ref(''); const editHealthText = ref('{}')
 
 // Wizard
 const wizardVisible = ref(false); const step = ref(0)
@@ -247,6 +311,117 @@ function formatBytes(bytes: any): string {
   if (n < 1048576) return (n / 1024).toFixed(1) + ' ' + t('nodeRuntimeProbe.kb')
   if (n < 1073741824) return (n / 1048576).toFixed(1) + ' ' + t('nodeRuntimeProbe.mb')
   return (n / 1073741824).toFixed(2) + ' ' + t('nodeRuntimeProbe.gb')
+}
+
+function asObject(value: any): Record<string, any> {
+  if (!value) return {}
+  if (typeof value === 'object' && !Array.isArray(value)) return value
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    } catch { return {} }
+  }
+  return {}
+}
+
+function asArray(value: any): any[] {
+  if (Array.isArray(value)) return value
+  if (value == null || value === '') return []
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      return value.split('\n').map((v: string) => v.trim()).filter(Boolean)
+    }
+  }
+  return [value]
+}
+
+function joinList(value: any): string {
+  return asArray(value).map(formatRuntimeValue).filter(Boolean).join('\n')
+}
+
+function formatRuntimeValue(value: any): string {
+  if (value == null || value === '') return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') {
+    if (value.host_path || value.container_path) {
+      return `${value.host_path || ''}:${value.container_path || value.host_path || ''}${value.readonly ? ':ro' : value.permissions ? ':' + value.permissions : ''}`
+    }
+    if (value.host_port || value.container_port) {
+      return `${value.host_port || ''}:${value.container_port || ''}/${value.protocol || 'tcp'}`
+    }
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
+function envRows(env: any): { key: string, value: string }[] {
+  const obj = asObject(env)
+  return Object.entries(obj).map(([key, value]) => ({ key, value: String(value) }))
+}
+
+function parseLines(value: string): string[] {
+  return Array.from(new Set((value || '').split('\n').map((v: string) => v.trim()).filter(Boolean)))
+}
+
+function parseKeyValueLines(value: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const line of parseLines(value)) {
+    const idx = line.indexOf('=')
+    if (idx > 0) out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
+  }
+  return out
+}
+
+function parseMountLines(value: string): any[] {
+  return parseLines(value).map((line: string) => {
+    const parts = line.split(':')
+    return { host_path: parts[0] || '', container_path: parts[1] || parts[0] || '', readonly: parts[2] === 'ro', permissions: parts[2] && parts[2] !== 'ro' ? parts[2] : undefined }
+  }).filter((m: any) => m.host_path || m.container_path)
+}
+
+function parsePortLines(value: string): any[] {
+  return parseLines(value).map((line: string) => {
+    const [left, protoRaw = 'tcp'] = line.split('/')
+    const [host, container = host] = left.split(':')
+    return { host_port: Number(host) || 0, container_port: Number(container) || 0, protocol: protoRaw || 'tcp' }
+  }).filter((p: any) => p.host_port || p.container_port)
+}
+
+function runParamSummary(row: any) {
+  const snapshot = asObject(row?.config_snapshot_json)
+  const docker = asObject(snapshot.docker_json || snapshot.docker || snapshot)
+  const image = snapshot.image_name || snapshot.image || row?.image_ref || ''
+  const entrypoint = joinList(snapshot.entrypoint_override_json || snapshot.entrypoint || docker.entrypoint)
+  const command = joinList(snapshot.command_override_json || snapshot.command || docker.command)
+  const args = joinList(snapshot.args_override_json || snapshot.args || snapshot.extra_args || docker.args)
+  const env = snapshot.default_env_json || snapshot.default_env || snapshot.env || docker.default_env || docker.env
+  const volumes = snapshot.extra_mounts || snapshot.volumes_json || snapshot.volumes || snapshot.mounts || docker.extra_mounts || docker.volumes
+  const ports = snapshot.ports_json || snapshot.ports || docker.ports
+  const devices = joinList(docker.devices || snapshot.devices)
+  const groupAdd = joinList(docker.group_add || snapshot.group_add)
+  const securityOpt = joinList(docker.security_options || docker.security_opt || snapshot.security_opt)
+  const privileged = docker.privileged === true || snapshot.privileged === true ? t('common.yes') : ''
+  const ipc = docker.ipc_mode || snapshot.ipc || snapshot.ipc_mode || ''
+  const shmSize = docker.shm_size || snapshot.shm_size || ''
+  const ulimits = typeof docker.ulimits === 'object' ? JSON.stringify(docker.ulimits) : joinList(docker.ulimits || snapshot.ulimits)
+  const health = JSON.stringify(snapshot.health_check_override_json || snapshot.health_check_json || snapshot.health_check || {}, null, 2)
+  const volumeRows = asArray(volumes).map((v) => {
+    if (typeof v === 'string') {
+      const parts = v.split(':')
+      return { host: parts[0] || '', container: parts[1] || parts[0] || '', readonly: parts[2] === 'ro' ? t('common.yes') : t('common.no') }
+    }
+    return { host: v.host_path || v.host || '', container: v.container_path || v.container || '', readonly: v.readonly ? t('common.yes') : t('common.no') }
+  })
+  const portRows = asArray(ports).map((p) => typeof p === 'string'
+    ? { host: p.split(':')[0] || '', container: (p.split(':')[1] || '').split('/')[0], protocol: p.includes('/') ? p.split('/')[1] : 'tcp' }
+    : { host: p.host_port || p.host || '', container: p.container_port || p.container || '', protocol: p.protocol || 'tcp' })
+  const riskText = (docker.privileged || ipc === 'host' || securityOpt) ? t('runnerConfigs.highRiskWarning') : ''
+  const preview = image ? ['docker run -d', docker.privileged ? '--privileged' : '', ipc ? `--ipc ${ipc}` : '', shmSize ? `--shm-size ${shmSize}` : '', image, args].filter(Boolean).join(' ') : ''
+  return { image, entrypoint, command, args, envRows: envRows(env), volumeRows, portRows, devices, groupAdd, privileged, ipc, securityOpt, shmSize, ulimits, health, riskText, preview }
 }
 
 onMounted(async () => { await loadRefs(); await refresh() })
@@ -350,9 +525,24 @@ async function showDetail(row: any) {
 
 function showEdit(row: any) {
   selected.value = row
+  const summary = runParamSummary(row)
   editConfigName.value = row.name || ''
   editImageRef.value = row.image_ref || ''
   editSnapshotText.value = JSON.stringify(row.config_snapshot_json || {}, null, 2)
+  editArgsText.value = summary.args || ''
+  editEnvText.value = summary.envRows.map((r) => `${r.key}=${r.value}`).join('\n')
+  editVolumesText.value = summary.volumeRows.map((r) => `${r.host}:${r.container}${r.readonly === t('common.yes') ? ':ro' : ''}`).join('\n')
+  editPortsText.value = summary.portRows.map((r) => `${r.host}:${r.container}/${r.protocol}`).join('\n')
+  editDevicesText.value = joinList(asObject(row.config_snapshot_json || {}).docker_json?.devices || asObject(row.config_snapshot_json || {}).devices)
+  editGroupAddText.value = summary.groupAdd.split(', ').join('\n')
+  editSecurityOptText.value = summary.securityOpt.split(', ').join('\n')
+  editPrivileged.value = summary.privileged === t('common.yes')
+  editIpcMode.value = summary.ipc
+  editShmSize.value = summary.shmSize
+  editUlimitsText.value = (() => {
+    try { return Object.entries(JSON.parse(summary.ulimits || '{}')).map(([k, v]) => `${k}=${v}`).join('\n') } catch { return summary.ulimits }
+  })()
+  editHealthText.value = summary.health || '{}'
   editVisible.value = true
 }
 
@@ -362,6 +552,20 @@ async function doEdit() {
   try {
     let snapshot: any = {}
     try { snapshot = JSON.parse(editSnapshotText.value || '{}') } catch { ElMessage.error(t('runnerConfigs.invalidJson')); saving.value = false; return }
+    snapshot.image_name = editImageRef.value
+    snapshot.args_override_json = parseLines(editArgsText.value)
+    snapshot.default_env_json = parseKeyValueLines(editEnvText.value)
+    snapshot.extra_mounts = parseMountLines(editVolumesText.value)
+    snapshot.ports_json = parsePortLines(editPortsText.value)
+    snapshot.docker_json = asObject(snapshot.docker_json)
+    snapshot.docker_json.devices = parseMountLines(editDevicesText.value)
+    snapshot.docker_json.group_add = parseLines(editGroupAddText.value)
+    snapshot.docker_json.security_options = parseLines(editSecurityOptText.value)
+    snapshot.docker_json.privileged = editPrivileged.value
+    if (editIpcMode.value) snapshot.docker_json.ipc_mode = editIpcMode.value
+    if (editShmSize.value) snapshot.docker_json.shm_size = editShmSize.value
+    snapshot.docker_json.ulimits = parseKeyValueLines(editUlimitsText.value)
+    try { snapshot.health_check_override_json = JSON.parse(editHealthText.value || '{}') } catch { ElMessage.error(t('runnerConfigs.invalidJson')); saving.value = false; return }
     await apiClient.patch(`/nodes/${selected.value.node_id}/backend-runtimes/${selected.value.id}`, { display_name: editConfigName.value, image_ref: editImageRef.value, config_snapshot_json: snapshot })
     ElMessage.success(t('runnerConfigs.savedNeedsCheck'))
     editVisible.value = false

@@ -7,6 +7,7 @@ const runnerPage = fs.readFileSync(path.join(root, 'src/pages/RunnerConfigsPage.
 const deploymentsPage = fs.readFileSync(path.join(root, 'src/pages/ModelDeploymentsPage.vue'), 'utf8')
 const artifactsPage = fs.readFileSync(path.join(root, 'src/pages/ModelArtifactsPage.vue'), 'utf8')
 const instancesPage = fs.readFileSync(path.join(root, 'src/pages/ModelInstancesPage.vue'), 'utf8')
+const layout = fs.readFileSync(path.join(root, 'src/layouts/ConsoleLayout.vue'), 'utf8')
 
 let failed = 0
 function check(name, condition) {
@@ -32,6 +33,12 @@ check('deployment final step has save, save-and-run, and preview actions', deplo
 check('deployment port labels distinguish host, container, and app ports', deploymentsPage.includes('deployments.hostPort') && deploymentsPage.includes('deployments.containerPort') && deploymentsPage.includes('deployments.appPort'))
 check('deployment run button is guarded for active states', deploymentsPage.includes('isRunBlocked') && deploymentsPage.includes("'running'") && deploymentsPage.includes("'starting'"))
 check('model test empty response is rendered as failure reason', instancesPage.includes('empty_model_response') && instancesPage.includes('instances.testReasonEmptyResponse'))
+check('main navigation exposes model workflow group', layout.includes('nav.aiWorkflow') && layout.includes('nav.modelLibrary') && layout.includes('nav.testDiagnostics'))
+check('backend and runtime templates are under configuration group', layout.includes('nav.config') && layout.indexOf('/backends') > layout.indexOf('nav.config') && layout.indexOf('/runtimes') > layout.indexOf('nav.config'))
+check('runner config page uses structured sections before advanced JSON', runnerPage.includes('sectionImageCommand') && runnerPage.includes('sectionDevicesSecurity') && runnerPage.includes('advancedJson'))
+check('instance list defaults to hiding stopped rows', instancesPage.includes('visibleItems') && instancesPage.includes("it.actual_state !== 'stopped'") && instancesPage.includes('showStopped'))
+check('instance test dialog supports mode selection', instancesPage.includes('testMode') && instancesPage.includes('value=\"chat\"') && instancesPage.includes('value=\"completion\"'))
+check('model artifact page displays inferred capabilities', artifactsPage.includes('inferModelCapabilities') && artifactsPage.includes('capabilityReadonlyHint') && artifactsPage.includes('recommendedEndpoint'))
 
 if (failed > 0) {
   process.exit(1)

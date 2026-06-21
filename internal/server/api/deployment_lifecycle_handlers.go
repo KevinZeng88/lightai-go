@@ -2123,6 +2123,17 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
+	var testReq struct {
+		Mode   string `json:"mode"`
+		Prompt string `json:"prompt"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&testReq)
+	if testReq.Mode == "" {
+		testReq.Mode = "auto"
+	}
+	if testReq.Prompt == "" {
+		testReq.Prompt = "ping"
+	}
 
 	// --- Phase 1: Resolve model id from /v1/models ---
 	// 1. Try RunPlan / NodeRunPlan resolved model name.
@@ -2163,7 +2174,7 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 		Detail:    fmt.Sprintf("endpoint=%s model=%s method=%s", endpoint, modelName, resolutionMethod),
 	})
 
-	result := tryInference(client, endpoint, modelName)
+	result := tryInferenceWithMode(client, endpoint, modelName, testReq.Mode, testReq.Prompt)
 	result["model_resolution_method"] = resolutionMethod
 	result["checked_at"] = checkedAt
 
@@ -2270,11 +2281,36 @@ func resolveModelID(client *http.Client, endpoint, artifactName, artifactPath, r
 // if the endpoint returns 404/405 (unsupported). Does not fallback for real
 // inference errors (OOM, auth failure, model load fail).
 func tryInference(client *http.Client, endpoint, modelName string) map[string]interface{} {
+	return tryInferenceWithMode(client, endpoint, modelName, "auto", "ping")
+}
+
+func tryInferenceWithMode(client *http.Client, endpoint, modelName, mode, prompt string) map[string]interface{} {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if prompt == "" {
+		prompt = "ping"
+	}
+	if mode == "completion" {
+		return tryCompletionInference(client, endpoint, modelName, prompt)
+	}
+	if mode == "chat" {
+		return tryChatInference(client, endpoint, modelName, prompt, false)
+	}
 	// Try chat/completions.
+	chatResult := tryChatInference(client, endpoint, modelName, prompt, true)
+	if chatResult["ok"] == true {
+		return chatResult
+	}
+	if chatResult["reason_code"] != "chat_endpoint_unsupported" {
+		return chatResult
+	}
+	return tryCompletionInference(client, endpoint, modelName, prompt)
+}
+
+func tryChatInference(client *http.Client, endpoint, modelName, prompt string, unsupportedAsFallback bool) map[string]interface{} {
 	chatURL := strings.TrimRight(endpoint, "/") + "/v1/chat/completions"
 	chatBody, _ := json.Marshal(map[string]interface{}{
 		"model":      modelName,
-		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
+		"messages":   []map[string]string{{"role": "user", "content": prompt}},
 		"max_tokens": 8, "temperature": 0, "stream": false,
 	})
 
@@ -2322,48 +2358,10 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 
 	// If chat endpoint not supported, try completions.
 	if isEndpointErr {
-		compURL := strings.TrimRight(endpoint, "/") + "/v1/completions"
-		compBody, _ := json.Marshal(map[string]interface{}{
-			"model":  modelName,
-			"prompt": "ping", "max_tokens": 8, "temperature": 0, "stream": false,
-		})
-		compStart := time.Now()
-		compReq, _ := http.NewRequest("POST", compURL, bytes.NewReader(compBody))
-		compReq.Header.Set("Content-Type", "application/json")
-		compReq.Header.Set("Accept", "application/json")
-		compResp, compErr := client.Do(compReq)
-		compLatency := time.Since(compStart).Milliseconds()
-
-		if compErr != nil {
-			return map[string]interface{}{"ok": false, "reason_code": "completion_endpoint_failed", "message": fmt.Sprintf("completions also unreachable: %v", compErr), "endpoint": compURL, "latency_ms": compLatency}
+		if unsupportedAsFallback {
+			return map[string]interface{}{"ok": false, "mode": "chat", "reason_code": "chat_endpoint_unsupported", "message": fmt.Sprintf("chat completions returned HTTP %d", resp.StatusCode), "endpoint": chatURL, "http_status": resp.StatusCode, "latency_ms": latencyMs}
 		}
-		compBytes, _ := io.ReadAll(io.LimitReader(compResp.Body, 8192))
-		compResp.Body.Close()
-
-		if compResp.StatusCode >= 200 && compResp.StatusCode < 300 {
-			preview := extractPreview(compBytes, "completion")
-			if strings.TrimSpace(preview) == "" {
-				return map[string]interface{}{
-					"ok": false, "mode": "completion", "reason_code": "empty_model_response",
-					"message":  "request succeeded but model response was empty",
-					"endpoint": compURL, "model": modelName,
-					"latency_ms": compLatency, "response_preview": preview,
-					"raw_response": string(compBytes),
-				}
-			}
-			resolvedModel := modelName
-			var compData map[string]interface{}
-			json.Unmarshal(compBytes, &compData)
-			if m, ok := compData["model"].(string); ok && m != "" {
-				resolvedModel = m
-			}
-			return map[string]interface{}{
-				"ok": true, "mode": "completion",
-				"endpoint": compURL, "model": resolvedModel,
-				"latency_ms": compLatency, "response_preview": preview,
-			}
-		}
-		return map[string]interface{}{"ok": false, "reason_code": "completion_endpoint_failed", "message": fmt.Sprintf("completions returned HTTP %d", compResp.StatusCode), "endpoint": compURL, "latency_ms": compLatency}
+		return map[string]interface{}{"ok": false, "mode": "chat", "reason_code": "chat_endpoint_failed", "message": fmt.Sprintf("chat completions returned HTTP %d", resp.StatusCode), "endpoint": chatURL, "http_status": resp.StatusCode, "latency_ms": latencyMs, "raw_response": string(bodyBytes)}
 	}
 
 	// Real error (not endpoint-unsupported) — do not fallback.
@@ -2375,7 +2373,53 @@ func tryInference(client *http.Client, endpoint, modelName string) map[string]in
 			errMsg = m
 		}
 	}
-	return map[string]interface{}{"ok": false, "reason_code": "chat_endpoint_failed", "message": errMsg, "endpoint": chatURL, "latency_ms": latencyMs}
+	return map[string]interface{}{"ok": false, "mode": "chat", "reason_code": "chat_endpoint_failed", "message": errMsg, "endpoint": chatURL, "http_status": resp.StatusCode, "latency_ms": latencyMs, "raw_response": string(bodyBytes)}
+}
+
+func tryCompletionInference(client *http.Client, endpoint, modelName, prompt string) map[string]interface{} {
+	compURL := strings.TrimRight(endpoint, "/") + "/v1/completions"
+	compBody, _ := json.Marshal(map[string]interface{}{
+		"model":  modelName,
+		"prompt": prompt, "max_tokens": 8, "temperature": 0, "stream": false,
+	})
+	compStart := time.Now()
+	compReq, _ := http.NewRequest("POST", compURL, bytes.NewReader(compBody))
+	compReq.Header.Set("Content-Type", "application/json")
+	compReq.Header.Set("Accept", "application/json")
+	compResp, compErr := client.Do(compReq)
+	compLatency := time.Since(compStart).Milliseconds()
+
+	if compErr != nil {
+		return map[string]interface{}{"ok": false, "mode": "completion", "reason_code": "completion_endpoint_failed", "message": fmt.Sprintf("completions unreachable: %v", compErr), "endpoint": compURL, "latency_ms": compLatency}
+	}
+	compBytes, _ := io.ReadAll(io.LimitReader(compResp.Body, 8192))
+	compResp.Body.Close()
+
+	if compResp.StatusCode >= 200 && compResp.StatusCode < 300 {
+		preview := extractPreview(compBytes, "completion")
+		if strings.TrimSpace(preview) == "" {
+			return map[string]interface{}{
+				"ok": false, "mode": "completion", "reason_code": "empty_model_response",
+				"message":  "request succeeded but model response was empty",
+				"endpoint": compURL, "model": modelName,
+				"latency_ms": compLatency, "response_preview": preview,
+				"raw_response": string(compBytes),
+			}
+		}
+		resolvedModel := modelName
+		var compData map[string]interface{}
+		json.Unmarshal(compBytes, &compData)
+		if m, ok := compData["model"].(string); ok && m != "" {
+			resolvedModel = m
+		}
+		return map[string]interface{}{
+			"ok": true, "mode": "completion",
+			"endpoint": compURL, "model": resolvedModel,
+			"latency_ms": compLatency, "response_preview": preview,
+			"raw_response": string(compBytes),
+		}
+	}
+	return map[string]interface{}{"ok": false, "mode": "completion", "reason_code": "completion_endpoint_failed", "message": fmt.Sprintf("completions returned HTTP %d", compResp.StatusCode), "endpoint": compURL, "http_status": compResp.StatusCode, "latency_ms": compLatency, "raw_response": string(compBytes)}
 }
 
 // extractPreview extracts a short response preview from chat or completion JSON.

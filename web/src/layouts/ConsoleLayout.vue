@@ -27,21 +27,22 @@
         <el-sub-menu index="models">
           <template #title>
             <el-icon><Box /></el-icon>
-            <span>{{ t('nav.models') }}</span>
+            <span>{{ t('nav.aiWorkflow') }}</span>
           </template>
-          <el-menu-item index="/models/artifacts">{{ t('artifacts.title') }}</el-menu-item>
+          <el-menu-item index="/models/artifacts">{{ t('nav.modelLibrary') }}</el-menu-item>
+          <el-menu-item index="/runner-configs">{{ t('runnerConfigs.title') }}</el-menu-item>
           <el-menu-item index="/models/deployments">{{ t('deployments.title') }}</el-menu-item>
           <el-menu-item index="/models/instances">{{ t('instances.title') }}</el-menu-item>
+          <el-menu-item index="/models/test-diagnostics">{{ t('nav.testDiagnostics') }}</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="runtime">
+        <el-sub-menu index="config">
           <template #title>
             <el-icon><Setting /></el-icon>
-            <span>{{ t('nav.runtime') }}</span>
+            <span>{{ t('nav.config') }}</span>
           </template>
           <el-menu-item index="/backends">{{ t('backends.title') }}</el-menu-item>
           <el-menu-item index="/runtimes">{{ t('runtimes.title') }}</el-menu-item>
-          <el-menu-item index="/runner-configs">{{ t('runnerConfigs.title') }}</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="system">

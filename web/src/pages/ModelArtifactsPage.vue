@@ -13,6 +13,14 @@
       <el-table-column prop="name" :label="$t('artifacts.name')" min-width="150" />
       <el-table-column prop="format" :label="$t('artifacts.format')" width="100" />
       <el-table-column prop="size_label" :label="$t('artifacts.size')" width="80" />
+      <el-table-column :label="$t('artifacts.capabilities')" min-width="180">
+        <template #default="{ row }">
+          <el-tag v-for="cap in capabilitiesFor(row).slice(0, 3)" :key="cap.id" size="small" class="cap-tag">
+            {{ capabilityText(cap) }}
+          </el-tag>
+          <span v-if="capabilitiesFor(row).length === 0">-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="path" :label="$t('artifacts.path')" min-width="200" show-overflow-tooltip />
       <el-table-column :label="$t('common.actions')" width="280">
         <template #default="{ row }">
@@ -52,21 +60,47 @@
           <el-descriptions-item v-if="selected.architecture && selected.architecture !== 'custom'" :label="$t('artifacts.architecture')">{{ selected.architecture }}</el-descriptions-item>
         </el-descriptions>
 
+        <h4 style="margin-top:12px">{{ $t('artifacts.capabilitySection') }}</h4>
+        <el-alert
+          type="info"
+          :closable="false"
+          style="margin-bottom:8px"
+          :title="$t('artifacts.capabilityReadonlyHint')"
+        />
+        <el-table :data="detailCapabilities" stripe size="small">
+          <el-table-column :label="$t('artifacts.capability')" width="160">
+            <template #default="{ row }">
+              <el-tag size="small">{{ capabilityText(row) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('artifacts.capabilitySource')" width="140">
+            <template #default="{ row }">{{ capabilitySourceText(row.source) }}</template>
+          </el-table-column>
+          <el-table-column :label="$t('artifacts.capabilityConfidence')" width="120">
+            <template #default="{ row }">{{ capabilityConfidenceText(row.confidence) }}</template>
+          </el-table-column>
+          <el-table-column prop="reason" :label="$t('artifacts.capabilityReason')" min-width="180" />
+        </el-table>
+        <el-descriptions :column="2" border size="small" style="margin-top:8px">
+          <el-descriptions-item :label="$t('artifacts.recommendedTestMode')">{{ testModeText(selected) }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('artifacts.recommendedEndpoint')">{{ recommendedEndpoint(selected) }}</el-descriptions-item>
+        </el-descriptions>
+
         <!-- GGUF metadata -->
         <template v-if="isGGUF && detailMeta">
-          <h4 style="margin-top:12px">GGUF Metadata</h4>
+          <h4 style="margin-top:12px">{{ $t('artifacts.ggufMetadata') }}</h4>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item v-if="detailMeta.embedding_length" :label="$t('artifacts.embeddingLength')">{{ detailMeta.embedding_length }}</el-descriptions-item>
             <el-descriptions-item v-if="detailMeta.block_count" :label="$t('artifacts.blockCount')">{{ detailMeta.block_count }}</el-descriptions-item>
             <el-descriptions-item v-if="detailMeta.vocab_size" :label="$t('artifacts.vocabSize')">{{ detailMeta.vocab_size }}</el-descriptions-item>
-            <el-descriptions-item v-if="detailMeta.head_count" label="Head count">{{ detailMeta.head_count }}</el-descriptions-item>
-            <el-descriptions-item v-if="detailMeta.head_count_kv" label="Head count KV">{{ detailMeta.head_count_kv }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.head_count" :label="$t('artifacts.headCount')">{{ detailMeta.head_count }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailMeta.head_count_kv" :label="$t('artifacts.headCountKV')">{{ detailMeta.head_count_kv }}</el-descriptions-item>
           </el-descriptions>
         </template>
 
         <!-- HF metadata -->
         <template v-if="isHF && detailMeta">
-          <h4 style="margin-top:12px">HuggingFace Metadata</h4>
+          <h4 style="margin-top:12px">{{ $t('artifacts.hfMetadata') }}</h4>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item v-if="detailMeta.model_type" :label="$t('artifacts.modelType')">{{ detailMeta.model_type }}</el-descriptions-item>
             <el-descriptions-item v-if="detailMeta.architectures" :label="$t('artifacts.architecture')">{{ Array.isArray(detailMeta.architectures) ? detailMeta.architectures.join(', ') : detailMeta.architectures }}</el-descriptions-item>
@@ -179,7 +213,11 @@
           <el-descriptions-item :label="$t('modelWizard.path')">{{ activeCandidate.path || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('modelWizard.type')">{{ activeCandidate.path_type || '-' }}</el-descriptions-item>
           <el-descriptions-item v-if="activeCandidate.detected_metadata?.context_length" :label="$t('modelWizard.contextLength')">{{ activeCandidate.detected_metadata.context_length }}</el-descriptions-item>
-          <el-descriptions-item v-if="activeCandidate.detected_metadata?.quantization" label="Quantization">{{ activeCandidate.detected_metadata.quantization }}</el-descriptions-item>
+          <el-descriptions-item v-if="activeCandidate.detected_metadata?.quantization" :label="$t('artifacts.quantization')">{{ activeCandidate.detected_metadata.quantization }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('artifacts.capabilities')" :span="2">
+            <el-tag v-for="cap in wizardCapabilities" :key="cap.id" size="small" class="cap-tag">{{ capabilityText(cap) }}</el-tag>
+            <span v-if="wizardCapabilities.length === 0">-</span>
+          </el-descriptions-item>
         </el-descriptions>
 
         <!-- Warnings -->
@@ -217,8 +255,9 @@ import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import RemoteFileBrowser from '@/components/RemoteFileBrowser.vue'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
+import { capabilityLabel, inferModelCapabilities, recommendedTestMode, testModeLabel } from '@/utils/modelCapabilities.js'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const dialogVisible = ref(false); const detailVisible = ref(false); const selected = ref<any>(null); const locations = ref<any[]>([])
@@ -268,6 +307,18 @@ const detailFileSize = computed(() => {
 })
 const detailParamCount = computed(() => detailMeta.value?.parameter_count || '')
 const detailCtxLen = computed(() => detailMeta.value?.context_length || detailMeta.value?.max_position_embeddings || selected.value?.default_context_length || '')
+const detailCapabilities = computed(() => capabilitiesFor(selected.value ? { ...selected.value, locations: locations.value } : null))
+const wizardCapabilities = computed(() => {
+  if (!activeCandidate.value) return []
+  return capabilitiesFor({
+    name: wizardModelName.value,
+    display_name: wizardDisplayName.value,
+    format: activeCandidate.value.format,
+    task_type: 'chat',
+    architecture: activeCandidate.value.detected_metadata?.architecture,
+    discovered_metadata_json: activeCandidate.value.detected_metadata || {},
+  })
+})
 
 function formatBytesHuman(bytes: number): string {
   if (!bytes || bytes === 0) return ''
@@ -275,6 +326,38 @@ function formatBytesHuman(bytes: number): string {
   let i = 0; let size = bytes
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
   return size.toFixed(1) + ' ' + units[i]
+}
+
+function capabilitiesFor(model: any): any[] {
+  if (!model) return []
+  return inferModelCapabilities(model)
+}
+
+function capabilityText(cap: any): string {
+  return capabilityLabel(cap, locale.value)
+}
+
+function capabilitySourceText(source: string): string {
+  const key = `artifacts.capabilitySource_${source || 'unknown'}`
+  const val = t(key)
+  return val === key ? (source || '-') : val
+}
+
+function capabilityConfidenceText(confidence: string): string {
+  const key = `artifacts.capabilityConfidence_${confidence || 'unknown'}`
+  const val = t(key)
+  return val === key ? (confidence || '-') : val
+}
+
+function testModeText(model: any): string {
+  return testModeLabel(recommendedTestMode(model), locale.value)
+}
+
+function recommendedEndpoint(model: any): string {
+  const mode = recommendedTestMode(model)
+  if (mode === 'chat') return '/v1/chat/completions'
+  if (mode === 'completion') return '/v1/completions'
+  return t('artifacts.endpointAuto')
 }
 
 onMounted(async () => { await refresh(); loadNodes() })
@@ -433,4 +516,5 @@ async function doDeleteLocation(loc: any) {
 <style scoped>
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .page-header h2 { margin: 0; }
+.cap-tag { margin-right: 4px; margin-bottom: 4px; }
 </style>

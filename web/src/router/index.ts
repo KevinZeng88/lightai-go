@@ -66,6 +66,11 @@ const router = createRouter({
           component: () => import('@/pages/ModelInstancesPage.vue'),
         },
         {
+          path: 'models/test-diagnostics',
+          name: 'ModelTestDiagnostics',
+          component: () => import('@/pages/ModelInstancesPage.vue'),
+        },
+        {
           path: 'observability/overview',
           name: 'ObservabilityOverview',
           component: () => import('@/pages/ObservabilityOverviewPage.vue'),
