@@ -83,7 +83,7 @@ for rt in "$VLLM_RT" "$SGLANG_RT" "$LLAMACPP_RT"; do [ -n "$rt" ] && ensure_nbr 
 run_dryrun() {
   local label="$1" rt="$2" art="$3" svc="$4" params="$5"
   local dep_resp; dep_resp=$(api_post "deployments" \
-    "{\"name\":\"$PREFIX-$label\",\"display_name\":\"$label\",\"model_artifact_id\":\"$art\",\"backend_runtime_id\":\"$rt\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":$svc,\"parameters_json\":$params}")
+    "{\"name\":\"$PREFIX-$label\",\"display_name\":\"$label\",\"model_artifact_id\":\"$art\",\"backend_runtime_id\":\"$rt\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[]},\"service_json\":$svc,\"parameters_json\":$params}")
   local dep_id; dep_id=$(echo "$dep_resp" | json_field id)
   if [ -z "$dep_id" ]; then
     echo "ERROR: deploy create: $(head -c 200 <<< "$dep_resp")"

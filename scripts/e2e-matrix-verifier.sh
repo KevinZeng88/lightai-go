@@ -110,7 +110,7 @@ for n in json.load(sys.stdin):
   # Create deployment
   local dep_name="${PREFIX}-${label}"
   local port=$((8500 + RANDOM % 500))
-  local dep_resp; dep_resp=$(api_post "deployments" "{\"name\":\"$dep_name\",\"display_name\":\"Matrix $label\",\"model_artifact_id\":\"$art_id\",\"backend_runtime_id\":\"$rt_id\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":$port,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}")
+  local dep_resp; dep_resp=$(api_post "deployments" "{\"name\":\"$dep_name\",\"display_name\":\"Matrix $label\",\"model_artifact_id\":\"$art_id\",\"backend_runtime_id\":\"$rt_id\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[]},\"service_json\":{\"host_port\":$port,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}")
   local dep_id; dep_id=$(echo "$dep_resp" | json_field id)
   if [ -z "$dep_id" ]; then
     echo "FAIL:$label:deploy_create" >> "$ARTIFACT_DIR/matrix-results.txt"

@@ -28,6 +28,9 @@ type ResolvedRunPlan struct {
 	GpuDriver        string   `json:"gpu_driver,omitempty"`        // DeviceRequest driver, e.g. "" for docker run --gpus CLI
 	GpuCapabilities  [][]string `json:"gpu_capabilities,omitempty"` // e.g. [["gpu"]]
 
+	// DeviceBinding captures vendor-specific accelerator-to-Docker binding.
+	DeviceBinding *DeviceBinding `json:"device_binding,omitempty"`
+
 	SecurityOptions []string `json:"security_options,omitempty"`
 	ExtraArgs       []string `json:"extra_args,omitempty"`
 
@@ -69,3 +72,32 @@ type HealthCheck struct {
 	IntervalSeconds       int    `json:"interval_seconds"`
 	TimeoutSeconds        int    `json:"timeout_seconds"`
 }
+
+// DeviceBinding captures vendor-specific accelerator-to-Docker parameter binding.
+// Platform AcceleratorIds (UUIDs) resolve into vendor-appropriate Docker config.
+type DeviceBinding struct {
+	Vendor string `json:"vendor"`
+	Mode   string `json:"mode"` // "nvidia_device_request", "metax_device_paths", "cpu_none"
+
+	// Platform accelerator assignment
+	AcceleratorIds []string `json:"accelerator_ids,omitempty"`
+
+	// NVIDIA binding
+	VisibleDeviceIDs []string   `json:"visible_device_ids,omitempty"`
+	GPUDriver        string     `json:"gpu_driver,omitempty"`
+	GPUCapabilities  [][]string `json:"gpu_capabilities,omitempty"`
+	GPUVisibleEnvKey string     `json:"gpu_visible_env_key,omitempty"`
+
+	// MetaX binding
+	DevicePaths []string `json:"device_paths,omitempty"`
+
+	// Common Docker accelerator parameters
+	Devices     []DeviceMapping   `json:"devices,omitempty"`
+	GroupAdd    []string          `json:"group_add,omitempty"`
+	Privileged  bool              `json:"privileged,omitempty"`
+	IPCMode     string            `json:"ipc_mode,omitempty"`
+	SecurityOpt []string          `json:"security_opt,omitempty"`
+	ShmSize     string            `json:"shm_size,omitempty"`
+	Ulimits     map[string]string `json:"ulimits,omitempty"`
+}
+

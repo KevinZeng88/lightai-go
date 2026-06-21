@@ -106,7 +106,7 @@ printf '%s\n' "$nbr_json" > "$ARTIFACT_DIR/node-backend-runtime.json"
 # Agent check to set NBR ready
 api_ok POST "/api/v1/nodes/$node_id/backend-runtimes/check" "{\"backend_runtime_id\":\"$runtime_id\",\"image_ref\":\"$runtime_image\",\"image_present\":true,\"docker_available\":true}" > /dev/null
 
-deployment_payload="{\"name\":\"ui-persist-deploy-$run_id\",\"display_name\":\"UI Persist Deploy $run_id\",\"model_artifact_id\":\"$artifact_id\",\"node_backend_runtime_id\":\"$node_id:$runtime_id\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8005,\"container_port\":8080,\"app_port\":8080,\"health_port\":8005,\"api_test_port\":8005},\"parameters_json\":{\"served_model_name\":\"ui-persist-$run_id\"},\"env_overrides_json\":{}}"
+deployment_payload="{\"name\":\"ui-persist-deploy-$run_id\",\"display_name\":\"UI Persist Deploy $run_id\",\"model_artifact_id\":\"$artifact_id\",\"node_backend_runtime_id\":\"$node_id:$runtime_id\",\"placement_json\":{\"node_id\":\"$node_id\",\"accelerator_ids\":[]},\"service_json\":{\"host_port\":8005,\"container_port\":8080,\"app_port\":8080,\"health_port\":8005,\"api_test_port\":8005},\"parameters_json\":{\"served_model_name\":\"ui-persist-$run_id\"},\"env_overrides_json\":{}}"
 printf '%s\n' "$deployment_payload" > "$ARTIFACT_DIR/deployment-request.json"
 deployment_json="$(api_ok POST /api/v1/deployments "$deployment_payload")"
 printf '%s\n' "$deployment_json" > "$ARTIFACT_DIR/deployment.json"

@@ -72,7 +72,7 @@ assert_contains "all list rows have required fields" "$(cat "$LIGHTAI_E2E_ARTIFA
 
 log "test=create and detail"
 DEP_NAME="$(e2e_resource_name "visibility")"
-CREATE_RESP="$(e2e_api_post "deployments" "{\"name\":\"$DEP_NAME\",\"display_name\":\"Visibility Test\",\"model_artifact_id\":\"$ART_ID\",\"node_backend_runtime_id\":\"$NBR_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8291,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}" 201)"
+CREATE_RESP="$(e2e_api_post "deployments" "{\"name\":\"$DEP_NAME\",\"display_name\":\"Visibility Test\",\"model_artifact_id\":\"$ART_ID\",\"node_backend_runtime_id\":\"$NBR_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[]},\"service_json\":{\"host_port\":8291,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}" 201)"
 printf '%s\n' "$CREATE_RESP" > "$LIGHTAI_E2E_ARTIFACT_DIR/create-response.json"
 DEP_ID="$(printf '%s' "$CREATE_RESP" | json_field id)"
 [ -n "$DEP_ID" ] || e2e_die "deployment create did not return id"

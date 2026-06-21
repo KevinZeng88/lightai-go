@@ -228,7 +228,7 @@ func workflowDeploymentPreflight(t *testing.T, app *workflowTestApp, fixture wor
 		"model_artifact_id":       fixture.ArtifactID,
 		"node_backend_runtime_id": fixture.NBRID,
 		"node_id":                 fixture.NodeID,
-		"gpu_ids":                 []interface{}{fixture.GPUID},
+		"accelerator_ids":                 []interface{}{fixture.GPUID},
 		"host_port":               float64(18080),
 	}, http.StatusOK)
 	var preflight map[string]interface{}
@@ -247,7 +247,7 @@ func workflowCreateDeployment(t *testing.T, app *workflowTestApp, fixture workfl
 		"replicas":                float64(1),
 		"placement_json": map[string]interface{}{
 			"node_id": fixture.NodeID,
-			"gpu_ids": []interface{}{fixture.GPUID},
+			"accelerator_ids": []interface{}{fixture.GPUID},
 		},
 		"service_json":       fixture.Service,
 		"parameters_json":    fixture.Parameters,

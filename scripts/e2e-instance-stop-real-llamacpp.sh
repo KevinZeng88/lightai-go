@@ -98,7 +98,7 @@ log "Pre state: containers=$PRE_CONTAINERS instances=$PRE_INSTANCES"
 # Step 1: Create deployment
 log "=== Step 1: Create deployment ==="
 DEP_NAME="${PREFIX}-llamacpp-gguf"
-CREATE_RESP=$(api_post "deployments" "{\"name\":\"$DEP_NAME\",\"display_name\":\"Instance Stop Test\",\"model_artifact_id\":\"$GGUF_ART_ID\",\"backend_runtime_id\":\"$LLAMACPP_RT\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8391,\"container_port\":8080,\"app_port\":8080},\"parameters_json\":{}}")
+CREATE_RESP=$(api_post "deployments" "{\"name\":\"$DEP_NAME\",\"display_name\":\"Instance Stop Test\",\"model_artifact_id\":\"$GGUF_ART_ID\",\"backend_runtime_id\":\"$LLAMACPP_RT\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[]},\"service_json\":{\"host_port\":8391,\"container_port\":8080,\"app_port\":8080},\"parameters_json\":{}}")
 echo "$CREATE_RESP" > "$ARTIFACT_DIR/create-response.json"
 DEP_ID=$(echo "$CREATE_RESP" | json_field id)
 [ -n "$DEP_ID" ] || { log "FATAL: Deployment create failed"; exit 1; }

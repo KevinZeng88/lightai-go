@@ -148,7 +148,7 @@ type DeploymentInfo struct {
 // PlacementInfo holds deployment placement configuration.
 type PlacementInfo struct {
 	NodeID string   `json:"node_id"`
-	GPUIds []string `json:"gpu_ids"`
+	AcceleratorIds []string `json:"accelerator_ids"`
 }
 
 // ServiceInfo holds deployment service configuration.
@@ -888,7 +888,7 @@ func computeInputHash(in ResolveInput) string {
 		"app_port":       in.Deployment.Service.AppPort,
 		"parameters":     in.Deployment.Parameters,
 		"env_overrides":  in.Deployment.EnvOverrides,
-		"gpu_ids":        in.Deployment.Placement.GPUIds,
+		"accelerator_ids":        in.Deployment.Placement.AcceleratorIds,
 		"node_id":        in.Deployment.Placement.NodeID,
 	})
 	h := sha256.Sum256(data)
@@ -927,3 +927,47 @@ func minInt(a, b int) int {
 	}
 	return b
 }
+
+// buildDeviceBinding creates a vendor-specific DeviceBinding from resolver inputs.
+func buildDeviceBinding(in ResolveInput, gpuIDs []string, gpuVisibleKey string, docker DockerSpecInfo) *DeviceBinding {
+	binding := &DeviceBinding{
+		Vendor:           in.BackendRuntime.Vendor,
+		GPUVisibleEnvKey: gpuVisibleKey,
+		Privileged:       docker.Privileged,
+		IPCMode:          docker.IPCMode,
+		ShmSize:          docker.ShmSize,
+		Devices:          docker.Devices,
+		GroupAdd:         docker.GroupAdd,
+		SecurityOpt:      docker.SecurityOptions,
+		Ulimits:          docker.Ulimits,
+	}
+
+	// Collect platform accelerator indices from assigned GPUs
+	for _, g := range in.AssignedGPUs {
+		binding.AcceleratorIds = append(binding.AcceleratorIds, fmt.Sprintf("%d", g.Index))
+	}
+
+	switch strings.ToLower(in.BackendRuntime.Vendor) {
+	case "nvidia":
+		binding.Mode = "nvidia_device_request"
+		binding.VisibleDeviceIDs = gpuIDs
+		binding.GPUDriver = docker.GpuDriver
+		binding.GPUCapabilities = docker.GpuCapabilities
+	case "metax":
+		// Privileged with device paths = native device_paths mode
+		binding.Mode = "metax_device_paths"
+		for _, d := range docker.Devices {
+			binding.DevicePaths = append(binding.DevicePaths, d.HostPath)
+		}
+	case "cpu":
+		binding.Mode = "cpu_none"
+	default:
+		binding.Mode = "nvidia_device_request"
+		binding.VisibleDeviceIDs = gpuIDs
+		binding.GPUDriver = docker.GpuDriver
+		binding.GPUCapabilities = docker.GpuCapabilities
+	}
+
+	return binding
+}
+

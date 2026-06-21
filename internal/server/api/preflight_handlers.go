@@ -28,7 +28,7 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 		ModelArtifactID      string   `json:"model_artifact_id"`
 		NodeBackendRuntimeID string   `json:"node_backend_runtime_id"`
 		NodeID               string   `json:"node_id"`
-		GPUIds               []string `json:"gpu_ids"`
+		AcceleratorIds       []string `json:"accelerator_ids"`
 		HostPort             int      `json:"host_port"`
 	}
 	// Re-marshal to typed struct for clean parsing.

@@ -13,7 +13,7 @@ type DBQuerier interface {
 // DryRunInput holds all data needed for dry-run validation.
 type DryRunInput struct {
 	NodeID          string
-	GPUIds          []string
+	AcceleratorIds          []string
 	HostPort        int
 	RuntimeVendor   string
 	ModelArtifactID string
@@ -49,7 +49,7 @@ func ValidateDryRun(db DBQuerier, in DryRunInput) DryRunResult {
 	}
 
 	// 3. Validate GPUs.
-	for _, gpuID := range in.GPUIds {
+	for _, gpuID := range in.AcceleratorIds {
 		var gpuHealth, gpuStatus, gpuVendor string
 		if err := db.QueryRow(`SELECT health, status, vendor FROM gpu_devices WHERE id = ?`, gpuID).Scan(&gpuHealth, &gpuStatus, &gpuVendor); err == sql.ErrNoRows {
 			result.Errors = append(result.Errors, fmt.Sprintf("GPU %s does not exist", gpuID))

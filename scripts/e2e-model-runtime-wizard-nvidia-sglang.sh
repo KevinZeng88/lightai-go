@@ -64,7 +64,7 @@ log "nbr checked status=$check_st deployable=$check_dep"
 echo "$check_result" > "$ARTIFACT_DIR/nbr-check-request.json"
 
 # Deploy
-payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$artifact_id\",\"node_backend_runtime_id\":\"$node_id:$RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$PORT}"
+payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$artifact_id\",\"node_backend_runtime_id\":\"$node_id:$RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$node_id\",\"accelerator_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$PORT}"
 [ -n "$DEPLOY_PARAMS" ] && payload="$payload,\"parameters_json\":{$DEPLOY_PARAMS}"
 payload="$payload}"
 printf '%s\n' "$payload" > "$ARTIFACT_DIR/deployment-request-payload.json"

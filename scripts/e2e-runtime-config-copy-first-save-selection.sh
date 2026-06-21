@@ -145,7 +145,7 @@ for n in json.load(sys.stdin):
   log "  --- Test 4: DryRun after explicit enable ---"
   local preview; preview=""
   if [ -n "$art_id" ]; then
-    local dep_payload="{\"name\":\"$PREFIX-${label}-dep\",\"model_artifact_id\":\"$art_id\",\"node_backend_runtime_id\":\"$NODE_ID:$clone_id\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8501,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}"
+    local dep_payload="{\"name\":\"$PREFIX-${label}-dep\",\"model_artifact_id\":\"$art_id\",\"node_backend_runtime_id\":\"$NODE_ID:$clone_id\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[]},\"service_json\":{\"host_port\":8501,\"container_port\":8000,\"app_port\":8000},\"parameters_json\":{}}"
     local dep_resp; dep_resp=$(api_post "deployments" "$dep_payload")
     local dep_id; dep_id=$(echo "$dep_resp" | json_field id)
     if [ -n "$dep_id" ]; then

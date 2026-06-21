@@ -101,7 +101,7 @@ api POST "/api/v1/nodes/$node_id/backend-runtimes/enable" "{\"backend_runtime_id
 api POST "/api/v1/nodes/$node_id/backend-runtimes/check" "{\"backend_runtime_id\":\"$node_id:vllm-v0.23.0-nvidia-cuda\",\"image_ref\":\"vllm/vllm-openai:latest\",\"image_present\":true,\"docker_available\":true}" >/dev/null
 
 # Create deployment with bad health check path to force health_check failure
-deploy_id="$(api POST /api/v1/deployments "{\"name\":\"fail-test-$RUN_ID\",\"model_artifact_id\":\"$artifact_id\",\"node_backend_runtime_id\":\"$node_id:vllm-v0.23.0-nvidia-cuda\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":8090},\"parameters_json\":{\"served_model_name\":\"fail-test\",\"max_model_len\":128}}" | json_get id)"
+deploy_id="$(api POST /api/v1/deployments "{\"name\":\"fail-test-$RUN_ID\",\"model_artifact_id\":\"$artifact_id\",\"node_backend_runtime_id\":\"$node_id:vllm-v0.23.0-nvidia-cuda\",\"placement_json\":{\"node_id\":\"$node_id\",\"accelerator_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":8090},\"parameters_json\":{\"served_model_name\":\"fail-test\",\"max_model_len\":128}}" | json_get id)"
 [ -n "$deploy_id" ] || fail "deploy create failed"
 log "deploy=$deploy_id"
 

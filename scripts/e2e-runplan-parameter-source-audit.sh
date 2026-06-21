@@ -190,7 +190,7 @@ log "NBR state saved"
 do_dryrun() {
   local label="$1" art_id="$2" rt_id="$3" svc_json="$4" params_json="$5"
   log "--- DryRun: $label ---"
-  local dep_resp; dep_resp=$(api_post "deployments" "{\"name\":\"$PREFIX-$label\",\"display_name\":\"$label\",\"model_artifact_id\":\"$art_id\",\"backend_runtime_id\":\"$rt_id\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":$svc_json,\"parameters_json\":$params_json}")
+  local dep_resp; dep_resp=$(api_post "deployments" "{\"name\":\"$PREFIX-$label\",\"display_name\":\"$label\",\"model_artifact_id\":\"$art_id\",\"backend_runtime_id\":\"$rt_id\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[]},\"service_json\":$svc_json,\"parameters_json\":$params_json}")
   DEP_ID=$(echo "$dep_resp" | json_field id)
   if [ -z "$DEP_ID" ]; then
     log "ERROR: Deployment create failed for $label"

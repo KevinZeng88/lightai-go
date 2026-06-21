@@ -197,7 +197,7 @@ e2e_check_nbr() {
 }
 e2e_create_deployment() {
   local name; name="e2e-${BACKEND_NAME}-${E2E_RUN_ID}"
-  local payload; payload="{\"name\":\"$name\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[\"$GPU_ID\"]},\"service_json\":{\"host_port\":$HOST_PORT}"
+  local payload; payload="{\"name\":\"$name\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[\"$GPU_ID\"]},\"service_json\":{\"host_port\":$HOST_PORT}"
   if [ -n "$DEPLOY_PARAMS" ]; then
     payload="$payload,\"parameters_json\":{$DEPLOY_PARAMS}"
   fi

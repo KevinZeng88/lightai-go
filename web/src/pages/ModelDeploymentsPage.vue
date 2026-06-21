@@ -267,7 +267,7 @@ const createVisible = ref(false); const dryRunVisible = ref(false); const runPla
 const dryRunResult = ref<any>(null); const runPlanData = ref('')
 const editVisible = ref(false); const selectedEditRow = ref<any>(null)
 const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '', source_template_name: '', source_backend_runtime_id: '', copied_at: '' })
-const createForm = ref({ name: '', model_artifact_id: '', node_backend_runtime_id: '', node_id: '', gpu_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
+const createForm = ref({ name: '', model_artifact_id: '', node_backend_runtime_id: '', node_id: '', accelerator_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
 const wizardVisible = ref(false); const wizardStep = ref(0)
@@ -369,16 +369,16 @@ async function doCreate() {
     if (payload.node_backend_runtime_id) {
       const nbr = allNBRs.value.find((n: any) => n.id === payload.node_backend_runtime_id)
       if (nbr) {
-        payload.placement_json = JSON.stringify({ node_id: nbr._node_id || nbr.node_id || createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
+        payload.placement_json = JSON.stringify({ node_id: nbr._node_id || nbr.node_id || createForm.value.node_id, accelerator_ids: JSON.parse(createForm.value.accelerator_ids || '[]') })
       } else {
-        payload.placement_json = JSON.stringify({ node_id: createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
+        payload.placement_json = JSON.stringify({ node_id: createForm.value.node_id, accelerator_ids: JSON.parse(createForm.value.accelerator_ids || '[]') })
       }
     } else {
-      payload.placement_json = JSON.stringify({ node_id: createForm.value.node_id, gpu_ids: JSON.parse(createForm.value.gpu_ids || '[]') })
+      payload.placement_json = JSON.stringify({ node_id: createForm.value.node_id, accelerator_ids: JSON.parse(createForm.value.accelerator_ids || '[]') })
     }
     payload.service_json = JSON.stringify(servicePayload(createForm.value.host_port, createForm.value.container_port, createForm.value.app_port))
     // Remove legacy fields not in create payload
-    delete payload.gpu_ids
+    delete payload.accelerator_ids
     await apiClient.post('/deployments', payload)
     ElMessage.success(t('deployments.created')); createVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
@@ -541,7 +541,7 @@ async function ensureWizardDeployment() {
   const name = `wizard-${Date.now()}`
   const payload: any = {
     name, display_name: name, model_artifact_id: wizardModelId.value,
-    placement_json: { node_id: wizardStartNode.value, gpu_ids: [] },
+    placement_json: { node_id: wizardStartNode.value, accelerator_ids: [] },
     service_json: servicePayload(wizardHostPort.value, wizardContainerPort.value, wizardAppPort.value),
     parameters_json: {}, env_overrides_json: {},
   }

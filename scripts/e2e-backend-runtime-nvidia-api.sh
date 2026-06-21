@@ -221,7 +221,7 @@ print(json.dumps({
   "name": "$PREFIX-$RUN_ID-vllm-deployment",
   "model_artifact_id": "$artifact_id",
   "node_backend_runtime_id": "$node_id:$runtime_id",
-  "placement_json": {"node_id": "$node_id", "gpu_ids": ["$gpu_id"]},
+  "placement_json": {"node_id": "$node_id", "accelerator_ids": ["$gpu_id"]},
   "service_json": {"host_port": int("$VLLM_PORT")},
   "parameters_json": {"served_model_name": "$PREFIX-$RUN_ID-vllm", "max_model_len": 4096, "gpu_memory_utilization": 0.85},
   "env_overrides_json": {}

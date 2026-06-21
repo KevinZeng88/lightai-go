@@ -194,7 +194,7 @@ echo ""
 echo "=== Deployment ==="
 D=$(curl -sf -b "$COOKIES" -X POST "$API/model-deployments" \
   -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF" -H "Origin: http://127.0.0.1:18080" \
-  -d "{\"name\":\"e2e-llama-cpp\",\"model_artifact_id\":\"$AID\",\"backend_runtime_id\":\"$RID\",\"node_id\":\"$NODE_ID\",\"gpu_ids\":[\"$GPU_ID\"],\"host_port\":$PORT}")
+  -d "{\"name\":\"e2e-llama-cpp\",\"model_artifact_id\":\"$AID\",\"backend_runtime_id\":\"$RID\",\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[\"$GPU_ID\"],\"host_port\":$PORT}")
 DID=$(echo "$D" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 pass "Deployment: $DID"
 

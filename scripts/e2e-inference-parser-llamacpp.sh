@@ -104,7 +104,7 @@ fi
 
 # Create deployment
 DEP_NAME="${PREFIX}-llamacpp"
-DEP_RESP=$(api_post "deployments" "{\"name\":\"$DEP_NAME\",\"display_name\":\"Inference Test\",\"model_artifact_id\":\"$GGUF_ART_ID\",\"backend_runtime_id\":\"$LLAMACPP_RT\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[]},\"service_json\":{\"host_port\":8491,\"container_port\":8080,\"app_port\":8080},\"parameters_json\":{}}")
+DEP_RESP=$(api_post "deployments" "{\"name\":\"$DEP_NAME\",\"display_name\":\"Inference Test\",\"model_artifact_id\":\"$GGUF_ART_ID\",\"backend_runtime_id\":\"$LLAMACPP_RT\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[]},\"service_json\":{\"host_port\":8491,\"container_port\":8080,\"app_port\":8080},\"parameters_json\":{}}")
 DEP_ID=$(echo "$DEP_RESP" | json_field id)
 [ -n "$DEP_ID" ] || { log "FATAL: Deployment create failed"; exit 1; }
 log "Deployment: $DEP_ID"

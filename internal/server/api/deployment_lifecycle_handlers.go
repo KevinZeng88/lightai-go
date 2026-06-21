@@ -474,7 +474,7 @@ type preflightResult struct {
 	deployConfigSnapshot string // config_snapshot_json from ModelDeployment
 	placement   struct {
 			NodeID string   `json:"node_id"`
-			GPUIds []string `json:"gpu_ids"`
+			AcceleratorIds []string `json:"accelerator_ids"`
 		}
 		service struct {
 			HostPort      int `json:"host_port"`
@@ -771,12 +771,12 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	h.DB.QueryRow(`SELECT primary_ip FROM nodes WHERE id = ?`, pf.placement.NodeID).Scan(&pf.nodeIP)
 
 	// Auto-assign first available GPU on the node if none specified.
-	if len(pf.placement.GPUIds) == 0 && pf.placement.NodeID != "" {
+	if len(pf.placement.AcceleratorIds) == 0 && pf.placement.NodeID != "" {
 		var autoGpuID string
 		h.DB.QueryRow(`SELECT id FROM gpu_devices WHERE node_id = ? AND status = 'available' LIMIT 1`,
 			pf.placement.NodeID).Scan(&autoGpuID)
 		if autoGpuID != "" {
-			pf.placement.GPUIds = []string{autoGpuID}
+			pf.placement.AcceleratorIds = []string{autoGpuID}
 		}
 	}
 
@@ -806,7 +806,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	_ = matchStatus
 
 	// Fetch GPU info.
-	for _, gid := range pf.placement.GPUIds {
+	for _, gid := range pf.placement.AcceleratorIds {
 		var idx int
 		var vendor string
 		if err := h.DB.QueryRow(`SELECT index_num, vendor FROM gpu_devices WHERE id = ?`, gid).Scan(&idx, &vendor); err != nil {
@@ -892,7 +892,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 			AppPort:       pf.service.AppPort,
 			HealthPort:    pf.service.HealthPort,
 			APITestPort:   pf.service.APITestPort,
-		}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, GPUIds: pf.placement.GPUIds}},
+		}, Placement: runplan.PlacementInfo{NodeID: pf.placement.NodeID, AcceleratorIds: pf.placement.AcceleratorIds}},
 		InstanceID:         instanceID,
 		Node:               &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
 		AssignedGPUs:       pf.gpuInfos,
@@ -1081,7 +1081,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		"deployment_id", deployID,
 		"instance_id", instanceID,
 		"node_id", pf.placement.NodeID,
-		"gpu_ids", pf.placement.GPUIds,
+		"accelerator_ids", pf.placement.AcceleratorIds,
 		"request_id", log.RequestIDFromContext(r.Context()),
 	)
 
@@ -1179,7 +1179,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`INSERT INTO model_instances (id, deployment_id, tenant_id, replica_index, node_id, agent_id, assigned_gpus_json, host_port, container_port, current_run_plan_id, actual_state, desired_state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		instanceID, deployID, tid, 0, pf.placement.NodeID, "", jsonString(pf.placement.GPUIds), pf.service.HostPort, pf.plan.ContainerPort, runPlanID, "pending", "running", now, now); err != nil {
+		instanceID, deployID, tid, 0, pf.placement.NodeID, "", jsonString(pf.placement.AcceleratorIds), pf.service.HostPort, pf.plan.ContainerPort, runPlanID, "pending", "running", now, now); err != nil {
 		log.Error("deployment.start.instance_insert_failed", "error", err, "instance_id", instanceID, "deployment_id", deployID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -1200,7 +1200,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	for _, gid := range pf.placement.GPUIds {
+	for _, gid := range pf.placement.AcceleratorIds {
 		leaseID := uuid.NewString()
 		if _, err := tx.Exec(`INSERT INTO gpu_leases (id, gpu_id, node_id, deployment_id, instance_id, tenant_id, status, reserved_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			leaseID, gid, pf.placement.NodeID, deployID, instanceID, tid, "reserved", now, now, now); err != nil {

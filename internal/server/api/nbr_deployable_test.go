@@ -222,7 +222,7 @@ func TestCreateDeploymentAcceptsReadyWithWarnings(t *testing.T) {
 		"name":                      "test-create-rww-deploy",
 		"model_artifact_id":         artifactID,
 		"node_backend_runtime_id":   nbrID,
-		"placement_json":            map[string]interface{}{"node_id": nodeID, "gpu_ids": []interface{}{}},
+		"placement_json":            map[string]interface{}{"node_id": nodeID, "accelerator_ids": []interface{}{}},
 		"service_json":              map[string]interface{}{"host_port": 8999},
 	}, http.StatusCreated)
 	var deploy map[string]interface{}
@@ -299,7 +299,7 @@ func TestCreateDeploymentRejectsBlockedNBR(t *testing.T) {
 		"name":                      "test-blocked-deploy",
 		"model_artifact_id":         artifactID,
 		"node_backend_runtime_id":   nbrID,
-		"placement_json":            map[string]interface{}{"node_id": nodeID, "gpu_ids": []interface{}{}},
+		"placement_json":            map[string]interface{}{"node_id": nodeID, "accelerator_ids": []interface{}{}},
 		"service_json":              map[string]interface{}{"host_port": 8998},
 	}, http.StatusBadRequest)
 	var errResp map[string]interface{}
