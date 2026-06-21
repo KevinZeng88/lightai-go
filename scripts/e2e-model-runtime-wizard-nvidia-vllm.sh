@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/e2e/lib/model-runtime-common.sh"
 
 BACKEND_NAME="vllm"
-BACKEND_RUNTIME_ID="vllm-v0.23.0-nvidia-cuda"
+BACKEND_RUNTIME_ID="runtime.vllm.nvidia-docker"
 IMAGE_REF="vllm/vllm-openai:latest"
 MODEL_PATH="/home/kzeng/models/Qwen3-0.6B-Instruct-2512"
 HOST_PORT="8004"

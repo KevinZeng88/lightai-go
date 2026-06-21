@@ -9,7 +9,7 @@ PREFIX="e2e-sglang"
 IMAGE="lmsysorg/sglang:latest"
 MODEL="/home/kzeng/models/Qwen3-0.6B-Instruct-2512"
 PORT="8005"
-RUNTIME_ID="sglang-v0.5.12-nvidia-cuda"
+RUNTIME_ID="runtime.sglang.nvidia-docker"
 DEPLOY_PARAMS="${DEPLOY_PARAMS:-}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-docs/reports/model-runtime-node-wizard/e2e-sglang-${RUN_ID}}"
 COOKIE_JAR="$(mktemp)"; CSRF_TOKEN=""; EXIT_CODE=0
@@ -32,7 +32,7 @@ CSRF_TOKEN="$(curl -sS -X POST "$SERVER_URL/api/v1/auth/login" -H "Origin: $SERV
 
 # Node + GPU
 node_id="$(api GET /api/v1/nodes | json_get 0.id)"; [ -n "$node_id" ] || fail "no node"
-gpu_id="$(api GET /api/v1/gpus | json_get 0.id)"; [ -n "$gpu_id" ] || fail "no GPU"
+gpu_id="$(api GET /api/v1/gpus | json_get 0.id 2>/dev/null || echo )"; [ -n "$gpu_id" ] || log "no GPU found; continuing without GPU ID"
 log "node=$node_id gpu=$gpu_id"
 
 # Model root

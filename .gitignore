@@ -16,6 +16,7 @@ logs/
 # Runtime credentials and state
 /runtime/
 internal/server/api/runtime/
+web/runtime/
 
 # Config
 *.local.toml

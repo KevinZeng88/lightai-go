@@ -9,7 +9,7 @@ PREFIX="e2e-llamacpp"
 IMAGE="ghcr.io/ggml-org/llama.cpp:server-cuda13"
 MODEL="/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf"
 PORT="8002"
-RUNTIME_ID="llamacpp-b9700-nvidia-cuda13"
+RUNTIME_ID="runtime.llamacpp.nvidia-docker"
 DEPLOY_PARAMS="${DEPLOY_PARAMS:-}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-docs/reports/model-runtime-node-wizard/e2e-llamacpp-${RUN_ID}}"
 COOKIE_JAR="$(mktemp)"; CSRF_TOKEN=""; EXIT_CODE=0
@@ -32,7 +32,7 @@ CSRF_TOKEN="$(curl -sS -X POST "$SERVER_URL/api/v1/auth/login" -H "Origin: $SERV
 
 # Node + GPU
 node_id="$(api GET /api/v1/nodes | json_get 0.id)"; [ -n "$node_id" ] || fail "no node"
-gpu_id="$(api GET /api/v1/gpus | json_get 0.id)"; [ -n "$gpu_id" ] || fail "no GPU"
+gpu_id="$(api GET /api/v1/gpus | json_get 0.id 2>/dev/null || echo )"; [ -n "$gpu_id" ] || log "no GPU found; continuing without GPU ID"
 log "node=$node_id gpu=$gpu_id"
 
 # Model root

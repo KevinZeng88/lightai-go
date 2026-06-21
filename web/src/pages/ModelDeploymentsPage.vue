@@ -333,10 +333,8 @@ function formatNBRLabel(nbr: any): string {
 }
 
 function isNBRDeployable(nbr: any): boolean {
-  // Use backend-provided deployable field if present
-  if (typeof nbr.deployable === 'boolean') return nbr.deployable
-  // Fallback: accept ready and ready_with_warnings
-  return nbr.status === 'ready' || nbr.status === 'ready_with_warnings'
+  // API must return deployable field; missing means broken contract.
+  return nbr.deployable === true
 }
 
 function nbrStatusTagType(status: string): string {
