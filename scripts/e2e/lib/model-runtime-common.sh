@@ -173,32 +173,28 @@ print('false')
 
 e2e_check_nbr() {
   log "stage=check_nbr start"
-  local imgs; imgs="$(api_body GET "/api/v1/nodes/$NODE_ID/docker-images" 2>/dev/null || echo '[]')"
-  set +e
-  local ip; ip="$(echo "$imgs" | python3 -c "
-import json,sys
-payload=json.load(sys.stdin)
-imgs=payload.get('images', []) if isinstance(payload, dict) else payload
-img='${IMAGE_REF}'
-for i in imgs:
-    refs=[i.get('image_ref','')]
-    repo=i.get('repository','')
-    tag=i.get('tag','')
-    if repo and tag:
-        refs.append(f'{repo}:{tag}')
-    for ref in refs:
-        if img == str(ref):
-            print('true'); sys.exit(0)
-print('false')
-" 2>/dev/null || echo false)"
-  set -e
-  local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/check" \
-    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
+  local nbr_id="$NODE_ID:$BACKEND_RUNTIME_ID"
+  # Use check-request (Web UI path) — authoritative Docker image inspect + probe pipeline.
+  local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr_id/check-request" '{}')"
   local st; st="$(echo "$r" | json_get status 2>/dev/null || echo '?')"
-  log "nbr check status=$st"
-  [ "$st" = "ready" ] || { fail "nbr not ready after check (status=$st)"; return 1; }
+  local dep; dep="$(echo "$r" | json_get deployable 2>/dev/null || echo '?')"
+  local warnings; warnings="$(echo "$r" | python3 -c 'import json,sys; d=json.load(sys.stdin); w=d.get("warnings"); print("none" if w is None else (", ".join(w) if w else "none"))' 2>/dev/null || echo '?')"
+  local disabled; disabled="$(echo "$r" | json_get disabled_reason 2>/dev/null || echo '')"
+  log "nbr check status=$st deployable=$dep warnings=$warnings"
+  [ -n "$disabled" ] && log "nbr disabled_reason=$disabled"
+  # Accept both ready and ready_with_warnings — both are deployable.
+  if [ "$st" != "ready" ] && [ "$st" != "ready_with_warnings" ]; then
+    fail "nbr not deployable after check (status=$st deployable=$dep disabled_reason=$disabled)"
+    return 1
+  fi
+  if [ "$dep" != "True" ] && [ "$dep" != "true" ]; then
+    fail "nbr deployable is not true (deployable=$dep)"
+    return 1
+  fi
+  # Save check result
+  mkdir -p "$ARTIFACT_DIR"
+  echo "$r" > "$ARTIFACT_DIR/nbr-check-request.json"
 }
-
 e2e_create_deployment() {
   local name; name="e2e-${BACKEND_NAME}-${E2E_RUN_ID}"
   local payload; payload="{\"name\":\"$name\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"gpu_ids\":[\"$GPU_ID\"]},\"service_json\":{\"host_port\":$HOST_PORT}"

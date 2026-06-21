@@ -36,9 +36,12 @@
         <el-form-item :label="$t('deployments.artifact')"><el-input v-model="createForm.model_artifact_id" /></el-form-item>
         <el-form-item :label="$t('deployments.runtime')">
           <el-select v-model="createForm.node_backend_runtime_id" filterable style="width:100%" :placeholder="$t('startWizard.selectRuntime')">
-            <el-option v-for="nbr in allNBRs" :key="nbr.id" :label="formatNBRLabel(nbr)" :value="nbr.id" :disabled="nbr.status !== 'ready'">
-              <span>{{ formatNBRLabel(nbr) }}</span>
-              <el-tag :type="nbrStatusTagType(nbr.status)" size="small" style="margin-left:8px">{{ nbrStatusText(nbr.status) }}</el-tag>
+            <el-option v-for="nbr in allNBRs" :key="nbr.id" :label="formatNBRLabel(nbr)" :value="nbr.id" :disabled="!isNBRDeployable(nbr)">
+              <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis">{{ formatNBRLabel(nbr) }}</span>
+                <el-tag :type="nbrStatusTagType(nbr.status)" size="small" style="margin-left:8px;flex-shrink:0">{{ nbrStatusText(nbr.status) }}</el-tag>
+              </div>
+              <div v-if="!isNBRDeployable(nbr) && nbr.disabled_reason" style="font-size:11px;color:var(--el-color-danger);margin-top:2px">{{ nbr.disabled_reason }}</div>
             </el-option>
           </el-select>
         </el-form-item>
@@ -171,12 +174,13 @@
             :key="nbr.id"
             :label="formatNBRLabel(nbr)"
             :value="nbr.id"
-            :disabled="nbr.status !== 'ready'"
+            :disabled="!isNBRDeployable(nbr)"
           >
             <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
               <span style="flex:1;overflow:hidden;text-overflow:ellipsis">{{ formatNBRLabel(nbr) }}</span>
               <el-tag :type="nbrStatusTagType(nbr.status)" size="small" style="margin-left:8px;flex-shrink:0">{{ nbrStatusText(nbr.status) }}</el-tag>
             </div>
+            <div v-if="!isNBRDeployable(nbr) && nbr.disabled_reason" style="font-size:11px;color:var(--el-color-danger);margin-top:2px">{{ nbr.disabled_reason }}</div>
           </el-option>
         </el-select>
         <el-alert v-if="wizardVersionId && wizardNBRs.length === 0 && nbrsLoaded" type="warning" :closable="false" style="margin-top:8px">
@@ -328,8 +332,16 @@ function formatNBRLabel(nbr: any): string {
   return parts.join(' / ')
 }
 
+function isNBRDeployable(nbr: any): boolean {
+  // Use backend-provided deployable field if present
+  if (typeof nbr.deployable === 'boolean') return nbr.deployable
+  // Fallback: accept ready and ready_with_warnings
+  return nbr.status === 'ready' || nbr.status === 'ready_with_warnings'
+}
+
 function nbrStatusTagType(status: string): string {
   if (status === 'ready') return 'success'
+  if (status === 'ready_with_warnings') return 'warning'
   if (status === 'needs_check') return 'warning'
   if (status === 'missing_image' || status === 'unsupported_device' || status === 'error') return 'danger'
   if (status === 'disabled') return 'info'

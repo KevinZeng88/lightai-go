@@ -166,9 +166,10 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "node_backend_runtime_id not found")
 		return
 	}
-	if nbrStatus != "ready" {
+	if !isNBRDeployable(nbrStatus) {
+		reason := nbrDisabledReason(nbrStatus, "")
 		writeError(w, http.StatusBadRequest,
-			fmt.Sprintf("node backend runtime is not ready (status=%s); please run agent check first", nbrStatus))
+			fmt.Sprintf("node backend runtime is not deployable (status=%s): %s", nbrStatus, reason))
 		return
 	}
 
@@ -782,12 +783,10 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	// Validate NodeBackendRuntime readiness and read snapshot + image_ref.
 	var nodeRuntimeStatus string
 	h.DB.QueryRow(`SELECT status, backend_runtime_id, node_id, COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE id = ?`, pf.nodeRuntimeID).Scan(&nodeRuntimeStatus, &pf.runtimeID, &pf.placement.NodeID, &pf.nbrSnapshot, &pf.nbrImageRef)
-	if nodeRuntimeStatus != "ready" {
-		reason := fmt.Sprintf("node backend runtime is not ready (status=%s)", nodeRuntimeStatus)
+	if !isNBRDeployable(nodeRuntimeStatus) {
+		reason := nbrDisabledReason(nodeRuntimeStatus, "")
 		if nodeRuntimeStatus == "" {
 			reason = "node_backend_runtime_id not found; recreate deployment with a valid NBR"
-		} else if nodeRuntimeStatus == "needs_check" {
-			reason = "node backend runtime needs agent check before it can be used; run check on the node runtime config first"
 		}
 		pf.addErr("node_backend_runtime_not_ready", reason, map[string]interface{}{"node_runtime_id": pf.nodeRuntimeID, "nbr_status": nodeRuntimeStatus, "node_id": pf.placement.NodeID, "runtime_id": pf.runtimeID})
 		return pf

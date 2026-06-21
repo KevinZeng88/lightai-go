@@ -36,7 +36,7 @@ func (h *AgentHandler) HandleListBackendRuntimes(w http.ResponseWriter, r *http.
 	}
 
 	// Enrich with node_count and ready_count from node_backend_runtimes
-	countRows, cerr := h.DB.Query(`SELECT backend_runtime_id, COUNT(*) AS node_count, SUM(CASE WHEN status = 'ready' THEN 1 ELSE 0 END) AS ready_count FROM node_backend_runtimes GROUP BY backend_runtime_id`)
+	countRows, cerr := h.DB.Query(`SELECT backend_runtime_id, COUNT(*) AS node_count, SUM(CASE WHEN status IN ('ready','ready_with_warnings') THEN 1 ELSE 0 END) AS ready_count FROM node_backend_runtimes GROUP BY backend_runtime_id`)
 	if cerr == nil {
 		defer countRows.Close()
 		countMap := make(map[string]map[string]int)
@@ -271,6 +271,8 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 				displayName += " - " + nid
 			}
 		}
+		deployable := isNBRDeployable(status)
+		warnings := extractProbeWarnings(probeResultsJSON, status)
 		out = append(out, map[string]interface{}{
 			"id": id, "backend_runtime_id": runtimeID, "node_id": nid, "name": displayName, "display_name": displayName, "runner_type": runner,
 			"image_ref": imageRef, "image_id": imageID, "image_digest": digest,
@@ -278,6 +280,9 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 			"driver_version": driver, "toolkit_version": toolkit, "device_check_json": json.RawMessage(checkJSON),
 			"status": status, "status_reason": reason, "last_checked_at": checked, "tenant_id": tid,
 			"created_at": ca, "updated_at": ua,
+			"deployable":      deployable,
+			"warnings":        warnings,
+			"disabled_reason": nbrDisabledReason(status, reason),
 			"config_snapshot_json": json.RawMessage(snapshotJSON),
 			"probe_results_json":   json.RawMessage(probeResultsJSON),
 			"backend_runtime":      map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
@@ -541,9 +546,13 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	// ---- Level 4: Version probe (DEFERRED) ----
 	// The /version-probe agent endpoint is not yet enabled. It requires security
 	// review (--pull=never, --network=none, --cap-drop=ALL, etc.) before deployment.
+	// probe_skipped=true + skip_reason means this is NOT a warning — it's an
+	// intentionally deferred feature. Only real probe failures (timeout, error,
+	// version mismatch) produce warnings.
 	probeResults["level4"] = map[string]interface{}{
 		"version_probed": false,
-		"probe_error":    "version probe deferred to future NBR Image Probe design",
+		"probe_skipped":  true,
+		"skip_reason":    "version probe not yet implemented; deferred to future design",
 	}
 
 	// ---- Process Start Detection (Layer 3) ----
@@ -612,6 +621,9 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 		"docker_available":   dockerAvailable,
 		"status":             status,
 		"status_reason":      reason,
+		"deployable":         isNBRDeployable(status),
+		"warnings":           extractProbeWarnings(jsonString(probeResults), status),
+		"disabled_reason":    nbrDisabledReason(status, reason),
 		"last_checked_at":    now,
 		"probe_results":      probeResults,
 	})
@@ -814,6 +826,7 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		"id": id, "backend_runtime_id": runtimeID, "node_id": nodeID, "name": displayName, "display_name": displayName,
 		"image_ref": imageRef, "image_present": imagePresent, "docker_available": dockerAvailable,
 		"status": status, "status_reason": reason, "last_checked_at": now,
+		"deployable": isNBRDeployable(status), "disabled_reason": nbrDisabledReason(status, reason),
 	})
 }
 
@@ -927,7 +940,11 @@ func evaluateProbeStatus(nodeID, vendor, imageRef, agentID string,
 
 	l4, _ := probeResults["level4"].(map[string]interface{})
 	if l4 != nil && !boolVal(l4, "version_probed", false) {
-		warnings = append(warnings, "version not probed")
+		// If probe was intentionally skipped (deferred/not-implemented), do NOT
+		// treat it as a warning. Only real probe failures produce warnings.
+		if !boolVal(l4, "probe_skipped", false) {
+			warnings = append(warnings, "version not probed")
+		}
 	}
 
 	if len(warnings) > 0 {
@@ -1163,6 +1180,90 @@ func resolveTemplatePath(templateName string) string {
 	}
 	// Old path: flat layout for backward compatibility
 	return "configs/model-runtime/backend-runtime-templates/" + templateName + ".yaml"
+}
+
+// isNBRDeployable returns true when the NBR status allows deployment.
+// ready and ready_with_warnings are deployable; all other statuses are not.
+// This is the single source of truth for NBR deployability — all callers
+// (create deployment, preflight, frontend) must use this helper.
+func isNBRDeployable(status string) bool {
+	return status == "ready" || status == "ready_with_warnings"
+}
+
+// extractProbeWarnings extracts user-visible warnings from probe_results_json.
+// Returns nil when there are no warnings. Skipped/deferred probes are NOT warnings.
+func extractProbeWarnings(probeResultsJSON string, status string) []string {
+	if probeResultsJSON == "" || probeResultsJSON == "{}" {
+		return nil
+	}
+	var pr map[string]interface{}
+	if json.Unmarshal([]byte(probeResultsJSON), &pr) != nil {
+		return nil
+	}
+	var warnings []string
+	// Level 3: backend match warnings
+	if l3, ok := pr["level3"].(map[string]interface{}); ok {
+		if ws, _ := l3["warning"].(bool); ws {
+			if detail := strVal(l3, "match_detail", ""); detail != "" {
+				warnings = append(warnings, "backend_match: "+detail)
+			}
+		}
+	}
+	// Level 4: version probe warnings (only when not skipped)
+	if l4, ok := pr["level4"].(map[string]interface{}); ok {
+		if !boolVal(l4, "version_probed", false) && !boolVal(l4, "probe_skipped", false) {
+			warnings = append(warnings, "version not probed")
+		}
+	}
+	// Process start detection warnings
+	if psd, ok := pr["process_start_detection"].(map[string]interface{}); ok {
+		if psdWarnings, ok := psd["warnings"].([]interface{}); ok {
+			for _, w := range psdWarnings {
+				if s, ok := w.(string); ok && s != "" {
+					warnings = append(warnings, s)
+				}
+			}
+		}
+	}
+	if len(warnings) == 0 {
+		return nil
+	}
+	return warnings
+}
+
+// nbrDisabledReason returns a human-readable reason when an NBR is not deployable.
+// Returns empty string when the NBR is deployable.
+func nbrDisabledReason(status, reason string) string {
+	if isNBRDeployable(status) {
+		return ""
+	}
+	switch status {
+	case "missing_image":
+		return "Docker image is not present on the node; pull the image or check the image reference"
+	case "needs_check":
+		return "Node runtime config has not been checked; run agent check first"
+	case "inspect_failed":
+		return "Docker image inspect failed; verify Docker daemon and image availability"
+	case "runtime_image_mismatch":
+		return "Docker image does not match the declared backend; verify the image reference"
+	case "agent_unreachable":
+		return "Agent is unreachable; verify node connectivity and agent status"
+	case "docker_error":
+		return "Docker daemon error; verify Docker is running on the node"
+	case "unsupported_device":
+		return "Node has no matching GPU vendor for this runtime"
+	case "disabled":
+		return "Node runtime config is disabled"
+	case "evidence_missing":
+		return "No image reference configured; set an image_ref before checking"
+	case "node_offline", "failed":
+		return "Node is offline or in failed state"
+	default:
+		if reason != "" {
+			return reason
+		}
+		return "Node runtime is not deployable (status=" + status + ")"
+	}
 }
 
 // osReadFile is a wrapper for testing.

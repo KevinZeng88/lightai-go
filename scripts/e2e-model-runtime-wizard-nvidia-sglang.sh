@@ -54,9 +54,14 @@ log "artifact=$artifact_id"
 api POST "/api/v1/nodes/$node_id/backend-runtimes/enable" "{\"backend_runtime_id\":\"$RUNTIME_ID\",\"image_ref\":\"$IMAGE\",\"image_present\":true,\"docker_available\":true}" >/dev/null
 log "nbr enabled"
 
-# Agent check (required after enable to set NBR ready)
-api POST "/api/v1/nodes/$node_id/backend-runtimes/check" "{\"backend_runtime_id\":\"$RUNTIME_ID\",\"image_ref\":\"$IMAGE\",\"image_present\":true,\"docker_available\":true}" >/dev/null
-log "nbr checked"
+# Agent check via check-request (Web UI path) — authoritative Docker inspect + probe pipeline.
+check_result="$(api POST "/api/v1/nodes/$node_id/backend-runtimes/$node_id:$RUNTIME_ID/check-request" '{}')"
+check_st="$(echo "$check_result" | json_get status 2>/dev/null || echo '?')"
+check_dep="$(echo "$check_result" | json_get deployable 2>/dev/null || echo '?')"
+log "nbr checked status=$check_st deployable=$check_dep"
+# Accept both ready and ready_with_warnings
+[ "$check_st" = "ready" ] || [ "$check_st" = "ready_with_warnings" ] || { fail "nbr not deployable (status=$check_st)"; }
+echo "$check_result" > "$ARTIFACT_DIR/nbr-check-request.json"
 
 # Deploy
 payload="{\"name\":\"$PREFIX-$RUN_ID-deploy\",\"model_artifact_id\":\"$artifact_id\",\"node_backend_runtime_id\":\"$node_id:$RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$node_id\",\"gpu_ids\":[\"$gpu_id\"]},\"service_json\":{\"host_port\":$PORT}"
