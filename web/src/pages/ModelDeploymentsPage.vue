@@ -15,7 +15,9 @@
           <el-tag :type="deploymentStatusType(row.status)" size="small">{{ deploymentStatusText(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="model_artifact_id" :label="$t('deployments.artifact')" width="200" />
+      <el-table-column :label="$t('deployments.artifact')" width="200">
+	        <template #default="{ row }">{{ modelName(row.model_artifact_id) }}</template>
+	      </el-table-column>
       <el-table-column :label="$t('deployments.backend')" width="140">
         <template #default="{ row }">{{ runtimeContext(row).backend || '-' }}</template>
       </el-table-column>
@@ -390,7 +392,16 @@ function isNBRDeployable(nbr: any): boolean {
   return nbr.deployable === true
 }
 
-function nbrStatusTagType(status: string): string {
+// Resolve model display name from artifact ID using the already-loaded models cache.
+	function modelName(id: string): string {
+	  if (!id) return '-'
+	  const m = models.value.find((m: any) => m.id === id)
+	  if (m) return m.display_name || m.name || id.slice(0, 8) + '...'
+	  // Unknown model: show short id prefix
+	  return id.length > 12 ? id.slice(0, 12) + '...' : id
+	}
+
+	function nbrStatusTagType(status: string): string {
   if (status === 'ready') return 'success'
   if (status === 'ready_with_warnings') return 'warning'
   if (status === 'needs_check') return 'warning'

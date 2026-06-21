@@ -76,7 +76,6 @@ export default {
     runtime: 'Runtime',
     aiWorkflow: 'Model Runtime',
     modelLibrary: 'Model Library',
-    testDiagnostics: 'Test & Diagnostics',
     config: 'Configuration',
     system: 'System',
     tenants: 'Tenants',

@@ -76,7 +76,6 @@ export default {
     runtime: '运行时',
     aiWorkflow: '模型运行',
     modelLibrary: '模型库',
-    testDiagnostics: '测试与诊断',
     config: '配置',
     system: '系统',
     tenants: '租户',

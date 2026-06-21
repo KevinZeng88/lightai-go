@@ -33,7 +33,6 @@
           <el-menu-item index="/runner-configs">{{ t('runnerConfigs.title') }}</el-menu-item>
           <el-menu-item index="/models/deployments">{{ t('deployments.title') }}</el-menu-item>
           <el-menu-item index="/models/instances">{{ t('instances.title') }}</el-menu-item>
-          <el-menu-item index="/models/test-diagnostics">{{ t('nav.testDiagnostics') }}</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="config">

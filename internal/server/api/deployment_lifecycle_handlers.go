@@ -2178,6 +2178,16 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 	result["model_resolution_method"] = resolutionMethod
 	result["checked_at"] = checkedAt
 
+	// Phase 1: collect diagnostic probes on failure for richer error context.
+	if result["ok"] != true {
+		diag := collectTestDiagnostics(client, endpoint, deployID, h)
+		for k, v := range diag {
+			if _, exists := result[k]; !exists {
+				result[k] = v
+			}
+		}
+	}
+
 	if result["ok"] == true {
 		WriteAudit(r.Context(), h.DB.DB, AuditEntry{
 			TenantID: tid, ActorID: actorID,
@@ -2196,6 +2206,90 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 		})
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+
+// collectTestDiagnostics gathers endpoint and runtime diagnostic information
+// when an instance test fails. Phase 1: /v1/models probe, /health probe,
+// backend name, and runtime image.
+func collectTestDiagnostics(client *http.Client, endpoint, deployID string, h *AgentHandler) map[string]interface{} {
+	diag := map[string]interface{}{}
+
+	// Probe /v1/models
+	modelsURL := endpoint + "/v1/models"
+	if !strings.HasSuffix(endpoint, "/") {
+		modelsURL = endpoint + "/v1/models"
+	}
+	modelsResp, modelsErr := client.Get(modelsURL)
+	if modelsErr != nil {
+		diag["models_probe"] = map[string]interface{}{
+			"ok": false, "error": fmt.Sprintf("failed to reach /v1/models: %v", modelsErr),
+		}
+	} else {
+		defer modelsResp.Body.Close()
+		bodyBytes, _ := io.ReadAll(io.LimitReader(modelsResp.Body, 4096))
+		diag["models_probe"] = map[string]interface{}{
+			"ok":          modelsResp.StatusCode >= 200 && modelsResp.StatusCode < 300,
+			"status_code": modelsResp.StatusCode,
+			"body":        string(bodyBytes)[:500],
+		}
+	}
+
+	// Probe /health
+	healthURL := endpoint + "/health"
+	if !strings.HasSuffix(endpoint, "/") {
+		healthURL = endpoint + "/health"
+	}
+	healthResp, healthErr := client.Get(healthURL)
+	if healthErr != nil {
+		diag["health_probe"] = map[string]interface{}{
+			"ok": false, "error": fmt.Sprintf("failed to reach /health: %v", healthErr),
+		}
+	} else {
+		defer healthResp.Body.Close()
+		bodyBytes, _ := io.ReadAll(io.LimitReader(healthResp.Body, 1024))
+		diag["health_probe"] = map[string]interface{}{
+			"ok":          healthResp.StatusCode >= 200 && healthResp.StatusCode < 300,
+			"status_code": healthResp.StatusCode,
+			"body":        string(bodyBytes)[:200],
+		}
+	}
+
+	// Collect runtime context: backend name, runtime image
+	if deployID != "" {
+		var backendName, runtimeImage string
+		h.DB.QueryRow(
+			`SELECT COALESCE(ib.name,''), COALESCE(br.image_name,'')
+			 FROM model_deployments md
+			 JOIN backend_runtimes br ON br.id = md.backend_runtime_id
+			 JOIN inference_backends ib ON ib.id = br.backend_id
+			 WHERE md.id = ?`, deployID,
+		).Scan(&backendName, &runtimeImage)
+		if backendName != "" {
+			diag["backend"] = backendName
+		}
+		if runtimeImage != "" {
+			diag["runtime_image"] = runtimeImage
+		}
+	}
+
+	// Suggest diagnostic actions
+	var suggestions []string
+	if mp, ok := diag["models_probe"].(map[string]interface{}); ok {
+		if ok, _ := mp["ok"].(bool); !ok {
+			suggestions = append(suggestions, "/v1/models endpoint unreachable — verify container is running an OpenAI-compatible server and port mapping is correct")
+		}
+	}
+	if hp, ok := diag["health_probe"].(map[string]interface{}); ok {
+		if ok, _ := hp["ok"].(bool); !ok {
+			suggestions = append(suggestions, "/health endpoint unreachable — container may not be ready or endpoint port is incorrect")
+		}
+	}
+	if len(suggestions) > 0 {
+		diag["suggestions"] = suggestions
+	}
+
+	return diag
 }
 
 // resolveModelID resolves the runtime model id by querying /v1/models and
