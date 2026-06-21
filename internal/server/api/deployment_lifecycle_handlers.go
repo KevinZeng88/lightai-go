@@ -473,16 +473,16 @@ type preflightResult struct {
 	nbrImageRef          string // image_ref from NodeBackendRuntime
 	deployConfigSnapshot string // config_snapshot_json from ModelDeployment
 	placement   struct {
-		NodeID string
-		GPUIds []string
-	}
-	service struct {
-		HostPort      int `json:"host_port"`
-		ContainerPort int `json:"container_port"`
-		AppPort       int `json:"app_port"`
-		HealthPort    int `json:"health_port"`
-		APITestPort   int `json:"api_test_port"`
-	}
+			NodeID string   `json:"node_id"`
+			GPUIds []string `json:"gpu_ids"`
+		}
+		service struct {
+			HostPort      int `json:"host_port"`
+			ContainerPort int `json:"container_port"`
+			AppPort       int `json:"app_port"`
+			HealthPort    int `json:"health_port"`
+			APITestPort   int `json:"api_test_port"`
+		}
 	params            map[string]interface{}
 	envOverrides      map[string]string
 	rtVendor          string

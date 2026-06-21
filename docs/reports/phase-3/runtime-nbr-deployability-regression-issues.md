@@ -3,115 +3,83 @@
 > Status: FIXED
 > Created: 2026-06-21
 > Finalized: 2026-06-21
-> Scope: NBR check-request status contract vs deployment selectability
+> Scope: NBR check-request status + GPU assignment JSON tag fix
 
-## 1. Primary Issue
+## 1. Primary Issues
 
-### Title
+### Issue A: NBR check-request deployability blocked by version probe warning
 
-**NBR check-request 状态与部署可选性契约不一致，导致 ready_with_warnings NBR 无法部署**
+**Root cause**: Level 4 version probe always deferred; `evaluateProbeStatus` treated ALL non-probed results as warnings, producing `ready_with_warnings` for every `check-request` call. Three consumers (HandleCreateDeployment, preflightDeployment, ModelDeploymentsPage.vue) only accepted `status == "ready"`, blocking all NBRs.
 
-### Root Cause
+**Fix**: Level 4 `probe_skipped: true`; `isNBRDeployable()` helper accepts ready + ready_with_warnings; frontend uses `nbr.deployable === true`.
 
-1. **Level 4 version probe always deferred** (`runtime_handlers.go:544-547`): `version_probed` always `false`. `evaluateProbeStatus` treated ALL non-probed results as warnings, producing `ready_with_warnings` for every `check-request` call.
+### Issue B: GPU IDs silently dropped — `placement.GPUIds` struct missing json tag
 
-2. **Three consumers only accepted `status == "ready"`**:
-   - `ModelDeploymentsPage.vue` — `:disabled="nbr.status !== 'ready'"`
-   - `deployment_lifecycle_handlers.go` (HandleCreateDeployment) — `if nbrStatus != "ready"`
-   - `deployment_lifecycle_handlers.go` (preflightDeployment) — `if nodeRuntimeStatus != "ready"`
+**Root cause**: `preflightResult.placement` struct had `GPUIds []string` with NO `json:"gpu_ids"` tag. JSON unmarshaling from `{"gpu_ids":["..."]}` silently dropped GPU IDs, resulting in:
+- `gpu_device_ids: null` in RunPlan
+- `CUDA_VISIBLE_DEVICES: ""` (empty, hides all GPUs)
+- vLLM: `AssertionError: DP adjusted local rank 0 is out of bounds`
+- SGLang: `exec: --: invalid option` (entrypoint wrapper with no sub-command)
 
-3. **E2E tests bypassed real Web UI path**: All E2E shell scripts used old `/check` endpoint (pure `ready`) instead of `/check-request` (which produced `ready_with_warnings`).
+**Fix**: Added `json:"gpu_ids"` tag to `GPUIds` field and `json:"node_id"` tag to `NodeID` field.
 
-### Fix Summary
-
-1. **Level 4: `probe_skipped: true`** — skipped/deferred probes no longer produce user-visible warnings
-2. **`evaluateProbeStatus`** — respects `probe_skipped`, does not warn on deferred probes
-3. **`isNBRDeployable()` helper** — single source of truth: `ready` + `ready_with_warnings` → true
-4. **`HandleCreateDeployment` + `preflightDeployment`** — use `isNBRDeployable()`
-5. **API responses** — NBR list, check-request, enable responses include `deployable`/`warnings`/`disabled_reason`
-6. **`extractProbeWarnings()`** — structured extraction from probe_results_json
-7. **`nbrDisabledReason()`** — clear reason for each non-deployable status
-8. **Frontend `ModelDeploymentsPage.vue`** — uses `nbr.deployable === true` directly, no fallback
-9. **`ready_count` unchanged** — still pure `ready`. New `deployable_count` = `ready` + `ready_with_warnings`
-10. **E2E common library and all three-backend scripts** — use `check-request` endpoint
+This bug was invisible before because:
+1. E2E tests previously used mock GPU or no-GPU paths
+2. The auto-GPU-assign fallback (`len(GPUIds) == 0`) silently selected a GPU, masking the missing explicit GPU IDs
+3. GPU DeviceRequest still worked (Count=-1 for all GPUs) but CUDA_VISIBLE_DEVICES was empty
 
 ---
 
 ## 2. Deployability Contract
 
-| Status | deployable | Notes |
-|--------|-----------|-------|
-| `ready` | true | Image inspect ok, all checks pass |
-| `ready_with_warnings` | true | Image inspect ok, real warnings present (not skipped probes) |
-| `missing_image` | false | Docker image not on node |
-| `needs_check` | false | Not yet checked |
-| `runtime_image_mismatch` | false | Image doesn't match backend |
-| `inspect_failed` | false | Docker inspect failed |
-| `agent_unreachable` | false | Agent not responding |
-| `docker_error` | false | Docker daemon error |
-| `unsupported_device` | false | No matching GPU |
-| `disabled` | false | Explicitly disabled |
-| `evidence_missing` | false | No image_ref configured |
+| Status | deployable |
+|--------|-----------|
+| `ready` | true |
+| `ready_with_warnings` | true |
+| `missing_image`, `needs_check`, `runtime_image_mismatch`, `inspect_failed`, `agent_unreachable`, `docker_error`, `unsupported_device`, `disabled`, `evidence_missing`, `failed`, `unknown`, `error` | false |
 
 ---
 
-## 3. Three-Backend E2E Results
+## 3. Three-Backend E2E Results (Real NVIDIA GPU)
 
-### Environment
-
-- LightAI Server: `http://127.0.0.1:18080` (dev mode)
-- Agent: mock GPU (no real NVIDIA GPU compute available to containers)
-- Docker: available, `nvidia-smi` present
-- Models: Qwen3-0.6B-Instruct-2512 (HF), Qwen3.5-9B-Q4 (GGUF)
+Environment: RTX 5090 (24GB), NVIDIA driver 610.43.02, CUDA 13.3, Docker 29.5.3, WSL2
 
 ### vLLM
 
-| Stage | Result | Detail |
-|-------|--------|--------|
-| check-request | **PASS** | `status=ready deployable=True warnings=none` |
-| preflight | **PASS** | candidate node ready |
-| create deployment | **PASS** | 201 Created |
-| container start | **BLOCKED_ENV** | Container exited (exit_code=1) — mock GPU has no real CUDA compute |
-| Root cause | Environment | vLLM requires real NVIDIA GPU; mock GPU from dev agent is insufficient |
-
-Evidence: `docs/reports/model-runtime-node-wizard/e2e-vllm-*` (preflight/deploy stages recorded)
+| Stage | Result |
+|-------|--------|
+| check-request | **PASS** — `status=ready deployable=True warnings=none` |
+| preflight | **PASS** — clean, no GPU warnings |
+| create deployment | **PASS** |
+| container start | **PASS** — vLLM 0.20.1 started successfully |
+| `/v1/models` | **PASS** — 200 OK (~85s startup) |
+| logs API | **PASS** |
+| stop/cleanup | **PASS** |
+| GPU params | **PASS** — `gpu_device_ids: ['0']`, `CUDA_VISIBLE_DEVICES=0`, `--gpus "device=0"` |
+| Default + modified params | **PASS** both |
 
 ### SGLang
 
-| Stage | Result | Detail |
-|-------|--------|--------|
-| check-request | **PASS** | `status=ready deployable=True` |
-| preflight | **PASS** | candidate node ready |
-| create deployment | **PASS** | 201 Created |
-| container start | **BLOCKED_ENV** | Container exited (exit_code=2) — SGLang NVIDIA entrypoint failed on mock GPU |
-| Root cause | Environment | SGLang requires real NVIDIA GPU; mock GPU from dev agent is insufficient |
-
-Evidence: `docs/reports/model-runtime-node-wizard/e2e-sglang-*`
+| Stage | Result |
+|-------|--------|
+| check-request | **PASS** — `status=ready deployable=True` |
+| preflight | **PASS** |
+| create deployment | **PASS** |
+| GPU params | **PASS** — `gpu_device_ids: ['0']`, `CUDA_VISIBLE_DEVICES=0` |
+| container start | **BLOCKED** — SGLang `nvidia_entrypoint.sh` wrapper expects sub-command; process start config needs `python3 -m sglang.launch_server` prefix (separate issue, not GPU/deployability) |
 
 ### llama.cpp
 
-| Stage | Result | Detail |
-|-------|--------|--------|
-| check-request | **PASS** | `status=ready deployable=True` |
-| preflight | **PASS** | candidate node ready |
-| create deployment | **PASS** | 201 Created |
-| container start | **PASS** | Container running (CPU fallback, no GPU needed) |
-| `/v1/models` | **PASS** | 200 OK |
-| instance test | **PASS** | Chat mode ok |
-| logs API | **PASS** | Logs retrieved |
-| stop/cleanup | **PASS** | Clean shutdown |
-| **Overall** | **PASS** | Full E2E chain passes |
-
-Evidence: `docs/reports/model-runtime-node-wizard/e2e-llamacpp-*`
-
-### Conclusion
-
-The NBR deployability fix works correctly for all three backends:
-- **check-request** now returns `status=ready` (not `ready_with_warnings` with spurious warnings)
-- **`deployable=True`** for all three backends
-- **`warnings=none`** when only skipped probe exists
-- **Create deployment** and **preflight** API accept deployable NBRs
-- vLLM and SGLang container failures are **environment blockers** (mock GPU lacks real CUDA), NOT deployability issues
+| Stage | Result |
+|-------|--------|
+| check-request | **PASS** — `status=ready deployable=True` |
+| preflight | **PASS** |
+| create deployment | **PASS** |
+| container start | **PASS** |
+| `/v1/models` | **PASS** — 200 OK |
+| instance test (chat) | **PASS** |
+| logs API | **PASS** |
+| stop/cleanup | **PASS** |
 
 ---
 
@@ -119,15 +87,14 @@ The NBR deployability fix works correctly for all three backends:
 
 | File | Change |
 |------|--------|
-| `internal/server/api/runtime_handlers.go` | Level 4 probe_skipped, evaluateProbeStatus fix, isNBRDeployable, extractProbeWarnings, nbrDisabledReason, NBR list/check-request/enable responses with deployable, ready_count + deployable_count |
-| `internal/server/api/deployment_lifecycle_handlers.go` | HandleCreateDeployment + preflightDeployment use isNBRDeployable() |
-| `internal/server/api/nbr_deployable_test.go` | NEW — 6 tests |
-| `web/src/pages/ModelDeploymentsPage.vue` | isNBRDeployable uses nbr.deployable directly, nbrStatusTagType updated, disabled reason displayed |
-| `scripts/e2e/lib/model-runtime-common.sh` | e2e_check_nbr uses check-request, accepts ready+ready_with_warnings |
-| `scripts/e2e-model-runtime-wizard-nvidia-vllm.sh` | Fixed runtime ID; uses common lib |
-| `scripts/e2e-model-runtime-wizard-nvidia-sglang.sh` | Fixed runtime ID; uses check-request; GPU resilience |
-| `scripts/e2e-model-runtime-wizard-nvidia-llamacpp.sh` | Fixed runtime ID; uses check-request; GPU resilience |
-| `scripts/e2e-real-smoke-all-three.sh` | All three backends use check-request |
+| `internal/server/api/runtime_handlers.go` | `probe_skipped: true`, `isNBRDeployable()`, `extractProbeWarnings()`, `nbrDisabledReason()`, deployable/warnings/disabled_reason in API responses, ready_count + deployable_count |
+| `internal/server/api/deployment_lifecycle_handlers.go` | **`placement.GPUIds` json tag fix**, `isNBRDeployable()` in HandleCreateDeployment + preflightDeployment |
+| `internal/server/api/nbr_deployable_test.go` | NEW — 6 deployable contract tests |
+| `web/src/pages/ModelDeploymentsPage.vue` | `isNBRDeployable()` uses `nbr.deployable === true`, disabled reason display |
+| `scripts/e2e/lib/model-runtime-common.sh` | `e2e_check_nbr()` uses check-request |
+| `scripts/e2e-model-runtime-wizard-nvidia-*.sh` | Runtime ID fixes, GPU resilience, check-request |
+| `scripts/e2e-real-smoke-all-three.sh` | check-request for all three backends |
+| `.gitignore` | Added `web/runtime/` |
 | `docs/reports/phase-3/runtime-nbr-deployability-regression-issues.md` | This document |
 
 ---
@@ -137,12 +104,11 @@ The NBR deployability fix works correctly for all three backends:
 ```
 go test lightai-go/internal/server/api/... → ALL PASS
 go test lightai-go/internal/server/runplan/... → ALL PASS
-go vet ./internal/... → CLEAN
-npm run build → ✓ built
-npm test → 20 tests PASS, 784 i18n keys consistent
-bash -n scripts/e2e/lib/model-runtime-common.sh → syntax OK
-bash scripts/e2e-model-runtime-wizard-nvidia-vllm.sh → check-request/preflight/deploy PASS
-bash scripts/e2e-model-runtime-wizard-nvidia-sglang.sh → check-request/preflight/deploy PASS
+go vet → CLEAN
+npm test → 20 PASS, 784 i18n keys
+npm run build → ✓
+bash scripts/e2e-model-runtime-wizard-nvidia-vllm.sh → vLLM default PASS, modified PASS
+bash scripts/e2e-model-runtime-wizard-nvidia-sglang.sh → GPU chain PASS (container: process_start_config)
 bash scripts/e2e-model-runtime-wizard-nvidia-llamacpp.sh → FULL PASS
 git diff --check → CLEAN
 git status --short → CLEAN
@@ -150,16 +116,11 @@ git status --short → CLEAN
 
 ---
 
-## 6. E2E Evidence Paths
+## 6. E2E Evidence
 
 ```
-docs/reports/model-runtime-node-wizard/e2e-vllm-*/
+docs/reports/model-runtime-node-wizard/e2e-matrix-20260621115854/vllm/
+docs/reports/model-runtime-node-wizard/e2e-matrix-20260621115854/vllm-modified/
 docs/reports/model-runtime-node-wizard/e2e-sglang-*/
 docs/reports/model-runtime-node-wizard/e2e-llamacpp-*/
 ```
-
----
-
-## 7. git status
-
-Clean — no untracked files, no unstaged changes after commit.
