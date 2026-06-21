@@ -239,6 +239,12 @@ Real hardware/model E2E was not run in this environment. The replacement validat
 
 ## 12. Commit And Push
 
-Commit id: pending at document creation; final commit and push result will be recorded in the final report after commit.
+Implementation commit id: `ac45ae3`.
 
-`git status --short`: pending at document creation.
+This closeout metadata update is committed separately because a commit cannot contain its own final hash.
+
+`git status --short` before metadata update commit:
+
+```text
+ M docs/reports/phase-3/web-ai-config-review/06-implementation-closeout.md
+```
