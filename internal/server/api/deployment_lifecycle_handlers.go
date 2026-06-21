@@ -465,59 +465,59 @@ type PreflightError struct {
 // preflightResult holds the output of the shared pre-start validation and
 // resolution logic used by both dry-run and real start.
 type preflightResult struct {
-	deploy      map[string]interface{}
-	artifactID  string
-	artifact    map[string]interface{}
-	runtimeID   string
+	deploy               map[string]interface{}
+	artifactID           string
+	artifact             map[string]interface{}
+	runtimeID            string
 	nbrSnapshot          string // config_snapshot_json from NodeBackendRuntime
 	nbrImageRef          string // image_ref from NodeBackendRuntime
 	deployConfigSnapshot string // config_snapshot_json from ModelDeployment
-	placement   struct {
-			NodeID string   `json:"node_id"`
-			AcceleratorIds []string `json:"accelerator_ids"`
-		}
-		service struct {
-			HostPort      int `json:"host_port"`
-			ContainerPort int `json:"container_port"`
-			AppPort       int `json:"app_port"`
-			HealthPort    int `json:"health_port"`
-			APITestPort   int `json:"api_test_port"`
-		}
-	params            map[string]interface{}
-	envOverrides      map[string]string
-	rtVendor          string
-	rtImage           string
-	rtDockerJSON      string
-	rtArgsOverride    string
-	rtEntryOverride   string
-	rtDefaultEnv      string
-	rtBackendID       string
-	rtVersionID       string
-	rtModelMount      string
-	rtHC              string
-	rtVersionSnapshot   string
-	processStartConfig  *runplan.ProcessStartConfig // from config_snapshot_json.process_start_config (Layer 3)
-	backendName         string
-	backendDefaultEnv string
-	bvEntrypoint      string
-	bvArgs            string
-	bvBackendParams   string
-	bvParamDefs       string
-	bvHC              string
-	bvPort            int
-	bvDefaultImages   string
-	bvEnv             string
-	nodeIP            string
-	gpuInfos          []runplan.GPUInfo
-	nodeRuntimeID     string
-	locationID        string
-	modelRoot         string
-	relativePath      string
-	absolutePath      string
-	plan              *runplan.ResolvedRunPlan
-	errs              []PreflightError
-	warns             []string
-	commandPreview    string
+	placement            struct {
+		NodeID         string   `json:"node_id"`
+		AcceleratorIds []string `json:"accelerator_ids"`
+	}
+	service struct {
+		HostPort      int `json:"host_port"`
+		ContainerPort int `json:"container_port"`
+		AppPort       int `json:"app_port"`
+		HealthPort    int `json:"health_port"`
+		APITestPort   int `json:"api_test_port"`
+	}
+	params             map[string]interface{}
+	envOverrides       map[string]string
+	rtVendor           string
+	rtImage            string
+	rtDockerJSON       string
+	rtArgsOverride     string
+	rtEntryOverride    string
+	rtDefaultEnv       string
+	rtBackendID        string
+	rtVersionID        string
+	rtModelMount       string
+	rtHC               string
+	rtVersionSnapshot  string
+	processStartConfig *runplan.ProcessStartConfig // from config_snapshot_json.process_start_config (Layer 3)
+	backendName        string
+	backendDefaultEnv  string
+	bvEntrypoint       string
+	bvArgs             string
+	bvBackendParams    string
+	bvParamDefs        string
+	bvHC               string
+	bvPort             int
+	bvDefaultImages    string
+	bvEnv              string
+	nodeIP             string
+	gpuInfos           []runplan.GPUInfo
+	nodeRuntimeID      string
+	locationID         string
+	modelRoot          string
+	relativePath       string
+	absolutePath       string
+	plan               *runplan.ResolvedRunPlan
+	errs               []PreflightError
+	warns              []string
+	commandPreview     string
 }
 
 // addErr appends a structured PreflightError to the result.
@@ -636,10 +636,10 @@ func (pf *preflightResult) validateContextLength() {
 		pf.addWarn("model has rope_scaling; extended context may be supported")
 	} else {
 		pf.addErr("context_length_exceeded", message, map[string]interface{}{
-			"user_context":   userCtx,
-			"model_context":  modelCtx,
-			"param_name":     paramName,
-			"artifact_id":    pf.artifactID,
+			"user_context":  userCtx,
+			"model_context": modelCtx,
+			"param_name":    paramName,
+			"artifact_id":   pf.artifactID,
 		})
 	}
 
@@ -1138,9 +1138,9 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 			"security_options": pf.plan.SecurityOptions,
 			"ulimits":          pf.plan.Ulimits,
 			"group_add":        pf.plan.GroupAdd,
-			"gpu_device_ids":    gpuDeviceIDs,
-			"gpu_driver":        pf.plan.GpuDriver,
-			"gpu_capabilities":  pf.plan.GpuCapabilities,
+			"gpu_device_ids":   gpuDeviceIDs,
+			"gpu_driver":       pf.plan.GpuDriver,
+			"gpu_capabilities": pf.plan.GpuCapabilities,
 		},
 		"health_check": map[string]interface{}{
 			"enabled":          pf.plan.HealthCheck.Path != "",
@@ -1875,18 +1875,18 @@ func (h *AgentHandler) HandleDeploymentTemplateSyncPreview(w http.ResponseWriter
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"deployment_id":              deployID,
-		"source_runtime_id":          sourceRuntimeID,
-		"source_exists":              sourceExists,
-		"source_template_name":       strVal(deploy, "source_template_name", ""),
-		"source_template_version":    strVal(deploy, "source_template_version", ""),
-		"copied_at":                  strVal(deploy, "copied_at", ""),
-		"original_config_hash":       strVal(deploy, "source_config_hash", ""),
-		"current_template_hash":      currentTemplateHash,
-		"template_changed":           strVal(deploy, "source_config_hash", "") != currentTemplateHash,
-		"diffs":                      diffs,
-		"changed_fields":             changedFieldsFromDiffs(diffs),
-		"conflicted_fields":          conflictedFieldsFromDiffs(diffs),
+		"deployment_id":           deployID,
+		"source_runtime_id":       sourceRuntimeID,
+		"source_exists":           sourceExists,
+		"source_template_name":    strVal(deploy, "source_template_name", ""),
+		"source_template_version": strVal(deploy, "source_template_version", ""),
+		"copied_at":               strVal(deploy, "copied_at", ""),
+		"original_config_hash":    strVal(deploy, "source_config_hash", ""),
+		"current_template_hash":   currentTemplateHash,
+		"template_changed":        strVal(deploy, "source_config_hash", "") != currentTemplateHash,
+		"diffs":                   diffs,
+		"changed_fields":          changedFieldsFromDiffs(diffs),
+		"conflicted_fields":       conflictedFieldsFromDiffs(diffs),
 	})
 }
 

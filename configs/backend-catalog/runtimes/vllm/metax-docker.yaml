@@ -26,7 +26,7 @@ docker_options:
   ulimits:
     memlock: "-1"
 env:
-  MACA_VISIBLE_DEVICE: "{{vendor_visible_devices}}"
+  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
   MACA_SMALL_PAGESIZE_ENABLE: "1"
   PYTORCH_ENABLE_PG_HIGH_PRIORITY_STREAM: "1"
 verification:

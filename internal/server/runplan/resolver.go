@@ -107,8 +107,8 @@ type DockerSpecInfo struct {
 	GroupAdd         []string          `json:"group_add"`
 	// GPU driver for DeviceRequest. Empty string ("") matches docker run --gpus CLI.
 	// Set per vendor in catalog: NVIDIA uses "", MetaX/Huawei use raw devices (no DeviceRequest).
-	GpuDriver        string     `json:"gpu_driver,omitempty"`
-	GpuCapabilities  [][]string `json:"gpu_capabilities,omitempty"` // e.g. [["gpu"]], [["gpu","compute"]]
+	GpuDriver       string     `json:"gpu_driver,omitempty"`
+	GpuCapabilities [][]string `json:"gpu_capabilities,omitempty"` // e.g. [["gpu"]], [["gpu","compute"]]
 }
 
 // ModelMountInfo holds model mount configuration.
@@ -147,7 +147,7 @@ type DeploymentInfo struct {
 
 // PlacementInfo holds deployment placement configuration.
 type PlacementInfo struct {
-	NodeID string   `json:"node_id"`
+	NodeID         string   `json:"node_id"`
 	AcceleratorIds []string `json:"accelerator_ids"`
 }
 
@@ -870,7 +870,7 @@ func defaultVisibleEnvKey(vendor string) string {
 	case "huawei", "ascend":
 		return "ASCEND_VISIBLE_DEVICES"
 	case "metax":
-		return "MACA_VISIBLE_DEVICE"
+		return "CUDA_VISIBLE_DEVICES"
 	default:
 		return "CUDA_VISIBLE_DEVICES"
 	}
@@ -878,18 +878,18 @@ func defaultVisibleEnvKey(vendor string) string {
 
 func computeInputHash(in ResolveInput) string {
 	data, _ := json.Marshal(map[string]interface{}{
-		"backend":        in.Backend.Name,
-		"version":        in.BackendVersion.Version,
-		"runtime":        in.BackendRuntime.ID,
-		"artifact":       in.Artifact.Path,
-		"deployment":     in.Deployment.ID,
-		"host_port":      in.Deployment.Service.HostPort,
-		"container_port": in.Deployment.Service.ContainerPort,
-		"app_port":       in.Deployment.Service.AppPort,
-		"parameters":     in.Deployment.Parameters,
-		"env_overrides":  in.Deployment.EnvOverrides,
-		"accelerator_ids":        in.Deployment.Placement.AcceleratorIds,
-		"node_id":        in.Deployment.Placement.NodeID,
+		"backend":         in.Backend.Name,
+		"version":         in.BackendVersion.Version,
+		"runtime":         in.BackendRuntime.ID,
+		"artifact":        in.Artifact.Path,
+		"deployment":      in.Deployment.ID,
+		"host_port":       in.Deployment.Service.HostPort,
+		"container_port":  in.Deployment.Service.ContainerPort,
+		"app_port":        in.Deployment.Service.AppPort,
+		"parameters":      in.Deployment.Parameters,
+		"env_overrides":   in.Deployment.EnvOverrides,
+		"accelerator_ids": in.Deployment.Placement.AcceleratorIds,
+		"node_id":         in.Deployment.Placement.NodeID,
 	})
 	h := sha256.Sum256(data)
 	return fmt.Sprintf("sha256:%x", h[:8])
@@ -970,4 +970,3 @@ func buildDeviceBinding(in ResolveInput, gpuIDs []string, gpuVisibleKey string, 
 
 	return binding
 }
-

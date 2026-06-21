@@ -355,7 +355,7 @@ section_metax() {
   log "══════ MetaX Env Check ══════"
   local detail; detail=$(api_get "backend-runtimes/$METAX_RT")
   local env; env=$(echo "$detail" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('default_env_json',{})))" 2>/dev/null)
-  assert_contains     "MetaX MACA_VISIBLE_DEVICE in env" "$env" "MACA_VISIBLE_DEVICE" || log "FAIL: MetaX MACA_VISIBLE_DEVICE"
+  assert_contains     "MetaX CUDA_VISIBLE_DEVICES in env" "$env" "CUDA_VISIBLE_DEVICES" || log "FAIL: MetaX CUDA_VISIBLE_DEVICES"
   assert_not_contains "MetaX no CUDA_VISIBLE_DEVICES sole" "$env" "CUDA_VISIBLE_DEVICES" || log "FAIL: MetaX CUDA leak"
   log "MetaX env check done"
 }

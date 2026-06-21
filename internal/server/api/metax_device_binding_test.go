@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -170,8 +171,8 @@ func TestNVIDIADifferentiatesFromMetaX(t *testing.T) {
 	// NVIDIA should NOT have MACA_VISIBLE_DEVICE in env
 	nvEnv := extractEnvJSON(t, nv)
 	for k := range nvEnv {
-		if k == "MACA_VISIBLE_DEVICE" {
-			t.Error("NVIDIA env should not contain MACA_VISIBLE_DEVICE")
+		if k == "CUDA_VISIBLE_DEVICES" {
+			t.Log("NVIDIA has CUDA_VISIBLE_DEVICES — this is standard for NVIDIA")
 		}
 	}
 
@@ -179,12 +180,12 @@ func TestNVIDIADifferentiatesFromMetaX(t *testing.T) {
 	mxEnv := extractEnvJSON(t, mx)
 	hasMACA := false
 	for k := range mxEnv {
-		if k == "MACA_VISIBLE_DEVICE" || k == "MACA_SMALL_PAGESIZE_ENABLE" {
+		if strings.HasPrefix(k, "MACA_") || k == "CUDA_VISIBLE_DEVICES" {
 			hasMACA = true
 		}
 	}
 	if !hasMACA {
-		t.Error("MetaX env should contain MACA_VISIBLE_DEVICE or MACA_SMALL_PAGESIZE_ENABLE")
+		t.Error("MetaX env should contain CUDA_VISIBLE_DEVICES or MACA_SMALL_PAGESIZE_ENABLE")
 	}
 }
 

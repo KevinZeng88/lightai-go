@@ -23,9 +23,9 @@ type ResolvedRunPlan struct {
 	HostPort      int `json:"host_port"`
 	ContainerPort int `json:"container_port"`
 
-	GPUDeviceIDs     []string `json:"gpu_device_ids,omitempty"`
-	GPUVisibleEnvKey string   `json:"gpu_visible_env_key,omitempty"`
-	GpuDriver        string   `json:"gpu_driver,omitempty"`        // DeviceRequest driver, e.g. "" for docker run --gpus CLI
+	GPUDeviceIDs     []string   `json:"gpu_device_ids,omitempty"`
+	GPUVisibleEnvKey string     `json:"gpu_visible_env_key,omitempty"`
+	GpuDriver        string     `json:"gpu_driver,omitempty"`       // DeviceRequest driver, e.g. "" for docker run --gpus CLI
 	GpuCapabilities  [][]string `json:"gpu_capabilities,omitempty"` // e.g. [["gpu"]]
 
 	// DeviceBinding captures vendor-specific accelerator-to-Docker binding.
@@ -100,4 +100,3 @@ type DeviceBinding struct {
 	ShmSize     string            `json:"shm_size,omitempty"`
 	Ulimits     map[string]string `json:"ulimits,omitempty"`
 }
-

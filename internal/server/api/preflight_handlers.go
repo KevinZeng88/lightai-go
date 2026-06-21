@@ -56,7 +56,7 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 	if nbrStatus != "ready" {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"can_run": false, "candidate_nodes": []interface{}{},
-			"errors":  []string{fmt.Sprintf("node backend runtime is not ready (status=%s)", nbrStatus)},
+			"errors":   []string{fmt.Sprintf("node backend runtime is not ready (status=%s)", nbrStatus)},
 			"warnings": []string{},
 		})
 		return

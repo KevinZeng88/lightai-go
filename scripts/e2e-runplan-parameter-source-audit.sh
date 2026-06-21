@@ -275,7 +275,7 @@ run_metax_test() {
   echo "$rt_detail" > "$ARTIFACT_DIR/metax-runtime-detail.json"
   local env_json; env_json=$(echo "$rt_detail" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('default_env_json',{})))" 2>/dev/null)
 
-  assert_contains     "MetaX: MACA_VISIBLE_DEVICE in env"     "$env_json" "MACA_VISIBLE_DEVICE" || fail "MetaX visible env"
+  assert_contains     "MetaX: CUDA_VISIBLE_DEVICES in env"     "$env_json" "CUDA_VISIBLE_DEVICES" || fail "MetaX visible env"
   assert_not_contains "MetaX: CUDA_VISIBLE_DEVICES not sole"  "$env_json" "CUDA_VISIBLE_DEVICES" || log "INFO: MetaX env OK (no CUDA leak)"
 
   log "MetaX test done"

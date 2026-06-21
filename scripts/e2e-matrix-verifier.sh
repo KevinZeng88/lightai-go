@@ -159,7 +159,7 @@ for n in json.load(sys.stdin):
     fi
     # Visible device env for MetaX
     if [ "$vendor" = "metax" ]; then
-      echo "$preview" | grep -qF -- "MACA_VISIBLE_DEVICE" || issues="$issues,no_maca_visible"
+      echo "$preview" | grep -qF -- "CUDA_VISIBLE_DEVICES" || issues="$issues,no_maca_visible"
     fi
 
     if [ -z "$issues" ]; then

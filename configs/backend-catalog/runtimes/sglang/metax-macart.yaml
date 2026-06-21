@@ -51,7 +51,7 @@ env_schema:
     default: "1"
   - name: TRITON_ENABLE_MAC_A_CHAIN_DOT_OPT
     default: "1"
-  - name: MACA_VISIBLE_DEVICE
+  - name: CUDA_VISIBLE_DEVICES
     node_specific: true
     optional: true
     note: "Set according to mx-smi topology on each node."

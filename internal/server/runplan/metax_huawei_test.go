@@ -21,8 +21,8 @@ func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
 			Vendor:      "metax",
 			RuntimeType: "docker",
 			DefaultEnv: map[string]string{
-				"MACA_VISIBLE_DEVICE":                "{{vendor_visible_devices}}",
-				"MACA_SMALL_PAGESIZE_ENABLE":         "1",
+				"CUDA_VISIBLE_DEVICES":                   "{{vendor_visible_devices}}",
+				"MACA_SMALL_PAGESIZE_ENABLE":             "1",
 				"PYTORCH_ENABLE_PG_HIGH_PRIORITY_STREAM": "1",
 			},
 			Docker: DockerSpecInfo{
@@ -30,7 +30,7 @@ func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
 				IPCMode:          "host",
 				UTSMode:          "host",
 				ShmSize:          "100gb",
-				GPUVisibleEnvKey: "MACA_VISIBLE_DEVICE",
+				GPUVisibleEnvKey: "CUDA_VISIBLE_DEVICES",
 				Devices: []DeviceMapping{
 					{HostPath: "/dev/dri", ContainerPath: "/dev/dri"},
 					{HostPath: "/dev/mxcd", ContainerPath: "/dev/mxcd"},
@@ -58,7 +58,7 @@ func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
 	if len(errs) > 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
-	if got := plan.Env["MACA_VISIBLE_DEVICE"]; got != "6,7" {
+	if got := plan.Env["CUDA_VISIBLE_DEVICES"]; got != "6,7" {
 		t.Fatalf("MACA_VISIBLE_DEVICE = %q, want 6,7", got)
 	}
 	if plan.UTSMode != "host" {
@@ -84,7 +84,7 @@ func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
 		"--shm-size 100gb",
 		"--ulimit memlock=-1",
 		"-v /data/part2/MX-C500/model/Qwen3:/models/Qwen3:ro",
-		"-e MACA_VISIBLE_DEVICE=6,7",
+		"-e CUDA_VISIBLE_DEVICES=6,7",
 	} {
 		if !strings.Contains(preview, want) {
 			t.Fatalf("preview missing %q:\n%s", want, preview)
