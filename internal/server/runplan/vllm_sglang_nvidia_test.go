@@ -282,8 +282,8 @@ func makeVLLMTestInput() ResolveInput {
 		},
 		BackendRuntime: &RuntimeInfo{
 			ID: "rt-test", Vendor: "nvidia", RuntimeType: "docker",
-			ImageName: "vllm/vllm-openai:latest",
-			Docker:    DockerSpecInfo{Privileged: true, IPCMode: "host", ShmSize: "10g"},
+			ImageName:  "vllm/vllm-openai:latest",
+			Docker:     DockerSpecInfo{Privileged: true, IPCMode: "host", ShmSize: "10g"},
 			ModelMount: ModelMountInfo{ContainerPath: "/models", Readonly: true},
 		},
 		Artifact: &ArtifactInfo{
@@ -293,10 +293,10 @@ func makeVLLMTestInput() ResolveInput {
 		Deployment: &DeploymentInfo{
 			ID: "dep-test", Name: "test",
 			Parameters: map[string]interface{}{
-				"--served-model-name":       "Qwen3-0.6B-Instruct-2512",
-				"--max-model-len":           float64(4096),
-				"--gpu-memory-utilization":  float64(0.6),
-				"--enforce-eager":           "",
+				"--served-model-name":      "Qwen3-0.6B-Instruct-2512",
+				"--max-model-len":          float64(4096),
+				"--gpu-memory-utilization": float64(0.6),
+				"--enforce-eager":          "",
 			},
 			Service: ServiceInfo{HostPort: 8004},
 		},
@@ -317,26 +317,33 @@ func TestVLLMUserServedModelNameOverridesDefault(t *testing.T) {
 				{Name: "--port", CliName: "--port", Default: "8000"},
 				{Name: "--served-model-name", CliName: "--served-model-name"},
 			},
-			HealthCheck: HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
+			HealthCheck:          HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
 			DefaultContainerPort: 8000, DefaultImages: map[string]string{"nvidia": "img:latest"},
 		},
 		BackendRuntime: &RuntimeInfo{ID: "rt", Vendor: "nvidia", RuntimeType: "docker", ImageName: "img:latest", Docker: DockerSpecInfo{}, ModelMount: ModelMountInfo{ContainerPath: "/models"}},
-		Artifact: &ArtifactInfo{Name: "M", Path: "/models/M", ModelRoot: "/models", RelativePath: "M"},
+		Artifact:       &ArtifactInfo{Name: "M", Path: "/models/M", ModelRoot: "/models", RelativePath: "M"},
 		Deployment: &DeploymentInfo{
 			ID: "dep", Name: "test",
 			Parameters: map[string]interface{}{"served_model_name": "my-custom-model"},
-			Service: ServiceInfo{HostPort: 8004},
+			Service:    ServiceInfo{HostPort: 8004},
 		},
 		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
 	}
 	plan, errs, _ := Resolve(in)
-	if len(errs) > 0 { t.Fatalf("errors: %v", errs) }
+	if len(errs) > 0 {
+		t.Fatalf("errors: %v", errs)
+	}
 	found := false
 	for i, a := range plan.Args {
-		if a == "--served-model-name" && i+1 < len(plan.Args) && plan.Args[i+1] == "my-custom-model" { found = true; break }
+		if a == "--served-model-name" && i+1 < len(plan.Args) && plan.Args[i+1] == "my-custom-model" {
+			found = true
+			break
+		}
 	}
-	if !found { t.Fatalf("--served-model-name my-custom-model not found: %v", plan.Args) }
+	if !found {
+		t.Fatalf("--served-model-name my-custom-model not found: %v", plan.Args)
+	}
 }
 
 func TestVLLMUserGpuMemoryUtilizationPropagates(t *testing.T) {
@@ -349,7 +356,8 @@ func TestVLLMUserGpuMemoryUtilizationPropagates(t *testing.T) {
 	found := false
 	for i, a := range plan.Args {
 		if a == "--gpu-memory-utilization" && i+1 < len(plan.Args) {
-			found = true; break
+			found = true
+			break
 		}
 	}
 	if !found {
@@ -370,7 +378,8 @@ func TestVLLMEnforceEagerUserOverride(t *testing.T) {
 	found := false
 	for _, a := range plan.Args {
 		if a == "--enforce-eager" {
-			found = true; break
+			found = true
+			break
 		}
 	}
 	if !found {
@@ -417,16 +426,16 @@ func TestGetParamMatchesCLIFormatNames(t *testing.T) {
 				{Name: "--port", CliName: "--port", Default: "8000"},
 				{Name: "--max-model-len", CliName: "--max-model-len", Default: "4096"},
 			},
-			HealthCheck: HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
+			HealthCheck:          HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
 			DefaultContainerPort: 8000,
-			DefaultImages: map[string]string{"nvidia": "vllm/vllm-openai:latest"},
+			DefaultImages:        map[string]string{"nvidia": "vllm/vllm-openai:latest"},
 		},
 		BackendRuntime: &RuntimeInfo{ID: "rt", Vendor: "nvidia", RuntimeType: "docker", ImageName: "vllm/vllm-openai:latest", Docker: DockerSpecInfo{}, ModelMount: ModelMountInfo{ContainerPath: "/models"}},
-		Artifact: &ArtifactInfo{Name: "Qwen3", Path: "/models/Qwen3", ModelRoot: "/models", RelativePath: "Qwen3"},
+		Artifact:       &ArtifactInfo{Name: "Qwen3", Path: "/models/Qwen3", ModelRoot: "/models", RelativePath: "Qwen3"},
 		Deployment: &DeploymentInfo{
 			ID: "dep", Name: "test",
 			Parameters: map[string]interface{}{"max_model_len": 16384.0},
-			Service: ServiceInfo{HostPort: 8004},
+			Service:    ServiceInfo{HostPort: 8004},
 		},
 		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
@@ -438,7 +447,8 @@ func TestGetParamMatchesCLIFormatNames(t *testing.T) {
 	found := false
 	for i, a := range plan.Args {
 		if a == "--max-model-len" && i+1 < len(plan.Args) && plan.Args[i+1] == "16384" {
-			found = true; break
+			found = true
+			break
 		}
 	}
 	if !found {

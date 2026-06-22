@@ -5,11 +5,11 @@ import "strings"
 // ClassifyEntrypointShape classifies a Docker image ENTRYPOINT into a shape category
 // used for profile matching. The classification is based on structural heuristics:
 //
-//   "empty"          — no ENTRYPOINT set
-//   "server_binary"  — single or multi-token binary path (e.g., ["vllm","serve"], ["/app/llama-server"])
-//   "wrapper_script" — shell script path (e.g., ["/opt/nvidia/nvidia_entrypoint.sh"])
-//   "python_launcher"— starts with python/python3
-//   "unknown"        — fallback
+//	"empty"          — no ENTRYPOINT set
+//	"server_binary"  — single or multi-token binary path (e.g., ["vllm","serve"], ["/app/llama-server"])
+//	"wrapper_script" — shell script path (e.g., ["/opt/nvidia/nvidia_entrypoint.sh"])
+//	"python_launcher"— starts with python/python3
+//	"unknown"        — fallback
 func ClassifyEntrypointShape(entrypoint []string) string {
 	if len(entrypoint) == 0 {
 		return "empty"

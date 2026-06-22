@@ -10,33 +10,33 @@ import (
 
 // GGUFMetadata holds extracted metadata from a GGUF file header.
 type GGUFMetadata struct {
-	Architecture    string `json:"architecture"`
-	ContextLength   int64  `json:"context_length"`
-	EmbeddingLength int64  `json:"embedding_length"`
-	BlockCount      int64  `json:"block_count"`
-	VocabSize       int64  `json:"vocab_size"`
-	HeadCount       int64  `json:"head_count"`
-	HeadCountKV     int64  `json:"head_count_kv"`
-	Quantization    string `json:"quantization"`
-	FileSizeBytes   int64  `json:"file_size_bytes"`
+	Architecture    string   `json:"architecture"`
+	ContextLength   int64    `json:"context_length"`
+	EmbeddingLength int64    `json:"embedding_length"`
+	BlockCount      int64    `json:"block_count"`
+	VocabSize       int64    `json:"vocab_size"`
+	HeadCount       int64    `json:"head_count"`
+	HeadCountKV     int64    `json:"head_count_kv"`
+	Quantization    string   `json:"quantization"`
+	FileSizeBytes   int64    `json:"file_size_bytes"`
 	Warnings        []string `json:"warnings,omitempty"`
 }
 
 const (
-	ggufMagic   = 0x46554747 // "GGUF" in little-endian
-	ggufTypeUint8    = 0
-	ggufTypeInt8     = 1
-	ggufTypeUint16   = 2
-	ggufTypeInt16    = 3
-	ggufTypeUint32   = 4
-	ggufTypeInt32    = 5
-	ggufTypeFloat32  = 6
-	ggufTypeBool     = 7
-	ggufTypeString   = 8
-	ggufTypeArray    = 9
-	ggufTypeUint64   = 10
-	ggufTypeInt64    = 11
-	ggufTypeFloat64  = 12
+	ggufMagic       = 0x46554747 // "GGUF" in little-endian
+	ggufTypeUint8   = 0
+	ggufTypeInt8    = 1
+	ggufTypeUint16  = 2
+	ggufTypeInt16   = 3
+	ggufTypeUint32  = 4
+	ggufTypeInt32   = 5
+	ggufTypeFloat32 = 6
+	ggufTypeBool    = 7
+	ggufTypeString  = 8
+	ggufTypeArray   = 9
+	ggufTypeUint64  = 10
+	ggufTypeInt64   = 11
+	ggufTypeFloat64 = 12
 )
 
 // readGGUFMeta reads GGUF metadata from a file. It reads only the header portion.

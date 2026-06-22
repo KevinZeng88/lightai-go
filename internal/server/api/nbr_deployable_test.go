@@ -219,11 +219,11 @@ func TestCreateDeploymentAcceptsReadyWithWarnings(t *testing.T) {
 
 	// Create deployment with ready_with_warnings NBR — should succeed
 	createResp := app.Client.JSON(t, http.MethodPost, "/api/v1/deployments", map[string]interface{}{
-		"name":                      "test-create-rww-deploy",
-		"model_artifact_id":         artifactID,
-		"node_backend_runtime_id":   nbrID,
-		"placement_json":            map[string]interface{}{"node_id": nodeID, "accelerator_ids": []interface{}{}},
-		"service_json":              map[string]interface{}{"host_port": 8999},
+		"name":                    "test-create-rww-deploy",
+		"model_artifact_id":       artifactID,
+		"node_backend_runtime_id": nbrID,
+		"placement_json":          map[string]interface{}{"node_id": nodeID, "accelerator_ids": []interface{}{}},
+		"service_json":            map[string]interface{}{"host_port": 8999},
 	}, http.StatusCreated)
 	var deploy map[string]interface{}
 	createResp.Decode(t, &deploy)
@@ -296,11 +296,11 @@ func TestCreateDeploymentRejectsBlockedNBR(t *testing.T) {
 
 	// Create deployment with blocked NBR — should be rejected
 	createResp := app.Client.JSON(t, http.MethodPost, "/api/v1/deployments", map[string]interface{}{
-		"name":                      "test-blocked-deploy",
-		"model_artifact_id":         artifactID,
-		"node_backend_runtime_id":   nbrID,
-		"placement_json":            map[string]interface{}{"node_id": nodeID, "accelerator_ids": []interface{}{}},
-		"service_json":              map[string]interface{}{"host_port": 8998},
+		"name":                    "test-blocked-deploy",
+		"model_artifact_id":       artifactID,
+		"node_backend_runtime_id": nbrID,
+		"placement_json":          map[string]interface{}{"node_id": nodeID, "accelerator_ids": []interface{}{}},
+		"service_json":            map[string]interface{}{"host_port": 8998},
 	}, http.StatusBadRequest)
 	var errResp map[string]interface{}
 	createResp.Decode(t, &errResp)

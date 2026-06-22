@@ -82,9 +82,15 @@
           <el-descriptions-item :label="t('instances.testCheckedAt')">{{ testResult.checked_at || '-' }}</el-descriptions-item>
         </el-descriptions>
         <el-descriptions v-else :column="1" border size="small" style="margin-top:12px">
-          <el-descriptions-item v-if="testResult.model_resolution_method" :label="t('instances.testResolveMethod')">{{ testResult.model_resolution_method }}</el-descriptions-item>
+          <el-descriptions-item v-if="testResult.reason_code" :label="t('instances.testReasonCode')">{{ testResult.reason_code }}</el-descriptions-item>
+          <el-descriptions-item v-if="testResult.http_status" :label="t('instances.testHttpStatus')">{{ testResult.http_status }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testEndpoint')">{{ testResult.endpoint || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="testResult.requested_model" :label="t('instances.testRequestedModel')">{{ testResult.requested_model }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testModel')">{{ testResult.model || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="testResult.available_models && testResult.available_models.length" :label="t('instances.testAvailableModels')">{{ testResult.available_models.join(', ') }}</el-descriptions-item>
+          <el-descriptions-item v-if="testResult.model_resolution_method" :label="t('instances.testResolveMethod')">{{ testResult.model_resolution_method }}</el-descriptions-item>
+          <el-descriptions-item v-if="testResult.hint" :label="t('instances.testHint')">{{ testResult.hint }}</el-descriptions-item>
+          <el-descriptions-item v-if="testResult.error_body" :label="t('instances.testBackendError')"><span class="text-danger">{{ testResult.error_body }}</span></el-descriptions-item>
           <el-descriptions-item :label="t('instances.testLatency')">{{ testResult.latency_ms != null ? testResult.latency_ms + ' ms' : '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testPreview')">{{ testResult.response_preview || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('instances.testCheckedAt')">{{ testResult.checked_at || '-' }}</el-descriptions-item>

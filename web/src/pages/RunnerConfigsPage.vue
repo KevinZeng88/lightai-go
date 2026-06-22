@@ -178,7 +178,7 @@
         <h4 style="margin-top:16px">{{ $t('runnerConfigs.sectionHealthPreview') }}</h4>
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item :label="$t('backends.healthCheck')">{{ runParamSummary(selected).health || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runtimes.commandPreview')">{{ runParamSummary(selected).preview || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.nbrTemplatePreview')">{{ runParamSummary(selected).preview || '-' }}</el-descriptions-item>
         </el-descriptions>
         <el-collapse v-if="selected?.probe_results_json && typeof selected.probe_results_json === 'object' && Object.keys(selected.probe_results_json).length > 0" style="margin-top:12px">
           <el-collapse-item :title="$t('nodeRuntimeProbe.imageMetadata')" name="level2" v-if="selected.probe_results_json.level2?.inspect_success">

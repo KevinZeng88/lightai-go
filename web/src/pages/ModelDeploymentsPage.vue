@@ -39,7 +39,7 @@
       <el-table-column :label="$t('deployments.recentError')" min-width="180" show-overflow-tooltip>
         <template #default="{ row }">{{ deploymentContext(row).lastError || '-' }}</template>
       </el-table-column>
-      <el-table-column :label="$t('common.actions')" width="320">
+      <el-table-column :label="$t('common.actions')" width="320" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="showEdit(row)">{{ $t('common.edit') }}</el-button>
           <el-button size="small" @click="doDryRun(row)">{{ $t('deployments.viewRunPlan') }}</el-button>
@@ -75,16 +75,39 @@
       <template #footer><el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doCreate" :loading="saving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="dryRunVisible" :title="$t('common.dryRunTitle')" width="820px">
+    <el-dialog v-model="dryRunVisible" :title="$t('deployments.finalRunPlan')" width="860px">
       <template v-if="dryRunResult">
-        <el-descriptions :column="1" border size="small">
+        <!-- Parameter source groups -->
+        <el-alert type="info" :closable="false" style="margin-bottom:12px">
+          {{ $t('deployments.runPlanSourceNote') }}
+        </el-alert>
+        <el-descriptions :column="1" border size="small" style="margin-top:8px">
+          <template #title>{{ $t('deployments.nbrTemplateGroup') }}</template>
           <el-descriptions-item :label="$t('runtimes.image')">{{ dryRunSummary(dryRunResult).image || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runnerConfigs.command')">{{ dryRunSummary(dryRunResult).command || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.detailEnv')">{{ dryRunSummary(dryRunResult).env || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('deployments.dockerOptions')">{{ dryRunSummary(dryRunResult).dockerOptions || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions :column="1" border size="small" style="margin-top:12px">
+          <template #title>{{ $t('deployments.modelLocationGroup') }}</template>
           <el-descriptions-item :label="$t('runtimes.extraMounts')">{{ dryRunSummary(dryRunResult).volumes || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('deployments.servedModelName')">{{ dryRunSummary(dryRunResult).servedModelName || '-' }} <span class="text-muted" v-if="dryRunSummary(dryRunResult).servedModelNameSource">({{ dryRunSummary(dryRunResult).servedModelNameSource }})</span></el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions :column="1" border size="small" style="margin-top:12px">
+          <template #title>{{ $t('deployments.portInjectionGroup') }}</template>
           <el-descriptions-item :label="$t('runnerConfigs.ports')">{{ dryRunSummary(dryRunResult).ports || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runtimes.devices')">{{ dryRunSummary(dryRunResult).devices || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions :column="1" border size="small" style="margin-top:12px">
+          <template #title>{{ $t('deployments.gpuBindingGroup') }}</template>
+          <el-descriptions-item :label="$t('runtimes.devices')">{{ dryRunSummary(dryRunResult).devices || '-' }} <span class="text-muted" v-if="dryRunSummary(dryRunResult).gpuSource">{{ dryRunSummary(dryRunResult).gpuSource }}</span></el-descriptions-item>
+          <el-descriptions-item v-if="dryRunSummary(dryRunResult).gpuEnv" :label="$t('deployments.gpuVisibleEnv')">{{ dryRunSummary(dryRunResult).gpuEnv }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions :column="1" border size="small" style="margin-top:12px">
+          <template #title>{{ $t('deployments.backendServiceGroup') }}</template>
           <el-descriptions-item :label="$t('backends.healthCheck')">{{ dryRunSummary(dryRunResult).health || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions :column="1" border size="small" style="margin-top:12px">
+          <template #title>{{ $t('deployments.finalCommandGroup') }}</template>
           <el-descriptions-item :label="$t('runtimes.commandPreview')">{{ dryRunSummary(dryRunResult).preview || '-' }}</el-descriptions-item>
         </el-descriptions>
         <el-collapse style="margin-top:12px">
@@ -289,7 +312,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="runPlanVisible" :title="$t('common.runPlanTitle')" width="820px">
+    <el-dialog v-model="runPlanVisible" :title="$t('deployments.finalRunPlan')" width="820px">
       <el-descriptions v-if="runPlanData" :column="1" border size="small">
         <el-descriptions-item :label="$t('runtimes.commandPreview')">{{ runPlanData }}</el-descriptions-item>
       </el-descriptions>
@@ -476,6 +499,17 @@ function parseKeyValueLines(value: string): Record<string, string> {
 function dryRunSummary(result: any) {
   const plan = asObject(result?.run_plan_json || result?.plan_json || result?.plan || result?.resolved_run_plan)
   const docker = asObject(plan.docker || plan.docker_run_spec || plan)
+  // Derive served model name and source.
+  const sn = plan.served_model_name || docker.served_model_name || ''
+  const source = (result?.served_model_name_source)
+    || (sn && sn === plan.model_name ? 'derived from artifact name' : '')
+  // GPU source note.
+  const gpuIDs = asArray(plan.gpu_device_ids || docker.gpu_device_ids || [])
+  const gpuEnvKey = plan.gpu_visible_env_key || docker.gpu_visible_env_key || ''
+  const gpuEnvVal = gpuEnvKey && docker.env ? (typeof docker.env === 'object' && !Array.isArray(docker.env) ? docker.env[gpuEnvKey] : '') : ''
+  const gpuSource = gpuIDs.length > 0
+    ? `来自 placement / accelerator_ids；若用户未手动选择，则来自当前单节点默认调度选择`
+    : ''
   return {
     image: docker.image || plan.image || '',
     command: summarizeList([...asArray(docker.entrypoint), ...asArray(docker.command), ...asArray(docker.args)].filter(Boolean)),
@@ -483,8 +517,17 @@ function dryRunSummary(result: any) {
     volumes: summarizeList(docker.volumes || plan.volumes),
     ports: summarizeList(docker.ports || plan.ports),
     devices: summarizeList(docker.devices || plan.devices),
-    health: summarizeList(plan.health_check || docker.health_check),
+    health: plan.health_check ? (typeof plan.health_check === 'object' ? JSON.stringify(plan.health_check) : String(plan.health_check)) : (docker.health_check ? JSON.stringify(docker.health_check) : ''),
     preview: result?.docker_preview || result?.command_preview || '',
+    servedModelName: sn || '-',
+    servedModelNameSource: sn ? `来自模型显示名 / deployment served model name 派生` : '',
+    gpuSource,
+    gpuEnv: gpuEnvKey ? `${gpuEnvKey}=${gpuEnvVal} (vendor binding 注入)` : '',
+    dockerOptions: [
+      plan.privileged ? '--privileged' : '',
+      plan.ipc_mode ? `--ipc ${plan.ipc_mode}` : '',
+      plan.shm_size ? `--shm-size ${plan.shm_size}` : '',
+    ].filter(Boolean).join(', ') || '-',
   }
 }
 

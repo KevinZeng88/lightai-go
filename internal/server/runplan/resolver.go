@@ -823,8 +823,27 @@ func buildVarMap(in ResolveInput) map[string]string {
 
 	if v := getParam("served_model_name"); v != nil {
 		s := fmt.Sprintf("%v", v)
-		vars["SERVED_MODEL_NAME"] = s
-		vars["served_model_name"] = s
+		if strings.TrimSpace(s) != "" {
+			vars["SERVED_MODEL_NAME"] = s
+			vars["served_model_name"] = s
+		}
+	}
+	// Derive served model name from artifact name when not explicitly set.
+	// Priority: deployment param > param def default > artifact name > sanitized path basename.
+	if vars["SERVED_MODEL_NAME"] == "" && in.Artifact.Name != "" {
+		sn := strings.TrimSpace(in.Artifact.Name)
+		if sn == "" && in.Artifact.Path != "" {
+			// Fallback: sanitize path basename.
+			base := in.Artifact.Path
+			if idx := strings.LastIndex(base, "/"); idx >= 0 {
+				base = base[idx+1:]
+			}
+			sn = strings.TrimSpace(base)
+		}
+		if sn != "" {
+			vars["SERVED_MODEL_NAME"] = sn
+			vars["served_model_name"] = sn
+		}
 	}
 	if v := getParam("max_model_len"); v != nil {
 		s := fmt.Sprintf("%v", v)

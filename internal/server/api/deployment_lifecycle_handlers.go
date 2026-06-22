@@ -2153,17 +2153,27 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	modelName, resolutionMethod := resolveModelID(client, endpoint, artifactName, artifactPath, runplanModel)
+	modelName, resolutionMethod, availableModels := resolveModelID(client, endpoint, artifactName, artifactPath, runplanModel)
 
 	if modelName == "" {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		resp := map[string]interface{}{
 			"ok": false, "reason_code": "model_id_not_resolved",
 			"message":                 "could not resolve model id from /v1/models or artifact",
 			"model_resolution_method": resolutionMethod,
+			"requested_model":         runplanModel,
+			"available_models":        availableModels,
 			"checked_at":              checkedAt,
-		})
+		}
+		if runplanModel != "" && len(availableModels) > 0 {
+			resp["hint"] = "The requested model name does not match any model served by the runtime. Add --served-model-name to the vLLM/SGLang launch command, or use an available model id."
+		}
+		writeJSON(w, http.StatusOK, resp)
 		return
 	}
+
+	// If the resolved model differs from the requested runplan model, include
+	// diagnostics so the caller can see the mismatch.
+	_ = runplanModel != "" && modelName != runplanModel
 
 	// --- Phase 2: Attempt chat/completions, fallback to completions ---
 	WriteAudit(r.Context(), h.DB.DB, AuditEntry{
@@ -2177,6 +2187,12 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 	result := tryInferenceWithMode(client, endpoint, modelName, testReq.Mode, testReq.Prompt)
 	result["model_resolution_method"] = resolutionMethod
 	result["checked_at"] = checkedAt
+	if runplanModel != "" {
+		result["requested_model"] = runplanModel
+	}
+	if len(availableModels) > 0 {
+		result["available_models"] = availableModels
+	}
 
 	// Phase 1: collect diagnostic probes on failure for richer error context.
 	if result["ok"] != true {
@@ -2207,7 +2223,6 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 	}
 	writeJSON(w, http.StatusOK, result)
 }
-
 
 // collectTestDiagnostics gathers endpoint and runtime diagnostic information
 // when an instance test fails. Phase 1: /v1/models probe, /health probe,
@@ -2294,32 +2309,39 @@ func collectTestDiagnostics(client *http.Client, endpoint, deployID string, h *A
 
 // resolveModelID resolves the runtime model id by querying /v1/models and
 // matching against the artifact name/path basename.
-func resolveModelID(client *http.Client, endpoint, artifactName, artifactPath, runplanModel string) (string, string) {
-	// 1. RunPlan resolved model name passed from caller.
-	if runplanModel != "" {
-		return runplanModel, "runplan"
-	}
-
-	// 2. Query /v1/models from the runtime.
+// Returns: (modelName, resolutionMethod, availableModels).
+// Always probes /v1/models; runplanModel is only used if it appears in the
+// runtime's actual /v1/models response (verified runplan priority).
+func resolveModelID(client *http.Client, endpoint, artifactName, artifactPath, runplanModel string) (string, string, []string) {
+	// 1. Always query /v1/models from the runtime.
 	modelsURL := strings.TrimRight(endpoint, "/") + "/v1/models"
 	httpReq, _ := http.NewRequest("GET", modelsURL, nil)
 	resp, err := client.Do(httpReq)
+	var modelIDs []string
 	if err != nil {
-		// /v1/models failed — fall back to artifact name.
-		return artifactName, "artifact_name_fallback"
+		// /v1/models unreachable — fall back to artifact name.
+		if runplanModel != "" {
+			return runplanModel, "runplan_unverified", modelIDs
+		}
+		return artifactName, "artifact_name_fallback", modelIDs
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return artifactName, "artifact_name_fallback"
+		if runplanModel != "" {
+			return runplanModel, "runplan_unverified", modelIDs
+		}
+		return artifactName, "artifact_name_fallback", modelIDs
 	}
 	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	var modelsResp map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &modelsResp); err != nil {
-		return artifactName, "artifact_name_fallback"
+		if runplanModel != "" {
+			return runplanModel, "runplan_unverified", modelIDs
+		}
+		return artifactName, "artifact_name_fallback", modelIDs
 	}
 
 	// Extract model ids.
-	var modelIDs []string
 	if data, ok := modelsResp["data"].([]interface{}); ok {
 		for _, d := range data {
 			if m, ok := d.(map[string]interface{}); ok {
@@ -2330,12 +2352,25 @@ func resolveModelID(client *http.Client, endpoint, artifactName, artifactPath, r
 		}
 	}
 	if len(modelIDs) == 0 {
-		return artifactName, "artifact_name_fallback"
+		if runplanModel != "" {
+			return runplanModel, "runplan_unverified", modelIDs
+		}
+		return artifactName, "artifact_name_fallback", modelIDs
+	}
+
+	// 2. RunPlan model takes priority IF it exists in available models.
+	if runplanModel != "" {
+		for _, mid := range modelIDs {
+			if mid == runplanModel {
+				return runplanModel, "runplan", modelIDs
+			}
+		}
+		// runplanModel not found in available models — fall through to matching.
 	}
 
 	// 3. Single model — use it directly.
 	if len(modelIDs) == 1 {
-		return modelIDs[0], "single_model_fallback"
+		return modelIDs[0], "single_model_fallback", modelIDs
 	}
 
 	// 4. Multiple models — try to match.
@@ -2354,7 +2389,7 @@ func resolveModelID(client *http.Client, endpoint, artifactName, artifactPath, r
 	for _, c := range candidates {
 		for _, mid := range modelIDs {
 			if mid == c {
-				return mid, "models_exact_match"
+				return mid, "models_exact_match", modelIDs
 			}
 		}
 	}
@@ -2362,13 +2397,13 @@ func resolveModelID(client *http.Client, endpoint, artifactName, artifactPath, r
 		cl := strings.ToLower(c)
 		for _, mid := range modelIDs {
 			if strings.Contains(strings.ToLower(mid), cl) || strings.Contains(cl, strings.ToLower(mid)) {
-				return mid, "models_alias_match"
+				return mid, "models_alias_match", modelIDs
 			}
 		}
 	}
 
-	// 5. Cannot match — fail.
-	return "", "model_id_not_resolved"
+	// 5. Cannot match — fail with available models for diagnostics.
+	return "", "model_id_not_resolved", modelIDs
 }
 
 // tryInference attempts chat/completions first, then falls back to completions

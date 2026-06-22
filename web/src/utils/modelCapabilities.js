@@ -140,7 +140,32 @@ export function formatTestFailure(result) {
     return `实例未运行：当前状态 ${state || 'unknown'}`
   }
   if (result?.reason_code === 'model_id_not_resolved') {
-    return `模型未加载完成：/v1/models 未返回目标模型${summary ? `，错误摘要 ${summary}` : ''}`
+    const requested = result?.requested_model || ''
+    const available = result?.available_models || []
+    const hint = result?.hint || ''
+    let msg = `模型 ID 解析失败`
+    if (requested) msg += `；请求模型 ${requested}`
+    if (available.length > 0) msg += `；可用模型 ${available.join(', ')}`
+    if (hint) msg += `；${hint}`
+    if (summary) msg += `；${summary}`
+    return msg
+  }
+  // 404 with model-not-found: show requested vs available.
+  if (result?.http_status === 404 || result?.reason_code === 'chat_endpoint_failed' || result?.reason_code === 'completion_endpoint_failed') {
+    const requested = result?.requested_model || result?.model || ''
+    const available = result?.available_models || []
+    const backendError = result?.error_body || result?.raw_response || ''
+    let msg = `${mode} 请求失败`
+    if (endpoint) msg += `：接口 ${endpoint}`
+    if (status) msg += `，HTTP 状态 ${status}`
+    if (requested) msg += `，请求模型 ${requested}`
+    if (available.length > 0) msg += `，可用模型 ${available.join(', ')}`
+    if (backendError) {
+      const short = typeof backendError === 'string' ? backendError.substring(0, 200) : ''
+      if (short) msg += `，后端错误 ${short}`
+    }
+    if (result?.hint) msg += `，提示：${result.hint}`
+    return msg
   }
 
   const statusText = status ? `，HTTP 状态 ${status}` : ''

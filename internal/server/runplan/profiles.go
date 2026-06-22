@@ -29,31 +29,31 @@ type ProcessStartDetectionHints struct {
 // It is stored in NBR.config_snapshot_json.process_start_config and
 // frozen into Deployment.config_snapshot_json.
 type ProcessStartConfig struct {
-	EntrypointMode string   `json:"entrypoint_mode"`           // "image_default" | "custom"
-	Entrypoint     []string `json:"entrypoint,omitempty"`      // only when mode=custom
-	CommandPrefix  []string `json:"command_prefix,omitempty"`  // prepended to Cmd
-	ShellMode      bool     `json:"shell_mode,omitempty"`      // v1 default false
-	ProfileID      string   `json:"profile_id,omitempty"`      // profile that was accepted
-	Source         string   `json:"source,omitempty"`          // "user_accepted_detection" | "user_override"
-	Confidence     string   `json:"confidence,omitempty"`      // "high" | "medium" | "low"
+	EntrypointMode string   `json:"entrypoint_mode"`          // "image_default" | "custom"
+	Entrypoint     []string `json:"entrypoint,omitempty"`     // only when mode=custom
+	CommandPrefix  []string `json:"command_prefix,omitempty"` // prepended to Cmd
+	ShellMode      bool     `json:"shell_mode,omitempty"`     // v1 default false
+	ProfileID      string   `json:"profile_id,omitempty"`     // profile that was accepted
+	Source         string   `json:"source,omitempty"`         // "user_accepted_detection" | "user_override"
+	Confidence     string   `json:"confidence,omitempty"`     // "high" | "medium" | "low"
 	Warnings       []string `json:"warnings,omitempty"`
 }
 
 // ProcessStartDetection is the system-generated suggestion for how to start
 // a container process for a given backend_family + image combination.
 type ProcessStartDetection struct {
-	Status           string                    `json:"status"` // "candidate_found" | "no_profiles" | "image_not_inspected"
-	SelectedProfile  string                    `json:"selected_profile_id,omitempty"`
-	EntrypointMode   string                    `json:"entrypoint_mode,omitempty"`
-	Entrypoint       []string                  `json:"entrypoint,omitempty"`
-	CommandPrefix    []string                  `json:"command_prefix,omitempty"`
-	ShellMode        bool                      `json:"shell_mode,omitempty"`
-	Confidence       string                    `json:"confidence,omitempty"` // "high" | "medium" | "low"
-	Source           string                    `json:"source,omitempty"`     // "backend_profile+image_inspect"
-	CandidateProfile *DetectionCandidate       `json:"candidate_profile,omitempty"`
-	AllCandidates    []DetectionCandidate      `json:"candidate_profiles,omitempty"`
-	Evidence         *DetectionEvidence        `json:"evidence,omitempty"`
-	Warnings         []string                  `json:"warnings,omitempty"`
+	Status           string               `json:"status"` // "candidate_found" | "no_profiles" | "image_not_inspected"
+	SelectedProfile  string               `json:"selected_profile_id,omitempty"`
+	EntrypointMode   string               `json:"entrypoint_mode,omitempty"`
+	Entrypoint       []string             `json:"entrypoint,omitempty"`
+	CommandPrefix    []string             `json:"command_prefix,omitempty"`
+	ShellMode        bool                 `json:"shell_mode,omitempty"`
+	Confidence       string               `json:"confidence,omitempty"` // "high" | "medium" | "low"
+	Source           string               `json:"source,omitempty"`     // "backend_profile+image_inspect"
+	CandidateProfile *DetectionCandidate  `json:"candidate_profile,omitempty"`
+	AllCandidates    []DetectionCandidate `json:"candidate_profiles,omitempty"`
+	Evidence         *DetectionEvidence   `json:"evidence,omitempty"`
+	Warnings         []string             `json:"warnings,omitempty"`
 }
 
 // DetectionCandidate is a scored profile candidate.
@@ -100,7 +100,7 @@ func DefaultProcessStartProfiles() map[string][]ProcessStartProfile {
 				Priority:       100,
 				Description:    "Run SGLang through python module launcher as Docker CMD, preserving image ENTRYPOINT.",
 				DetectionHints: &ProcessStartDetectionHints{
-					EntrypointKinds:                     []string{"wrapper_script", "empty", "unknown"},
+					EntrypointKinds:                       []string{"wrapper_script", "empty", "unknown"},
 					AvoidIfEntrypointAlreadyStartsBackend: true,
 				},
 			},

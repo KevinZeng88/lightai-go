@@ -65,13 +65,13 @@ func scanDirectory(absPath, root, relPath string) map[string]interface{} {
 		if json.Unmarshal(data, &config) == nil {
 			hasHF = true
 			candidate := ScanCandidate{
-				Path:            absPath,
-				PathType:        "directory",
-				Format:          "huggingface",
+				Path:             absPath,
+				PathType:         "directory",
+				Format:           "huggingface",
 				DetectedMetadata: make(map[string]interface{}),
-				Warnings:        []string{},
-				AutoSelected:    false,
-				SelectionReason: "",
+				Warnings:         []string{},
+				AutoSelected:     false,
+				SelectionReason:  "",
 			}
 
 			// Extract HF metadata
@@ -86,13 +86,13 @@ func scanDirectory(absPath, root, relPath string) map[string]interface{} {
 		hasGGUF = true
 		for _, ggufPath := range matches {
 			candidate := ScanCandidate{
-				Path:            ggufPath,
-				PathType:        "file",
-				Format:          "gguf",
+				Path:             ggufPath,
+				PathType:         "file",
+				Format:           "gguf",
 				DetectedMetadata: make(map[string]interface{}),
-				Warnings:        []string{},
-				AutoSelected:    false,
-				SelectionReason: "",
+				Warnings:         []string{},
+				AutoSelected:     false,
+				SelectionReason:  "",
 			}
 			if fi, err := os.Stat(ggufPath); err == nil {
 				candidate.SizeBytes = fi.Size()
@@ -145,12 +145,12 @@ func scanSingleFile(absPath, root, relPath string, info os.FileInfo) map[string]
 	}
 
 	candidate := ScanCandidate{
-		Path:            absPath,
-		PathType:        "file",
+		Path:             absPath,
+		PathType:         "file",
 		DetectedMetadata: make(map[string]interface{}),
-		Warnings:        []string{},
-		AutoSelected:    true,
-		SelectionReason: "single file selected",
+		Warnings:         []string{},
+		AutoSelected:     true,
+		SelectionReason:  "single file selected",
 	}
 
 	candidate.SizeBytes = info.Size()

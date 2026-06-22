@@ -42,21 +42,21 @@ func (h *AgentHandler) HandleListBackendRuntimes(w http.ResponseWriter, r *http.
 		countMap := make(map[string]map[string]int)
 		for countRows.Next() {
 			var rid string
-				var nc, rc, dc int
-				if e := countRows.Scan(&rid, &nc, &rc, &dc); e == nil {
-					countMap[rid] = map[string]int{"node_count": nc, "ready_count": rc, "deployable_count": dc}
+			var nc, rc, dc int
+			if e := countRows.Scan(&rid, &nc, &rc, &dc); e == nil {
+				countMap[rid] = map[string]int{"node_count": nc, "ready_count": rc, "deployable_count": dc}
 			}
 		}
 		for _, entry := range out {
 			id := strVal(entry, "id", "")
 			if stats, ok := countMap[id]; ok {
 				entry["node_count"] = stats["node_count"]
-					entry["ready_count"] = stats["ready_count"]
-					entry["deployable_count"] = stats["deployable_count"]
+				entry["ready_count"] = stats["ready_count"]
+				entry["deployable_count"] = stats["deployable_count"]
 			} else {
 				entry["node_count"] = 0
 				entry["ready_count"] = 0
-					entry["deployable_count"] = 0
+				entry["deployable_count"] = 0
 			}
 		}
 	}
@@ -282,9 +282,9 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 			"driver_version": driver, "toolkit_version": toolkit, "device_check_json": json.RawMessage(checkJSON),
 			"status": status, "status_reason": reason, "last_checked_at": checked, "tenant_id": tid,
 			"created_at": ca, "updated_at": ua,
-			"deployable":      deployable,
-			"warnings":        warnings,
-			"disabled_reason": nbrDisabledReason(status, reason),
+			"deployable":           deployable,
+			"warnings":             warnings,
+			"disabled_reason":      nbrDisabledReason(status, reason),
 			"config_snapshot_json": json.RawMessage(snapshotJSON),
 			"probe_results_json":   json.RawMessage(probeResultsJSON),
 			"backend_runtime":      map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},

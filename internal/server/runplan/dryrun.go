@@ -13,7 +13,7 @@ type DBQuerier interface {
 // DryRunInput holds all data needed for dry-run validation.
 type DryRunInput struct {
 	NodeID          string
-	AcceleratorIds          []string
+	AcceleratorIds  []string
 	HostPort        int
 	RuntimeVendor   string
 	ModelArtifactID string
