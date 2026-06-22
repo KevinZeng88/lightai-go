@@ -10,9 +10,23 @@ import (
 
 // ScanCandidate represents one model candidate found during scanning.
 type ScanCandidate struct {
-	Path             string                 `json:"path"`
-	PathType         string                 `json:"path_type"` // "file" or "directory"
-	Format           string                 `json:"format"`
+	Path     string `json:"path"`
+	PathType string `json:"path_type"` // "file" or "directory"
+
+	// ── Phase A+B1: enriched model type fields ──
+	Kind                string   `json:"kind"`                 // "directory" | "file" | "adapter" | "bundle"
+	Format              string   `json:"format"`               // "huggingface" | "sentence_transformers" | "gguf" | "lora_adapter" | ...
+	Task                string   `json:"task"`                 // "chat" | "completion" | "embedding" | "rerank" | "vision_chat" | "adapter" | "unknown"
+	Capabilities        []string `json:"capabilities"`         // ["chat","completion"] | ["embedding"] | ...
+	DefaultTestMode     string   `json:"default_test_mode"`    // "chat" | "completion" | "embedding" | "rerank" | "auto"
+	Deployable          bool     `json:"deployable"`           // can it run as standalone?
+	RequiresBaseModel   bool     `json:"requires_base_model"`  // adapter/lora case
+	RecommendedBackends []string `json:"recommended_backends"` // ["vllm","sglang"] | ["llamacpp"] | []
+	Confidence          string   `json:"confidence"`           // "high" | "medium" | "low"
+	Evidence            []string `json:"evidence"`             // e.g. ["config.json","tokenizer_config.json"]
+	UnsupportedReason   string   `json:"unsupported_reason"`   // only when deployable=false
+
+	// ── Existing fields ──
 	DetectedMetadata map[string]interface{} `json:"detected_metadata"`
 	Warnings         []string               `json:"warnings"`
 	AutoSelected     bool                   `json:"auto_selected"`
@@ -29,9 +43,448 @@ type ScanResult struct {
 	Error      string          `json:"error,omitempty"`
 }
 
+// ── Plugin abstraction ──
+
+// FileFacts collects low-cost filesystem facts once per scanned directory.
+// Detectors read from FileFacts instead of accessing the filesystem directly.
+type FileFacts struct {
+	AbsPath     string
+	IsDirectory bool
+	DirEntries  []string // base names of entries in this directory
+
+	// Parsed JSON files (nil if not present or parse failed)
+	ConfigJSON             map[string]interface{}
+	GenerationConfigJSON   map[string]interface{}
+	TokenizerConfigJSON    map[string]interface{}
+	SentenceBertConfigJSON map[string]interface{}
+	AdapterConfigJSON      map[string]interface{}
+	ModelIndexJSON         map[string]interface{}
+
+	// File glob results
+	GGUFFiles       []string // *.gguf
+	ONNXFiles       []string // *.onnx
+	EngineFiles     []string // *.engine
+	SafetensorFiles []string // *.safetensors
+	XMLFiles        []string // *.xml
+	BinFiles        []string // *.bin (for OpenVINO)
+	PTModelFiles    []string // pytorch_model.bin
+
+	// Presence checks
+	HasConfigJSON               bool
+	HasTokenizerConfigJSON      bool
+	HasGenerationConfigJSON     bool
+	HasSentenceBertConfigJSON   bool
+	HasModulesJSON              bool
+	HasOnePooling               bool // 1_Pooling/config.json exists
+	HasAdapterConfigJSON        bool
+	HasAdapterModelSafetensors  bool
+	HasPreprocessorConfigJSON   bool
+	HasImageProcessorConfigJSON bool
+	HasModelIndexJSON           bool
+
+	EvidenceFiles []string // files found during fact collection
+}
+
+// ModelTypeDefaults holds default values applied to candidates produced by a detector.
+type ModelTypeDefaults struct {
+	Kind                string
+	Format              string
+	Task                string
+	Capabilities        []string
+	DefaultTestMode     string
+	Deployable          bool
+	RequiresBaseModel   bool
+	RecommendedBackends []string
+	Confidence          string
+	UnsupportedReason   string
+}
+
+// DetectorFunc receives pre-collected FileFacts and returns zero or more ScanCandidate.
+type DetectorFunc func(facts FileFacts) []ScanCandidate
+
+// ModelTypePlugin bundles a detector with its defaults.
+type ModelTypePlugin struct {
+	ID       string
+	Detect   DetectorFunc
+	Defaults ModelTypeDefaults
+}
+
+// ── Plugin registry (priority-ordered) ──
+
+var modelTypePlugins = []ModelTypePlugin{
+	{ID: "lora_adapter", Detect: DetectLoRAAdapter, Defaults: loRADefaults},
+	{ID: "sentence_transformers", Detect: DetectSentenceTransformers, Defaults: sentenceTransformersDefaults},
+	{ID: "reranker", Detect: DetectReranker, Defaults: rerankerDefaults},
+	{ID: "vision_language", Detect: DetectVisionLanguage, Defaults: visionLanguageDefaults},
+	{ID: "hf_chat", Detect: DetectHuggingFaceChat, Defaults: hfChatDefaults},
+	{ID: "gguf", Detect: DetectGGUF, Defaults: ggufDefaults},
+}
+
+// Plugin defaults
+var (
+	loRADefaults = ModelTypeDefaults{
+		Kind: "adapter", Format: "lora_adapter", Task: "adapter",
+		Capabilities: []string{}, DefaultTestMode: "auto",
+		Deployable: false, RequiresBaseModel: true,
+		RecommendedBackends: []string{}, Confidence: "high",
+		UnsupportedReason: "这是 LoRA/Adapter，需要选择基础模型后使用，不能作为独立模型直接部署。",
+	}
+	sentenceTransformersDefaults = ModelTypeDefaults{
+		Kind: "directory", Format: "sentence_transformers", Task: "embedding",
+		Capabilities: []string{"embedding"}, DefaultTestMode: "embedding",
+		Deployable: true, RequiresBaseModel: false,
+		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "high",
+	}
+	rerankerDefaults = ModelTypeDefaults{
+		Kind: "directory", Format: "huggingface", Task: "rerank",
+		Capabilities: []string{"rerank"}, DefaultTestMode: "rerank",
+		Deployable: true, RequiresBaseModel: false,
+		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "medium",
+	}
+	visionLanguageDefaults = ModelTypeDefaults{
+		Kind: "directory", Format: "huggingface", Task: "vision_chat",
+		Capabilities: []string{"chat", "vision"}, DefaultTestMode: "chat",
+		Deployable: true, RequiresBaseModel: false,
+		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "high",
+	}
+	hfChatDefaults = ModelTypeDefaults{
+		Kind: "directory", Format: "huggingface", Task: "chat",
+		Capabilities: []string{"chat", "completion"}, DefaultTestMode: "chat",
+		Deployable: true, RequiresBaseModel: false,
+		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "medium",
+	}
+	ggufDefaults = ModelTypeDefaults{
+		Kind: "file", Format: "gguf", Task: "chat",
+		Capabilities: []string{"chat", "completion"}, DefaultTestMode: "chat",
+		Deployable: true, RequiresBaseModel: false,
+		RecommendedBackends: []string{"llamacpp"}, Confidence: "high",
+	}
+)
+
+// ── FileFacts construction ──
+
+func collectFileFacts(absPath string) FileFacts {
+	facts := FileFacts{AbsPath: absPath}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return facts
+	}
+	facts.IsDirectory = info.IsDir()
+	if !facts.IsDirectory {
+		return facts
+	}
+
+	entries, _ := os.ReadDir(absPath)
+	for _, e := range entries {
+		facts.DirEntries = append(facts.DirEntries, e.Name())
+	}
+
+	// Parse key JSON files
+	facts.ConfigJSON, _ = readJSONFile(filepath.Join(absPath, "config.json"))
+	facts.GenerationConfigJSON, _ = readJSONFile(filepath.Join(absPath, "generation_config.json"))
+	facts.TokenizerConfigJSON, _ = readJSONFile(filepath.Join(absPath, "tokenizer_config.json"))
+	facts.SentenceBertConfigJSON, _ = readJSONFile(filepath.Join(absPath, "sentence_bert_config.json"))
+	facts.AdapterConfigJSON, _ = readJSONFile(filepath.Join(absPath, "adapter_config.json"))
+	facts.ModelIndexJSON, _ = readJSONFile(filepath.Join(absPath, "model_index.json"))
+
+	facts.HasConfigJSON = facts.ConfigJSON != nil
+	facts.HasTokenizerConfigJSON = fileExists(filepath.Join(absPath, "tokenizer_config.json"))
+	facts.HasGenerationConfigJSON = fileExists(filepath.Join(absPath, "generation_config.json"))
+	facts.HasSentenceBertConfigJSON = facts.SentenceBertConfigJSON != nil || fileExists(filepath.Join(absPath, "config_sentence_transformers.json"))
+	facts.HasModulesJSON = fileExists(filepath.Join(absPath, "modules.json"))
+	facts.HasOnePooling = fileExists(filepath.Join(absPath, "1_Pooling/config.json"))
+	facts.HasAdapterConfigJSON = facts.AdapterConfigJSON != nil
+	facts.HasAdapterModelSafetensors = fileExists(filepath.Join(absPath, "adapter_model.safetensors"))
+	facts.HasPreprocessorConfigJSON = fileExists(filepath.Join(absPath, "preprocessor_config.json"))
+	facts.HasImageProcessorConfigJSON = fileExists(filepath.Join(absPath, "image_processor_config.json"))
+	facts.HasModelIndexJSON = facts.ModelIndexJSON != nil
+
+	// Glob files
+	facts.GGUFFiles, _ = filepath.Glob(filepath.Join(absPath, "*.gguf"))
+	facts.ONNXFiles, _ = filepath.Glob(filepath.Join(absPath, "*.onnx"))
+	facts.EngineFiles, _ = filepath.Glob(filepath.Join(absPath, "*.engine"))
+	facts.SafetensorFiles, _ = filepath.Glob(filepath.Join(absPath, "*.safetensors"))
+	facts.XMLFiles, _ = filepath.Glob(filepath.Join(absPath, "*.xml"))
+	facts.BinFiles, _ = filepath.Glob(filepath.Join(absPath, "*.bin"))
+	facts.PTModelFiles, _ = filepath.Glob(filepath.Join(absPath, "pytorch_model.bin"))
+
+	// Collect evidence files
+	for _, f := range entries {
+		n := f.Name()
+		if strings.HasPrefix(n, ".") {
+			continue
+		}
+		switch n {
+		case "config.json", "tokenizer_config.json", "tokenizer.json", "generation_config.json",
+			"modules.json", "sentence_bert_config.json", "config_sentence_transformers.json",
+			"adapter_config.json", "adapter_model.safetensors", "preprocessor_config.json",
+			"image_processor_config.json", "model_index.json":
+			facts.EvidenceFiles = append(facts.EvidenceFiles, n)
+		case "1_Pooling":
+			facts.EvidenceFiles = append(facts.EvidenceFiles, "1_Pooling/config.json")
+		}
+	}
+	// Add glob-based evidence
+	if len(facts.GGUFFiles) > 0 {
+		facts.EvidenceFiles = append(facts.EvidenceFiles, "*.gguf")
+	}
+	if len(facts.ONNXFiles) > 0 {
+		facts.EvidenceFiles = append(facts.EvidenceFiles, "*.onnx")
+	}
+	if len(facts.EngineFiles) > 0 {
+		facts.EvidenceFiles = append(facts.EvidenceFiles, "*.engine")
+	}
+
+	return facts
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+func readJSONFile(p string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// nameMatches checks whether the model name (from path or any related name field)
+// contains any of the given keywords (case-insensitive).
+func nameMatches(path string, keywords ...string) bool {
+	lower := strings.ToLower(path)
+	for _, kw := range keywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// ── Detectors ──
+
+// DetectHuggingFaceChat detects standard HF chat/completion directories.
+func DetectHuggingFaceChat(facts FileFacts) []ScanCandidate {
+	if !facts.HasConfigJSON {
+		return nil
+	}
+	c := ScanCandidate{
+		Path: facts.AbsPath, PathType: "directory",
+		DetectedMetadata: make(map[string]interface{}),
+	}
+	c.Evidence = append(c.Evidence, "config.json")
+	if facts.HasTokenizerConfigJSON {
+		c.Evidence = append(c.Evidence, "tokenizer_config.json")
+	}
+	if facts.HasGenerationConfigJSON {
+		c.Evidence = append(c.Evidence, "generation_config.json")
+	}
+	if len(facts.SafetensorFiles) > 0 {
+		c.Evidence = append(c.Evidence, "*.safetensors")
+	}
+	extractHFMetadata(facts.AbsPath, facts.ConfigJSON, &c)
+	return []ScanCandidate{c}
+}
+
+// DetectGGUF detects GGUF file candidates.
+func DetectGGUF(facts FileFacts) []ScanCandidate {
+	var candidates []ScanCandidate
+	for _, ggufPath := range facts.GGUFFiles {
+		c := ScanCandidate{
+			Path: ggufPath, PathType: "file",
+			DetectedMetadata: make(map[string]interface{}),
+			Evidence:         []string{"*.gguf"},
+		}
+		if fi, err := os.Stat(ggufPath); err == nil {
+			c.SizeBytes = fi.Size()
+			c.SizeLabel = FormatBytes(fi.Size())
+			c.DetectedMetadata["file_size_bytes"] = float64(fi.Size())
+		}
+		c.DetectedMetadata["format"] = "gguf"
+		extractGGUFMetadata(ggufPath, &c)
+		candidates = append(candidates, c)
+	}
+	return candidates
+}
+
+// DetectSentenceTransformers detects SentenceTransformers / Embedding models.
+func DetectSentenceTransformers(facts FileFacts) []ScanCandidate {
+	hasSTStructure := facts.HasModulesJSON && facts.HasOnePooling
+	hasSTConfig := facts.HasSentenceBertConfigJSON || facts.SentenceBertConfigJSON != nil
+	hasSTName := nameMatches(facts.AbsPath,
+		"bge", "e5", "gte", "embedding", "embeddings",
+		"sentence-transformers", "text2vec", "m3e", "jina-embeddings",
+		"stella", "multilingual-e5", "bce-embedding",
+	)
+
+	if !hasSTStructure && !hasSTConfig && !hasSTName {
+		return nil
+	}
+
+	c := ScanCandidate{
+		Path: facts.AbsPath, PathType: "directory",
+		DetectedMetadata: make(map[string]interface{}),
+	}
+	if facts.HasModulesJSON {
+		c.Evidence = append(c.Evidence, "modules.json")
+	}
+	if facts.HasOnePooling {
+		c.Evidence = append(c.Evidence, "1_Pooling/config.json")
+	}
+	if facts.HasSentenceBertConfigJSON {
+		c.Evidence = append(c.Evidence, "config_sentence_transformers.json")
+	}
+	if facts.SentenceBertConfigJSON != nil {
+		c.Evidence = append(c.Evidence, "sentence_bert_config.json")
+	}
+
+	// If there's a config.json, extract HF metadata for size/architecture info
+	if facts.ConfigJSON != nil {
+		extractHFMetadata(facts.AbsPath, facts.ConfigJSON, &c)
+	}
+	return []ScanCandidate{c}
+}
+
+// DetectReranker detects Reranker / CrossEncoder models.
+func DetectReranker(facts FileFacts) []ScanCandidate {
+	hasRerankerName := nameMatches(facts.AbsPath,
+		"reranker", "rerank", "cross-encoder", "cross_encoder",
+		"ranker", "bge-reranker", "jina-reranker", "ms-marco",
+		"bce-reranker",
+	)
+
+	if !hasRerankerName {
+		return nil
+	}
+	// Require at least some HF directory evidence to avoid false positives
+	if !facts.HasConfigJSON && len(facts.SafetensorFiles) == 0 && len(facts.PTModelFiles) == 0 {
+		return nil
+	}
+
+	c := ScanCandidate{
+		Path: facts.AbsPath, PathType: "directory",
+		DetectedMetadata: make(map[string]interface{}),
+	}
+	c.Evidence = append(c.Evidence, "name contains reranker/cross-encoder")
+	if facts.HasConfigJSON {
+		c.Evidence = append(c.Evidence, "config.json")
+	}
+	if len(facts.SafetensorFiles) > 0 {
+		c.Evidence = append(c.Evidence, "*.safetensors")
+	}
+	if facts.ConfigJSON != nil {
+		extractHFMetadata(facts.AbsPath, facts.ConfigJSON, &c)
+	}
+	return []ScanCandidate{c}
+}
+
+// DetectVisionLanguage detects Vision-Language / Multimodal models.
+func DetectVisionLanguage(facts FileFacts) []ScanCandidate {
+	hasVLName := nameMatches(facts.AbsPath,
+		"internvl", "qwen-vl", "qwen2-vl", "qwen2.5-vl",
+		"llava", "minicpm-v", "glm-4v", "cogvlm", "phi-3-vision",
+		"phi-3.5-vision", "paligemma", "fuyu", "idefics",
+	)
+	hasVLIndicator := fileExists(filepath.Join(facts.AbsPath, "configuration_internvl_chat.py")) ||
+		fileExists(filepath.Join(facts.AbsPath, "configuration_intern_vit.py")) ||
+		facts.HasImageProcessorConfigJSON ||
+		facts.HasPreprocessorConfigJSON
+
+	if !hasVLName && !hasVLIndicator {
+		return nil
+	}
+	if !facts.HasConfigJSON {
+		return nil
+	}
+
+	c := ScanCandidate{
+		Path: facts.AbsPath, PathType: "directory",
+		DetectedMetadata: make(map[string]interface{}),
+	}
+	c.Evidence = append(c.Evidence, "name contains vision-language model pattern")
+	if fileExists(filepath.Join(facts.AbsPath, "configuration_internvl_chat.py")) {
+		c.Evidence = append(c.Evidence, "configuration_internvl_chat.py")
+	}
+	if fileExists(filepath.Join(facts.AbsPath, "configuration_intern_vit.py")) {
+		c.Evidence = append(c.Evidence, "configuration_intern_vit.py")
+	}
+	if facts.HasImageProcessorConfigJSON {
+		c.Evidence = append(c.Evidence, "image_processor_config.json")
+	}
+	if facts.HasPreprocessorConfigJSON {
+		c.Evidence = append(c.Evidence, "preprocessor_config.json")
+	}
+	if facts.ConfigJSON != nil {
+		extractHFMetadata(facts.AbsPath, facts.ConfigJSON, &c)
+	}
+	return []ScanCandidate{c}
+}
+
+// DetectLoRAAdapter detects LoRA/Adapter models.
+func DetectLoRAAdapter(facts FileFacts) []ScanCandidate {
+	if !facts.HasAdapterConfigJSON && !facts.HasAdapterModelSafetensors {
+		return nil
+	}
+	c := ScanCandidate{
+		Path: facts.AbsPath, PathType: "directory",
+		DetectedMetadata: make(map[string]interface{}),
+	}
+	if facts.HasAdapterConfigJSON {
+		c.Evidence = append(c.Evidence, "adapter_config.json")
+	}
+	if facts.HasAdapterModelSafetensors {
+		c.Evidence = append(c.Evidence, "adapter_model.safetensors")
+	}
+	// Extract adapter-specific metadata if available
+	if facts.AdapterConfigJSON != nil {
+		if baseModel, ok := facts.AdapterConfigJSON["base_model_name_or_path"]; ok {
+			c.DetectedMetadata["base_model_name_or_path"] = baseModel
+		}
+	}
+	return []ScanCandidate{c}
+}
+
+// ── applyDefaults fills unset fields from plugin defaults ──
+
+func applyDefaults(c *ScanCandidate, d ModelTypeDefaults) {
+	if c.Kind == "" {
+		c.Kind = d.Kind
+	}
+	if c.Format == "" {
+		c.Format = d.Format
+	}
+	if c.Task == "" {
+		c.Task = d.Task
+	}
+	if len(c.Capabilities) == 0 {
+		c.Capabilities = d.Capabilities
+	}
+	if c.DefaultTestMode == "" {
+		c.DefaultTestMode = d.DefaultTestMode
+	}
+	// Deployable/RequiresBaseModel: plugin defaults always win for these flags.
+	c.Deployable = d.Deployable
+	c.RequiresBaseModel = d.RequiresBaseModel
+	if len(c.RecommendedBackends) == 0 {
+		c.RecommendedBackends = d.RecommendedBackends
+	}
+	if c.Confidence == "" {
+		c.Confidence = d.Confidence
+	}
+	if c.UnsupportedReason == "" {
+		c.UnsupportedReason = d.UnsupportedReason
+	}
+}
+
+// ── Public API ──
+
 // ScanModelPath scans a directory or file for model candidates.
-// For directories: detects HF config, GGUF files, or mixed.
-// For files: detects GGUF by extension.
 func ScanModelPath(root, relPath string) map[string]interface{} {
 	absPath := filepath.Join(root, relPath)
 	info, err := os.Stat(absPath)
@@ -42,70 +495,30 @@ func ScanModelPath(root, relPath string) map[string]interface{} {
 	}
 
 	if info.IsDir() {
-		return scanDirectory(absPath, root, relPath)
+		return scanDirectory(absPath)
 	}
 
-	// Single file scan
 	return scanSingleFile(absPath, root, relPath, info)
 }
 
-// scanDirectory scans a directory for model candidates.
-func scanDirectory(absPath, root, relPath string) map[string]interface{} {
-	result := &ScanResult{
-		ScanRoot: absPath,
-	}
+// scanDirectory uses the plugin registry to detect model types.
+func scanDirectory(absPath string) map[string]interface{} {
+	facts := collectFileFacts(absPath)
+	result := &ScanResult{ScanRoot: absPath}
 
-	hasHF := false
-	hasGGUF := false
-
-	// ── HF Directory Detection ──
-	configPath := filepath.Join(absPath, "config.json")
-	if data, err := os.ReadFile(configPath); err == nil {
-		var config map[string]interface{}
-		if json.Unmarshal(data, &config) == nil {
-			hasHF = true
-			candidate := ScanCandidate{
-				Path:             absPath,
-				PathType:         "directory",
-				Format:           "huggingface",
-				DetectedMetadata: make(map[string]interface{}),
-				Warnings:         []string{},
-				AutoSelected:     false,
-				SelectionReason:  "",
+	var candidates []ScanCandidate
+	for _, plugin := range modelTypePlugins {
+		detected := plugin.Detect(facts)
+		for i := range detected {
+			applyDefaults(&detected[i], plugin.Defaults)
+			// Preserve detector evidence if not already set by defaults
+			if len(detected[i].Evidence) == 0 {
+				detected[i].Evidence = facts.EvidenceFiles
 			}
-
-			// Extract HF metadata
-			extractHFMetadata(absPath, config, &candidate)
-
-			result.Candidates = append(result.Candidates, candidate)
 		}
+		candidates = append(candidates, detected...)
 	}
-
-	// ── GGUF File Detection ──
-	if matches, _ := filepath.Glob(filepath.Join(absPath, "*.gguf")); len(matches) > 0 {
-		hasGGUF = true
-		for _, ggufPath := range matches {
-			candidate := ScanCandidate{
-				Path:             ggufPath,
-				PathType:         "file",
-				Format:           "gguf",
-				DetectedMetadata: make(map[string]interface{}),
-				Warnings:         []string{},
-				AutoSelected:     false,
-				SelectionReason:  "",
-			}
-			if fi, err := os.Stat(ggufPath); err == nil {
-				candidate.SizeBytes = fi.Size()
-				candidate.SizeLabel = FormatBytes(fi.Size())
-				candidate.DetectedMetadata["file_size_bytes"] = float64(fi.Size())
-			}
-			candidate.DetectedMetadata["format"] = "gguf"
-			extractGGUFMetadata(ggufPath, &candidate)
-			result.Candidates = append(result.Candidates, candidate)
-		}
-	}
-	_ = hasHF
-	_ = hasGGUF
+	result.Candidates = candidates
 
 	// ── Auto-selection logic ──
 	totalCandidates := len(result.Candidates)
@@ -113,7 +526,6 @@ func scanDirectory(absPath, root, relPath string) map[string]interface{} {
 		result.Candidates[0].AutoSelected = true
 		result.Candidates[0].SelectionReason = fmt.Sprintf("single %s candidate in directory", result.Candidates[0].Format)
 	} else if totalCandidates > 1 {
-		// Check if all are same type
 		allGGUF := true
 		for _, c := range result.Candidates {
 			if c.Format != "gguf" {
@@ -126,7 +538,7 @@ func scanDirectory(absPath, root, relPath string) map[string]interface{} {
 				fmt.Sprintf("found %d GGUF files, user must select one", totalCandidates))
 		} else {
 			result.Warnings = append(result.Warnings,
-				"mixed model types found (HF + GGUF), user must select one")
+				"mixed model types found, user must select one")
 		}
 	}
 
@@ -134,50 +546,48 @@ func scanDirectory(absPath, root, relPath string) map[string]interface{} {
 		result.Error = "no recognizable model files found in directory"
 	}
 
-	// ── Convert to map for API compatibility ──
 	return toMap(result)
 }
 
 // scanSingleFile scans a single file for model metadata.
 func scanSingleFile(absPath, root, relPath string, info os.FileInfo) map[string]interface{} {
-	result := &ScanResult{
-		ScanRoot: absPath,
-	}
+	result := &ScanResult{ScanRoot: absPath}
 
-	candidate := ScanCandidate{
-		Path:             absPath,
-		PathType:         "file",
+	c := ScanCandidate{
+		Path: absPath, PathType: "file",
 		DetectedMetadata: make(map[string]interface{}),
-		Warnings:         []string{},
 		AutoSelected:     true,
 		SelectionReason:  "single file selected",
 	}
 
-	candidate.SizeBytes = info.Size()
-	candidate.SizeLabel = FormatBytes(info.Size())
-	candidate.DetectedMetadata["file_size_bytes"] = float64(info.Size())
+	c.SizeBytes = info.Size()
+	c.SizeLabel = FormatBytes(info.Size())
+	c.DetectedMetadata["file_size_bytes"] = float64(info.Size())
 
 	if strings.HasSuffix(strings.ToLower(relPath), ".gguf") {
-		candidate.Format = "gguf"
-		candidate.DetectedMetadata["format"] = "gguf"
-		extractGGUFMetadata(absPath, &candidate)
+		// Apply GGUF plugin defaults
+		applyDefaults(&c, ggufDefaults)
+		c.DetectedMetadata["format"] = "gguf"
+		extractGGUFMetadata(absPath, &c)
+		c.Evidence = append(c.Evidence, "*.gguf")
 	} else {
-		candidate.Format = "custom"
-		candidate.DetectedMetadata["format"] = "custom"
+		c.Format = "custom"
+		c.Task = "unknown"
+		c.DetectedMetadata["format"] = "custom"
+		c.Evidence = append(c.Evidence, fmt.Sprintf("file extension: %s", filepath.Ext(relPath)))
 	}
 
-	result.Candidates = append(result.Candidates, candidate)
-
+	result.Candidates = append(result.Candidates, c)
 	return toMap(result)
 }
 
-// extractGGUFMetadata reads GGUF header metadata and populates the candidate.
+// ── Metadata extraction (unchanged from original) ──
+
 func extractGGUFMetadata(path string, candidate *ScanCandidate) {
 	meta, err := readGGUFMeta(path)
 	if err != nil {
 		candidate.Warnings = append(candidate.Warnings,
 			fmt.Sprintf("GGUF metadata read failed: %v", err))
-		// Fall back to filename-based quantization guess
 		if candidate.DetectedMetadata["quantization"] == nil {
 			candidate.DetectedMetadata["quantization"] = guessQuantFromFilename(path)
 		}
@@ -205,7 +615,6 @@ func extractGGUFMetadata(path string, candidate *ScanCandidate) {
 	}
 	candidate.DetectedMetadata["file_size_bytes"] = float64(meta.FileSizeBytes)
 
-	// Quantization
 	q := meta.Quantization
 	if q == "" || q == "unknown" {
 		q = guessQuantFromFilename(path)
@@ -217,11 +626,9 @@ func extractGGUFMetadata(path string, candidate *ScanCandidate) {
 	candidate.Warnings = append(candidate.Warnings, meta.Warnings...)
 }
 
-// extractHFMetadata reads HuggingFace config files and populates metadata.
 func extractHFMetadata(absPath string, config map[string]interface{}, candidate *ScanCandidate) {
 	candidate.DetectedMetadata["format"] = "huggingface"
 
-	// config.json fields
 	if arch, ok := config["architectures"]; ok {
 		candidate.DetectedMetadata["architectures"] = arch
 		if archList, ok := arch.([]interface{}); ok && len(archList) > 0 {
@@ -263,7 +670,6 @@ func extractHFMetadata(absPath string, config map[string]interface{}, candidate 
 		candidate.DetectedMetadata["quantization_config"] = qc
 	}
 
-	// Safetensors: compute total file size
 	safePattern := filepath.Join(absPath, "*.safetensors")
 	if matches, _ := filepath.Glob(safePattern); len(matches) > 0 {
 		var totalSize int64
@@ -277,7 +683,6 @@ func extractHFMetadata(absPath string, config map[string]interface{}, candidate 
 		candidate.SizeLabel = FormatBytes(totalSize)
 		candidate.DetectedMetadata["file_size_bytes"] = float64(totalSize)
 	} else {
-		// Compute total directory size
 		var totalSize int64
 		filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() {
@@ -290,12 +695,10 @@ func extractHFMetadata(absPath string, config map[string]interface{}, candidate 
 		candidate.DetectedMetadata["file_size_bytes"] = float64(totalSize)
 	}
 
-	// Check for tokenizer
 	if _, err := os.Stat(filepath.Join(absPath, "tokenizer_config.json")); err == nil {
 		candidate.DetectedMetadata["has_tokenizer"] = true
 	}
 
-	// Check for generation_config.json
 	if data, err := os.ReadFile(filepath.Join(absPath, "generation_config.json")); err == nil {
 		var genConfig map[string]interface{}
 		if json.Unmarshal(data, &genConfig) == nil {
@@ -305,7 +708,6 @@ func extractHFMetadata(absPath string, config map[string]interface{}, candidate 
 		}
 	}
 
-	// Mark missing fields with warnings
 	if candidate.DetectedMetadata["max_position_embeddings"] == nil {
 		candidate.Warnings = append(candidate.Warnings, "max_position_embeddings not found in config.json")
 	}
@@ -314,7 +716,8 @@ func extractHFMetadata(absPath string, config map[string]interface{}, candidate 
 	}
 }
 
-// FormatBytes converts a byte count to a human-readable string.
+// ── Utilities ──
+
 func FormatBytes(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -328,7 +731,17 @@ func FormatBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// toMap converts a ScanResult to a map[string]interface{} for API compatibility.
+func strsToInterfaces(strs []string) []interface{} {
+	if strs == nil {
+		return []interface{}{}
+	}
+	out := make([]interface{}, len(strs))
+	for i, s := range strs {
+		out[i] = s
+	}
+	return out
+}
+
 func toMap(sr *ScanResult) map[string]interface{} {
 	if sr.Error != "" {
 		return map[string]interface{}{
@@ -338,9 +751,37 @@ func toMap(sr *ScanResult) map[string]interface{} {
 			"warnings":   sr.Warnings,
 		}
 	}
+	candidates := make([]interface{}, len(sr.Candidates))
+	for i, c := range sr.Candidates {
+		candidates[i] = candidateToMap(c)
+	}
 	return map[string]interface{}{
 		"scan_root":  sr.ScanRoot,
-		"candidates": sr.Candidates,
+		"candidates": candidates,
 		"warnings":   sr.Warnings,
+	}
+}
+
+func candidateToMap(c ScanCandidate) map[string]interface{} {
+	return map[string]interface{}{
+		"path":                 c.Path,
+		"path_type":            c.PathType,
+		"kind":                 c.Kind,
+		"format":               c.Format,
+		"task":                 c.Task,
+		"capabilities":         strsToInterfaces(c.Capabilities),
+		"default_test_mode":    c.DefaultTestMode,
+		"deployable":           c.Deployable,
+		"requires_base_model":  c.RequiresBaseModel,
+		"recommended_backends": c.RecommendedBackends,
+		"confidence":           c.Confidence,
+		"evidence":             strsToInterfaces(c.Evidence),
+		"unsupported_reason":   c.UnsupportedReason,
+		"detected_metadata":    c.DetectedMetadata,
+		"warnings":             c.Warnings,
+		"auto_selected":        c.AutoSelected,
+		"selection_reason":     c.SelectionReason,
+		"size_bytes":           c.SizeBytes,
+		"size_label":           c.SizeLabel,
 	}
 }

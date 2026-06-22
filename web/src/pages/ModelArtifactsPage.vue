@@ -552,17 +552,24 @@ async function doWizardSave() {
   wizardSaving.value = true
   try {
     const c = activeCandidate.value
+    // Pass candidate's task, capabilities, default_test_mode from scanner (Phase A+B1).
+    const caps = c.capabilities || []
+    const dtm = c.default_test_mode || 'auto'
+    const task = c.task || 'chat'
+
     const artifact = await apiClient.post('/api/v1/model-artifacts', {
       name: wizardModelName.value,
       path: c.path || scanResult.value?.absolute_path,
       format: c.format || 'huggingface',
-      task_type: 'chat',
+      task_type: task,
       size_label: c.size_label || scanResult.value?.size_label || '',
       source_type: 'local_path',
       display_name: wizardDisplayName.value || wizardModelName.value,
       architecture: c.detected_metadata?.architecture || 'custom',
       default_context_length: c.detected_metadata?.context_length || 0,
       quantization: c.detected_metadata?.quantization || 'unknown',
+      capabilities: caps,
+      default_test_mode: dtm,
     })
     // Derive the model location path from the candidate (the specific discovered file).
     // The scan root and the candidate path are needed to compute model_root and relative_path
@@ -583,6 +590,17 @@ async function doWizardSave() {
       locRelativePath = scanResult.value?.relative_path || wizardSelectedEntry.value?.relative_path
     }
 
+    // Enrich discovered_metadata_json with scanner metadata (Phase A+B1).
+    const scanMeta: any = { ...(c.detected_metadata || {}) }
+    if (c.kind) scanMeta.kind = c.kind
+    if (c.task) scanMeta.task = c.task
+    if (c.deployable !== undefined) scanMeta.deployable = c.deployable
+    if (c.requires_base_model !== undefined) scanMeta.requires_base_model = c.requires_base_model
+    if (c.recommended_backends?.length) scanMeta.recommended_backends = c.recommended_backends
+    if (c.confidence) scanMeta.confidence = c.confidence
+    if (c.evidence?.length) scanMeta.evidence = c.evidence
+    if (c.unsupported_reason) scanMeta.unsupported_reason = c.unsupported_reason
+
     await apiClient.post(`/model-artifacts/${artifact.id}/locations`, {
       node_id: wizardNodeId.value,
       root_id: scanResult.value?.root_id || wizardSelectedEntry.value?.root_id,
@@ -592,7 +610,7 @@ async function doWizardSave() {
       path_type: candidatePathType,
       verification_status: 'verified',
       match_status: 'exact_match',
-      discovered_metadata_json: c.detected_metadata || {},
+      discovered_metadata_json: scanMeta,
     })
     ElMessage.success(t('artifacts.created')); wizardVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
