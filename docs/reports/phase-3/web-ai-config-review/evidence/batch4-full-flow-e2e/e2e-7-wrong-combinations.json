@@ -1,0 +1,68 @@
+{
+  "LoRA standalone": {
+    "code": "not_deployable",
+    "compatible": false,
+    "expected": false,
+    "reason": "该模型不能独立部署。"
+  },
+  "SGLang+GGUF": {
+    "code": "format_mismatch",
+    "compatible": false,
+    "expected": false,
+    "reason": "模型为 GGUF 文件，vLLM/SGLang 不支持。请使用 llama.cpp。"
+  },
+  "llama.cpp+Embedding": {
+    "code": "format_mismatch",
+    "compatible": false,
+    "expected": false,
+    "reason": "模型为 SentenceTransformers/Embedding 格式，llama.cpp 不支持。请使用 vLLM 或 SGLang。"
+  },
+  "llama.cpp+GGUF": {
+    "code": "ok",
+    "compatible": true,
+    "expected": true,
+    "reason": ""
+  },
+  "llama.cpp+HF": {
+    "code": "format_mismatch",
+    "compatible": false,
+    "expected": false,
+    "reason": "模型为 HuggingFace 目录，llama.cpp 不支持。请使用 vLLM 或 SGLang。"
+  },
+  "llama.cpp+Reranker": {
+    "code": "format_mismatch",
+    "compatible": false,
+    "expected": false,
+    "reason": "模型为 HuggingFace 目录，llama.cpp 不支持。请使用 vLLM 或 SGLang。"
+  },
+  "vLLM+Embedding": {
+    "code": "ok",
+    "compatible": true,
+    "expected": true,
+    "reason": ""
+  },
+  "vLLM+GGUF": {
+    "code": "format_mismatch",
+    "compatible": false,
+    "expected": false,
+    "reason": "模型为 GGUF 文件，vLLM/SGLang 不支持。请使用 llama.cpp。"
+  },
+  "vLLM+HF Chat": {
+    "code": "ok",
+    "compatible": true,
+    "expected": true,
+    "reason": ""
+  },
+  "vLLM+Reranker": {
+    "code": "ok",
+    "compatible": true,
+    "expected": true,
+    "reason": ""
+  },
+  "vLLM+VLM": {
+    "code": "ok",
+    "compatible": true,
+    "expected": true,
+    "reason": ""
+  }
+}

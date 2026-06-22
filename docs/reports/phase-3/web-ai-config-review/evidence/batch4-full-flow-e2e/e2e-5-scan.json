@@ -1,0 +1,53 @@
+{
+  "candidates": [
+    {
+      "auto_selected": true,
+      "capabilities": [
+        "rerank"
+      ],
+      "confidence": "medium",
+      "default_test_mode": "rerank",
+      "deployable": true,
+      "detected_metadata": {
+        "architecture": "XLMRobertaForSequenceClassification",
+        "architectures": [
+          "XLMRobertaForSequenceClassification"
+        ],
+        "context_length": 514,
+        "file_size_bytes": 1112206140,
+        "format": "huggingface",
+        "has_tokenizer": true,
+        "hidden_size": 768,
+        "max_position_embeddings": 514,
+        "model_type": "xlm-roberta",
+        "num_attention_heads": 12,
+        "num_hidden_layers": 12,
+        "safetensors_count": 1,
+        "torch_dtype": "float32",
+        "vocab_size": 250002
+      },
+      "evidence": [
+        "name contains reranker/cross-encoder",
+        "config.json",
+        "*.safetensors"
+      ],
+      "format": "huggingface",
+      "kind": "directory",
+      "path": "/home/kzeng/models/bge-reranker-base",
+      "path_type": "directory",
+      "recommended_backends": [
+        "vllm",
+        "sglang"
+      ],
+      "requires_base_model": false,
+      "selection_reason": "single huggingface candidate in directory",
+      "size_bytes": 1112206140,
+      "size_label": "1.0 GiB",
+      "task": "rerank",
+      "unsupported_reason": "",
+      "warnings": null
+    }
+  ],
+  "scan_root": "/home/kzeng/models/bge-reranker-base",
+  "warnings": null
+}

@@ -1,0 +1,56 @@
+{
+  "candidates": [
+    {
+      "auto_selected": true,
+      "capabilities": [
+        "chat",
+        "completion"
+      ],
+      "confidence": "medium",
+      "default_test_mode": "chat",
+      "deployable": true,
+      "detected_metadata": {
+        "architecture": "Qwen3ForCausalLM",
+        "architectures": [
+          "Qwen3ForCausalLM"
+        ],
+        "context_length": 40960,
+        "file_size_bytes": 1192135096,
+        "format": "huggingface",
+        "has_tokenizer": true,
+        "hidden_size": 1024,
+        "max_position_embeddings": 40960,
+        "model_type": "qwen3",
+        "num_attention_heads": 16,
+        "num_hidden_layers": 28,
+        "num_key_value_heads": 8,
+        "rope_scaling": null,
+        "safetensors_count": 1,
+        "vocab_size": 151936
+      },
+      "evidence": [
+        "config.json",
+        "tokenizer_config.json",
+        "generation_config.json",
+        "*.safetensors"
+      ],
+      "format": "huggingface",
+      "kind": "directory",
+      "path": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+      "path_type": "directory",
+      "recommended_backends": [
+        "vllm",
+        "sglang"
+      ],
+      "requires_base_model": false,
+      "selection_reason": "single huggingface candidate in directory",
+      "size_bytes": 1192135096,
+      "size_label": "1.1 GiB",
+      "task": "chat",
+      "unsupported_reason": "",
+      "warnings": null
+    }
+  ],
+  "scan_root": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+  "warnings": null
+}

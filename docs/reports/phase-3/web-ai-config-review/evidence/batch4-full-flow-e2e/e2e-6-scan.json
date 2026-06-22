@@ -1,0 +1,51 @@
+{
+  "candidates": [
+    {
+      "auto_selected": true,
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
+      "confidence": "high",
+      "default_test_mode": "chat",
+      "deployable": true,
+      "detected_metadata": {
+        "architecture": "InternVLChatModel",
+        "architectures": [
+          "InternVLChatModel"
+        ],
+        "file_size_bytes": 1876463472,
+        "format": "huggingface",
+        "has_tokenizer": true,
+        "model_type": "internvl_chat",
+        "safetensors_count": 1,
+        "torch_dtype": "bfloat16"
+      },
+      "evidence": [
+        "name contains vision-language model pattern",
+        "configuration_internvl_chat.py",
+        "configuration_intern_vit.py",
+        "preprocessor_config.json"
+      ],
+      "format": "huggingface",
+      "kind": "directory",
+      "path": "/home/kzeng/models/InternVL2_5-1B",
+      "path_type": "directory",
+      "recommended_backends": [
+        "vllm",
+        "sglang"
+      ],
+      "requires_base_model": false,
+      "selection_reason": "single huggingface candidate in directory",
+      "size_bytes": 1876463472,
+      "size_label": "1.7 GiB",
+      "task": "vision_chat",
+      "unsupported_reason": "",
+      "warnings": [
+        "max_position_embeddings not found in config.json"
+      ]
+    }
+  ],
+  "scan_root": "/home/kzeng/models/InternVL2_5-1B",
+  "warnings": null
+}

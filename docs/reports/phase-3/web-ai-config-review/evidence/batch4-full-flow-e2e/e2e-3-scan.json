@@ -1,0 +1,44 @@
+{
+  "candidates": [
+    {
+      "auto_selected": true,
+      "capabilities": [
+        "chat",
+        "completion"
+      ],
+      "confidence": "high",
+      "default_test_mode": "chat",
+      "deployable": true,
+      "detected_metadata": {
+        "architecture": "qwen35",
+        "block_count": 32,
+        "context_length": 262144,
+        "embedding_length": 4096,
+        "file_size_bytes": 5627044704,
+        "format": "gguf",
+        "head_count": 16,
+        "head_count_kv": 4,
+        "quantization": "Q4_K_M"
+      },
+      "evidence": [
+        "*.gguf"
+      ],
+      "format": "gguf",
+      "kind": "file",
+      "path": "/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf",
+      "path_type": "file",
+      "recommended_backends": [
+        "llamacpp"
+      ],
+      "requires_base_model": false,
+      "selection_reason": "single gguf candidate in directory",
+      "size_bytes": 5627044704,
+      "size_label": "5.2 GiB",
+      "task": "chat",
+      "unsupported_reason": "",
+      "warnings": null
+    }
+  ],
+  "scan_root": "/home/kzeng/models/Qwen3.5-9B-Q4",
+  "warnings": null
+}

@@ -208,11 +208,10 @@ func (db *DB) Migrate() error {
 	// databases that reached V13 before the target stable IDs were added.
 	db.seedTargetBackendCatalog()
 	// V27: force-update backend capabilities AFTER seed (seed UPDATE may overwrite).
-	if currentVersion < 27 {
-		if err := db.migrateV27(); err != nil {
-			return fmt.Errorf("migrate v27: %w", err)
-		}
-	}
+	// This runs every time (not gated on schema_version) because the seed
+	// function's UPDATE can reset capabilities_json to the old struct value
+	// if the DB was created with an older seed data version.
+	db.repairBackendCapabilitiesV27()
 
 	log.Info("db migrate: completed", "duration_ms", time.Since(migrateStart).Milliseconds())
 	return nil
@@ -1591,6 +1590,25 @@ func (db *DB) migrateV26() error {
 
 // migrateV27 force-updates built-in backend_versions.capabilities_json
 // to the current capability contract (Batch 3: Phase D).
+// repairBackendCapabilitiesV27 runs unconditionally after every seed to ensure
+// backend_versions.capabilities_json has the current structured capability contract.
+func (db *DB) repairBackendCapabilitiesV27() {
+	caps := map[string]string{
+		"vllm-v0.23.0":       `{"supported_formats":["huggingface","sentence_transformers"],"supported_tasks":["chat","completion","embedding","rerank","vision_chat"],"supported_capabilities":["chat","completion","embedding","rerank","vision"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions","embedding":"/v1/embeddings","rerank":"/v1/rerank"}}`,
+		"sglang-v0.5.13.post1": `{"supported_formats":["huggingface","sentence_transformers"],"supported_tasks":["chat","completion","embedding","rerank","vision_chat"],"supported_capabilities":["chat","completion","embedding","rerank","vision"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions","embedding":"/v1/embeddings","rerank":"/rerank"}}`,
+		"sglang-v0.5.12.post1": `{"supported_formats":["huggingface","sentence_transformers"],"supported_tasks":["chat","completion","embedding","rerank","vision_chat"],"supported_capabilities":["chat","completion","embedding","rerank","vision"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions","embedding":"/v1/embeddings","rerank":"/rerank"}}`,
+		"sglang-0.4.6-compatible": `{"supported_formats":["huggingface","sentence_transformers"],"supported_tasks":["chat","completion","embedding","rerank","vision_chat"],"supported_capabilities":["chat","completion","embedding","rerank","vision"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions","embedding":"/v1/embeddings","rerank":"/rerank"}}`,
+		"bver-vllm-0.8.5":  `{"supported_formats":["huggingface","sentence_transformers"],"supported_tasks":["chat","completion","embedding","rerank","vision_chat"],"supported_capabilities":["chat","completion","embedding","rerank","vision"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions","embedding":"/v1/embeddings","rerank":"/v1/rerank"}}`,
+		"bver-vllm-0.10.0": `{"supported_formats":["huggingface","sentence_transformers"],"supported_tasks":["chat","completion","embedding","rerank","vision_chat"],"supported_capabilities":["chat","completion","embedding","rerank","vision"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions","embedding":"/v1/embeddings","rerank":"/v1/rerank"}}`,
+		"llamacpp-b9700": `{"supported_formats":["gguf"],"supported_tasks":["chat","completion"],"supported_capabilities":["chat","completion"],"model_path_modes":["file"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions"}}`,
+	}
+	for id, capsJSON := range caps {
+		if _, err := db.Exec(`UPDATE backend_versions SET capabilities_json = ?, updated_at = datetime('now') WHERE id = ?`, capsJSON, id); err != nil {
+			log.Warn("db.repairBackendCapabilitiesV27 warning", "error", err, "id", id)
+		}
+	}
+}
+
 func (db *DB) migrateV27() error {
 	caps := map[string]string{
 		"vllm-v0.23.0":            `{"supported_formats":["huggingface","sentence_transformers"],"supported_tasks":["chat","completion","embedding","rerank","vision_chat"],"supported_capabilities":["chat","completion","embedding","rerank","vision"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions","embedding":"/v1/embeddings","rerank":"/v1/rerank"}}`,

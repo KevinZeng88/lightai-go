@@ -1,0 +1,54 @@
+{
+  "candidates": [
+    {
+      "auto_selected": true,
+      "capabilities": [
+        "embedding"
+      ],
+      "confidence": "high",
+      "default_test_mode": "embedding",
+      "deployable": true,
+      "detected_metadata": {
+        "architecture": "BertModel",
+        "architectures": [
+          "BertModel"
+        ],
+        "context_length": 512,
+        "file_size_bytes": 95827648,
+        "format": "huggingface",
+        "has_tokenizer": true,
+        "hidden_size": 512,
+        "max_position_embeddings": 512,
+        "model_type": "bert",
+        "num_attention_heads": 8,
+        "num_hidden_layers": 4,
+        "safetensors_count": 1,
+        "torch_dtype": "float32",
+        "vocab_size": 21128
+      },
+      "evidence": [
+        "modules.json",
+        "1_Pooling/config.json",
+        "config_sentence_transformers.json",
+        "sentence_bert_config.json"
+      ],
+      "format": "sentence_transformers",
+      "kind": "directory",
+      "path": "/home/kzeng/models/bge-small-zh-v1.5",
+      "path_type": "directory",
+      "recommended_backends": [
+        "vllm",
+        "sglang"
+      ],
+      "requires_base_model": false,
+      "selection_reason": "single sentence_transformers candidate in directory",
+      "size_bytes": 95827648,
+      "size_label": "91.4 MiB",
+      "task": "embedding",
+      "unsupported_reason": "",
+      "warnings": null
+    }
+  ],
+  "scan_root": "/home/kzeng/models/bge-small-zh-v1.5",
+  "warnings": null
+}
