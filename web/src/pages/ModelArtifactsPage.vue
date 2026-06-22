@@ -204,14 +204,18 @@
         <el-alert v-if="scanResult && !scanResult.error && !scanResult.candidates?.length" type="warning" :title="$t('modelWizard.noModelFound')" show-icon style="margin-bottom:12px" />
 
         <!-- Scan status info -->
-        <el-alert v-if="scanResult && !scanResult.error" type="success" :closable="false" style="margin-bottom:12px">
+        <el-alert v-if="scanResult && !scanResult.error && scanResult.candidates?.length > 0" type="success" :closable="false" style="margin-bottom:12px">
           <template #title>
             {{ $t('modelWizard.scanComplete') }}
-            <template v-if="scanResult.candidates?.length === 1 && scanResult.candidates[0].auto_selected">
-              — {{ $t('modelWizard.autoSelected') }}: {{ scanResult.candidates[0].path?.split('/').pop() }}
+            <template v-if="scanResult.candidates.length === 1 && scanResult.candidates[0].auto_selected">
+              — {{ $t('modelWizard.autoSelected') }}:
+              <el-tag size="small" :type="scanResult.candidates[0].format === 'huggingface' ? 'success' : 'warning'" style="margin-left:4px">
+                {{ scanResult.candidates[0].format === 'huggingface' ? 'HuggingFace' : scanResult.candidates[0].format?.toUpperCase() }}
+              </el-tag>
+              {{ scanResult.candidates[0].path?.split('/').pop() }}
             </template>
-            <template v-else-if="scanResult.candidates?.length > 1">
-              — {{ $t('modelWizard.ggufFound', { n: scanResult.candidates.length }) }}
+            <template v-else>
+              — {{ $t('modelWizard.scanSummary', { n: scanResult.candidates.length }) }}
             </template>
           </template>
         </el-alert>
@@ -223,16 +227,25 @@
 
         <!-- Multi-candidate selection -->
         <div v-if="scanResult?.candidates?.length > 1" style="margin-bottom:12px">
-          <div style="font-weight:500;margin-bottom:4px">{{ $t('modelWizard.selectCandidate') }}</div>
+          <div style="font-weight:500;margin-bottom:8px">
+            {{ $t('modelWizard.selectCandidate') }}
+            <el-tag v-if="hasHF" size="small" type="success" style="margin-left:8px">{{ $t('modelWizard.directoryModel') }}</el-tag>
+            <el-tag v-if="hasGGUF" size="small" type="warning" style="margin-left:4px">{{ $t('modelWizard.fileModel') }}</el-tag>
+          </div>
           <el-radio-group v-model="selectedCandidateIdx" @change="onCandidateSelect">
             <el-radio v-for="(c, idx) in scanResult.candidates" :key="idx" :value="idx" style="display:block;margin:4px 0">
+              <el-tag size="small" :type="c.format === 'huggingface' ? 'success' : 'warning'" style="margin-right:8px">
+                {{ c.format === 'huggingface' ? $t('modelWizard.formatHF') : c.format?.toUpperCase() }}
+              </el-tag>
               {{ c.path?.split('/').pop() }}
-              <el-tag size="small" type="info" style="margin-left:8px">{{ c.format }}</el-tag>
               <template v-if="c.detected_metadata?.quantization">
                 <el-tag size="small" type="warning" style="margin-left:4px">{{ c.detected_metadata.quantization }}</el-tag>
               </template>
               <template v-if="c.detected_metadata?.context_length">
                 <span style="margin-left:8px;font-size:12px;color:#909399">{{ $t('modelWizard.contextLength') }}: {{ c.detected_metadata.context_length }}</span>
+              </template>
+              <template v-if="c.format === 'huggingface'">
+                <span style="margin-left:8px;font-size:12px;color:#67c23a">{{ $t('modelWizard.directoryModelHint') }}</span>
               </template>
             </el-radio>
           </el-radio-group>
@@ -343,6 +356,10 @@ const TEST_MODE_OPTIONS = [
 const hasPersistedCapabilities = computed(() => {
   return Array.isArray(selected.value?.capabilities) && selected.value.capabilities.length > 0
 })
+
+// Scan result candidate type checks.
+const hasHF = computed(() => scanResult.value?.candidates?.some((c: any) => c.format === 'huggingface'))
+const hasGGUF = computed(() => scanResult.value?.candidates?.some((c: any) => c.format === 'gguf'))
 
 // Computed metadata from selected artifact + first location
 const detailMeta = computed(() => {
@@ -504,10 +521,16 @@ async function doScan() {
     scanResult.value = resp
     // Handle new candidate-based response
     if (resp.candidates?.length) {
-      // Auto-select: pick the first auto_selected candidate, or the first one
+      // Auto-select: pick auto_selected first, then prefer HF directory over GGUF files,
+      // then fall back to the first candidate (WEB-AI-RC-006).
       let autoIdx = 0
       for (let i = 0; i < resp.candidates.length; i++) {
         if (resp.candidates[i].auto_selected) { autoIdx = i; break }
+      }
+      // If no auto_selected, prefer HuggingFace directory model over GGUF files.
+      if (!resp.candidates[autoIdx]?.auto_selected) {
+        const hfIdx = resp.candidates.findIndex((c: any) => c.format === 'huggingface')
+        if (hfIdx >= 0) { autoIdx = hfIdx }
       }
       selectedCandidateIdx.value = autoIdx
       activeCandidate.value = resp.candidates[autoIdx]
