@@ -194,6 +194,11 @@ func (db *DB) Migrate() error {
 			return fmt.Errorf("migrate v24: %w", err)
 		}
 	}
+	if currentVersion < 25 {
+		if err := db.migrateV25(); err != nil {
+			return fmt.Errorf("migrate v25: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -255,6 +260,9 @@ func (db *DB) migrateV3() error {
 			default_context_length INTEGER NOT NULL DEFAULT 0,
 			estimated_vram_bytes INTEGER NOT NULL DEFAULT 0,
 			required_gpu_count INTEGER NOT NULL DEFAULT 1,
+			capabilities_json TEXT NOT NULL DEFAULT '[]',
+			capability_sources_json TEXT NOT NULL DEFAULT '{}',
+			default_test_mode TEXT NOT NULL DEFAULT 'auto',
 			tenant_id TEXT NOT NULL,
 			owner_id TEXT,
 			created_by TEXT NOT NULL DEFAULT 'system',
@@ -1507,6 +1515,27 @@ func (db *DB) migrateV24() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (24, 'V24: node_backend_runtimes image capability probe results')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV25 adds model capability persistence columns to model_artifacts
+// (Phase 2: capabilities_json, capability_sources_json, default_test_mode).
+func (db *DB) migrateV25() error {
+	alterStatements := []string{
+		`ALTER TABLE model_artifacts ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE model_artifacts ADD COLUMN capability_sources_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE model_artifacts ADD COLUMN default_test_mode TEXT NOT NULL DEFAULT 'auto'`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			// Column may already exist from a partially applied development DB.
+			log.Warn("db.migrateV25 add column warning", "error", err)
+		}
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (25, 'V25: model_artifacts capability persistence columns')`); err != nil {
 		return err
 	}
 	return nil

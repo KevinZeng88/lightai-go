@@ -67,6 +67,19 @@ function addCapability(map, id, source, confidence, reason) {
 
 export function inferModelCapabilities(model) {
   const caps = new Map()
+
+  // Phase 2: Prefer persisted capabilities from backend.
+  const persisted = model?.capabilities
+  if (Array.isArray(persisted) && persisted.length > 0) {
+    const sources = model?.capability_sources || {}
+    for (const id of persisted) {
+      const source = sources[id] || 'user_override'
+      addCapability(caps, id, source, 'high', source === 'scan' ? 'scan metadata' : source === 'inferred' ? 'inferred' : 'user configured')
+    }
+    return Array.from(caps.values())
+  }
+
+  // Legacy path: infer from model fields and scan metadata.
   const explicit = explicitCapabilitySet(model)
   for (const id of explicit) {
     addCapability(caps, id, 'explicit', 'high', 'capabilities')
@@ -110,6 +123,10 @@ export function inferModelCapabilities(model) {
 }
 
 export function recommendedTestMode(model) {
+  // Phase 2: Prefer persisted default_test_mode.
+  const dtm = model?.default_test_mode
+  if (dtm && dtm !== 'auto') return dtm
+  // Fall back to inference.
   const caps = inferModelCapabilities(model)
   const ids = new Set(caps.map((c) => c.id))
   if (ids.has('chat')) return 'chat'
@@ -124,8 +141,8 @@ export function capabilityLabel(capability, locale = 'zh-CN') {
 }
 
 export function testModeLabel(mode, locale = 'zh-CN') {
-  const zh = { auto: '自动', chat: 'Chat Completion', completion: 'Text Completion' }
-  const en = { auto: 'Auto', chat: 'Chat Completion', completion: 'Text Completion' }
+  const zh = { auto: '自动', chat: 'Chat Completion', completion: 'Text Completion', embedding: 'Embedding', rerank: 'Rerank' }
+  const en = { auto: 'Auto', chat: 'Chat Completion', completion: 'Text Completion', embedding: 'Embedding', rerank: 'Rerank' }
   return (locale === 'en-US' ? en : zh)[mode] || mode
 }
 

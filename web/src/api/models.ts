@@ -7,6 +7,9 @@ export interface ModelArtifact {
   size_label: string; quantization: string
   default_context_length: number; estimated_vram_bytes: number
   required_gpu_count: number; tenant_id: string
+  capabilities?: string[]
+  capability_sources?: Record<string, string>
+  default_test_mode?: string
   created_at: string; updated_at: string
   locations?: ModelLocation[]
 }

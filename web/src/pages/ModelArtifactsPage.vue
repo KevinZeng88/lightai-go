@@ -31,14 +31,41 @@
       </el-table-column>
     </el-table>
 
-    <!-- Simple Create Dialog -->
-    <el-dialog v-model="dialogVisible" :title="editingId ? $t('common.edit') : $t('common.create')" width="500px">
+    <!-- Edit/Create Dialog -->
+    <el-dialog v-model="dialogVisible" :title="editingId ? $t('common.edit') : $t('common.create')" width="700px">
       <el-form :model="form" label-width="140px">
-        <el-form-item :label="$t('artifacts.name')"><el-input v-model="form.name" disabled /><el-tag size="small" type="info" style="margin-left:8px">{{ $t('common.readonly') }}</el-tag></el-form-item>
+        <!-- Editable basic info -->
+        <el-divider content-position="left">{{ $t('artifacts.editSectionBasic') }}</el-divider>
+        <el-form-item :label="$t('artifacts.name')">
+          <el-input v-model="form.name" :disabled="!!editingId" />
+          <el-tag v-if="editingId" size="small" type="info" style="margin-left:8px">{{ $t('common.readonly') }}</el-tag>
+        </el-form-item>
         <el-form-item :label="$t('artifacts.displayName')"><el-input v-model="form.display_name" /></el-form-item>
         <el-form-item :label="$t('artifacts.path')"><el-input v-model="form.path" /></el-form-item>
         <el-form-item :label="$t('artifacts.format')"><el-select v-model="form.format" filterable allow-create style="width:100%"><el-option v-for="o in formatOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
         <el-form-item :label="$t('artifacts.quantization')"><el-select v-model="form.quantization" filterable allow-create style="width:100%"><el-option v-for="o in quantOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
+
+        <!-- Capabilities (editable) -->
+        <el-divider content-position="left">{{ $t('artifacts.capabilitySection') }}</el-divider>
+        <el-form-item :label="$t('artifacts.capabilities')">
+          <el-checkbox-group v-model="editCapabilities">
+            <el-checkbox v-for="c in CAPABILITY_OPTIONS" :key="c.value" :label="c.value" :value="c.value">{{ $t(c.labelKey) }}</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item :label="$t('artifacts.defaultTestMode')">
+          <el-select v-model="editDefaultTestMode" style="width:220px">
+            <el-option v-for="o in TEST_MODE_OPTIONS" :key="o.value" :label="$t(o.labelKey)" :value="o.value" />
+          </el-select>
+        </el-form-item>
+
+        <!-- Scan facts (read-only, only in edit mode) -->
+        <template v-if="editingId">
+          <el-divider content-position="left">{{ $t('artifacts.editSectionScanFacts') }}</el-divider>
+          <el-form-item :label="$t('artifacts.size')"><el-input :model-value="form.size_label || '-'" disabled /></el-form-item>
+          <el-form-item :label="$t('artifacts.architecture')"><el-input :model-value="form.architecture !== 'custom' ? form.architecture : $t('artifacts.notIdentified')" disabled /></el-form-item>
+          <el-form-item :label="$t('artifacts.contextLength')"><el-input :model-value="form.default_context_length || '-'" disabled /></el-form-item>
+          <el-form-item :label="$t('artifacts.taskType')"><el-input :model-value="form.task_type || '-'" disabled /></el-form-item>
+        </template>
       </el-form>
       <template #footer><el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doSave" :loading="saving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
@@ -62,11 +89,18 @@
 
         <h4 style="margin-top:12px">{{ $t('artifacts.capabilitySection') }}</h4>
         <el-alert
+          v-if="!hasPersistedCapabilities"
           type="info"
           :closable="false"
           style="margin-bottom:8px"
           :title="$t('artifacts.capabilityReadonlyHint')"
         />
+        <el-tag
+          v-if="hasPersistedCapabilities"
+          type="success"
+          size="small"
+          style="margin-bottom:8px"
+        >{{ $t('artifacts.capabilityPersisted') }}</el-tag>
         <el-table :data="detailCapabilities" stripe size="small">
           <el-table-column :label="$t('artifacts.capability')" width="160">
             <template #default="{ row }">
@@ -84,6 +118,11 @@
         <el-descriptions :column="2" border size="small" style="margin-top:8px">
           <el-descriptions-item :label="$t('artifacts.recommendedTestMode')">{{ testModeText(selected) }}</el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.recommendedEndpoint')">{{ recommendedEndpoint(selected) }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions v-if="selected?.default_test_mode" :column="1" border size="small" style="margin-top:8px">
+          <el-descriptions-item :label="$t('artifacts.configuredTestMode')">
+            <el-tag size="small" type="primary">{{ testModeText({ default_test_mode: selected.default_test_mode }) }}</el-tag>
+          </el-descriptions-item>
         </el-descriptions>
 
         <!-- GGUF metadata -->
@@ -261,7 +300,7 @@ const { t, locale } = useI18n()
 
 const loading = ref(false); const saving = ref(false)
 const items = ref<any[]>([]); const dialogVisible = ref(false); const detailVisible = ref(false); const selected = ref<any>(null); const locations = ref<any[]>([])
-const form = ref({ name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' })
+const form = ref<Record<string, any>>({ name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' })
 let editingId = ''
 
 // Wizard state
@@ -279,6 +318,30 @@ const addLocVisible = ref(false); const addLocNodeId = ref(''); const addLocPath
 
 const formatOptions = ['gguf', 'safetensors', 'huggingface', 'pt', 'onnx', 'other']
 const quantOptions = ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'FP16', 'BF16', 'FP8', 'INT8', 'INT4', 'none', 'other']
+
+// Capability edit state
+const editCapabilities = ref<string[]>([])
+const editDefaultTestMode = ref('auto')
+const CAPABILITY_OPTIONS = [
+  { value: 'chat', labelKey: 'artifacts.capability_chat' },
+  { value: 'completion', labelKey: 'artifacts.capability_completion' },
+  { value: 'embedding', labelKey: 'artifacts.capability_embedding' },
+  { value: 'rerank', labelKey: 'artifacts.capability_rerank' },
+  { value: 'vision', labelKey: 'artifacts.capability_vision' },
+  { value: 'tool_calling', labelKey: 'artifacts.capability_tool_calling' },
+  { value: 'structured_output', labelKey: 'artifacts.capability_structured_output' },
+]
+const TEST_MODE_OPTIONS = [
+  { value: 'auto', labelKey: 'artifacts.testMode_auto' },
+  { value: 'chat', labelKey: 'artifacts.testMode_chat' },
+  { value: 'completion', labelKey: 'artifacts.testMode_completion' },
+  { value: 'embedding', labelKey: 'artifacts.testMode_embedding' },
+  { value: 'rerank', labelKey: 'artifacts.testMode_rerank' },
+]
+
+const hasPersistedCapabilities = computed(() => {
+  return Array.isArray(selected.value?.capabilities) && selected.value.capabilities.length > 0
+})
 
 // Computed metadata from selected artifact + first location
 const detailMeta = computed(() => {
@@ -338,7 +401,16 @@ function capabilityText(cap: any): string {
 }
 
 function capabilitySourceText(source: string): string {
-  const key = `artifacts.capabilitySource_${source || 'unknown'}`
+  // Map new capability source values to i18n keys.
+  const sourceKeyMap: Record<string, string> = {
+    explicit: 'artifacts.capabilitySource_explicit',
+    metadata: 'artifacts.capabilitySource_metadata',
+    inferred: 'artifacts.capabilitySource_inferred',
+    scan: 'artifacts.capabilitySource_scan',
+    user_override: 'artifacts.capabilitySource_userOverride',
+    backend_probe: 'artifacts.capabilitySource_backendProbe',
+  }
+  const key = sourceKeyMap[source] || `artifacts.capabilitySource_${source || 'unknown'}`
   const val = t(key)
   return val === key ? (source || '-') : val
 }
@@ -369,15 +441,19 @@ async function refresh() {
 }
 async function loadNodesLocal() { loadNodes() }
 
-function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; dialogVisible.value = true }
-function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); dialogVisible.value = true }
+function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; editCapabilities.value = []; editDefaultTestMode.value = 'auto'; dialogVisible.value = true }
+function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); editCapabilities.value = Array.isArray(row.capabilities) ? [...row.capabilities] : []; editDefaultTestMode.value = row.default_test_mode || 'auto'; dialogVisible.value = true }
 
 async function doSave() {
   saving.value = true
   try {
     if (!form.value.display_name) form.value.display_name = form.value.name
-    if (editingId) await apiClient.patch(`/api/v1/model-artifacts/${editingId}`, form.value)
-    else await apiClient.post('/api/v1/model-artifacts', form.value)
+    const payload: any = { ...form.value }
+    // Include capabilities and default test mode.
+    payload.capabilities = editCapabilities.value
+    payload.default_test_mode = editDefaultTestMode.value
+    if (editingId) await apiClient.patch(`/api/v1/model-artifacts/${editingId}`, payload)
+    else await apiClient.post('/api/v1/model-artifacts', payload)
     ElMessage.success(t('artifacts.saved')); dialogVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   saving.value = false

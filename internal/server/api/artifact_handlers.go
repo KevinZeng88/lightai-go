@@ -13,6 +13,72 @@ import (
 	"github.com/google/uuid"
 )
 
+// Allowed capability values.
+var allowedCapabilities = map[string]bool{
+	"chat": true, "completion": true, "embedding": true,
+	"rerank": true, "vision": true,
+	"tool_calling": true, "structured_output": true,
+}
+
+// Allowed capability source values.
+var allowedCapabilitySources = map[string]bool{
+	"scan": true, "inferred": true,
+	"user_override": true, "backend_probe": true,
+}
+
+// Allowed default_test_mode values.
+var allowedTestModes = map[string]bool{
+	"auto": true, "chat": true, "completion": true,
+	"embedding": true, "rerank": true,
+}
+
+// validateCapabilitiesJSON checks that all values in the given JSON array are
+// valid capability strings. Returns the array and nil on success, or nil and
+// an error message on validation failure.
+func validateCapabilitiesJSON(raw interface{}) ([]interface{}, error) {
+	arr, ok := raw.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("capabilities_json must be a JSON array")
+	}
+	for _, v := range arr {
+		s, ok := v.(string)
+		if !ok || !allowedCapabilities[s] {
+			return nil, fmt.Errorf("invalid capability: %v", v)
+		}
+	}
+	return arr, nil
+}
+
+// validateDefaultTestMode checks that the given value is a valid test mode.
+func validateDefaultTestMode(v string) error {
+	if v == "" {
+		return nil // empty is fine, will default
+	}
+	if !allowedTestModes[v] {
+		return fmt.Errorf("invalid default_test_mode: %s (allowed: auto, chat, completion, embedding, rerank)", v)
+	}
+	return nil
+}
+
+// normalizeCapabilitySources ensures all capability sources are valid and
+// user-provided capabilities are marked as user_override.
+func normalizeCapabilitySources(capabilities []interface{}, sources map[string]interface{}) map[string]interface{} {
+	if sources == nil {
+		sources = make(map[string]interface{})
+	}
+	for _, c := range capabilities {
+		key, ok := c.(string)
+		if !ok {
+			continue
+		}
+		existing, hasExisting := sources[key]
+		if !hasExisting || existing == "inferred" || existing == "scan" || existing == "" {
+			sources[key] = "user_override"
+		}
+	}
+	return sources
+}
+
 // ==========================================================================
 // ModelArtifact CRUD
 // ==========================================================================
@@ -22,9 +88,9 @@ func (h *AgentHandler) HandleListArtifacts(w http.ResponseWriter, r *http.Reques
 	var err error
 	var out []map[string]interface{}
 	if isPlatformAdmin(r) {
-		out, err = h.queryArtifacts(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, tenant_id, created_at, updated_at FROM model_artifacts ORDER BY name`)
+		out, err = h.queryArtifacts(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at FROM model_artifacts ORDER BY name`)
 	} else {
-		out, err = h.queryArtifacts(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, tenant_id, created_at, updated_at FROM model_artifacts WHERE tenant_id = ? ORDER BY name`, tid)
+		out, err = h.queryArtifacts(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at FROM model_artifacts WHERE tenant_id = ? ORDER BY name`, tid)
 	}
 	if err != nil {
 		log.Error("list artifacts", "error", err)
@@ -64,12 +130,13 @@ func (h *AgentHandler) HandleCreateArtifact(w http.ResponseWriter, r *http.Reque
 	tid := tenantID(r)
 	now := time.Now().Format(time.RFC3339)
 
-	_, err := h.DB.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := h.DB.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "source_type", "local_path"),
 		path, format, strVal(req, "task_type", "chat"),
 		strVal(req, "architecture", "custom"), strVal(req, "size_label", ""),
 		strVal(req, "quantization", "unknown"), intVal(req, "default_context_length", 0),
 		int64Val(req, "estimated_vram_bytes", 0), intVal(req, "required_gpu_count", 1),
+		strVal(req, "capabilities_json", "[]"), strVal(req, "capability_sources_json", "{}"), strVal(req, "default_test_mode", "auto"),
 		tid, now, now,
 	)
 	if err != nil {
@@ -142,6 +209,43 @@ func (h *AgentHandler) HandlePatchArtifact(w http.ResponseWriter, r *http.Reques
 		sets = append(sets, "estimated_vram_bytes = ?")
 		args = append(args, v)
 	}
+	// Handle capabilities_json with validation.
+	if v, ok := req["capabilities"]; ok {
+		caps, err := validateCapabilitiesJSON(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sets = append(sets, "capabilities_json = ?")
+		args = append(args, jsonString(caps))
+		// Normalize sources: user-provided caps get user_override source.
+		var rawSources interface{}
+		if sv, ok2 := req["capability_sources"]; ok2 {
+			rawSources = sv
+		} else if existingSources, ok3 := existing["capability_sources"]; ok3 {
+			rawSources = existingSources
+		}
+		if rawSources != nil {
+			if sm, ok4 := rawSources.(map[string]interface{}); ok4 {
+				normalizedSources := normalizeCapabilitySources(caps, sm)
+				sets = append(sets, "capability_sources_json = ?")
+				args = append(args, jsonString(normalizedSources))
+			}
+		}
+	} else if v, ok := req["capability_sources"]; ok {
+		// Allow updating sources independently.
+		sets = append(sets, "capability_sources_json = ?")
+		args = append(args, jsonString(v))
+	}
+	if v, ok := req["default_test_mode"]; ok {
+		tm, _ := v.(string)
+		if err := validateDefaultTestMode(tm); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sets = append(sets, "default_test_mode = ?")
+		args = append(args, tm)
+	}
 	args = append(args, id)
 	_, err := h.DB.Exec(`UPDATE model_artifacts SET `+joinSets(sets)+` WHERE id = ?`, args...)
 	if err != nil {
@@ -204,14 +308,22 @@ func (h *AgentHandler) HandleDeleteArtifact(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *AgentHandler) getArtifactJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, tenant_id, created_at, updated_at FROM model_artifacts WHERE id = ?`, id)
-	var rid, name, dn, st, path, frmt, tt, arch, sl, quant, tid, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at FROM model_artifacts WHERE id = ?`, id)
+	var rid, name, dn, st, path, frmt, tt, arch, sl, quant, capsJSON, sourcesJSON, testMode, tid, ca, ua string
 	var ctxLen, gpuCount int
 	var vram int64
-	if err := row.Scan(&rid, &name, &dn, &st, &path, &frmt, &tt, &arch, &sl, &quant, &ctxLen, &vram, &gpuCount, &tid, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &st, &path, &frmt, &tt, &arch, &sl, &quant, &ctxLen, &vram, &gpuCount, &capsJSON, &sourcesJSON, &testMode, &tid, &ca, &ua); err != nil {
 		return nil
 	}
-	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "tenant_id": tid, "created_at": ca, "updated_at": ua, "locations": h.listModelLocations(id)}
+	var caps interface{}
+	if err := json.Unmarshal([]byte(capsJSON), &caps); err != nil {
+		caps = []interface{}{}
+	}
+	var sources interface{}
+	if err := json.Unmarshal([]byte(sourcesJSON), &sources); err != nil {
+		sources = map[string]interface{}{}
+	}
+	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "capabilities": caps, "capability_sources": sources, "default_test_mode": testMode, "tenant_id": tid, "created_at": ca, "updated_at": ua, "locations": h.listModelLocations(id)}
 }
 
 func (h *AgentHandler) queryArtifacts(query string, args ...interface{}) ([]map[string]interface{}, error) {
@@ -222,13 +334,21 @@ func (h *AgentHandler) queryArtifacts(query string, args ...interface{}) ([]map[
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var rid, name, dn, st, path, frmt, tt, arch, sl, quant, tid, ca, ua string
+		var rid, name, dn, st, path, frmt, tt, arch, sl, quant, capsJSON, sourcesJSON, testMode, tid, ca, ua string
 		var ctxLen, gpuCount int
 		var vram int64
-		if err := rows.Scan(&rid, &name, &dn, &st, &path, &frmt, &tt, &arch, &sl, &quant, &ctxLen, &vram, &gpuCount, &tid, &ca, &ua); err != nil {
+		if err := rows.Scan(&rid, &name, &dn, &st, &path, &frmt, &tt, &arch, &sl, &quant, &ctxLen, &vram, &gpuCount, &capsJSON, &sourcesJSON, &testMode, &tid, &ca, &ua); err != nil {
 			continue
 		}
-		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "tenant_id": tid, "created_at": ca, "updated_at": ua})
+		var caps interface{}
+		if err := json.Unmarshal([]byte(capsJSON), &caps); err != nil {
+			caps = []interface{}{}
+		}
+		var sources interface{}
+		if err := json.Unmarshal([]byte(sourcesJSON), &sources); err != nil {
+			sources = map[string]interface{}{}
+		}
+		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "capabilities": caps, "capability_sources": sources, "default_test_mode": testMode, "tenant_id": tid, "created_at": ca, "updated_at": ua})
 	}
 	if out == nil {
 		out = []map[string]interface{}{}
@@ -266,12 +386,13 @@ func (h *AgentHandler) HandleDiscoverArtifact(w http.ResponseWriter, r *http.Req
 	}
 	defer tx.Rollback()
 
-	_, err := tx.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := tx.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "source_type", "local_path"),
 		absolutePath, strVal(req, "format", "custom"), strVal(req, "task_type", "chat"),
 		strVal(req, "architecture", "custom"), strVal(req, "size_label", ""),
 		strVal(req, "quantization", "unknown"), intVal(req, "default_context_length", 0),
 		int64Val(req, "estimated_vram_bytes", 0), intVal(req, "required_gpu_count", 1),
+		strVal(req, "capabilities_json", "[]"), strVal(req, "capability_sources_json", "{}"), strVal(req, "default_test_mode", "auto"),
 		tid, now, now)
 	if err != nil {
 		log.Error("discover_artifact.insert_artifact_failed", "error", err)

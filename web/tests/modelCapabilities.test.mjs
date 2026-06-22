@@ -63,6 +63,31 @@ const stoppedFailure = formatTestFailure({
 })
 check('not-running failure includes current state', stoppedFailure.includes('stopped'), stoppedFailure)
 
+// Phase 2: Persisted capabilities tests.
+const qwenWithCapabilities = {
+  ...qwen,
+  capabilities: ['chat', 'completion'],
+  capability_sources: { chat: 'user_override', completion: 'scan' },
+  default_test_mode: 'chat',
+}
+const qwenPersistedCaps = inferModelCapabilities(qwenWithCapabilities)
+check('persisted capabilities override inference', qwenPersistedCaps.some((c) => c.id === 'chat' && c.source === 'user_override'))
+check('persisted capability source is user_override for chat', qwenPersistedCaps.find((c) => c.id === 'chat')?.source === 'user_override')
+check('persisted capability source is scan for completion', qwenPersistedCaps.find((c) => c.id === 'completion')?.source === 'scan')
+check('persisted default_test_mode=chat returns chat', recommendedTestMode(qwenWithCapabilities) === 'chat')
+
+// Empty persisted capabilities still fall back to inference.
+const qwenEmptyCaps = { ...qwen, capabilities: [] }
+check('empty persisted capabilities fall back to inference', inferModelCapabilities(qwenEmptyCaps).some((c) => c.id === 'chat'))
+
+// default_test_mode='completion' returns completion even without capability.
+const qwenCompletionTestMode = { ...qwen, capabilities: [], default_test_mode: 'completion' }
+check('default_test_mode=completion returns completion', recommendedTestMode(qwenCompletionTestMode) === 'completion')
+
+// default_test_mode='auto' falls back to inference.
+const qwenAutoTestMode = { ...qwen, default_test_mode: 'auto' }
+check('default_test_mode=auto falls back to inference', recommendedTestMode(qwenAutoTestMode) === 'chat')
+
 if (failed > 0) {
   process.exit(1)
 }
