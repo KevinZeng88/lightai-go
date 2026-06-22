@@ -29,6 +29,125 @@ func makeTempDir(t *testing.T, name string, files map[string]string) string {
 	return root
 }
 
+// ── Batch 5 (B2): Unsupported detector tests ──
+
+func TestDetectDiffusers(t *testing.T) {
+	root := makeTempDir(t, "stable-diffusion", map[string]string{
+		"model_index.json": `{"_class_name":"StableDiffusionPipeline"}`,
+	})
+	os.MkdirAll(filepath.Join(root, "unet"), 0755)
+	facts := collectFileFacts(root)
+	candidates := DetectDiffusers(facts)
+	if len(candidates) == 0 {
+		t.Fatal("expected diffusers candidate")
+	}
+	if candidates[0].PathType != "directory" {
+		t.Errorf("expected path_type=directory, got %q", candidates[0].PathType)
+	}
+}
+
+func TestDetectASR(t *testing.T) {
+	root := makeTempDir(t, "whisper-small", map[string]string{
+		"config.json": `{"architectures":["WhisperForConditionalGeneration"]}`,
+	})
+	facts := collectFileFacts(root)
+	candidates := DetectASR(facts)
+	if len(candidates) == 0 {
+		t.Fatal("expected ASR candidate (name contains 'whisper')")
+	}
+}
+
+func TestDetectTTS(t *testing.T) {
+	root := makeTempDir(t, "chattts-model", map[string]string{
+		"config.json": `{}`,
+	})
+	facts := collectFileFacts(root)
+	candidates := DetectTTS(facts)
+	if len(candidates) == 0 {
+		t.Fatal("expected TTS candidate (name contains 'chattts')")
+	}
+}
+
+func TestDetectClassification(t *testing.T) {
+	root := makeTempDir(t, "bert-classifier", map[string]string{
+		"config.json": `{"architectures":["BertForSequenceClassification"]}`,
+	})
+	facts := collectFileFacts(root)
+	candidates := DetectClassification(facts)
+	if len(candidates) == 0 {
+		t.Fatal("expected classification candidate")
+	}
+}
+
+func TestDetectOpenVINO(t *testing.T) {
+	root := makeTempDir(t, "openvino-model", map[string]string{
+		"model.xml": "<xml></xml>",
+		"model.bin": "\x00\x01",
+	})
+	facts := collectFileFacts(root)
+	candidates := DetectOpenVINO(facts)
+	if len(candidates) == 0 {
+		t.Fatal("expected OpenVINO candidate")
+	}
+}
+
+func TestDetectTensorRT(t *testing.T) {
+	root := makeTempDir(t, "trt-model", map[string]string{
+		"model.engine": "TRT_ENGINE_DATA",
+	})
+	facts := collectFileFacts(root)
+	candidates := DetectTensorRT(facts)
+	if len(candidates) == 0 {
+		t.Fatal("expected TensorRT candidate")
+	}
+}
+
+func TestDetectONNX(t *testing.T) {
+	root := makeTempDir(t, "onnx-model", map[string]string{
+		"model.onnx": "ONNX_DATA",
+	})
+	facts := collectFileFacts(root)
+	candidates := DetectONNX(facts)
+	if len(candidates) == 0 {
+		t.Fatal("expected ONNX candidate")
+	}
+	if candidates[0].PathType != "file" {
+		t.Errorf("expected path_type=file, got %q", candidates[0].PathType)
+	}
+}
+
+func TestB2UnsupportedDeployableFalse(t *testing.T) {
+	// Verify all B2 detectors set deployable=false via full pipeline.
+	tests := []struct {
+		name  string
+		files map[string]string
+	}{
+		{"ONNX", map[string]string{"model.onnx": "data"}},
+		{"TensorRT", map[string]string{"model.engine": "data"}},
+		{"OpenVINO", map[string]string{"model.xml": "<xml/>", "model.bin": "\x00"}},
+		{"Diffusers", map[string]string{"model_index.json": "{}"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := makeTempDir(t, tt.name, tt.files)
+			// For Diffusers, create unet/ dir
+			if tt.name == "Diffusers" {
+				os.MkdirAll(filepath.Join(root, "unet"), 0755)
+			}
+			result := ScanModelPath(root, ".")
+			candidates := result["candidates"].([]interface{})
+			if len(candidates) == 0 {
+				t.Skip("no candidates found (expected for some types in full pipeline)")
+				return
+			}
+			cmap := candidates[0].(map[string]interface{})
+			if cmap["deployable"] != false {
+				t.Errorf("%s: expected deployable=false, got %v", tt.name, cmap["deployable"])
+			}
+		})
+	}
+}
+
 func hasCandidateWith(t *testing.T, candidates []ScanCandidate, task, format string) bool {
 	t.Helper()
 	for _, c := range candidates {

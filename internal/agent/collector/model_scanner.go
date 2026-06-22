@@ -116,7 +116,14 @@ var modelTypePlugins = []ModelTypePlugin{
 	{ID: "sentence_transformers", Detect: DetectSentenceTransformers, Defaults: sentenceTransformersDefaults},
 	{ID: "reranker", Detect: DetectReranker, Defaults: rerankerDefaults},
 	{ID: "vision_language", Detect: DetectVisionLanguage, Defaults: visionLanguageDefaults},
+	{ID: "diffusers", Detect: DetectDiffusers, Defaults: diffusersDefaults},
+	{ID: "asr", Detect: DetectASR, Defaults: asrDefaults},
+	{ID: "tts", Detect: DetectTTS, Defaults: ttsDefaults},
+	{ID: "classification", Detect: DetectClassification, Defaults: classificationDefaults},
 	{ID: "hf_chat", Detect: DetectHuggingFaceChat, Defaults: hfChatDefaults},
+	{ID: "openvino", Detect: DetectOpenVINO, Defaults: openvinoDefaults},
+	{ID: "tensorrt", Detect: DetectTensorRT, Defaults: tensorrtDefaults},
+	{ID: "onnx", Detect: DetectONNX, Defaults: onnxDefaults},
 	{ID: "gguf", Detect: DetectGGUF, Defaults: ggufDefaults},
 }
 
@@ -153,6 +160,56 @@ var (
 		Deployable: true, RequiresBaseModel: false,
 		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "medium",
 	}
+	diffusersDefaults = ModelTypeDefaults{
+		Kind: "directory", Format: "diffusers", Task: "image_generation",
+		Capabilities: []string{"image_generation"}, DefaultTestMode: "auto",
+		Deployable: false, RequiresBaseModel: false,
+		RecommendedBackends: []string{}, Confidence: "high",
+		UnsupportedReason: "当前平台尚未配置 Diffusers/Image Generation 后端。",
+	}
+	asrDefaults = ModelTypeDefaults{
+		Kind: "directory", Format: "huggingface", Task: "asr",
+		Capabilities: []string{"asr"}, DefaultTestMode: "auto",
+		Deployable: false, RequiresBaseModel: false,
+		RecommendedBackends: []string{}, Confidence: "medium",
+		UnsupportedReason: "当前平台尚未配置 ASR 后端。",
+	}
+	ttsDefaults = ModelTypeDefaults{
+		Kind: "directory", Format: "huggingface", Task: "tts",
+		Capabilities: []string{"tts"}, DefaultTestMode: "auto",
+		Deployable: false, RequiresBaseModel: false,
+		RecommendedBackends: []string{}, Confidence: "medium",
+		UnsupportedReason: "当前平台尚未配置 TTS 后端。",
+	}
+	classificationDefaults = ModelTypeDefaults{
+		Kind: "directory", Format: "huggingface", Task: "classification",
+		Capabilities: []string{"classification"}, DefaultTestMode: "auto",
+		Deployable: false, RequiresBaseModel: false,
+		RecommendedBackends: []string{}, Confidence: "medium",
+		UnsupportedReason: "当前平台尚未配置分类模型服务后端。",
+	}
+	openvinoDefaults = ModelTypeDefaults{
+		Kind: "bundle", Format: "openvino", Task: "unknown",
+		Capabilities: []string{}, DefaultTestMode: "auto",
+		Deployable: false, RequiresBaseModel: false,
+		RecommendedBackends: []string{}, Confidence: "high",
+		UnsupportedReason: "当前平台尚未配置 OpenVINO 后端。",
+	}
+	tensorrtDefaults = ModelTypeDefaults{
+		Kind: "bundle", Format: "tensorrt_engine", Task: "unknown",
+		Capabilities: []string{}, DefaultTestMode: "auto",
+		Deployable: false, RequiresBaseModel: false,
+		RecommendedBackends: []string{}, Confidence: "high",
+		UnsupportedReason: "当前平台尚未配置 TensorRT-LLM 后端。",
+	}
+	onnxDefaults = ModelTypeDefaults{
+		Kind: "file", Format: "onnx", Task: "unknown",
+		Capabilities: []string{}, DefaultTestMode: "auto",
+		Deployable: false, RequiresBaseModel: false,
+		RecommendedBackends: []string{}, Confidence: "high",
+		UnsupportedReason: "当前平台尚未配置 ONNX Runtime 后端。",
+	}
+
 	ggufDefaults = ModelTypeDefaults{
 		Kind: "file", Format: "gguf", Task: "chat",
 		Capabilities: []string{"chat", "completion"}, DefaultTestMode: "chat",
@@ -457,6 +514,104 @@ func DetectLoRAAdapter(facts FileFacts) []ScanCandidate {
 	return []ScanCandidate{c}
 }
 
+// DetectDiffusers detects Diffusers / Image Generation models.
+func DetectDiffusers(facts FileFacts) []ScanCandidate {
+	if !facts.HasModelIndexJSON && !fileExists(filepath.Join(facts.AbsPath, "unet")) {
+		return nil
+	}
+	c := ScanCandidate{Path: facts.AbsPath, PathType: "directory", DetectedMetadata: make(map[string]interface{})}
+	if facts.HasModelIndexJSON {
+		c.Evidence = append(c.Evidence, "model_index.json")
+	}
+	if fileExists(filepath.Join(facts.AbsPath, "unet")) {
+		c.Evidence = append(c.Evidence, "unet/")
+	}
+	return []ScanCandidate{c}
+}
+
+// DetectASR detects Automatic Speech Recognition models.
+func DetectASR(facts FileFacts) []ScanCandidate {
+	if !nameMatches(facts.AbsPath, "whisper", "funasr", "paraformer", "sensevoice") {
+		return nil
+	}
+	if !facts.HasConfigJSON {
+		return nil
+	}
+	c := ScanCandidate{Path: facts.AbsPath, PathType: "directory", DetectedMetadata: make(map[string]interface{})}
+	c.Evidence = append(c.Evidence, "name contains asr model pattern", "config.json")
+	return []ScanCandidate{c}
+}
+
+// DetectTTS detects Text-to-Speech models.
+func DetectTTS(facts FileFacts) []ScanCandidate {
+	if !nameMatches(facts.AbsPath, "cosyvoice", "chattts", "gpt-sovits", "fish-speech", "bark") {
+		return nil
+	}
+	if !facts.HasConfigJSON {
+		return nil
+	}
+	c := ScanCandidate{Path: facts.AbsPath, PathType: "directory", DetectedMetadata: make(map[string]interface{})}
+	c.Evidence = append(c.Evidence, "name contains tts model pattern", "config.json")
+	return []ScanCandidate{c}
+}
+
+// DetectClassification detects classification / token classification models.
+func DetectClassification(facts FileFacts) []ScanCandidate {
+	if facts.ConfigJSON == nil {
+		return nil
+	}
+	architectures, _ := facts.ConfigJSON["architectures"].([]interface{})
+	hasClassArch := false
+	for _, a := range architectures {
+		if s, ok := a.(string); ok {
+			if strings.Contains(s, "SequenceClassification") || strings.Contains(s, "TokenClassification") || strings.Contains(s, "ImageClassification") || strings.Contains(s, "AudioClassification") {
+				hasClassArch = true
+				break
+			}
+		}
+	}
+	if !hasClassArch {
+		return nil
+	}
+	c := ScanCandidate{Path: facts.AbsPath, PathType: "directory", DetectedMetadata: make(map[string]interface{})}
+	c.Evidence = append(c.Evidence, "config.json: classification architecture")
+	return []ScanCandidate{c}
+}
+
+// DetectOpenVINO detects OpenVINO model bundles.
+func DetectOpenVINO(facts FileFacts) []ScanCandidate {
+	if len(facts.XMLFiles) == 0 || len(facts.BinFiles) == 0 {
+		return nil
+	}
+	c := ScanCandidate{Path: facts.AbsPath, PathType: "directory", DetectedMetadata: make(map[string]interface{})}
+	c.Evidence = append(c.Evidence, "*.xml", "*.bin")
+	return []ScanCandidate{c}
+}
+
+// DetectTensorRT detects TensorRT/TensorRT-LLM engine files.
+func DetectTensorRT(facts FileFacts) []ScanCandidate {
+	if len(facts.EngineFiles) == 0 {
+		return nil
+	}
+	c := ScanCandidate{Path: facts.AbsPath, PathType: "directory", DetectedMetadata: make(map[string]interface{})}
+	c.Evidence = append(c.Evidence, "*.engine")
+	return []ScanCandidate{c}
+}
+
+// DetectONNX detects ONNX model files.
+func DetectONNX(facts FileFacts) []ScanCandidate {
+	if len(facts.ONNXFiles) == 0 {
+		return nil
+	}
+	var candidates []ScanCandidate
+	for _, onnxPath := range facts.ONNXFiles {
+		c := ScanCandidate{Path: onnxPath, PathType: "file", DetectedMetadata: make(map[string]interface{})}
+		c.Evidence = append(c.Evidence, "*.onnx")
+		candidates = append(candidates, c)
+	}
+	return candidates
+}
+
 // ── applyDefaults fills unset fields from plugin defaults ──
 
 func applyDefaults(c *ScanCandidate, d ModelTypeDefaults) {
@@ -533,7 +688,11 @@ func scanDirectory(absPath string) map[string]interface{} {
 	hasSpecificMatch := false
 	for _, c := range candidates {
 		if c.Format == "sentence_transformers" || c.Format == "lora_adapter" ||
-			c.Task == "rerank" || c.Task == "vision_chat" {
+			c.Format == "diffusers" || c.Format == "openvino" ||
+			c.Format == "tensorrt_engine" || c.Format == "onnx" ||
+			c.Task == "rerank" || c.Task == "vision_chat" ||
+			c.Task == "image_generation" || c.Task == "asr" ||
+			c.Task == "tts" || c.Task == "classification" {
 			hasSpecificMatch = true
 			break
 		}

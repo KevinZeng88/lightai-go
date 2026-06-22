@@ -146,6 +146,25 @@ func TestCompatHFWithVLLMNoBlock(t *testing.T) {
 	assertCompatPass(t, "HF+vLLM no block", result)
 }
 
+// TestCompatDeployableFalseFailsOnUnsupportedTypes verifies all B2 types are blocked.
+func TestCompatDeployableFalseFailsOnUnsupportedTypes(t *testing.T) {
+	vllmCaps := BackendDescriptor{BackendName: "vllm", SupportedFormats: []string{"huggingface"}, SupportedTasks: []string{"chat"}, ModelPathModes: []string{"directory"}}
+	tests := []struct{ format, task, pathType string }{
+		{"onnx", "unknown", "file"},
+		{"tensorrt_engine", "unknown", "directory"},
+		{"openvino", "unknown", "directory"},
+		{"diffusers", "image_generation", "directory"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.format, func(t *testing.T) {
+			result := CheckCompatibility(ModelDescriptor{Format: tt.format, Task: tt.task, Deployable: false, PathType: tt.pathType}, vllmCaps)
+			if result.Compatible {
+				t.Errorf("%s: expected FAIL (deployable=false), got PASS", tt.format)
+			}
+		})
+	}
+}
+
 func TestParseBackendCapabilities(t *testing.T) {
 	capsJSON := `{"supported_formats":["huggingface"],"supported_tasks":["chat","embedding"],"supported_capabilities":["chat","embedding"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","embedding":"/v1/embeddings"}}`
 	bd, err := ParseBackendCapabilities(capsJSON)
