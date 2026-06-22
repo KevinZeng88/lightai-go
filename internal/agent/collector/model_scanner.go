@@ -322,6 +322,13 @@ func DetectSentenceTransformers(facts FileFacts) []ScanCandidate {
 		"sentence-transformers", "text2vec", "m3e", "jina-embeddings",
 		"stella", "multilingual-e5", "bce-embedding",
 	)
+	// Exclude reranker names that happen to match embedding keywords ("bge")
+	hasRerankerName := nameMatches(facts.AbsPath,
+		"reranker", "rerank", "cross-encoder", "cross_encoder", "ranker",
+	)
+	if hasRerankerName {
+		hasSTName = false
+	}
 
 	if !hasSTStructure && !hasSTConfig && !hasSTName {
 		return nil
@@ -511,12 +518,35 @@ func scanDirectory(absPath string) map[string]interface{} {
 		detected := plugin.Detect(facts)
 		for i := range detected {
 			applyDefaults(&detected[i], plugin.Defaults)
-			// Preserve detector evidence if not already set by defaults
 			if len(detected[i].Evidence) == 0 {
 				detected[i].Evidence = facts.EvidenceFiles
 			}
 		}
 		candidates = append(candidates, detected...)
+	}
+
+	// De-duplication: suppress HF Chat when a more specific plugin matched.
+	// Higher-priority plugins (LoRA, ST, Reranker, VLM) are more specific;
+	// HF Chat is the catch-all that fires whenever config.json exists.
+	// When a more specific plugin found a match for the same directory,
+	// remove the generic HF Chat candidate to avoid confusion.
+	hasSpecificMatch := false
+	for _, c := range candidates {
+		if c.Format == "sentence_transformers" || c.Format == "lora_adapter" ||
+			c.Task == "rerank" || c.Task == "vision_chat" {
+			hasSpecificMatch = true
+			break
+		}
+	}
+	if hasSpecificMatch {
+		filtered := candidates[:0]
+		for _, c := range candidates {
+			if c.Format == "huggingface" && c.Task == "chat" {
+				continue
+			}
+			filtered = append(filtered, c)
+		}
+		candidates = filtered
 	}
 	result.Candidates = candidates
 
