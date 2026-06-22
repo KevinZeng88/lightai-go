@@ -1,9 +1,10 @@
 # Model Detection Runtime Plugin Implementation Plan
 
-> Status: DRAFT_FOR_REVIEW
+> Status: REVISED_FOR_REVIEW
 > Based on: Design doc 28 (`28-model-detection-runtime-plugin-design.md`)
 > Baseline: commit `625ac16`
 > Date: 2026-06-23
+> Revised: per review feedback (7 revision points)
 
 ## 1. Review Scope
 
@@ -20,20 +21,7 @@ Path, PathType, Format, DetectedMetadata, Warnings, AutoSelected, SelectionReaso
 
 **Missing from design**: No `Kind`, `Task`, `Capabilities`, `DefaultTestMode`, `Deployable`, `RequiresBaseModel`, `RecommendedBackends`, `Confidence`, `Evidence`, `UnsupportedReason` fields.
 
-**Detection coverage**:
-- HF directory: ✅ (checks `config.json` existence)
-- GGUF file: ✅ (globs `*.gguf`)
-- Embedding (SentenceTransformers): ❌
-- Reranker/CrossEncoder: ❌
-- Vision-Language: ❌
-- LoRA/Adapter: ❌
-- ONNX: ❌
-- TensorRT Engine: ❌
-- OpenVINO: ❌
-- Diffusers: ❌
-- ASR: ❌
-- TTS: ❌
-- Classification: ❌
+**Detection coverage**: HF directory ✅, GGUF file ✅. All other model types ❌.
 
 ### 2.2 Scan API Proxy (`internal/server/api/agent_proxy_handlers.go`)
 
@@ -41,368 +29,527 @@ Enriches response with `root_id`, `root`, `model_root`, `scan_root`, `relative_p
 
 ### 2.3 Frontend Wizard (`web/src/pages/ModelArtifactsPage.vue`)
 
-**Candidate display**: Shows format badge (HF green / GGUF orange), path basename, quantization, context length. Auto-select prioritizes HF directory over GGUF.
-
-**Missing**: No task type, deployability status, recommended backends, confidence, evidence, or unsupported reason display.
+Shows format badge (HF green / GGUF orange), path basename, quantization, context length. Auto-select prioritizes HF directory. Missing: task type, deployability status, recommended backends, confidence, evidence, unsupported reason.
 
 ### 2.4 Model Persistence
 
-**model_artifacts table columns**: `capabilities_json`, `capability_sources_json`, `default_test_mode`, `format`, `task_type`, `architecture`, etc.
-
-**model_locations table columns**: `path_type` (file/directory), `discovered_metadata_json`.
-
-**Missing**: No `metadata_json` column on either table. No `kind` column on locations. No scanner metadata (task, deployable, recommended_backends, evidence, confidence) is persisted anywhere.
+**model_artifacts**: `capabilities_json`, `capability_sources_json`, `default_test_mode`, `format`, `task_type`, `architecture`.
+**model_locations**: `path_type` (file/directory), `discovered_metadata_json`.
+**Missing**: No scanner metadata (task, deployable, recommended_backends, evidence, confidence) is persisted.
 
 ### 2.5 Backend / BackendVersion / BackendRuntime Capabilities
 
 **backend_versions**: Has `capabilities_json` TEXT column (JSON object). Used in seed data.
-
 **backend_runtimes**: No format/task capability columns.
-
-**Missing**: No `supported_formats`, `supported_tasks`, `model_path_mode`, or `test_endpoints` columns or JSON fields in any table.
+**Missing**: No `supported_formats`, `supported_tasks`, `model_path_mode`, or `test_endpoints` in any table.
 
 ### 2.6 Preflight / Compatibility
 
-**No compatibility checks exist.** Preflight validates node readiness, model location existence, GPU availability — but never checks whether the selected backend supports the model's format. vLLM + GGUF and llama.cpp + HF directory are both silently allowed.
+**No compatibility checks exist.** vLLM + GGUF and llama.cpp + HF directory are both silently allowed.
 
 ### 2.7 Test Dialog / Test API
 
-**Frontend** (`ModelInstancesPage.vue`): Test mode selector has only `auto`, `chat`, `completion`. No `embedding` or `rerank` options.
-
-**Backend** (`deployment_lifecycle_handlers.go`): `tryInferenceWithMode()` only handles chat/completion/auto. Embedding/rerank modes fall through to auto (chat→completion fallback). No `/v1/embeddings` or `/v1/rerank` endpoint calls exist.
+Frontend: only `auto`, `chat`, `completion` modes. No `embedding` or `rerank`.
+Backend: `tryInferenceWithMode()` only handles chat/completion/auto. No `/v1/embeddings` or `/v1/rerank` calls.
 
 ### 2.8 i18n
 
-Has basic capability labels. Missing: task type labels (Embedding, Reranker, Vision-Language, etc.), deployability labels, unsupported reason messages.
+Has basic capability labels. Missing: task type labels, deployability labels, unsupported reason messages.
 
 ## 3. Design Gap Analysis
 
-| Gap ID | Area | Current | Target | Severity | Schema Change? | Phase |
-|--------|------|---------|--------|----------|---------------|-------|
-| G-01 | ScanCandidate struct | 9 fields, no task/caps/deployable | 17-field ModelCandidate with kind/task/caps/deployable/evidence/confidence | HIGH | No (struct only) | A |
-| G-02 | Detector coverage | 2 detectors (HF, GGUF) | 13 detectors (embedding, reranker, VLM, LoRA, ONNX, etc.) | MEDIUM | No | B |
-| G-03 | FileFacts abstraction | No pre-collected facts | FileFacts struct shared across detectors | LOW | No | B |
-| G-04 | Scan API metadata enrichment | No type metadata added | Proxy preserves all candidate fields | LOW | No | A |
-| G-05 | Wizard candidate display | Format badge only | Full: task, caps, deployable, backends, evidence, confidence, unsupported | MEDIUM | No | C |
-| G-06 | Model persistence | capabilities_json only; no scan metadata | Persist task/deployable/recommended_backends/evidence in metadata_json or discovered_metadata_json | MEDIUM | No (use existing) | C |
-| G-07 | Backend capability | No supported_formats/tasks columns | Express via capabilities_json or new JSON columns | MEDIUM | TBD (prefer existing columns) | D |
-| G-08 | Preflight compatibility | None | Backend-model format/task compatibility checks; fail incompatible combinations | HIGH | No | D |
-| G-09 | Test dialog modes | Only auto/chat/completion | Add embedding/rerank to frontend selector and backend handler | MEDIUM | No | E |
-| G-10 | Test endpoint dispatch | No embedding/rerank API calls | Add /v1/embeddings and rerank endpoint calls | MEDIUM | No | E |
-| G-11 | i18n coverage | Basic caps/labels | Task type labels, deployability labels, unsupported reason i18n | LOW | No | C |
-| G-12 | Test coverage | 2 detector types in tests | Tests for all 13 detector types + compatibility checks | MEDIUM | No | F |
+| Gap ID | Area | Current | Target | Severity | Schema? | Phase |
+|--------|------|---------|--------|----------|---------|-------|
+| G-01 | ScanCandidate struct | 9 fields | Full ModelCandidate with kind/task/caps/deployable/evidence/confidence | HIGH | No | A |
+| G-02a | Detector: deployable types | 2 detectors | 6 core types (HF, GGUF, Embedding, Reranker, VLM, LoRA) | MEDIUM | No | B1 |
+| G-02b | Detector: unsupported types | 0 detectors | 7 unsupported types (ONNX, TensorRT, OpenVINO, Diffusers, ASR, TTS, Classification) | LOW | No | B2 |
+| G-03 | FileFacts abstraction | None | Shared FileFacts across detectors | LOW | No | B1 |
+| G-04 | Scan API enrichment | No type metadata | Proxy preserves all candidate fields | LOW | No | A |
+| G-05 | Wizard candidate display | Format badge only | Full: task, caps, deployable, backends, evidence, unsupported | MEDIUM | No | C |
+| G-06 | Model persistence | caps only; no scan metadata | Persist into artifact caps + location discovered_metadata_json | MEDIUM | No | C |
+| G-07 | Backend capability | No supported_formats/tasks | Express via `backend_versions.capabilities_json` structured sub-fields | MEDIUM | No | D |
+| G-08 | Preflight compatibility | None | CompatibilityChecker blocks invalid combos | HIGH | No | D |
+| G-09 | Test dialog modes | Only auto/chat/completion | Add embedding/rerank to frontend + backend | MEDIUM | No | E |
+| G-10 | Test endpoint dispatch | No embedding/rerank calls | Add /v1/embeddings and rerank endpoint calls | MEDIUM | No | E |
+| G-11 | i18n | Basic caps/labels | Task type, deployability, unsupported labels | LOW | No | C |
+| G-12 | Regression tests | 2 detector types | All detector types + compat + path mode + i18n | MEDIUM | No | Each phase |
 
-## 4. Schema Decision
+## 4. Abstraction: ModelType Plugin
 
-**Default position: no new schema columns.** All new metadata (task, deployable, recommended_backends, evidence, confidence, unsupported_reason) will be stored in existing JSON columns:
+### 4.1 Plugin Definition
 
-| Data | Where stored |
-|------|-------------|
-| Scanner metadata (task, confidence, evidence, deployable, recommended_backends, unsupported_reason) | `model_locations.discovered_metadata_json` (already exists) |
-| Model capabilities | `model_artifacts.capabilities_json` (already exists) |
-| Capability sources | `model_artifacts.capability_sources_json` (already exists) |
-| Default test mode | `model_artifacts.default_test_mode` (already exists) |
-| Backend supported formats/tasks | `backend_versions.capabilities_json` (already exists as JSON object) |
+The core abstraction is a **ModelType Plugin** — a lightweight Go struct that bundles everything needed to recognize and characterize one model type:
 
-**If schema change proves necessary** (only if existing JSON columns prove insufficient during implementation):
-- Add `model_artifacts.metadata_json TEXT NOT NULL DEFAULT '{}'` to mirror `model_locations.discovered_metadata_json`
-- No new migration needed for V25+ databases; add column in V27 if needed
+```go
+type ModelTypePlugin struct {
+    ID          string           // e.g. "embedding.sentence_transformers"
+    Detect      DetectorFunc     // returns []ScanCandidate or nil
+    Defaults    ModelTypeDefaults
+}
 
-## 5. Proposed Architecture (Refinement of Design Doc)
-
-The design doc's 5-layer architecture is sound. For LightAI Go's current Go-based implementation, the practical refinement is:
-
-```
-Layer 1: ScanCandidate (enriched struct, immediate)
-    ↓  user selects one
-Layer 2: ModelArtifact + ModelLocation (persist candidate metadata via discovered_metadata_json)
-    ↓  preflight runs
-Layer 3: CompatibilityChecker (pure function: ModelDescriptor × BackendDescriptor → CompatResult)
-    ↓  only if compatible
-Layer 4: RunPlanResolver + TestMethodResolver (already exist, minor additions)
+type ModelTypeDefaults struct {
+    Kind               string   // "directory" | "file" | "adapter" | "bundle"
+    Format             string   // "huggingface" | "sentence_transformers" | "gguf" | "lora_adapter" | ...
+    Task               string   // "chat" | "completion" | "embedding" | "rerank" | "vision_chat" | ...
+    Capabilities       []string // ["chat","completion"] | ["embedding"] | ...
+    DefaultTestMode    string   // "chat" | "embedding" | "rerank" | "auto"
+    Deployable         bool     // can it run as a standalone model?
+    RequiresBaseModel  bool     // adapter/lora case
+    RecommendedBackends []string // ["vllm","sglang"] | ["llamacpp"] | []
+    UnsupportedReason  string   // only for deployable=false
+}
 ```
 
-For the Detector Registry: use a Go function table (`[]DetectorFunc`) rather than a Go interface with shared struct, given the project's existing style (no heavy interface abstractions in the current scanner).
+A plugin answers 10 things about a model type:
+1. **Detector** — how to recognize it (DetectorFunc)
+2. **Model semantic** — format, task, capabilities, default_test_mode
+3. **Path semantic** — directory, file, adapter, or bundle
+4. **Deployability** — can it run standalone?
+5. **Recommended backends** — which backends typically support it
+6. **Compatibility rule** — what backend capabilities are required (derived from Defaults.Format × Defaults.Task)
+7. **Run method hint** — directory path or file path (derived from Kind)
+8. **Test method** — which test mode and endpoint type (derived from DefaultTestMode)
+9. **Evidence/confidence** — set by the detector, not the defaults
+10. **Unsupported reason** — why it can't run (if Deployable=false)
 
-## 6. Phased Implementation Plan
+### 4.2 Plugin Registration
 
-### Phase A: Data Contract — ModelCandidate Enrichment
+Plugins are registered as a function table (not a Go interface), matching the project's existing style:
 
-**Goal**: Expand ScanCandidate to carry all fields from the design doc without changing detection logic.
+```go
+var modelTypePlugins = []ModelTypePlugin{
+    PluginLoRAAdapter,           // highest priority
+    PluginSentenceTransformers,
+    PluginReranker,
+    PluginVisionLanguage,
+    PluginHuggingFaceChat,
+    PluginDiffusers,
+    PluginASR,
+    PluginTTS,
+    PluginClassification,
+    PluginOpenVINO,
+    PluginGGUF,
+    PluginONNX,
+    PluginTensorRT,              // lowest priority
+}
+```
+
+Adding a new model type = adding one plugin to this table. No changes to frontend pages, RunPlan resolver, preflight, or test dialog.
+
+### 4.3 Plugin Execution
+
+```go
+func scanDirectory(absPath string, facts FileFacts) []ScanCandidate {
+    var candidates []ScanCandidate
+    for _, plugin := range modelTypePlugins {
+        detected := plugin.Detect(facts)
+        for i := range detected {
+            // Apply plugin defaults to each candidate
+            applyDefaults(&detected[i], plugin.Defaults)
+        }
+        candidates = append(candidates, detected...)
+    }
+    // Auto-selection: single → auto; multiple same-type → warn; mixed → user picks
+    return applyAutoSelection(candidates)
+}
+```
+
+## 5. Data Authority (Where Each Fact Lives)
+
+**Critical: do not conflate artifact-level semantics with location-level evidence.**
+
+### ModelArtifact — Model Semantic Authority
+
+```
+format                     ← persistent (already exists)
+task_type                  ← persistent (already exists; currently defaults to "chat")
+capabilities_json          ← persistent (Phase 2)
+capability_sources_json    ← persistent (Phase 2)
+default_test_mode          ← persistent (Phase 2)
+```
+
+These fields describe WHAT the model IS. They travel with the artifact, independent of any specific node location.
+
+### ModelLocation — Location & Scan Evidence Authority
+
+```
+path                       ← persistent (already exists)
+path_type                  ← persistent (already exists: "file" | "directory")
+discovered_metadata_json   ← persistent (already exists; enriched in Phase C):
+    kind                   ← "directory" | "file" | "adapter"
+    evidence               ← ["config.json", "tokenizer_config.json", ...]
+    confidence             ← "high" | "medium" | "low"
+    detector_id            ← which plugin identified this
+    scan_root              ← the directory that was scanned
+    unsupported_reason     ← only if location-specific (rare; usually on artifact)
+```
+
+These fields describe HOW and WHERE the model was found. They are node-specific and may differ between nodes.
+
+### BackendVersion — Runtime Capability Authority
+
+```
+capabilities_json (structured sub-fields; Phase D):
+    supported_formats       ← ["huggingface","sentence_transformers"] | ["gguf"]
+    supported_tasks         ← ["chat","completion","embedding","rerank","vision_chat"]
+    supported_capabilities  ← ["chat","completion","embedding","rerank","vision"]
+    model_path_modes        ← ["directory"] | ["file"]
+    test_endpoints          ← {"chat":"/v1/chat/completions","embedding":"/v1/embeddings",...}
+```
+
+These fields describe what a backend CAN run. They are backend-version-specific.
+
+### Why Not New Schema Columns
+
+All new data fits into existing JSON columns. The `discovered_metadata_json` on model_locations already exists and is already read/written by the API. The `capabilities_json` on both model_artifacts and backend_versions already exists. Adding first-class columns would duplicate storage without adding query capability (SQLite JSON functions can query into these columns if needed).
+
+## 6. Schema Decision
+
+**No new schema columns.** All new metadata uses existing JSON columns. No migration needed.
+
+| Data | Where stored | Column exists? |
+|------|-------------|----------------|
+| Model capabilities, sources, default_test_mode | `model_artifacts.capabilities_json`, `.capability_sources_json`, `.default_test_mode` | ✅ Phase 2 |
+| Scanner evidence, confidence, detector_id, scan_root | `model_locations.discovered_metadata_json` | ✅ V13 |
+| Backend supported formats, tasks, path modes, test endpoints | `backend_versions.capabilities_json` (structured sub-fields) | ✅ V17 |
+
+If during implementation existing columns prove insufficient, fallback option:
+- Add `model_artifacts.metadata_json TEXT NOT NULL DEFAULT '{}'` via V27 migration
+- This would only happen if `discovered_metadata_json` on locations can't carry artifact-level metadata cleanly
+
+## 7. Phased Implementation Plan
+
+### Phase A: Candidate Contract — Field Plumbing Only
+
+**Goal**: Expand ScanCandidate struct with all design fields, populate them for existing HF/GGUF detectors, and ensure the entire pipeline (scan → proxy → wizard → create) preserves them. No new detectors. No UI changes.
 
 **Changes**:
-1. Add fields to `ScanCandidate` struct in `model_scanner.go`:
-   - `Kind string` (derived from PathType + context)
-   - `Task string` (derived from format + metadata inference)
-   - `Capabilities []string`
-   - `DefaultTestMode string`
-   - `Deployable bool`
-   - `RequiresBaseModel bool`
-   - `RecommendedBackends []string`
-   - `Confidence string`
-   - `Evidence []string`
-   - `UnsupportedReason string`
+1. Add fields to `ScanCandidate` in `model_scanner.go`:
+   - `Kind string`, `Task string`, `Capabilities []string`, `DefaultTestMode string`
+   - `Deployable bool`, `RequiresBaseModel bool`, `RecommendedBackends []string`
+   - `Confidence string`, `Evidence []string`, `UnsupportedReason string`
 
-2. Populate these fields for existing detectors:
-   - HF directory: kind="directory", task="chat", deployable=true, confidence="medium", evidence=["config.json"]
-   - GGUF: kind="file", task="chat", deployable=true, confidence="high", evidence=["*.gguf"]
+2. Populate for existing detectors:
+   - HF directory: kind="directory", task="chat", capabilities=["chat","completion"], default_test_mode="chat", deployable=true, confidence="medium", evidence=["config.json"], recommended_backends=["vllm","sglang"]
+   - GGUF file: kind="file", task="chat", capabilities=["chat","completion"], default_test_mode="chat", deployable=true, confidence="high", evidence=["*.gguf"], recommended_backends=["llamacpp"]
 
 3. Update `toMap()` to include new fields in API response
 
-4. Update scan proxy to preserve new candidate fields
+4. Scan proxy: no changes needed (already preserves candidate fields)
 
-5. Update frontend wizard `doWizardSave` to read new fields (capabilities, default_test_mode, task, recommended_backends, evidence) from candidate and pass them to create API
+5. Frontend `doWizardSave`: read `capabilities`, `default_test_mode`, `task`, `recommended_backends` from candidate; pass to create APIs; ensure `path_type` is correctly set
 
-**No**: new detectors, new UI sections, compatibility checks
+**Explicitly NOT in Phase A**:
+- New detectors
+- New detail/edit UI sections
+- Compatibility checker
+- Embedding/rerank test modes
+- Unsupported type recognition
+- i18n additions beyond what's needed for field flow
 
 **Acceptance**:
 - Scan API returns candidates with kind, task, capabilities, deployable, recommended_backends, confidence, evidence
-- HF and GGUF behavior unchanged
-- Tests: go test ./internal/server/api/... , go test ./internal/server/runplan/... ALL PASS
-- npm test + npm run build ALL PASS
+- HF/GGUF existing behavior unchanged: direct file selection RunPlan correct, directory scan RunPlan correct
+- Create model from wizard preserves capabilities and default_test_mode (no regression from Phase 2)
+- Tests: `go test ./internal/server/api/...`, `go test ./internal/server/runplan/...`, `npm test`, `npm run build` ALL PASS
+- **Regression gate**: GGUF RunPlan `-m` still points to `.gguf` file; HF RunPlan still uses directory path
 
-**Risk**: Low — additive changes only, no logic changes to detection
+**Risk**: Low — additive struct fields only, no logic changes to detection
 
 ---
 
-### Phase B: Detector Registration
+### Phase B1: Core Deployable Model Type Plugins
 
-**Goal**: Refactor detection into a detector function table without changing what is currently detected; then add new detectors.
+**Goal**: Add detectors for model types that have known deployable backends. These immediately add value because they enable correct capabilities, task types, and recommended backends.
 
-**Changes**:
-1. Create `FileFacts` struct in scanner (collects directory listing, key JSON files, glob results once)
-2. Define `DetectorFunc` type: `func(facts FileFacts) []ScanCandidate`
-3. Build `FileFacts` once in `scanDirectory()`, pass to all registered detectors
-4. Migrate existing HF and GGUF detection into detector functions
-5. Add new detectors (output only — no backend changes):
-   - `DetectSentenceTransformers` — checks modules.json, sentence_bert_config.json, name patterns
-   - `DetectReranker` — checks name patterns (reranker, cross-encoder, bge-reranker), config hints
-   - `DetectVisionLanguage` — checks name patterns (qwen-vl, llava, internvl), preprocessor_config
-   - `DetectLoRAAdapter` — checks adapter_config.json, adapter_model.safetensors
-   - `DetectONNX` — checks *.onnx
-   - `DetectTensorRT` — checks *.engine
-   - `DetectOpenVINO` — checks *.xml + *.bin
-   - `DetectDiffusers` — checks model_index.json, unet/
-   - `DetectASR` — checks name patterns (whisper, funasr, paraformer)
-   - `DetectTTS` — checks name patterns (cosyvoice, chattts, gpt-sovits)
-   - `DetectClassification` — checks config architectures for SequenceClassification/TokenClassification
-6. Detection priority order: LoRA → SentenceTransformers → Reranker → VLM → HF Chat → Diffusers → ASR → TTS → Classification → OpenVINO → GGUF → ONNX → TensorRT
-7. Unsupportable types (ONNX, TensorRT, OpenVINO, Diffusers, ASR, TTS, Classification) have `deployable=false` with clear `unsupported_reason`
+**Detectors added** (6 new, 2 regression):
 
-**No**: UI changes, compatibility checks, schema changes, test endpoint changes
+| # | Detector | Detection evidence | Format | Task | Deployable | Recommended Backends |
+|---|----------|-------------------|--------|------|------------|---------------------|
+| 1 | HF Chat/Completion (regression) | config.json exists | huggingface | chat | true | vllm, sglang |
+| 2 | GGUF file (regression) | *.gguf | gguf | chat | true | llamacpp |
+| 3 | SentenceTransformers / Embedding | modules.json, sentence_bert_config.json, name patterns | sentence_transformers | embedding | true | vllm, sglang |
+| 4 | Reranker / CrossEncoder | name patterns (reranker, cross-encoder, bge-reranker), config hints | huggingface | rerank | true | vllm, sglang |
+| 5 | Vision-Language / Multimodal | name patterns (qwen-vl, llava, internvl), preprocessor_config, image_processor_config | huggingface | vision_chat | true | vllm, sglang |
+| 6 | LoRA / Adapter | adapter_config.json, adapter_model.safetensors | lora_adapter | adapter | false | [] |
+
+**Implementation**:
+1. Introduce `FileFacts` struct (collects directory listing, key JSON files, glob results once)
+2. Define `ModelTypePlugin` struct with `Detect` and `Defaults`
+3. Migrate existing HF/GGUF detection into plugin functions (wrapping existing code, not rewriting)
+4. Add 4 new plugin functions (Embedding, Reranker, VLM, LoRA)
+5. Detection priority: LoRA → SentenceTransformers → Reranker → VLM → HF Chat → GGUF
+
+**Explicitly NOT in Phase B1**:
+- Unsupported detectors (ONNX, TensorRT, etc.) — deferred to Phase B2
+- UI display changes — deferred to Phase C
+- Compatibility checks — deferred to Phase D
+- Test method changes — deferred to Phase E
 
 **Acceptance**:
-- All 13 detector types produce correct candidate output
-- Existing HF/GGUF behavior unchanged
-- New types show correct task, deployable, recommended_backends, unsupported_reason
-- Tests: each detector has unit test coverage (at minimum: 1 positive case per detector)
-- go test, go vet, npm test, npm build ALL PASS
+- Embedding models detected with task=embedding, capabilities=["embedding"], default_test_mode="embedding"
+- Reranker models detected with task=rerank, capabilities=["rerank"], default_test_mode="rerank"
+- Vision-Language detected with task=vision_chat, capabilities=["chat","vision"]
+- LoRA detected with deployable=false, requires_base_model=true, unsupported_reason set
+- HF/GGUF behavior unchanged (regression gate)
+- Tests: at minimum 1 positive case per detector, covering all 6 types
+- `go test`, `go vet`, `npm test`, `npm build` ALL PASS
 
-**Risk**: Medium — refactoring existing detection into functions could introduce regressions if not careful. Mitigation: keep existing code paths as-is, wrap in detector functions, validate with existing tests first.
+**Risk**: Medium — refactoring detection into plugin functions. Mitigation: wrap existing code paths in plugin functions first, validate with existing tests, then add new plugins.
 
 ---
 
-### Phase C: Model Persistence and UI Display
+### Phase C: Model Persistence and UI Display / Edit
 
-**Goal**: Persist scanner metadata into model records and display it in UI.
+**Goal**: Persist scanner metadata and display it in model detail and edit pages.
 
 **Changes**:
 
-**Backend**:
-1. In `HandleCreateModelLocation` and `doWizardSave`: persist scanner metadata fields into `discovered_metadata_json` on `model_locations`:
+**Backend — persist scanner metadata**:
+1. In `HandleCreateModelLocation`: write scanner metadata into `discovered_metadata_json`:
    ```json
    {
      "kind": "directory",
-     "task": "chat",
-     "deployable": true,
-     "requires_base_model": false,
-     "recommended_backends": ["vllm", "sglang"],
-     "confidence": "medium",
      "evidence": ["config.json", "tokenizer_config.json"],
-     "unsupported_reason": "",
-     "detector_id": "hf_chat"
+     "confidence": "medium",
+     "detector_id": "hf_chat",
+     "scan_root": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512"
    }
    ```
-2. Populate `capabilities_json`, `capability_sources_json`, `default_test_mode` on model_artifacts from candidate data
-3. In artifact detail API: read `discovered_metadata_json` from first location and merge with artifact fields
+2. Populate `capabilities_json`, `capability_sources_json`, `default_test_mode` on `model_artifacts` from candidate (Phase A already ensures this)
+3. Expose `discovered_metadata_json` through artifact detail API (already returned in location list)
 
 **Frontend detail page**:
-1. Show task type, model format, capabilities, default test mode
-2. Show scanner metadata: deployable status, recommended backends, confidence, evidence
-3. Show unsupported reason for non-deployable models
-4. Add section for "扫描识别信息" (Scan Recognition Info) with collapsible evidence
+1. Show: task type, model format, capabilities, default test mode (already partially done)
+2. Show scanner info section: evidence, confidence, detector, scan root
+3. Show deployability status badge: "可部署" (green) / "不可独立部署" (orange)
+4. Show recommended backends as tags
+5. For non-deployable: show unsupported_reason
+6. Add collapsible "扫描识别信息" section
 
 **Frontend edit page**:
 1. Already supports editing capabilities and default_test_mode (Phase 2)
-2. Add task type editing (select: chat/completion/embedding/rerank/vision_chat/classification/unknown)
+2. Add task type editing: select with options matching detected task types
 
-**i18n**: Add keys for all task types, deployable/not-deployable labels, backend names, evidence labels
+**i18n**: Add keys for task types (chat/completion/embedding/rerank/vision_chat/adapter/classification/unknown), deployability, evidence labels
 
-**No**: Compatibility checks, test endpoint changes, new detectors
+**Explicitly NOT in Phase C**:
+- Compatibility checks (Phase D)
+- New test modes (Phase E)
+- Unsupported model type display (Phase B2)
 
 **Acceptance**:
-- Scanner metadata persists in `discovered_metadata_json`
-- Model detail page shows task, deployable, recommended backends, evidence
-- Embedding/Reranker/Vision models show correct task type in UI
+- Scanner metadata persisted in `discovered_metadata_json`
+- Detail page shows task, deployable, recommended backends, evidence
+- Embedding/Reranker/Vision labels appear correctly in UI (no "Unknown" for recognized types)
 - LoRA shows "不可独立部署" with reason
-- ONNX shows "当前不支持" with reason
-- No undefined/null/[object Object] leaks
-- Tests: go test, npm test, npm build ALL PASS
+- No `undefined`/`null`/`[object Object]`/`task.xxx`/`format.xxx` leaks
+- Tests: `go test`, `npm test`, `npm build` ALL PASS
 
-**Risk**: Low — additive UI changes, existing JSON column usage
+**Risk**: Low — additive UI, existing JSON columns
 
 ---
 
 ### Phase D: Backend Capability and Compatibility Checker
 
-**Goal**: Express what each backend supports and prevent incompatible model-backend combinations at preflight.
+**Goal**: Express backend capabilities and block invalid model-backend combinations at preflight.
+
+**Blocking rules — all must BLOCK** (not warn):
+- **format mismatch**: model format ∉ backend supported_formats → FAIL
+- **path mode mismatch**: model path_type ≠ backend model_path_mode requirement → FAIL
+- **deployable=false**: model is not deployable → FAIL
+- **task mismatch**: model task ∉ backend supported_tasks → FAIL (unless backend explicitly declares compatibility alias or fallback)
 
 **Changes**:
 
 **Backend capability** (seed data only, no schema change):
-1. Enrich `backend_versions.capabilities_json` in seed data:
+1. Enrich `backend_versions.capabilities_json` for each backend:
    ```json
+   // vLLM / SGLang
    {
      "supported_formats": ["huggingface", "sentence_transformers"],
      "supported_tasks": ["chat", "completion", "embedding", "rerank", "vision_chat"],
-     "model_path_mode": "directory",
-     "test_endpoints": {
-       "chat": "/v1/chat/completions",
-       "completion": "/v1/completions",
-       "embedding": "/v1/embeddings",
-       "rerank": ["/v1/rerank", "/rerank"]
-     }
+     "supported_capabilities": ["chat", "completion", "embedding", "rerank", "vision"],
+     "model_path_modes": ["directory"]
+   }
+   // llama.cpp
+   {
+     "supported_formats": ["gguf"],
+     "supported_tasks": ["chat", "completion"],
+     "supported_capabilities": ["chat", "completion"],
+     "model_path_modes": ["file"]
    }
    ```
-2. For llama.cpp: supported_formats=["gguf"], supported_tasks=["chat","completion"], model_path_mode="file"
 
 **CompatibilityChecker** (`internal/server/runplan/compat.go` — new file):
-1. Pure function: takes ModelDescriptor (format, task, path_type) + BackendDescriptor (supported_formats, model_path_mode) → CompatResult
-2. Rules:
-   - vLLM/SGLang + format=gguf → FAIL: "模型为 GGUF 文件，vLLM/SGLang 不支持。请使用 llama.cpp。"
-   - llama.cpp + format=huggingface → FAIL: "模型为 HuggingFace 目录，llama.cpp 不支持。请使用 vLLM/SGLang。"
-   - LoRA + standalone deploy → FAIL: "这是 LoRA/Adapter，不能作为独立模型部署。"
-   - model_path_mode=file + path_type=directory → FAIL: "后端需要具体模型文件路径，但当前模型位置是目录。"
-   - Supported format + task mismatch → WARNING (not block)
-3. Add unit tests for all pass/fail scenarios
+1. Input: ModelDescriptor (format, task, deployable, path_type) + BackendDescriptor (capabilities_json)
+2. Output: CompatResult{Compatible bool, Severity string, Reason string}
+3. Check order: deployable → format → path_mode → task
+4. On any failure: return structured error with Chinese message
 
 **Preflight integration** (`deployment_lifecycle_handlers.go`):
-1. In `preflightDeployment()`, after model location validation, call `CompatibilityChecker`
-2. On failure: add structured preflight error, block deployment
-3. Frontend shows compatibility error in preflight UI
-
-**No**: Schema changes, new backend columns, RunPlan changes
+1. Call CompatibilityChecker after model location validation, before RunPlan resolution
+2. On failure: add structured preflight error, **block deployment**
+3. Frontend preflight UI shows compatibility error
 
 **Acceptance**:
-- vLLM + GGUF fails preflight with clear error
-- llama.cpp + HF directory fails preflight with clear error
-- LoRA standalone deploy fails preflight
-- Compatible combinations pass preflight
-- Tests: go test with new compat tests, existing tests unchanged
-- npm test + npm build ALL PASS
+- vLLM/SGLang + GGUF file → preflight FAIL: "模型为 GGUF 文件，vLLM/SGLang 不支持。请使用 llama.cpp。"
+- llama.cpp + HF directory → preflight FAIL: "模型为 HuggingFace 目录，llama.cpp 不支持。请使用 vLLM/SGLang。"
+- LoRA standalone deploy → preflight FAIL
+- deployable=false models → preflight FAIL
+- Embedding + vLLM → preflight PASS
+- Reranker + vLLM → preflight PASS
+- GGUF + llama.cpp → preflight PASS
+- Tests: 8+ compatibility unit tests (all pass/fail scenarios)
+- `go test`, `npm test`, `npm build` ALL PASS
 
-**Risk**: Medium — preflight logic change could break deployment flow. Mitigation: add compatibility check as a new step after existing validations, not replacing any.
+**Risk**: Medium — preflight logic change. Mitigation: add as new validation step, not replacing existing.
 
 ---
 
 ### Phase E: Test Method Abstraction
 
-**Goal**: Support embedding and rerank test modes in both frontend and backend.
+**Goal**: Support embedding and rerank test modes.
 
 **Changes**:
 
 **Frontend** (`ModelInstancesPage.vue`):
-1. Add `embedding` and `rerank` options to test mode `<el-select>`
-2. `recommendedTestMode()` already handles these (returns the persisted/default value)
+1. Add `embedding` and `rerank` to test mode selector
+2. `recommendedTestMode()` already handles these
 
 **Backend** (`deployment_lifecycle_handlers.go`):
-1. Add `tryEmbeddingInference()` function: POST to `/v1/embeddings` with `{"input": "hello world", "model": "..."}`
-2. Add `tryRerankInference()` function: POST to rerank endpoint candidates with query+documents payload
-3. Update `tryInferenceWithMode()` to dispatch to embedding/rerank functions
-4. Read test endpoint from `backend_versions.capabilities_json.test_endpoints` (from Phase D)
-5. On rerank endpoint not declared: return diagnostic result with clear message
+1. `tryEmbeddingInference()`: POST `/v1/embeddings` with `{"input": "hello world", "model": "..."}`
+2. `tryRerankInference()`: POST to declared rerank endpoint with `{"query": "what is gpu", "documents": [...]}`
+3. Read endpoint from `backend_versions.capabilities_json.test_endpoints` (from Phase D)
+4. Rerank endpoint not declared → return diagnostic: "该模型识别为 Reranker，但当前运行后端未声明 Rerank 测试端点。"
+5. Update `tryInferenceWithMode()` to dispatch embedding/rerank
 
-**No**: Schema changes, new backend columns
+**No**: Schema changes, endpoint probing, new backend columns
 
 **Acceptance**:
-- Embedding models default to embedding test mode
-- Reranker models default to rerank test mode  
-- Test selector shows all 5 modes: auto/chat/completion/embedding/rerank
-- Embedding test calls /v1/embeddings
-- Rerank test calls declared rerank endpoint
-- If no rerank endpoint declared, shows diagnostic message
+- Test selector: auto/chat/completion/embedding/rerank (5 modes)
+- Embedding model defaults to embedding test mode
+- Reranker model defaults to rerank test mode
+- Embedding test calls `/v1/embeddings`
+- Rerank test calls declared endpoint; undelcared → clear diagnostic
+- Chat/completion test unchanged (regression gate)
 - Tests: go test, npm test, npm build ALL PASS
 
 **Risk**: Low — additive, no existing behavior changes
 
 ---
 
-### Phase F: Final Hardening and Closeout
+### Phase B2: Recognized-but-Unsupported Model Type Plugins
 
-**Goal**: Complete documentation, tests, and clean commit.
+**Goal**: Add detectors for model types that the platform cannot currently run. These models enter the model library for visibility but are marked as unsupported.
 
-**Changes**:
-1. Run full test suite: go test, go vet, npm test, npm build
-2. Verify git diff --check clean
-3. Create closeout document `29-model-detection-runtime-plugin-closeout.md`
-4. Final commit and push
+**Detectors added** (7):
+
+| # | Detector | Evidence | deployable | unsupported_reason |
+|---|----------|----------|------------|-------------------|
+| 7 | ONNX | *.onnx | false | "当前平台尚未配置 ONNX Runtime 后端。" |
+| 8 | TensorRT Engine | *.engine, rank*.engine | false | "当前平台尚未配置 TensorRT-LLM 后端。" |
+| 9 | OpenVINO | *.xml + *.bin | false | "当前平台尚未配置 OpenVINO 后端。" |
+| 10 | Diffusers | model_index.json, unet/ | false | "当前平台尚未配置 Diffusers/Image Generation 后端。" |
+| 11 | ASR | name patterns (whisper, funasr, paraformer) | false | "当前平台尚未配置 ASR 后端。" |
+| 12 | TTS | name patterns (cosyvoice, chattts, gpt-sovits) | false | "当前平台尚未配置 TTS 后端。" |
+| 13 | Classification | config architectures: SequenceClassification/TokenClassification | false | "当前平台尚未配置分类模型服务后端。" |
+
+**These plugins are registered in the same table as B1**, with priority between LoRA (adapter, needs base model) and GGUF (file scan). All have `Deployable=false` with clear `UnsupportedReason`.
 
 **Acceptance**:
-- All tests pass
-- git status clean
-- Closeout document complete
+- All 7 types detected and create valid candidates
+- All have deployable=false with clear unsupported_reason
+- Models enter model library (Phase C already handles display)
+- Preflight blocks deployment (Phase D already blocks deployable=false)
+- Tests: 1 positive case per detector
+- `go test`, `npm test`, `npm build` ALL PASS
 
-## 7. Phase Acceptance Criteria Summary
+**Risk**: Low — purely additive, no existing behavior changes
 
-| Phase | Go Tests | Frontend Tests | Build | Key Assertion |
-|-------|----------|---------------|-------|---------------|
-| A | ALL PASS | ALL PASS | ✅ | Candidate has kind/task/caps/deployable |
-| B | ALL PASS + detector tests | ALL PASS | ✅ | 13 detectors produce correct output |
-| C | ALL PASS | ALL PASS | ✅ | Task/caps/evidence shown in detail/edit |
-| D | ALL PASS + compat tests | ALL PASS | ✅ | vLLM+GGUF blocked, llama.cpp+HF blocked |
-| E | ALL PASS | ALL PASS | ✅ | Embedding/rerank test modes work |
-| F | ALL PASS | ALL PASS | ✅ | git status clean, closeout complete |
+---
 
-## 8. Test Plan
+### Phase F: Hardening and Closeout
 
-### New Tests Required
+**Goal**: Complete tests, docs, regression verification, clean commit.
 
-**Phase A**: No new tests (struct-only changes, existing tests verify no regression)
+**Changes**:
+1. Full regression suite:
+   - `go test ./internal/server/api/...`, `go test ./internal/server/runplan/...`, `go vet ./...`
+   - `npm test`, `npm run build`
+2. Run regression gates (see §8)
+3. Create closeout document
+4. Final commit and push
 
-**Phase B**: ~13 detector unit tests (one per detector type)
-- `TestDetectHuggingFaceChat`
-- `TestDetectSentenceTransformers`
-- `TestDetectReranker`
-- `TestDetectVisionLanguage`
-- `TestDetectGGUFFile`
+## 8. Regression Test Gates
+
+Every phase must pass these regression assertions — they are non-negotiable:
+
+| # | Assertion | Introduced |
+|---|-----------|-----------|
+| R1 | Direct GGUF file selection RunPlan: `-m` points to `.gguf` file | RC-001/003/005/006 |
+| R2 | Directory scan GGUF selection RunPlan: `-m` points to selected `.gguf` file | RC-006 |
+| R3 | HF directory with vLLM/SGLang: path mode is directory | baseline |
+| R4 | llama.cpp + HF directory → preflight FAIL | (new in Phase D) |
+| R5 | vLLM/SGLang + GGUF file → preflight FAIL | (new in Phase D) |
+| R6 | deployable=false → cannot generate RunPlan | (new in Phase D) |
+| R7 | i18n: no `task.xxx` / `format.xxx` / `capability.xxx` / `status.xxx` leaks | MV-007 |
+| R8 | `go test`, `go vet`, `npm test`, `npm build`, `git diff --check` ALL PASS | always |
+
+## 9. Phase Acceptance Criteria Summary
+
+| Phase | New Detectors | UI Changes | Compat Checks | Test Modes | Risk |
+|-------|--------------|------------|---------------|------------|------|
+| A | 0 (enrich existing) | Wizard field passthrough only | No | No | Low |
+| B1 | 6 (HF, GGUF, Embedding, Reranker, VLM, LoRA) | No | No | No | Medium |
+| C | 0 | Detail: task/evidence/deployable; Edit: task type | No | No | Low |
+| D | 0 | Preflight error display | Yes (block, not warn) | No | Medium |
+| E | 0 | Test selector: +embedding/rerank | No | Yes (embedding/rerank) | Low |
+| B2 | 7 (ONNX, TRT, OpenVINO, Diffusers, ASR, TTS, Classification) | No (reuses C) | No (reuses D) | No | Low |
+| F | 0 | 0 | Regression gates | Regression gates | Low |
+
+## 10. Decisions (Formerly Open Questions)
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| D1 | **Plugin style: lightweight struct + function table** (`[]ModelTypePlugin`), not Go interface | Matches project's existing plain-function style; no interface abstraction overhead |
+| D2 | **Backend capability schema: reuse `backend_versions.capabilities_json`** with structured sub-fields (`supported_formats`, `supported_tasks`, `supported_capabilities`, `model_path_modes`, `test_endpoints`). No new columns. | Existing column is already a JSON object; structured sub-fields are backward-compatible |
+| D3 | **LoRA/Adapter: enter model library, deployment UI grays out with "需要基础模型，不能独立部署"** | Provides visibility; prevents accidental deployment; consistent with other unsupported types |
+| D4 | **Unsupported models: enter model library, marked "当前不支持运行", display unsupported_reason** | Provides visibility of what was scanned; enables future backend additions to automatically unlock these models |
+| D5 | **Rerank endpoint: use backend-declared endpoint from `capabilities_json.test_endpoints.rerank`; if not declared, return clear diagnostic** | Deterministic; no blind probing; backend declaration is the single source of truth |
+| D6 | **Phase ordering: A → B1 → C → D → E → B2 → F** | B1 delivers immediate value (embedding/reranker/VLM recognition); C provides UI visibility before D enforces constraints; B2 is low-priority (unsupported types); E enables test UX |
+| D7 | **Compatibility: format/path_mode/deployable/task mismatch → BLOCK (never warn)** | Prevent silent wrong behavior; user must explicitly choose compatible combination |
+
+## 11. Test Plan
+
+### New Tests Required Per Phase
+
+**Phase A**: No new tests (struct changes only; existing tests verify regression)
+
+**Phase B1**: ~8 tests — 1 per detector + mixed + empty
+- `TestDetectHuggingFaceChat`, `TestDetectGGUFFile` (regression)
+- `TestDetectSentenceTransformers`, `TestDetectReranker`, `TestDetectVisionLanguage`
 - `TestDetectLoRAAdapter`
-- `TestDetectONNX`
-- `TestDetectTensorRT`
-- `TestDetectOpenVINO`
-- `TestDetectDiffusers`
-- `TestDetectASR`
-- `TestDetectTTS`
-- `TestDetectClassification`
-- `TestEmptyDirectory`
-- `TestMixedHFAndGGUF`
+- `TestEmptyDirectory`, `TestMixedHFAndGGUF`
 
-**Phase C**: No new backend tests (UI changes only). Update existing wizard tests if needed.
+**Phase C**: No new backend tests (UI only). Update existing wizard/model tests if needed.
 
-**Phase D**: ~8 compatibility tests
-- `TestCompatVLLMWithGGUFFails`
-- `TestCompatLlamaCppWithHFFails`
+**Phase D**: ~10 tests
+- `TestCompatVLLMWithGGUFFails`, `TestCompatSGLangWithGGUFFails`
+- `TestCompatLlamaCppWithHFFails`, `TestCompatLlamaCppWithEmbeddingFails`
 - `TestCompatLoRAStandaloneFails`
-- `TestCompatVLLMWithHFPasses`
-- `TestCompatLlamaCppWithGGUFPasses`
+- `TestCompatDeployableFalseFails` (ONNX/TensorRT/OpenVINO/Diffusers/etc.)
 - `TestCompatFilePathModeWithDirectoryFails`
-- `TestCompatONNXWithoutBackendFails`
-- `TestCompatEmbeddingWithVLLMPasses`
+- `TestCompatVLLMWithHFPasses`, `TestCompatLlamaCppWithGGUFPasses`
+- `TestCompatEmbeddingWithVLLMPasses`, `TestCompatRerankerWithVLLMPasses`
 
-**Phase E**: ~4 test mode tests
-- `TestEmbeddingTestEndpoint`
-- `TestRerankTestEndpoint`
-- `TestRerankNoEndpointDeclared`
-- `TestChatCompletionEndpointsUnchanged`
+**Phase E**: ~4 tests
+- `TestEmbeddingTestEndpoint`, `TestRerankTestEndpoint`
+- `TestRerankNoEndpointDeclared`, `TestChatCompletionUnchanged`
+
+**Phase B2**: ~7 tests — 1 per unsupported type
+- `TestDetectONNX`, `TestDetectTensorRT`, `TestDetectOpenVINO`
+- `TestDetectDiffusers`, `TestDetectASR`, `TestDetectTTS`, `TestDetectClassification`
 
 ### Verification Commands (all phases)
 
@@ -410,7 +557,7 @@ For the Detector Registry: use a Go function table (`[]DetectorFunc`) rather tha
 gofmt -w cmd/ internal/
 go test ./internal/server/api/...
 go test ./internal/server/runplan/...
-go test ./internal/agent/...   # if agent scanner tests exist
+go test ./internal/agent/...        # if agent scanner tests exist
 go vet ./...
 npm --prefix web test
 npm --prefix web run build
@@ -418,17 +565,17 @@ git diff --check
 git status --short
 ```
 
-## 9. Risk and Rollback Notes
+## 12. Risk and Rollback Notes
 
 | Risk | Mitigation |
 |------|-----------|
-| Detector refactoring breaks existing HF/GGUF | Keep existing code paths as first-pass detectors; add new detectors after |
-| Preflight compatibility breaks deployment | Add as new validation step, not replacing existing checks; feature-flag if needed |
-| New candidate fields break scan API consumers | Add fields with zero-value defaults; existing fields unchanged |
-| Embedding/rerank test not testable without running instance | Test with unit tests for endpoint dispatch; leave runtime validation for Phase 3 |
-| Seed data update breaks existing DB | Use V26 migration pattern: REPLACE old JSON, no new columns |
+| Plugin refactoring breaks HF/GGUF | Wrap existing code in plugin functions; validate with existing tests before adding new plugins |
+| Preflight compatibility blocks valid deployments | Feature-flag: skip compat check if `capabilities_json` lacks `supported_formats` (backward compat) |
+| New candidate fields confuse existing API consumers | Add fields with zero-value defaults; existing fields unchanged |
+| Embedding/rerank test not testable without running instance | Unit-test endpoint dispatch; runtime validation deferred to manual testing |
+| Seed data update breaks existing DB | Use REPLACE pattern (like V26) to update `capabilities_json`; no new columns |
 
-## 10. Explicit Non-goals
+## 13. Explicit Non-goals
 
 1. No resource parameter editor (Phase 3)
 2. No multi-replica/cross-node scheduling
@@ -438,27 +585,27 @@ git status --short
 6. No model conversion
 7. No LoRA merge
 8. No image/audio upload test UI
-9. No schema changes (default position; only if existing JSON columns prove insufficient)
+9. No new schema columns (default; only if existing JSON columns prove insufficient)
 10. No backward compatibility for old data
+11. No endpoint probing mechanism for rerank/embedding (use declared endpoints only)
 
-## 11. Open Questions for User Review
+## 14. Modified Files Summary (Expected)
 
-1. **Q1: Detector registry style** — The design doc suggests either Go interface or function table. The current codebase uses plain functions (not interfaces). Should we stay with function tables (`[]DetectorFunc`) for consistency, or move to interfaces for extensibility?
+| Phase | Files |
+|-------|-------|
+| A | `internal/agent/collector/model_scanner.go`, `web/src/pages/ModelArtifactsPage.vue` |
+| B1 | `internal/agent/collector/model_scanner.go` (plugins + detectors), new test files |
+| C | `internal/server/api/artifact_handlers.go`, `web/src/pages/ModelArtifactsPage.vue`, `web/src/locales/zh-CN.ts`, `web/src/locales/en-US.ts` |
+| D | `internal/server/runplan/compat.go` (new), `internal/server/api/deployment_lifecycle_handlers.go`, `internal/server/db/db.go` (seed) |
+| E | `internal/server/api/deployment_lifecycle_handlers.go`, `web/src/pages/ModelInstancesPage.vue` |
+| B2 | `internal/agent/collector/model_scanner.go` (7 new plugins), new test file |
+| F | Closeout doc, no code |
 
-2. **Q2: Schema for backend capabilities** — The plan reuses `backend_versions.capabilities_json` (existing JSON column). Is this acceptable, or should we add first-class columns (`supported_formats_json`, `supported_tasks_json`)?
-
-3. **Q3: LoRA/Adapter handling** — Should LoRA adapters be completely hidden from deployment UI, or listed but grayed out with "不可独立部署" message? Plan proposes the latter (listed, grayed out).
-
-4. **Q4: Unsupported models in model library** — Should ONNX/TensorRT/OpenVINO/Diffusers models enter the model library at all? Plan says yes — they should be listed but marked as "当前不支持" to provide visibility.
-
-5. **Q5: Rerank endpoint probing** — Should the test handler probe multiple rerank endpoint candidates (`/v1/rerank`, `/rerank`, `/v2/rerank`, `/score`, `/v1/score`) or only use the declared one? Plan says use declared; probe only if none declared.
-
-6. **Q6: Phase ordering** — Phase C (UI) before Phase D (compatibility) or Phase D before Phase C? Plan puts UI persistence first because it provides visibility before enforcing constraints.
-
-## 12. Recommended Next Prompt After Approval
+## 15. Recommended First Prompt After Approval
 
 ```
-Proceed to Phase A: implement ModelCandidate struct enrichment.
-Start with internal/agent/collector/model_scanner.go.
-Do not add new detectors — only add fields and populate them for existing HF/GGUF detection.
+Proceed to Phase A: enrich ScanCandidate struct with design fields.
+Only add fields and populate them for existing HF/GGUF detection.
+No new detectors, no UI changes, no compatibility checks.
+Verify regression gates R1-R3 and R8 before moving to Phase B1.
 ```
