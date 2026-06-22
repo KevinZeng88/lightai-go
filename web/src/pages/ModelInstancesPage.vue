@@ -137,7 +137,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="logsVisible" :title="t('dockerLogs.title')" size="60%">
+    <el-drawer v-model="logsVisible" :title="t('dockerLogs.title')" size="60%" @closed="stopLogsTimer">
       <div class="logs-toolbar">
         <el-input-number v-model="logsTail" :min="1" :max="5000" :step="100" size="small" />
         <el-button :icon="RefreshRight" :loading="logsLoading" @click="loadLogs">{{ t('dockerLogs.refresh') }}</el-button>
@@ -166,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Document, RefreshRight } from '@element-plus/icons-vue'
@@ -190,6 +190,8 @@ const logsError = ref('')
 const logsMeta = ref<any>(null)
 const logsRow = ref<any>(null)
 const autoOpenedFailedLogs = ref(false)
+let logsTimer: ReturnType<typeof setInterval> | null = null
+const LOGS_REFRESH_INTERVAL_MS = 3000
 
 // Model smoke test + instance actions
 const testing = ref(false)
@@ -236,6 +238,10 @@ onMounted(async () => {
   await refresh()
 })
 
+onUnmounted(() => {
+  stopLogsTimer()
+})
+
 async function refresh() {
   loading.value = true
   try {
@@ -272,10 +278,28 @@ function testModeText(mode: string): string {
   return testModeLabel(mode || 'auto', locale.value)
 }
 
+function stopLogsTimer() {
+  if (logsTimer !== null) { clearInterval(logsTimer); logsTimer = null }
+}
+
+function startLogsTimer() {
+  stopLogsTimer()
+  // Only auto-refresh for running/starting/waiting instances.
+  const state = logsRow.value?.actual_state
+  if (state === 'stopped' || state === 'failed') return
+  logsTimer = setInterval(() => {
+    // Guard against concurrent requests.
+    if (logsLoading.value) return
+    loadLogs()
+  }, LOGS_REFRESH_INTERVAL_MS)
+}
+
 async function openLogs(row: any) {
+  stopLogsTimer()
   logsRow.value = row
   logsVisible.value = true
   await loadLogs()
+  startLogsTimer()
 }
 
 async function loadLogs() {
@@ -290,8 +314,11 @@ async function loadLogs() {
     logsMeta.value = resp
     logsText.value = resp?.logs || ''
   } catch (e: any) {
-    logsMeta.value = null
-    logsText.value = ''
+    // Don't overwrite existing logs on transient refresh errors.
+    if (!logsText.value) {
+      logsMeta.value = null
+      logsText.value = ''
+    }
     logsError.value = e?.message || t('dockerLogs.loadFailed')
   } finally {
     logsLoading.value = false

@@ -511,8 +511,14 @@ function onWizardImageSelected(img: any) {
 async function doCreateConfig() {
   saving.value = true
   try {
-    // Enable the selected template on the selected node (creates NodeBackendRuntime only, no BackendRuntime clone)
-    await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: wizTemplateId.value, display_name: wizConfigName.value, image_ref: wizImageRef.value })
+    // If check was already done and succeeded, the NBR already exists with ready status.
+    // Don't re-enable, which would reset the status to 'needs_check'.
+    const checked = wizCheckResult.value
+    const alreadyReady = checked && (checked.status === 'ready' || checked.status === 'ready_with_warnings')
+    if (!alreadyReady) {
+      // Enable the selected template on the selected node (creates NodeBackendRuntime only, no BackendRuntime clone)
+      await apiClient.post(`/nodes/${wizNodeId.value}/backend-runtimes/enable`, { backend_runtime_id: wizTemplateId.value, display_name: wizConfigName.value, image_ref: wizImageRef.value })
+    }
     ElMessage.success(t('runnerConfigs.created')); wizardVisible.value = false; await refresh()
   } catch (e: any) { ElMessage.error(e?.message || t('common.failed')) }
   saving.value = false

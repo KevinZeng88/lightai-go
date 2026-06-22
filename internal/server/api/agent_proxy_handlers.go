@@ -120,11 +120,18 @@ func (h *AgentHandler) HandleProxyNodeModelScan(w http.ResponseWriter, r *http.R
 			out["root_id"] = root.ID
 			out["root"] = root.Path
 			out["model_root"] = root.Path
+			out["scan_root"] = root.Path
+			// Compute the canonical server-side absolute path from the validated root + relative path.
+			// The agent may return its own paths; for top-level we trust the server's resolution.
 			out["relative_path"] = rel
 			out["absolute_path"] = root.Path
 			if rel != "" {
 				out["absolute_path"] = root.Path + "/" + rel
 			}
+			// For candidate-based responses, preserve each candidate's own specific path
+			// (e.g., a .gguf file within a directory). This is essential for llama.cpp
+			// which needs the exact file path in -m, not the parent directory (WEB-AI-LW-003).
+			// The agent's scanner sets candidate.path to the discovered file/directory.
 			body, _ = json.Marshal(out)
 		}
 	}

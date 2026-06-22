@@ -850,7 +850,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	if pf.rtHC != "" && pf.rtHC != "{}" {
 		json.Unmarshal([]byte(pf.rtHC), &rtHC)
 	}
-	if rtEntryOverride != nil {
+	if len(rtEntryOverride) > 0 {
 		entrypoint = rtEntryOverride
 	}
 	var defaultArgs []string
