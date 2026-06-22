@@ -12,34 +12,32 @@ This document reviews the current codebase against the design doc 28, identifies
 
 ## 1.1 Local Model Inventory (2026-06-23)
 
-Checked at plan revision time:
+Verified at plan revision time — all paths confirmed on disk:
 
-**Available locally**:
-| Path | Type | Format | Status |
-|------|------|--------|--------|
-| `/home/kzeng/models/Qwen3-0.6B-Instruct-2512/` | HF directory | huggingface | ✅ Can smoke-test |
-| `/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf` | GGUF file | gguf | ✅ Can smoke-test |
-| `/home/kzeng/models/qwen2.5-0.5b-gguf/` | GGUF multi-file | gguf | ✅ Can smoke-test |
-| `/home/kzeng/models/Qwen3.5-27B-Q4/` | GGUF file | gguf | ✅ Large, may skip |
-| Various root `.gguf` files | GGUF | gguf | ✅ Can smoke-test |
+| Type | Local Path | Format | Status |
+|------|-----------|--------|--------|
+| HF Chat | `/home/kzeng/models/Qwen3-0.6B-Instruct-2512` | huggingface directory | ✅ Can smoke-test |
+| GGUF Chat | `/home/kzeng/models/Qwen3.5-9B-Q4/` (specific `.gguf` selected by scan) | gguf file | ✅ Can smoke-test |
+| GGUF Large | `/home/kzeng/models/Qwen3.5-27B-Q4` | gguf file | ✅ Large, optional |
+| Embedding | `/home/kzeng/models/bge-small-zh-v1.5` | sentence_transformers directory | ✅ Can smoke-test |
+| Reranker | `/home/kzeng/models/bge-reranker-base` | huggingface directory | ✅ Can smoke-test |
+| Vision-Language | `/home/kzeng/models/InternVL2_5-1B` | huggingface directory | ✅ Can smoke-test |
 
-**NOT available locally**:
-| Type | Status | Notes |
-|------|--------|-------|
-| Embedding HF directory (bge-m3, bge-large-zh, e5, gte, etc.) | ❌ Missing | No HF embedding model directories found |
-| Reranker HF directory (bge-reranker, jina-reranker, etc.) | ❌ Missing | No HF reranker model directories found |
-| Vision-Language HF directory (qwen-vl, llava, internvl, etc.) | ❌ Missing | No VL model directories found |
+**Evidence per model**:
+- `bge-small-zh-v1.5`: has `config_sentence_transformers.json`, `modules.json`, `1_Pooling/` → clear SentenceTransformers/Embedding structure
+- `bge-reranker-base`: has `config.json`, `model.safetensors` → HF directory suitable for reranker detection
+- `InternVL2_5-1B`: has `config.json`, `configuration_internvl_chat.py`, `configuration_intern_vit.py` → clear VL model structure
 
-**GGUF conversions exist but are NOT the target testing form**: `qllama_bge-reranker-v2-m3_latest.gguf` and `quentinz_bge-large-zh-v1.5_latest.gguf` are GGUF-converted versions of embedding/reranker models. These are NOT the standard HF directory form that vLLM/SGLang expect. They will be detected as GGUF Chat (via llama.cpp detector), not as Embedding/Reranker.
+**No external model dependencies remain for MUST RUN types.** All 5 MUST RUN model types have local models available.
 
-## 1.2 External Model Dependencies
+## 1.2 Blocked-by-Backend Status
 
-For production smoke validation of Embedding and Reranker, the following models are recommended but NOT present:
+Models exist locally but a backend may still be unable to run them (e.g., vLLM doesn't support a specific architecture, or the rerank endpoint isn't declared). In these cases the status is **BACKEND_CAPABILITY_BLOCKED**, NOT EXTERNAL_DEPENDENCY_BLOCKED.
 
-- Embedding: `BAAI/bge-m3`, `BAAI/bge-large-zh-v1.5`, `intfloat/multilingual-e5-base`, `thenlper/gte-large-zh`
-- Reranker: `BAAI/bge-reranker-v2-m3`, `BAAI/bge-reranker-large`, `jinaai/jina-reranker-v2-base-multilingual`
+- `EXTERNAL_DEPENDENCY_BLOCKED` = model files not present on disk
+- `BACKEND_CAPABILITY_BLOCKED` = model files present, but backend/runtime/catalog/endpoint lacks support
 
-Phases P4 and P5 (Embedding/Reranker smoke) are gated on user providing these models. Without them, P4/P5 are marked **EXTERNAL_DEPENDENCY_BLOCKED** — not PASS, not FAIL.
+Neither status is PASS. BACKEND_CAPABILITY_BLOCKED requires documenting what capability is missing and whether a catalog/seed update can fix it.
 
 ## 1.3 Production Runtime Acceptance Scope
 
@@ -53,11 +51,11 @@ These must be validated through the full pipeline: scan → create → preflight
 |---|-----------|--------|---------|---------------|-------------|
 | 1 | Chat / Completion | huggingface (directory) | vLLM, SGLang | `/v1/chat/completions`, `/v1/completions` | ✅ Qwen3-0.6B-Instruct-2512 |
 | 2 | GGUF Chat / Completion | gguf (file) | llama.cpp | `/v1/chat/completions` or declared endpoint | ✅ Qwen3.5-9B-Q4_K_M.gguf |
-| 3 | Embedding | huggingface / sentence_transformers (directory) | vLLM, SGLang | `/v1/embeddings` | ❌ EXTERNAL_DEPENDENCY_BLOCKED |
-| 4 | Reranker / CrossEncoder | huggingface (directory) | vLLM, SGLang | backend-declared rerank endpoint (`/v1/rerank`, `/rerank`) | ❌ EXTERNAL_DEPENDENCY_BLOCKED |
-| 5 | Vision-Language / Multimodal | huggingface (directory) | vLLM, SGLang | `/v1/chat/completions` (text); image input as enhancement | ❌ EXTERNAL_DEPENDENCY_BLOCKED |
+| 3 | Embedding | huggingface / sentence_transformers (directory) | vLLM, SGLang | `/v1/embeddings` | ✅ `bge-small-zh-v1.5` |
+| 4 | Reranker / CrossEncoder | huggingface (directory) | vLLM, SGLang | backend-declared rerank endpoint (`/v1/rerank`, `/rerank`) | ✅ `bge-reranker-base` |
+| 5 | Vision-Language / Multimodal | huggingface (directory) | vLLM, SGLang | `/v1/chat/completions` (text); image input as enhancement; `vision` capability must be preserved | ✅ `InternVL2_5-1B` |
 
-For #3-#5, the platform code must be complete (detection, persistence, preflight, test endpoints). Only the live container smoke is gated on external model files.
+All 5 MUST RUN types have local models. For #3-#5, if the backend cannot run them, the status is BACKEND_CAPABILITY_BLOCKED (not EXTERNAL_DEPENDENCY_BLOCKED). Container smoke is gated on backend capability, not model availability.
 
 ### RECOGNIZE BUT NOT RUN (7 model types)
 
@@ -85,7 +83,7 @@ These are detected, can enter the model library, but preflight blocks deployment
 - A + B1 + C: NOT done (no compatibility enforcement)
 - A + B1 + C + D: NOT done (no test method abstraction)
 - A + B1 + C + D + E: **Code complete for MUST RUN types.** Ready for Phase P.
-- A + B1 + C + D + E + P: **Production closed loop complete** (where locally available).
+- A + B1 + C + D + E + P: **Production closed loop complete.** All 5 MUST RUN types have local models. Smoke tests P1-P7 run against real local models.
 
 ## 1.4 Execution Strategy
 
@@ -624,31 +622,53 @@ Evidence: docker command with `-m` path, container logs, curl output
 
 #### P4: Embedding with vLLM/SGLang
 
-Model: external (BAAI/bge-m3 or equivalent) — **EXTERNAL_DEPENDENCY_BLOCKED**
+Model: `/home/kzeng/models/bge-small-zh-v1.5` (local ✅)
 Backend: vLLM or SGLang
 ```text
-✅ detector identifies task=embedding
+✅ scan identifies task=embedding
+✅ capabilities=["embedding"]
 ✅ default_test_mode=embedding
-✅ preflight pass with embedding-supporting backend
-✅ /v1/embeddings succeeds, returns embedding vector
+✅ preflight pass with embedding-capable backend
+✅ RunPlan uses directory path
+✅ container starts
+✅ /v1/embeddings succeeds
+✅ response contains embedding vector
 ```
-**Status**: EXTERNAL_DEPENDENCY_BLOCKED until user provides embedding HF directory.
-**What IS verified without the model**: detector output, artifact persistence, preflight compatibility, test endpoint dispatch logic.
+If backend cannot run this model: BACKEND_CAPABILITY_BLOCKED (explain missing capability; NOT external dependency).
 
 #### P5: Reranker with vLLM/SGLang
 
-Model: external (BAAI/bge-reranker-v2-m3 or equivalent) — **EXTERNAL_DEPENDENCY_BLOCKED**
+Model: `/home/kzeng/models/bge-reranker-base` (local ✅)
 Backend: vLLM or SGLang
 ```text
-✅ detector identifies task=rerank
+✅ scan identifies task=rerank
+✅ capabilities=["rerank"]
 ✅ default_test_mode=rerank
-✅ preflight pass with rerank-supporting backend
-✅ declared rerank endpoint succeeds, returns score/rank output
+✅ preflight pass with rerank-capable backend
+✅ RunPlan uses directory path
+✅ container starts
+✅ backend-declared rerank endpoint succeeds
+✅ response contains scores/ranked results
 ```
-**Status**: EXTERNAL_DEPENDENCY_BLOCKED until user provides reranker HF directory.
-**What IS verified without the model**: detector output, artifact persistence, preflight compatibility, test endpoint dispatch logic.
+If backend cannot run this model: BACKEND_CAPABILITY_BLOCKED.
 
-#### P6: Wrong Combination Blocking
+#### P6: Vision-Language / Multimodal with vLLM/SGLang
+
+Model: `/home/kzeng/models/InternVL2_5-1B` (local ✅)
+Backend: vLLM or SGLang
+```text
+✅ scan identifies task=vision_chat
+✅ capabilities contains ["chat","vision"]
+✅ default_test_mode=chat
+✅ preflight compatibility based on backend declaration
+✅ RunPlan uses directory path
+✅ container starts if backend supports this VLM
+✅ text chat endpoint succeeds if supported
+```
+Image upload test is not required this round, but `vision` capability must not be lost.
+If backend cannot run this model: BACKEND_CAPABILITY_BLOCKED.
+
+#### P7: Wrong Combination Blocking
 
 Models: any local model ✅ (no external dependency)
 ```text
@@ -663,9 +683,12 @@ Evidence: preflight error messages, UI screenshots/descriptions
 
 **Phase P Acceptance**:
 - P1/P2/P3: PASS with real container + endpoint evidence (local models)
-- P4/P5: EXTERNAL_DEPENDENCY_BLOCKED (code paths verified; live smoke gated on model files)
-- P6: PASS (all blocking scenarios verified)
-- All regression gates R1-R8 still pass
+- P4: PASS or BACKEND_CAPABILITY_BLOCKED (local model; backend capability may limit)
+- P5: PASS or BACKEND_CAPABILITY_BLOCKED (local model; backend capability may limit)
+- P6: PASS or BACKEND_CAPABILITY_BLOCKED (local model; backend capability may limit)
+- P7: PASS (all blocking scenarios verified)
+- All regression gates R1-R10 still pass
+- No EXTERNAL_DEPENDENCY_BLOCKED for models that exist on disk
 
 ---
 
@@ -737,6 +760,7 @@ These may NOT appear in any closeout or final report:
 - ❌ "preflight passes" without actual container start
 - ❌ Endpoint success claimed without docker command / logs / curl evidence
 - ❌ EXTERNAL_DEPENDENCY_BLOCKED reported as PASS
+- ❌ 本机已有模型却标记为 EXTERNAL_DEPENDENCY_BLOCKED（应标 BACKEND_CAPABILITY_BLOCKED）
 - ❌ Known failing endpoint marked as "acceptable partial" without formal DOCUMENTED_BLOCKER entry
 - ❌ "later" / "TODO" / "后续再说" for MUST RUN model types
 
@@ -818,7 +842,7 @@ git status --short
 | Risk | Mitigation |
 |------|-----------|
 | Plugin refactoring breaks HF/GGUF | Wrap existing code in plugin functions; validate with existing tests before adding new plugins |
-| Preflight compatibility blocks valid deployments | Feature-flag: skip compat check if `capabilities_json` lacks `supported_formats` (backward compat) |
+| backend_versions.capabilities_json missing supported_formats/supported_tasks/test_endpoints | Repair seed/catalog data in the same phase. If capability metadata is still missing, preflight fails with "后端能力未声明". Do not skip compatibility check. Do not add backward compatibility fallback. |
 | New candidate fields confuse existing API consumers | Add fields with zero-value defaults; existing fields unchanged |
 | Embedding/rerank test not testable without running instance | Unit-test endpoint dispatch; runtime validation deferred to manual testing |
 | Seed data update breaks existing DB | Use REPLACE pattern (like V26) to update `capabilities_json`; no new columns |
