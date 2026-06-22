@@ -41,8 +41,8 @@ func getVllmIDs(t *testing.T, db *db.DB) (backendID, versionID string) {
 	if err := db.QueryRow("SELECT id FROM inference_backends WHERE name='vllm'").Scan(&backendID); err != nil {
 		t.Fatalf("vllm backend: %v", err)
 	}
-	if err := db.QueryRow("SELECT id FROM backend_versions WHERE backend_id=(SELECT id FROM inference_backends WHERE name='vllm') AND version='0.8.5'").Scan(&versionID); err != nil {
-		t.Fatalf("vllm 0.8.5: %v", err)
+	if err := db.QueryRow("SELECT id FROM backend_versions WHERE backend_id=(SELECT id FROM inference_backends WHERE name='vllm') AND is_default=1").Scan(&versionID); err != nil {
+		t.Fatalf("vllm default version: %v", err)
 	}
 	return
 }

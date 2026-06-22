@@ -99,7 +99,7 @@ func newWorkflowDeploymentFixture(t *testing.T, app *workflowTestApp, suffix str
 	nodeID := modelFixture.NodeID
 	gpuID := app.InsertGPU(t, nodeID, "nvidia")
 
-	systemRuntime := workflowFindSystemRuntimeByVendor(t, app, "nvidia")
+	systemRuntime := workflowFindSystemRuntimeByVendor(t, app, "nvidia", "vllm")
 	runtime, markRuntimeDeleted := workflowCloneBackendRuntime(t, app, systemRuntime, "deployment-"+suffix)
 	runtimeID := workflowStringField(t, runtime, "id")
 	patch := workflowDeploymentRuntimePatchPayload(suffix)
@@ -208,11 +208,20 @@ func workflowDeploymentRuntimePatchPayload(suffix string) map[string]interface{}
 	}
 }
 
-func workflowFindSystemRuntimeByVendor(t *testing.T, app *workflowTestApp, vendor string) map[string]interface{} {
+func workflowFindSystemRuntimeByVendor(t *testing.T, app *workflowTestApp, vendor string, preferredBackends ...string) map[string]interface{} {
 	t.Helper()
 	resp := app.Client.JSON(t, http.MethodGet, "/api/v1/backend-runtimes", nil, http.StatusOK)
 	var runtimes []map[string]interface{}
 	resp.Decode(t, &runtimes)
+	// First pass: try preferred backends.
+	for _, pref := range preferredBackends {
+		for _, runtime := range runtimes {
+			if workflowBoolField(t, runtime, "is_builtin") && !workflowBoolField(t, runtime, "is_editable") && runtime["vendor"] == vendor && runtime["backend_id"] == "backend."+pref {
+				return runtime
+			}
+		}
+	}
+	// Fallback: first matching built-in runtime for the vendor.
 	for _, runtime := range runtimes {
 		if workflowBoolField(t, runtime, "is_builtin") && !workflowBoolField(t, runtime, "is_editable") && runtime["vendor"] == vendor {
 			return runtime

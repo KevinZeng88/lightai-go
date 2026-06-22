@@ -18,7 +18,7 @@ func insertUIPersistenceArtifact(t *testing.T, h *AgentHandler, id string) {
 	if _, err := h.DB.Exec(`INSERT INTO model_artifacts
 		(id,name,display_name,source_type,path,format,task_type,architecture,size_label,quantization,tenant_id,created_at,updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		id, id, "Display "+id, "local_path", "/models/"+id+".gguf", "gguf", "chat", "custom", "", "unknown", "", now, now); err != nil {
+		id, id, "Display "+id, "local_path", "/models/"+id, "huggingface", "chat", "custom", "", "unknown", "", now, now); err != nil {
 		t.Fatalf("insert artifact: %v", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestModelArtifactDisplayNamePersistenceDoesNotChangePath(t *testing.T) {
 	if got["display_name"] != "Qwen Friendly Name" {
 		t.Fatalf("display_name=%v", got["display_name"])
 	}
-	if got["path"] != "/models/qwen-file.gguf" {
+	if got["path"] != "/models/qwen-file" {
 		t.Fatalf("path changed after display_name edit: %v", got["path"])
 	}
 }

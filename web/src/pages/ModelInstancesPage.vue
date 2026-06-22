@@ -60,6 +60,8 @@
             <el-option :label="testModeText('auto')" value="auto" />
             <el-option :label="testModeText('chat')" value="chat" />
             <el-option :label="testModeText('completion')" value="completion" />
+            <el-option :label="testModeText('embedding')" value="embedding" />
+            <el-option :label="testModeText('rerank')" value="rerank" />
           </el-select>
         </el-form-item>
         <el-button type="primary" :loading="testing" :disabled="!testRow" @click="runSelectedTest">{{ t('instances.runTest') }}</el-button>

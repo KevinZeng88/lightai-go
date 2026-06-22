@@ -879,6 +879,50 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 
 	instanceID := uuid.NewString()
 
+	// ── Phase D: Compatibility check before RunPlan resolution ──
+	modelFormat := strVal(artifact, "format", "custom")
+	modelTask := strVal(artifact, "task_type", "chat")
+	modelPathType := "directory"
+	if modelFormat == "gguf" {
+		modelPathType = "file"
+	}
+	modelDeployable := true
+	if loc := h.getModelLocationJSON(pf.locationID); loc != nil {
+		if metaRaw, ok := loc["discovered_metadata_json"]; ok {
+			var metaMap map[string]interface{}
+			switch v := metaRaw.(type) {
+			case map[string]interface{}:
+				metaMap = v
+			case json.RawMessage:
+				json.Unmarshal(v, &metaMap)
+			}
+			if metaMap != nil {
+				if dp, ok := metaMap["deployable"].(bool); ok {
+					modelDeployable = dp
+				}
+			}
+		}
+	}
+	var backendCapRaw string
+	h.DB.QueryRow(`SELECT COALESCE(capabilities_json,'{}') FROM backend_versions WHERE id = ?`, pf.rtVersionID).Scan(&backendCapRaw)
+	backendCaps, capsErr := runplan.ParseBackendCapabilities(backendCapRaw)
+	if capsErr != nil || len(backendCaps.SupportedFormats) == 0 {
+		backendCaps = runplan.BackendDescriptor{BackendName: pf.backendName}
+	} else {
+		backendCaps.BackendName = pf.backendName
+	}
+	compatResult := runplan.CheckCompatibility(
+		runplan.ModelDescriptor{Format: modelFormat, Task: modelTask, Deployable: modelDeployable, PathType: modelPathType},
+		backendCaps,
+	)
+	if !compatResult.Compatible {
+		pf.addErr(compatResult.Code, compatResult.Reason, map[string]interface{}{
+			"artifact_id": pf.artifactID, "backend": pf.backendName,
+			"model_format": modelFormat, "model_task": modelTask,
+		})
+		return pf
+	}
+
 	// Call the real RunPlan resolver with snapshot-based RuntimeInfo.
 	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
 		Backend:             &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
@@ -2424,6 +2468,12 @@ func tryInferenceWithMode(client *http.Client, endpoint, modelName, mode, prompt
 	if mode == "chat" {
 		return tryChatInference(client, endpoint, modelName, prompt, false)
 	}
+	if mode == "embedding" {
+		return tryEmbeddingInference(client, endpoint, modelName)
+	}
+	if mode == "rerank" {
+		return tryRerankInference(client, endpoint, modelName)
+	}
 	// Try chat/completions.
 	chatResult := tryChatInference(client, endpoint, modelName, prompt, true)
 	if chatResult["ok"] == true {
@@ -2506,6 +2556,70 @@ func tryChatInference(client *http.Client, endpoint, modelName, prompt string, u
 		}
 	}
 	return map[string]interface{}{"ok": false, "mode": "chat", "reason_code": "chat_endpoint_failed", "message": errMsg, "endpoint": chatURL, "http_status": resp.StatusCode, "latency_ms": latencyMs, "raw_response": string(bodyBytes)}
+}
+
+// tryEmbeddingInference sends an embedding test request to /v1/embeddings.
+func tryEmbeddingInference(client *http.Client, endpoint, modelName string) map[string]interface{} {
+	embURL := strings.TrimRight(endpoint, "/") + "/v1/embeddings"
+	embBody, _ := json.Marshal(map[string]interface{}{
+		"model": modelName,
+		"input": "hello world",
+	})
+	startTime := time.Now()
+	httpReq, _ := http.NewRequest("POST", embURL, bytes.NewReader(embBody))
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	resp, err := client.Do(httpReq)
+	latencyMs := time.Since(startTime).Milliseconds()
+	if err != nil {
+		return map[string]interface{}{"ok": false, "mode": "embedding", "reason_code": "network_error", "message": err.Error(), "endpoint": embURL, "latency_ms": latencyMs}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		var preview string
+		if len(body) > 300 {
+			preview = string(body[:300])
+		} else {
+			preview = string(body)
+		}
+		return map[string]interface{}{"ok": true, "mode": "embedding", "endpoint": embURL, "model": modelName, "latency_ms": latencyMs, "response_preview": preview, "raw_response": string(body), "checked_at": time.Now().Format(time.RFC3339)}
+	}
+	return map[string]interface{}{"ok": false, "mode": "embedding", "reason_code": "embedding_endpoint_failed", "http_status": resp.StatusCode, "endpoint": embURL, "model": modelName, "latency_ms": latencyMs, "error_body": string(body), "checked_at": time.Now().Format(time.RFC3339)}
+}
+
+// tryRerankInference sends a rerank test request to the declared rerank endpoint.
+func tryRerankInference(client *http.Client, endpoint, modelName string) map[string]interface{} {
+	rankURL := strings.TrimRight(endpoint, "/") + "/v1/rerank"
+	rankBody, _ := json.Marshal(map[string]interface{}{
+		"model": modelName,
+		"query": "what is GPU",
+		"documents": []string{
+			"GPU is a processor for parallel computation.",
+			"A database stores structured data.",
+		},
+	})
+	startTime := time.Now()
+	httpReq, _ := http.NewRequest("POST", rankURL, bytes.NewReader(rankBody))
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	resp, err := client.Do(httpReq)
+	latencyMs := time.Since(startTime).Milliseconds()
+	if err != nil {
+		return map[string]interface{}{"ok": false, "mode": "rerank", "reason_code": "network_error", "message": err.Error(), "endpoint": rankURL, "latency_ms": latencyMs}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		var preview string
+		if len(body) > 300 {
+			preview = string(body[:300])
+		} else {
+			preview = string(body)
+		}
+		return map[string]interface{}{"ok": true, "mode": "rerank", "endpoint": rankURL, "model": modelName, "latency_ms": latencyMs, "response_preview": preview, "raw_response": string(body), "checked_at": time.Now().Format(time.RFC3339)}
+	}
+	return map[string]interface{}{"ok": false, "mode": "rerank", "reason_code": "rerank_endpoint_failed", "http_status": resp.StatusCode, "endpoint": rankURL, "model": modelName, "latency_ms": latencyMs, "error_body": string(body), "checked_at": time.Now().Format(time.RFC3339)}
 }
 
 func tryCompletionInference(client *http.Client, endpoint, modelName, prompt string) map[string]interface{} {
