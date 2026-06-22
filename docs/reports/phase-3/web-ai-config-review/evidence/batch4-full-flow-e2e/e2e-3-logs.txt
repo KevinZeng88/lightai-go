@@ -1,0 +1,20 @@
+0.08.276.482 I slot print_timing: id  3 | task 0 |    graphs reused =          7
+0.08.276.516 I slot      release: id  3 | task 0 | stop processing: n_tokens = 30, truncated = 0
+0.08.276.521 I srv  update_slots: all slots are idle
+0.16.235.146 I srv  params_from_: Chat format: peg-native
+0.16.235.313 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.767
+0.16.235.385 I slot launch_slot_: id  3 | task 11 | processing task, is_child = 0
+0.16.235.386 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache
+0.16.235.387 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens
+0.16.235.507 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache
+0.16.235.510 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens
+0.16.235.611 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache
+0.16.235.613 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens
+0.16.235.673 I slot update_slots: id  3 | task 11 | Checking checkpoint with [11, 11] against 22...
+0.16.246.407 W slot update_slots: id  3 | task 11 | restored context checkpoint (pos_min = 11, pos_max = 11, n_tokens = 12, n_past = 12, size = 50.251 MiB)
+0.16.532.269 I slot print_timing: id  3 | task 11 | prompt eval time =     235.62 ms /    11 tokens (   21.42 ms per token,    46.69 tokens per second)
+0.16.532.277 I slot print_timing: id  3 | task 11 |        eval time =      60.97 ms /     8 tokens (    7.62 ms per token,   131.22 tokens per second)
+0.16.532.278 I slot print_timing: id  3 | task 11 |       total time =     296.59 ms /    19 tokens
+0.16.532.278 I slot print_timing: id  3 | task 11 |    graphs reused =         13
+0.16.532.300 I slot      release: id  3 | task 11 | stop processing: n_tokens = 30, truncated = 0
+0.16.532.309 I srv  update_slots: all slots are idle

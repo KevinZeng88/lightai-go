@@ -1,0 +1,1 @@
+vLLM image vllm/vllm-openai:latest cannot load InternVL2_5-1B: missing sentencepiece/tiktoken tokenizer dependency. BACKEND_CAPABILITY_BLOCKED.

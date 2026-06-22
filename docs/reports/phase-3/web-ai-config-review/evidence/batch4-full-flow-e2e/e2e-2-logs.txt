@@ -1,0 +1,5 @@
+[2026-06-22 18:42:15] Prefill batch, #new-seq: 1, #new-token: 9, #cached-token: 0, token usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: True, input throughput (token/s): 8.83
+[2026-06-22 18:42:15] INFO:     172.17.0.1:50834 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+[2026-06-22 18:42:22] INFO:     172.17.0.1:50836 - "GET /v1/models HTTP/1.1" 200 OK
+[2026-06-22 18:42:23] Prefill batch, #new-seq: 1, #new-token: 1, #cached-token: 8, token usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: True, input throughput (token/s): 0.14
+[2026-06-22 18:42:23] INFO:     172.17.0.1:50838 - "POST /v1/chat/completions HTTP/1.1" 200 OK

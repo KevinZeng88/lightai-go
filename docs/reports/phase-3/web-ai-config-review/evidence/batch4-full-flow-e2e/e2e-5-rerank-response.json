@@ -1,0 +1,1 @@
+{"id":"score-9f4831131e7d5076","model":"bge-reranker-base","usage":{"prompt_tokens":30,"total_tokens":30},"results":[{"index":0,"document":{"text":"GPU is a processor for parallel computation","multi_modal":null},"relevance_score":0.9996671676635742},{"index":1,"document":{"text":"A database stores structured data","multi_modal":null},"relevance_score":0.0013584967236965895}]}

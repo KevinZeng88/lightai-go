@@ -1,0 +1,1 @@
+docker run -d --name lightai-e2e3 --ipc host --shm-size 8gb --gpus "device=0" -v /home/kzeng/models/Qwen3.5-9B-Q4:/models/Qwen3.5-9B-Q4:ro -e CUDA_VISIBLE_DEVICES=0 -p 18004:8080/tcp ghcr.io/ggml-org/llama.cpp:server-cuda13 -m /models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf --host 0.0.0.0 --port 8080
