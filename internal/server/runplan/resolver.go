@@ -781,6 +781,20 @@ func buildVarMap(in ResolveInput) map[string]string {
 
 	vars["MODEL_CONTAINER_PATH"] = modelContainerPath
 	vars["model_container_path"] = vars["MODEL_CONTAINER_PATH"]
+
+	// MODEL_CONTAINER_FILE: for GGUF/file-type models, includes the specific
+	// .gguf filename even when the location path is a directory.
+	// llama.cpp's -m requires the exact .gguf file path (WEB-AI-RC-001).
+	modelContainerFile := modelContainerPath
+	if !strings.HasSuffix(modelBase, ".gguf") {
+		artifactBase := filepathBase(in.Artifact.Path)
+		if strings.HasSuffix(artifactBase, ".gguf") {
+			modelContainerFile = strings.TrimRight(containerMount, "/") + "/" + strings.TrimLeft(modelBase, "/") + "/" + artifactBase
+		}
+	}
+	vars["MODEL_CONTAINER_FILE"] = modelContainerFile
+	vars["model_container_file"] = modelContainerFile
+
 	vars["MODEL_HOST_PATH"] = modelHostPath
 	vars["model_host_path"] = vars["MODEL_HOST_PATH"]
 	vars["model_parent_host_path"] = modelHostRoot(in.Artifact)

@@ -2132,7 +2132,7 @@ func (h *AgentHandler) HandleModelInstanceTest(w http.ResponseWriter, r *http.Re
 		testReq.Mode = "auto"
 	}
 	if testReq.Prompt == "" {
-		testReq.Prompt = "ping"
+		testReq.Prompt = "Reply with exactly one word: pong"
 	}
 
 	// --- Phase 1: Resolve model id from /v1/models ---
@@ -2410,13 +2410,13 @@ func resolveModelID(client *http.Client, endpoint, artifactName, artifactPath, r
 // if the endpoint returns 404/405 (unsupported). Does not fallback for real
 // inference errors (OOM, auth failure, model load fail).
 func tryInference(client *http.Client, endpoint, modelName string) map[string]interface{} {
-	return tryInferenceWithMode(client, endpoint, modelName, "auto", "ping")
+	return tryInferenceWithMode(client, endpoint, modelName, "auto", "Reply with exactly one word: pong")
 }
 
 func tryInferenceWithMode(client *http.Client, endpoint, modelName, mode, prompt string) map[string]interface{} {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	if prompt == "" {
-		prompt = "ping"
+		prompt = "Reply with exactly one word: pong"
 	}
 	if mode == "completion" {
 		return tryCompletionInference(client, endpoint, modelName, prompt)
@@ -2438,8 +2438,11 @@ func tryInferenceWithMode(client *http.Client, endpoint, modelName, mode, prompt
 func tryChatInference(client *http.Client, endpoint, modelName, prompt string, unsupportedAsFallback bool) map[string]interface{} {
 	chatURL := strings.TrimRight(endpoint, "/") + "/v1/chat/completions"
 	chatBody, _ := json.Marshal(map[string]interface{}{
-		"model":      modelName,
-		"messages":   []map[string]string{{"role": "user", "content": prompt}},
+		"model": modelName,
+		"messages": []map[string]string{
+			{"role": "system", "content": "Reply with exactly one word: pong"},
+			{"role": "user", "content": prompt},
+		},
 		"max_tokens": 8, "temperature": 0, "stream": false,
 	})
 

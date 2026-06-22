@@ -20,7 +20,7 @@ func TestLlamaCppNvidiaRunPlan(t *testing.T) {
 			ID:                   "bver-llamacpp-b4817",
 			Version:              "b4817",
 			DefaultEntrypoint:    []string{},
-			DefaultArgs:          []string{"llama-server", "-m", "{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}", "-ngl", "{{assigned_gpu_count}}"},
+			DefaultArgs:          []string{"llama-server", "-m", "{{model_container_file}}", "--host", "0.0.0.0", "--port", "{{container_port}}", "-ngl", "{{assigned_gpu_count}}"},
 			DefaultBackendParams: []string{},
 			ParameterDefs: []ParameterDef{
 				{Name: "ctx_size", CliName: "--ctx-size", Type: "integer", Default: 4096.0, Required: false},
@@ -177,6 +177,96 @@ func TestLlamaCppNvidiaRunPlan(t *testing.T) {
 	t.Logf("docker_preview:\n  %s", preview)
 	t.Logf("input_hash: %s", plan.InputHash)
 	t.Logf("plan_hash: %s", plan.PlanHash)
+}
+
+// TestLlamaCppGGUFFileInDirectory verifies that when the model_locations.relative_path
+// is a directory but the artifact path points to a .gguf file, the -m flag uses the
+// specific .gguf file path while the mount uses the directory. This is the production
+// scenario where the old scan proxy stored directory-level paths (WEB-AI-RC-001).
+func TestLlamaCppGGUFFileInDirectory(t *testing.T) {
+	in := ResolveInput{
+		Backend: &BackendInfo{
+			ID:             "backend-llamacpp",
+			Name:           "llamacpp",
+			DefaultVersion: "b9700",
+			DefaultEnv:     map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			ID:                "llamacpp-b9700",
+			Version:           "b9700",
+			DefaultEntrypoint: []string{},
+			DefaultArgs:       []string{"-m", "{{model_container_file}}", "--host", "0.0.0.0", "--port", "{{container_port}}"},
+			ParameterDefs: []ParameterDef{
+				{Name: "ctx_size", CliName: "--ctx-size", Type: "integer", Default: 4096.0, Required: false},
+				{Name: "n_gpu_layers", CliName: "--n-gpu-layers", Type: "integer", Default: 999.0, Required: false},
+			},
+			HealthCheck: HealthCheckInput{
+				Path: "/health", ExpectedStatus: 200,
+				StartupTimeoutSeconds: 60, IntervalSeconds: 2, TimeoutSeconds: 5,
+			},
+			DefaultContainerPort: 8080,
+			DefaultImages:        map[string]string{"nvidia": "ghcr.io/ggml-org/llama.cpp:server-cuda13"},
+			Env:                  map[string]string{},
+		},
+		BackendRuntime: &RuntimeInfo{
+			ID:          "runtime-llamacpp-nvidia",
+			Vendor:      "nvidia",
+			RuntimeType: "docker",
+			DefaultEnv:  map[string]string{},
+			Docker:      DockerSpecInfo{},
+			ModelMount:  ModelMountInfo{ContainerPath: "/models", Readonly: true},
+		},
+		// Production scenario: model_locations.relative_path = directory name,
+		// but artifact path = specific .gguf file.
+		Artifact: &ArtifactInfo{
+			ID:           "artifact-qwen35-9b-q4",
+			Name:         "Qwen3.5-9B-Q4_K_M",
+			Path:         "/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf",
+			ModelRoot:    "/home/kzeng/models",
+			RelativePath: "Qwen3.5-9B-Q4", // directory name from old scan proxy
+		},
+		Deployment: &DeploymentInfo{
+			ID:      "deploy-llamacpp-gguf",
+			Name:    "qwen35-9b-llamacpp-gguf",
+			Service: ServiceInfo{HostPort: 8004},
+		},
+		InstanceID: "inst-llamacpp-gguf-001",
+		Node:       &NodeInfo{ID: "KZ-LAPTOP", IP: "127.0.0.1"},
+		AssignedGPUs: []GPUInfo{
+			{Index: 0, Vendor: "nvidia"},
+		},
+	}
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan == nil {
+		t.Fatal("plan is nil")
+	}
+
+	argsStr := strings.Join(plan.Args, " ")
+
+	// CRITICAL: -m must point to the .gguf FILE, not the directory.
+	if !strings.Contains(argsStr, "/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf") {
+		t.Errorf("args must contain file path in -m, got: %s", argsStr)
+	}
+	if strings.HasSuffix(strings.TrimSpace(argsStr), "/models/Qwen3.5-9B-Q4") {
+		t.Error("args must not end with directory path for -m")
+	}
+
+	// Mount should use the directory (for multi-file access).
+	if len(plan.Mounts) == 0 {
+		t.Fatal("no mounts generated")
+	}
+	mount := plan.Mounts[0]
+	expectedContainer := "/models/Qwen3.5-9B-Q4"
+	if mount.ContainerPath != expectedContainer {
+		t.Errorf("mount container_path: got %q, want %q (directory mount preserves multi-file access)", mount.ContainerPath, expectedContainer)
+	}
+
+	t.Logf("docker_preview:\n  %s", EquivalentCommandPreview(plan))
+	t.Logf("args: %s", argsStr)
 }
 
 // TestLlamaCppRunPlanNoGPU verifies CPU-only mode.

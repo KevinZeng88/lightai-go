@@ -104,7 +104,7 @@ func TestResolveSGLangNVIDIA(t *testing.T) {
 		Backend: &BackendInfo{Name: "sglang", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			Version:              "0.4.6",
-			DefaultEntrypoint:    []string{"python3", "-m", "sglang.launch_server"},
+			DefaultEntrypoint:    []string{"sglang", "serve"},
 			DefaultArgs:          []string{"--model-path", "{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}"},
 			DefaultBackendParams: []string{},
 			ParameterDefs:        []ParameterDef{{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: false}},

@@ -346,7 +346,7 @@ async function runSelectedTest() {
   testing.value = true
   testResult.value = null
   try {
-    testResult.value = await apiClient.post(`/model-instances/${testRow.value.id}/test`, { mode: testMode.value, prompt: 'ping', timeout_seconds: 30 })
+    testResult.value = await apiClient.post(`/model-instances/${testRow.value.id}/test`, { mode: testMode.value, prompt: 'Reply with exactly one word: pong', timeout_seconds: 30 })
   } catch (e: any) {
     testResult.value = { ok: false, mode: testMode.value, reason_code: 'network_error', message: e?.message || t('common.requestFailed') }
   } finally {
