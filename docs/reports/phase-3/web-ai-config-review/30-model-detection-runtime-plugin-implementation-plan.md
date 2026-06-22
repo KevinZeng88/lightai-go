@@ -1,14 +1,108 @@
 # Model Detection Runtime Plugin Implementation Plan
 
-> Status: REVISED_FOR_REVIEW
+> Status: REVISED_V3 — Production Runtime Acceptance integrated
 > Based on: Design doc 28 (`28-model-detection-runtime-plugin-design.md`)
 > Baseline: commit `625ac16`
 > Date: 2026-06-23
-> Revised: per review feedback (7 revision points)
+> Revised: review feedback (7 pts) + production runtime acceptance (8 pts)
 
 ## 1. Review Scope
 
 This document reviews the current codebase against the design doc 28, identifies gaps, and proposes a phased implementation plan. It does NOT implement any code changes.
+
+## 1.1 Local Model Inventory (2026-06-23)
+
+Checked at plan revision time:
+
+**Available locally**:
+| Path | Type | Format | Status |
+|------|------|--------|--------|
+| `/home/kzeng/models/Qwen3-0.6B-Instruct-2512/` | HF directory | huggingface | ✅ Can smoke-test |
+| `/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf` | GGUF file | gguf | ✅ Can smoke-test |
+| `/home/kzeng/models/qwen2.5-0.5b-gguf/` | GGUF multi-file | gguf | ✅ Can smoke-test |
+| `/home/kzeng/models/Qwen3.5-27B-Q4/` | GGUF file | gguf | ✅ Large, may skip |
+| Various root `.gguf` files | GGUF | gguf | ✅ Can smoke-test |
+
+**NOT available locally**:
+| Type | Status | Notes |
+|------|--------|-------|
+| Embedding HF directory (bge-m3, bge-large-zh, e5, gte, etc.) | ❌ Missing | No HF embedding model directories found |
+| Reranker HF directory (bge-reranker, jina-reranker, etc.) | ❌ Missing | No HF reranker model directories found |
+| Vision-Language HF directory (qwen-vl, llava, internvl, etc.) | ❌ Missing | No VL model directories found |
+
+**GGUF conversions exist but are NOT the target testing form**: `qllama_bge-reranker-v2-m3_latest.gguf` and `quentinz_bge-large-zh-v1.5_latest.gguf` are GGUF-converted versions of embedding/reranker models. These are NOT the standard HF directory form that vLLM/SGLang expect. They will be detected as GGUF Chat (via llama.cpp detector), not as Embedding/Reranker.
+
+## 1.2 External Model Dependencies
+
+For production smoke validation of Embedding and Reranker, the following models are recommended but NOT present:
+
+- Embedding: `BAAI/bge-m3`, `BAAI/bge-large-zh-v1.5`, `intfloat/multilingual-e5-base`, `thenlper/gte-large-zh`
+- Reranker: `BAAI/bge-reranker-v2-m3`, `BAAI/bge-reranker-large`, `jinaai/jina-reranker-v2-base-multilingual`
+
+Phases P4 and P5 (Embedding/Reranker smoke) are gated on user providing these models. Without them, P4/P5 are marked **EXTERNAL_DEPENDENCY_BLOCKED** — not PASS, not FAIL.
+
+## 1.3 Production Runtime Acceptance Scope
+
+LightAI Go must be usable in production for common model types. Detection alone is insufficient — models must actually run.
+
+### MUST RUN (5 model types)
+
+These must be validated through the full pipeline: scan → create → preflight → RunPlan → container start → endpoint success.
+
+| # | Model Type | Format | Backend | Test Endpoint | Local Model |
+|---|-----------|--------|---------|---------------|-------------|
+| 1 | Chat / Completion | huggingface (directory) | vLLM, SGLang | `/v1/chat/completions`, `/v1/completions` | ✅ Qwen3-0.6B-Instruct-2512 |
+| 2 | GGUF Chat / Completion | gguf (file) | llama.cpp | `/v1/chat/completions` or declared endpoint | ✅ Qwen3.5-9B-Q4_K_M.gguf |
+| 3 | Embedding | huggingface / sentence_transformers (directory) | vLLM, SGLang | `/v1/embeddings` | ❌ EXTERNAL_DEPENDENCY_BLOCKED |
+| 4 | Reranker / CrossEncoder | huggingface (directory) | vLLM, SGLang | backend-declared rerank endpoint (`/v1/rerank`, `/rerank`) | ❌ EXTERNAL_DEPENDENCY_BLOCKED |
+| 5 | Vision-Language / Multimodal | huggingface (directory) | vLLM, SGLang | `/v1/chat/completions` (text); image input as enhancement | ❌ EXTERNAL_DEPENDENCY_BLOCKED |
+
+For #3-#5, the platform code must be complete (detection, persistence, preflight, test endpoints). Only the live container smoke is gated on external model files.
+
+### RECOGNIZE BUT NOT RUN (7 model types)
+
+These are detected, entered into the model library, but cannot run:
+
+| # | Model Type | Reason | deployable |
+|---|-----------|--------|------------|
+| 6 | LoRA / Adapter | Needs base model + adapter composition (future) | false |
+| 7 | ONNX | No ONNX Runtime backend | false |
+| 8 | TensorRT / TensorRT-LLM Engine | No TensorRT-LLM backend | false |
+| 9 | OpenVINO | No OpenVINO backend | false |
+| 10 | Diffusers / Image Generation | No Diffusers/Image Generation backend | false |
+| 11 | ASR | No ASR backend | false |
+| 12 | TTS | No TTS backend | false |
+| 13 | Classification | No classification serving backend | false |
+
+These are detected, can enter the model library, but preflight blocks deployment. They are recognized to provide visibility of what was scanned.
+
+### Completion Threshold
+
+**Production closed loop = Phase A + B1 + C + D + E completed, PLUS Phase P smoke gates where locally available.**
+
+- A alone: NOT done (only contract, no new behavior)
+- A + B1 alone: NOT done (no UI, no preflight, no test)
+- A + B1 + C: NOT done (no compatibility enforcement)
+- A + B1 + C + D: NOT done (no test method abstraction)
+- A + B1 + C + D + E: **Code complete for MUST RUN types.** Ready for Phase P.
+- A + B1 + C + D + E + P: **Production closed loop complete** (where locally available).
+
+## 1.4 Execution Strategy
+
+**Phases are gated — each phase must be completed, committed, pushed, and git-clean before the next phase begins.**
+
+```
+Phase A  → closeout → commit → push → git clean
+Phase B1 → closeout → commit → push → git clean
+Phase C  → closeout → commit → push → git clean
+Phase D  → closeout → commit → push → git clean
+Phase E  → closeout → commit → push → git clean
+Phase P  → smoke evidence → closeout → commit → push → git clean
+Phase B2 → closeout → commit → push → git clean
+Phase F  → final closeout → commit → push → git clean
+```
+
+Priority: P (production smoke) comes before B2 (unsupported types). "Common models that run" is higher priority than "recognizing more models that don't run."
 
 ## 2. Current Implementation Summary
 
@@ -363,21 +457,57 @@ If during implementation existing columns prove insufficient, fallback option:
 **Changes**:
 
 **Backend capability** (seed data only, no schema change):
+
+The `capabilities_json` on `backend_versions` MUST drive actual behavior — it is NOT a display-only field. Every sub-field feeds into a code path:
+
+| Sub-field | Drives | Failure if missing/wrong |
+|-----------|--------|-------------------------|
+| `supported_formats` | CompatibilityChecker format match | Unsupported format silently allowed |
+| `supported_tasks` | CompatibilityChecker task match | Embedding model allowed on chat-only backend |
+| `supported_capabilities` | Test method dispatch, UI labels | Wrong test endpoint selected |
+| `model_path_modes` | RunPlan path resolution (directory vs file) | Wrong container path generated |
+| `test_endpoints` | Test method endpoint selection | `tryEmbeddingInference`/`tryRerankInference` can't call correct endpoint |
+
+If a backend does NOT declare an endpoint or capability, the system MUST fail clearly, not guess.
+
 1. Enrich `backend_versions.capabilities_json` for each backend:
    ```json
-   // vLLM / SGLang
+   // vLLM
    {
      "supported_formats": ["huggingface", "sentence_transformers"],
      "supported_tasks": ["chat", "completion", "embedding", "rerank", "vision_chat"],
      "supported_capabilities": ["chat", "completion", "embedding", "rerank", "vision"],
-     "model_path_modes": ["directory"]
+     "model_path_modes": ["directory"],
+     "test_endpoints": {
+       "chat": "/v1/chat/completions",
+       "completion": "/v1/completions",
+       "embedding": "/v1/embeddings",
+       "rerank": "/v1/rerank"
+     }
+   }
+   // SGLang
+   {
+     "supported_formats": ["huggingface", "sentence_transformers"],
+     "supported_tasks": ["chat", "completion", "embedding", "rerank", "vision_chat"],
+     "supported_capabilities": ["chat", "completion", "embedding", "rerank", "vision"],
+     "model_path_modes": ["directory"],
+     "test_endpoints": {
+       "chat": "/v1/chat/completions",
+       "completion": "/v1/completions",
+       "embedding": "/v1/embeddings",
+       "rerank": "/rerank"
+     }
    }
    // llama.cpp
    {
      "supported_formats": ["gguf"],
      "supported_tasks": ["chat", "completion"],
      "supported_capabilities": ["chat", "completion"],
-     "model_path_modes": ["file"]
+     "model_path_modes": ["file"],
+     "test_endpoints": {
+       "chat": "/v1/chat/completions",
+       "completion": "/v1/completions"
+     }
    }
    ```
 
@@ -395,7 +525,7 @@ If during implementation existing columns prove insufficient, fallback option:
 **Acceptance**:
 - vLLM/SGLang + GGUF file → preflight FAIL: "模型为 GGUF 文件，vLLM/SGLang 不支持。请使用 llama.cpp。"
 - llama.cpp + HF directory → preflight FAIL: "模型为 HuggingFace 目录，llama.cpp 不支持。请使用 vLLM/SGLang。"
-- LoRA standalone deploy → preflight FAIL
+- LoRA standalone deploy → preflight FAIL: "这是 LoRA/Adapter，需要选择基础模型后使用，不能作为独立模型直接部署。"
 - deployable=false models → preflight FAIL
 - Embedding + vLLM → preflight PASS
 - Reranker + vLLM → preflight PASS
@@ -436,6 +566,106 @@ If during implementation existing columns prove insufficient, fallback option:
 - Tests: go test, npm test, npm build ALL PASS
 
 **Risk**: Low — additive, no existing behavior changes
+
+---
+
+### Phase P: Production Runtime Smoke
+
+**Goal**: Validate that MUST RUN model types actually work end-to-end in production: scan → create → preflight → RunPlan → container start → endpoint success.
+
+**Gating**: Each smoke test requires the corresponding model files. Tests without local models are marked EXTERNAL_DEPENDENCY_BLOCKED.
+
+**Evidence required per smoke test** (not just "test passed"):
+```
+container created / started
+health check pass (or /v1/models returns expected ID)
+corresponding endpoint request success
+docker command / RunPlan text
+logs path or operation_id
+```
+
+#### P1: HF Chat with vLLM
+
+Model: `/home/kzeng/models/Qwen3-0.6B-Instruct-2512` (local ✅)
+Backend: vLLM
+```text
+✅ preflight pass
+✅ RunPlan uses directory path (--model /models/Qwen3-0.6B-Instruct-2512)
+✅ container starts
+✅ /v1/models returns model ID
+✅ /v1/chat/completions succeeds
+```
+Evidence: docker command, container logs, curl output
+
+#### P2: HF Chat with SGLang
+
+Model: `/home/kzeng/models/Qwen3-0.6B-Instruct-2512` (local ✅)
+Backend: SGLang
+```text
+✅ preflight pass
+✅ RunPlan uses directory path (sglang serve --model-path /models/...)
+✅ container starts
+✅ model endpoint available
+✅ chat/completion request succeeds
+```
+Evidence: docker command (sglang serve), container logs, curl output
+
+#### P3: GGUF Chat with llama.cpp
+
+Model: `/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf` (local ✅)
+Backend: llama.cpp
+```text
+✅ preflight pass
+✅ RunPlan -m points to .gguf file (not directory)
+✅ container starts
+✅ chat/completion request succeeds (or current llama.cpp endpoint)
+```
+Evidence: docker command with `-m` path, container logs, curl output
+
+#### P4: Embedding with vLLM/SGLang
+
+Model: external (BAAI/bge-m3 or equivalent) — **EXTERNAL_DEPENDENCY_BLOCKED**
+Backend: vLLM or SGLang
+```text
+✅ detector identifies task=embedding
+✅ default_test_mode=embedding
+✅ preflight pass with embedding-supporting backend
+✅ /v1/embeddings succeeds, returns embedding vector
+```
+**Status**: EXTERNAL_DEPENDENCY_BLOCKED until user provides embedding HF directory.
+**What IS verified without the model**: detector output, artifact persistence, preflight compatibility, test endpoint dispatch logic.
+
+#### P5: Reranker with vLLM/SGLang
+
+Model: external (BAAI/bge-reranker-v2-m3 or equivalent) — **EXTERNAL_DEPENDENCY_BLOCKED**
+Backend: vLLM or SGLang
+```text
+✅ detector identifies task=rerank
+✅ default_test_mode=rerank
+✅ preflight pass with rerank-supporting backend
+✅ declared rerank endpoint succeeds, returns score/rank output
+```
+**Status**: EXTERNAL_DEPENDENCY_BLOCKED until user provides reranker HF directory.
+**What IS verified without the model**: detector output, artifact persistence, preflight compatibility, test endpoint dispatch logic.
+
+#### P6: Wrong Combination Blocking
+
+Models: any local model ✅ (no external dependency)
+```text
+✅ vLLM/SGLang + GGUF file → preflight FAIL (clear error)
+✅ llama.cpp + HF directory → preflight FAIL (clear error)
+✅ LoRA standalone deploy → preflight FAIL (or UI grayed out)
+✅ deployable=false models → cannot generate RunPlan
+✅ Chat test on embedding model → redirected or blocked
+✅ Reranker model + backend missing rerank endpoint → clear failure
+```
+Evidence: preflight error messages, UI screenshots/descriptions
+
+**Phase P Acceptance**:
+- P1/P2/P3: PASS with real container + endpoint evidence (local models)
+- P4/P5: EXTERNAL_DEPENDENCY_BLOCKED (code paths verified; live smoke gated on model files)
+- P6: PASS (all blocking scenarios verified)
+- All regression gates R1-R8 still pass
 
 ---
 
@@ -490,23 +720,41 @@ Every phase must pass these regression assertions — they are non-negotiable:
 | R1 | Direct GGUF file selection RunPlan: `-m` points to `.gguf` file | RC-001/003/005/006 |
 | R2 | Directory scan GGUF selection RunPlan: `-m` points to selected `.gguf` file | RC-006 |
 | R3 | HF directory with vLLM/SGLang: path mode is directory | baseline |
-| R4 | llama.cpp + HF directory → preflight FAIL | (new in Phase D) |
-| R5 | vLLM/SGLang + GGUF file → preflight FAIL | (new in Phase D) |
-| R6 | deployable=false → cannot generate RunPlan | (new in Phase D) |
+| R4 | llama.cpp + HF directory → preflight FAIL (not warn) | (Phase D) |
+| R5 | vLLM/SGLang + GGUF file → preflight FAIL (not warn) | (Phase D) |
+| R6 | deployable=false → cannot generate RunPlan | (Phase D) |
 | R7 | i18n: no `task.xxx` / `format.xxx` / `capability.xxx` / `status.xxx` leaks | MV-007 |
 | R8 | `go test`, `go vet`, `npm test`, `npm build`, `git diff --check` ALL PASS | always |
+| R9 | Test endpoint uses backend-declared endpoint; undeclared → clear diagnostic (no guessing) | (Phase E) |
+| R10 | `capabilities_json` on backend_versions drives actual behavior (compat + test dispatch) | (Phase D/E) |
+
+### Forbidden Completion Patterns
+
+These may NOT appear in any closeout or final report:
+
+- ❌ "detection passes" without runtime evidence (for MUST RUN types)
+- ❌ "UI displays correctly" without preflight/endpoint verification
+- ❌ "preflight passes" without actual container start
+- ❌ Endpoint success claimed without docker command / logs / curl evidence
+- ❌ EXTERNAL_DEPENDENCY_BLOCKED reported as PASS
+- ❌ Known failing endpoint marked as "acceptable partial" without formal DOCUMENTED_BLOCKER entry
+- ❌ "later" / "TODO" / "后续再说" for MUST RUN model types
 
 ## 9. Phase Acceptance Criteria Summary
 
-| Phase | New Detectors | UI Changes | Compat Checks | Test Modes | Risk |
-|-------|--------------|------------|---------------|------------|------|
-| A | 0 (enrich existing) | Wizard field passthrough only | No | No | Low |
-| B1 | 6 (HF, GGUF, Embedding, Reranker, VLM, LoRA) | No | No | No | Medium |
-| C | 0 | Detail: task/evidence/deployable; Edit: task type | No | No | Low |
-| D | 0 | Preflight error display | Yes (block, not warn) | No | Medium |
-| E | 0 | Test selector: +embedding/rerank | No | Yes (embedding/rerank) | Low |
-| B2 | 7 (ONNX, TRT, OpenVINO, Diffusers, ASR, TTS, Classification) | No (reuses C) | No (reuses D) | No | Low |
-| F | 0 | 0 | Regression gates | Regression gates | Low |
+| Phase | New Detectors | UI Changes | Compat Checks | Test Modes | Runtime Evidence | Risk |
+|-------|--------------|------------|---------------|------------|-----------------|------|
+| A | 0 (enrich existing) | Wizard field passthrough only | No | No | No | Low |
+| B1 | 6 (HF, GGUF, Embedding, Reranker, VLM, LoRA) | No | No | No | No | Medium |
+| C | 0 | Detail: task/evidence/deployable; Edit: task type | No | No | No | Low |
+| D | 0 | Preflight error display | Yes (BLOCK all mismatches) | No | No | Medium |
+| E | 0 | Test selector: +embedding/rerank | No | Yes (embedding/rerank) | No | Low |
+| **P** | **0** | **0** | **Regression gates** | **Regression gates** | **YES: real container + endpoint evidence** | **Medium** |
+| B2 | 7 (ONNX, TRT, OpenVINO, Diffusers, ASR, TTS, Classification) | No (reuses C) | No (reuses D) | No | No | Low |
+| F | 0 | 0 | Regression gates | Regression gates | Regression gates | Low |
+
+**Production closed loop = A+B1+C+D+E+P. Only P (or later) counts as production-ready.**
+B2 is lower priority than P — recognizing unsupported types is less valuable than proving common types work.
 
 ## 10. Decisions (Formerly Open Questions)
 
@@ -517,7 +765,7 @@ Every phase must pass these regression assertions — they are non-negotiable:
 | D3 | **LoRA/Adapter: enter model library, deployment UI grays out with "需要基础模型，不能独立部署"** | Provides visibility; prevents accidental deployment; consistent with other unsupported types |
 | D4 | **Unsupported models: enter model library, marked "当前不支持运行", display unsupported_reason** | Provides visibility of what was scanned; enables future backend additions to automatically unlock these models |
 | D5 | **Rerank endpoint: use backend-declared endpoint from `capabilities_json.test_endpoints.rerank`; if not declared, return clear diagnostic** | Deterministic; no blind probing; backend declaration is the single source of truth |
-| D6 | **Phase ordering: A → B1 → C → D → E → B2 → F** | B1 delivers immediate value (embedding/reranker/VLM recognition); C provides UI visibility before D enforces constraints; B2 is low-priority (unsupported types); E enables test UX |
+| D6 | **Phase ordering: A → B1 → C → D → E → P → B2 → F** | Production smoke (P) comes before unsupported types (B2). "Common models actually run" is higher priority than "recognize more models that won't run." |
 | D7 | **Compatibility: format/path_mode/deployable/task mismatch → BLOCK (never warn)** | Prevent silent wrong behavior; user must explicitly choose compatible combination |
 
 ## 11. Test Plan
