@@ -124,6 +124,28 @@ func TestCompatVisionWithVLLMPasses(t *testing.T) {
 	assertCompatPass(t, "Vision+vLLM", result)
 }
 
+// TestCompatInternVLWithVLLMBlocked verifies architecture-level blocking.
+func TestCompatInternVLWithVLLMBlocked(t *testing.T) {
+	result := CheckCompatibility(
+		ModelDescriptor{Format: "huggingface", Task: "vision_chat", Deployable: true, PathType: "directory", Architecture: "InternVLChatModel"},
+		BackendDescriptor{BackendName: "vllm", SupportedFormats: []string{"huggingface"}, SupportedTasks: []string{"chat", "vision_chat"}, ModelPathModes: []string{"directory"}, BlockedArchitectures: map[string]string{"InternVLChatModel": "vLLM cannot load InternVL tokenizer"}},
+	)
+	assertCompatFail(t, "InternVL+vLLM blocked", result)
+	if result.Code != "architecture_blocked" {
+		t.Errorf("expected code=architecture_blocked, got %s", result.Code)
+	}
+}
+
+// TestCompatHFWithVLLMNoBlock verifies that HF chat models pass even with
+// blocked architectures declared (architecture check only matches exact arch).
+func TestCompatHFWithVLLMNoBlock(t *testing.T) {
+	result := CheckCompatibility(
+		ModelDescriptor{Format: "huggingface", Task: "chat", Deployable: true, PathType: "directory", Architecture: "Qwen3ForCausalLM"},
+		BackendDescriptor{BackendName: "vllm", SupportedFormats: []string{"huggingface"}, SupportedTasks: []string{"chat"}, ModelPathModes: []string{"directory"}, BlockedArchitectures: map[string]string{"InternVLChatModel": "vLLM cannot load InternVL tokenizer"}},
+	)
+	assertCompatPass(t, "HF+vLLM no block", result)
+}
+
 func TestParseBackendCapabilities(t *testing.T) {
 	capsJSON := `{"supported_formats":["huggingface"],"supported_tasks":["chat","embedding"],"supported_capabilities":["chat","embedding"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","embedding":"/v1/embeddings"}}`
 	bd, err := ParseBackendCapabilities(capsJSON)
@@ -135,6 +157,18 @@ func TestParseBackendCapabilities(t *testing.T) {
 	}
 	if len(bd.SupportedTasks) != 2 {
 		t.Errorf("expected 2 tasks, got %v", bd.SupportedTasks)
+	}
+	if len(bd.BlockedArchitectures) != 0 {
+		t.Errorf("expected 0 blocked architectures from JSON without blocked_architectures key, got %v", bd.BlockedArchitectures)
+	}
+	// Test with blocked_architectures
+	capsWithBlock := `{"supported_formats":["huggingface"],"supported_tasks":["chat","vision_chat"],"supported_capabilities":["chat","vision"],"model_path_modes":["directory"],"blocked_architectures":{"InternVLChatModel":"tokenizer not supported"}}`
+	bd2, err2 := ParseBackendCapabilities(capsWithBlock)
+	if err2 != nil {
+		t.Fatalf("failed to parse with blocks: %v", err2)
+	}
+	if bd2.BlockedArchitectures["InternVLChatModel"] != "tokenizer not supported" {
+		t.Errorf("wrong blocked arch: %v", bd2.BlockedArchitectures)
 	}
 	if ep, ok := bd.TestEndpoints["chat"].(string); !ok || ep != "/v1/chat/completions" {
 		t.Errorf("wrong chat endpoint: %v", bd.TestEndpoints["chat"])

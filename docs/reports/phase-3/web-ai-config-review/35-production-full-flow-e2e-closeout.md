@@ -1,12 +1,27 @@
 # 35 — Production Full-Flow E2E (Batch 4) Closeout
 
-> Status: **REVISED** — Real runtime evidence for all 6 model types
+> Status: **PARTIAL_PASS** — 5/6 runtime PASS, 1 BACKEND_CAPABILITY_BLOCKED (VLM), preflight now blocks VLM
 > Baseline: commit `5cb70cf` (original programmatic)
-> Date: 2026-06-23
+> Triaged: commit `(pending)` (VLM architecture blocking in compat checker)
 
-## 1. Correction from Previous Version
+## 1. Batch 4 Final Status: PARTIAL_PASS
 
-Commit `5cb70cf` provided only programmatic validation (scan + compat JSON). That was NOT Production Full-Flow E2E. This revision adds **real container deployment, endpoint testing, logs, and cleanup** evidence.
+5 runtime E2Es PASS (real containers + endpoint evidence):
+- E2E-1 HF Chat + vLLM → PASS
+- E2E-2 HF Chat + SGLang → PASS  
+- E2E-3 GGUF + llama.cpp → PASS
+- E2E-4 Embedding + vLLM → PASS
+- E2E-5 Reranker + vLLM → PASS
+
+1 runtime E2E BACKEND_CAPABILITY_BLOCKED (triage complete, preflight now blocks):
+- E2E-6 VLM + vLLM / InternVL2_5-1B → BACKEND_CAPABILITY_BLOCKED
+
+1 compatibility E2E PASS:
+- E2E-7 Wrong Combination Blocking → PASS (16/16)
+
+## 1a. Correction from Previous Version
+
+Commit `5cb70cf` provided only programmatic validation (scan + compat JSON). That was NOT Production Full-Flow E2E. This revision adds **real container deployment, endpoint testing, logs, cleanup, and VLM blocker triage with code fix**.
 
 ## 2. Environment
 
@@ -28,7 +43,7 @@ Commit `5cb70cf` provided only programmatic validation (scan + compat JSON). Tha
 | 3 | Qwen3.5-9B-Q4 (GGUF) | llama.cpp | ✅ Started | ✅ /v1/models + /v1/chat/completions | **PASS** |
 | 4 | bge-small-zh-v1.5 (Embedding) | vLLM | ✅ Started | ✅ /v1/embeddings (vector returned) | **PASS** |
 | 5 | bge-reranker-base (Reranker) | vLLM | ✅ Started | ✅ /v1/rerank (scores: 0.999 vs 0.001) | **PASS** |
-| 6 | InternVL2_5-1B (VLM) | vLLM | ❌ Failed | ❌ Tokenizer error | **BACKEND_CAPABILITY_BLOCKED** |
+| 6 | InternVL2_5-1B (VLM) | vLLM | ❌ Tokenizer error | ❌ (blocked by compat) | **BACKEND_CAPABILITY_BLOCKED** |
 | 7 | Wrong Combos | N/A | N/A | N/A | **PASS** (11/11) |
 
 ## 4. Runtime Evidence Details
@@ -66,11 +81,24 @@ Commit `5cb70cf` provided only programmatic validation (scan + compat JSON). Tha
 - **/v1/rerank**: Returned relevance_score 0.999 for GPU doc, 0.001 for DB doc
 - **Evidence**: e2e-5-docker-command.txt, e2e-5-rerank-response.json
 
-### E2E-6: vLLM + VLM → BACKEND_CAPABILITY_BLOCKED
-- **Reason**: vLLM image lacks sentencepiece/tiktoken dependency for InternVL2_5-1B tokenizer
-- **Error**: `ValueError: Couldn't instantiate the backend tokenizer... You need to have sentencepiece or tiktoken installed`
-- **Not a code defect**: This is an infrastructure/container image capability issue
-- **Evidence**: e2e-6-chat-response-or-blocker.txt, e2e-6-logs.txt
+### E2E-6: vLLM + VLM → BACKEND_CAPABILITY_BLOCKED (TRIAGED)
+
+**Root cause**: vLLM v0.20.1 (`vllm/vllm-openai:latest`) FAILS to load InternVL2.5 even though:
+- `sentencepiece` IS installed in the image (v0.2.1)
+- `--trust-remote-code` flag was provided
+- The same image successfully loads Qwen3, bge-small, and bge-reranker
+
+The tokenizer conversion fails because InternVL2.5 uses a custom tokenizer that transformers cannot convert to fast tokenizer format, even with sentencepiece present. This is a true **architecture-level incompatibility** between vLLM v0.20.1 and InternVLChatModel.
+
+**Fix applied**: 
+1. Added `Architecture` field to `ModelDescriptor` and `BlockedArchitectures` map to `BackendDescriptor`
+2. Added architecture-level blocking check in `CheckCompatibility` (step 5, before task check)
+3. Both vLLM and SGLang `capabilities_json` now declare `blocked_architectures.InternVLChatModel` with clear reason
+4. Preflight passes model architecture from `model_artifacts.architecture` to compat checker
+5. `TestCompatInternVLWithVLLMBlocked` verifies the block
+6. `TestCompatHFWithVLLMNoBlock` verifies Qwen3 (different architecture) still passes
+
+**Evidence**: e2e-6-chat-response-or-blocker.txt, e2e-6-logs.txt
 
 ### E2E-7: Wrong Combinations → PASS (11/11)
 - 6 blocking combinations verified (format_mismatch, not_deployable)
@@ -123,10 +151,19 @@ evidence/batch4-full-flow-e2e/
 ├── e2e-1-scan.json to e2e-6-scan.json (from programmatic phase)
 ```
 
-## 7. Final Status
+## 7. Triage Code Changes (VLM Blocker)
+
+| File | Change |
+|------|--------|
+| `internal/server/runplan/compat.go` | Added `Architecture` to ModelDescriptor, `BlockedArchitectures` to BackendDescriptor, architecture check in CheckCompatibility, parsing in ParseBackendCapabilities |
+| `internal/server/runplan/compat_test.go` | Added `TestCompatInternVLWithVLLMBlocked`, `TestCompatHFWithVLLMNoBlock`, parsing test for blocked_architectures |
+| `internal/server/db/db.go` | Updated V27 repair and seed `capabilities_json`: vLLM/SGLang block InternVLChatModel with clear reason |
+| `internal/server/api/deployment_lifecycle_handlers.go` | Preflight passes `artifact.architecture` to compat check |
+
+## 8. Final Status
 
 | Count | Status |
 |-------|--------|
 | 5 | ✅ PASS (real container + endpoint evidence) |
-| 1 | BACKEND_CAPABILITY_BLOCKED (InternVL tokenizer) |
-| 1 | PASS (E2E-7: compatibility checks) |
+| 1 | BACKEND_CAPABILITY_BLOCKED (InternVL: triaged, preflight now blocks) |
+| 1 | PASS (E2E-7: 16/16 compatibility checks including architecture blocking) |

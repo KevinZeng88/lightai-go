@@ -4,10 +4,11 @@ import "encoding/json"
 
 // ModelDescriptor captures model-level facts for compatibility checking.
 type ModelDescriptor struct {
-	Format     string
-	Task       string
-	Deployable bool
-	PathType   string
+	Format       string
+	Task         string
+	Deployable   bool
+	PathType     string
+	Architecture string // model architecture (e.g., "InternVLChatModel")
 }
 
 // BackendDescriptor captures backend-level capability facts.
@@ -18,6 +19,7 @@ type BackendDescriptor struct {
 	SupportedCapabilities []string
 	ModelPathModes        []string
 	TestEndpoints         map[string]interface{}
+	BlockedArchitectures  map[string]string // arch → reason for blocking
 }
 
 // CompatResult is the output of a compatibility check.
@@ -67,7 +69,12 @@ func CheckCompatibility(model ModelDescriptor, backend BackendDescriptor) Compat
 			pathModeMismatchMsg(model.PathType, backend.BackendName, backend.ModelPathModes)}
 	}
 
-	// 5. Task check.
+	// 5. Architecture-level blocking (VLM triage: E2E evidence shows InternVL fails).
+	if reason, blocked := backend.BlockedArchitectures[model.Architecture]; blocked {
+		return CompatResult{false, "architecture_blocked", reason}
+	}
+
+	// 6. Task check.
 	taskOK := false
 	for _, t := range backend.SupportedTasks {
 		if t == model.Task {
@@ -91,9 +98,13 @@ func ParseBackendCapabilities(capabilitiesJSON string) (BackendDescriptor, error
 		SupportedCapabilities []string               `json:"supported_capabilities"`
 		ModelPathModes        []string               `json:"model_path_modes"`
 		TestEndpoints         map[string]interface{} `json:"test_endpoints"`
+		BlockedArchitectures  map[string]string      `json:"blocked_architectures"`
 	}
 	if err := json.Unmarshal([]byte(capabilitiesJSON), &caps); err != nil {
 		return BackendDescriptor{}, err
+	}
+	if caps.BlockedArchitectures == nil {
+		caps.BlockedArchitectures = map[string]string{}
 	}
 	return BackendDescriptor{
 		SupportedFormats:      caps.SupportedFormats,
@@ -101,6 +112,7 @@ func ParseBackendCapabilities(capabilitiesJSON string) (BackendDescriptor, error
 		SupportedCapabilities: caps.SupportedCapabilities,
 		ModelPathModes:        caps.ModelPathModes,
 		TestEndpoints:         caps.TestEndpoints,
+		BlockedArchitectures:  caps.BlockedArchitectures,
 	}, nil
 }
 

@@ -912,7 +912,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		backendCaps.BackendName = pf.backendName
 	}
 	compatResult := runplan.CheckCompatibility(
-		runplan.ModelDescriptor{Format: modelFormat, Task: modelTask, Deployable: modelDeployable, PathType: modelPathType},
+		runplan.ModelDescriptor{Format: modelFormat, Task: modelTask, Deployable: modelDeployable, PathType: modelPathType, Architecture: strVal(artifact, "architecture", "")},
 		backendCaps,
 	)
 	if !compatResult.Compatible {
