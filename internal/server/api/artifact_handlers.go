@@ -27,6 +27,12 @@ var allowedCapabilitySources = map[string]bool{
 }
 
 // Allowed default_test_mode values.
+var allowedTaskTypes = map[string]bool{
+	"chat": true, "completion": true, "embedding": true,
+	"rerank": true, "vision_chat": true, "adapter": true, "unknown": true,
+}
+
+// Allowed default_test_mode values.
 var allowedTestModes = map[string]bool{
 	"auto": true, "chat": true, "completion": true,
 	"embedding": true, "rerank": true,
@@ -126,13 +132,19 @@ func (h *AgentHandler) HandleCreateArtifact(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	taskType := strVal(req, "task_type", "chat")
+	if !allowedTaskTypes[taskType] {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid task_type: %s", taskType))
+		return
+	}
+
 	id := uuid.NewString()
 	tid := tenantID(r)
 	now := time.Now().Format(time.RFC3339)
 
 	_, err := h.DB.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "source_type", "local_path"),
-		path, format, strVal(req, "task_type", "chat"),
+		path, format, taskType,
 		strVal(req, "architecture", "custom"), strVal(req, "size_label", ""),
 		strVal(req, "quantization", "unknown"), intVal(req, "default_context_length", 0),
 		int64Val(req, "estimated_vram_bytes", 0), intVal(req, "required_gpu_count", 1),
@@ -194,6 +206,14 @@ func (h *AgentHandler) HandlePatchArtifact(w http.ResponseWriter, r *http.Reques
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
 	for _, f := range []string{"display_name", "path", "format", "source_type", "task_type", "architecture", "size_label", "quantization"} {
+		if f == "task_type" {
+			if tv, ok := req[f]; ok {
+				if ts, ok2 := tv.(string); ok2 && !allowedTaskTypes[ts] {
+					writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid task_type: %s", ts))
+					return
+				}
+			}
+		}
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
 			args = append(args, v)

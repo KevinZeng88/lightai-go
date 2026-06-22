@@ -44,6 +44,11 @@
         <el-form-item :label="$t('artifacts.path')"><el-input v-model="form.path" /></el-form-item>
         <el-form-item :label="$t('artifacts.format')"><el-select v-model="form.format" filterable allow-create style="width:100%"><el-option v-for="o in formatOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
         <el-form-item :label="$t('artifacts.quantization')"><el-select v-model="form.quantization" filterable allow-create style="width:100%"><el-option v-for="o in quantOptions" :key="o" :label="o" :value="o" /></el-select></el-form-item>
+        <el-form-item :label="$t('artifacts.taskType')">
+          <el-select v-model="editTaskType" style="width:100%">
+            <el-option v-for="o in TASK_TYPE_OPTIONS" :key="o.value" :label="$t(o.labelKey)" :value="o.value" />
+          </el-select>
+        </el-form-item>
 
         <!-- Capabilities (editable) -->
         <el-divider content-position="left">{{ $t('artifacts.capabilitySection') }}</el-divider>
@@ -77,6 +82,9 @@
           <el-descriptions-item :label="$t('artifacts.name')">{{ selected.name }}</el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.displayName')">{{ selected.display_name || selected.name }}</el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.format')">{{ selected.format }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('artifacts.taskType')">
+            <el-tag size="small" type="primary">{{ taskTypeText(selected.task_type || 'chat') }}</el-tag>
+          </el-descriptions-item>
           <el-descriptions-item :label="$t('artifacts.path')">{{ selected.path }}</el-descriptions-item>
           <el-descriptions-item v-if="detailPathType" :label="$t('artifacts.pathType')">{{ detailPathType }}</el-descriptions-item>
           <el-descriptions-item v-if="detailFileSize" :label="$t('artifacts.fileSize')">{{ detailFileSize }}</el-descriptions-item>
@@ -173,6 +181,33 @@
             </template>
           </el-table-column>
         </el-table>
+
+        <!-- Scanner Recognition Info (Phase C) -->
+        <template v-if="scanMeta">
+          <h4 style="margin-top:16px">{{ $t('artifacts.scanRecognition') }}</h4>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item v-if="scanMeta.kind" :label="$t('artifacts.kind')">
+              <el-tag size="small" :type="scanMeta.kind === 'directory' ? 'success' : scanMeta.kind === 'file' ? 'warning' : 'info'">{{ kindText(scanMeta.kind) }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="scanMeta.deployable !== undefined" :label="$t('artifacts.deployable')">
+              <el-tag size="small" :type="scanMeta.deployable ? 'success' : 'danger'">{{ scanMeta.deployable ? $t('common.yes') : $t('common.no') }}</el-tag>
+              <span v-if="!scanMeta.deployable && scanMeta.unsupported_reason" style="margin-left:8px;color:#f56c6c">{{ scanMeta.unsupported_reason }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="scanMeta.requires_base_model" :label="$t('artifacts.requiresBaseModel')">
+              <el-tag size="small" type="warning">{{ $t('common.yes') }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="scanMeta.confidence" :label="$t('artifacts.confidence')">
+              <el-tag size="small">{{ scanMeta.confidence }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="scanMeta.recommended_backends?.length" :label="$t('artifacts.recommendedBackends')" :span="2">
+              <el-tag v-for="b in scanMeta.recommended_backends" :key="b" size="small" type="success" style="margin-right:4px">{{ b }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="scanMeta.evidence?.length" :label="$t('artifacts.evidence')" :span="2">
+              <el-tag v-for="e in scanMeta.evidence" :key="e" size="small" type="info" style="margin-right:4px;margin-bottom:4px">{{ e }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="scanMeta.scan_root" :label="$t('artifacts.scanRoot')" :span="2">{{ scanMeta.scan_root }}</el-descriptions-item>
+          </el-descriptions>
+        </template>
       </template>
     </el-drawer>
 
@@ -336,6 +371,16 @@ const quantOptions = ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'FP16', 'BF16', 'FP8', 'INT8',
 // Capability edit state
 const editCapabilities = ref<string[]>([])
 const editDefaultTestMode = ref('auto')
+const editTaskType = ref('chat')
+const TASK_TYPE_OPTIONS = [
+  { value: 'chat', labelKey: 'artifacts.task_chat' },
+  { value: 'completion', labelKey: 'artifacts.task_completion' },
+  { value: 'embedding', labelKey: 'artifacts.task_embedding' },
+  { value: 'rerank', labelKey: 'artifacts.task_rerank' },
+  { value: 'vision_chat', labelKey: 'artifacts.task_visionChat' },
+  { value: 'adapter', labelKey: 'artifacts.task_adapter' },
+  { value: 'unknown', labelKey: 'artifacts.task_unknown' },
+]
 const CAPABILITY_OPTIONS = [
   { value: 'chat', labelKey: 'artifacts.capability_chat' },
   { value: 'completion', labelKey: 'artifacts.capability_completion' },
@@ -356,6 +401,23 @@ const TEST_MODE_OPTIONS = [
 const hasPersistedCapabilities = computed(() => {
   return Array.isArray(selected.value?.capabilities) && selected.value.capabilities.length > 0
 })
+
+// Scanner metadata from first model location (Phase C).
+const scanMeta = computed(() => {
+  const loc = locations.value?.[0]
+  if (!loc?.discovered_metadata_json) return null
+  return loc.discovered_metadata_json
+})
+
+function kindText(kind: string): string {
+  const keyMap: Record<string, string> = { directory: 'artifacts.kind_directory', file: 'artifacts.kind_file', adapter: 'artifacts.kind_adapter' }
+  return t(keyMap[kind] || kind)
+}
+
+function taskTypeText(task: string): string {
+  const keyMap: Record<string, string> = { chat: 'artifacts.task_chat', completion: 'artifacts.task_completion', embedding: 'artifacts.task_embedding', rerank: 'artifacts.task_rerank', vision_chat: 'artifacts.task_visionChat', adapter: 'artifacts.task_adapter', unknown: 'artifacts.task_unknown' }
+  return t(keyMap[task] || task)
+}
 
 // Scan result candidate type checks.
 const hasHF = computed(() => scanResult.value?.candidates?.some((c: any) => c.format === 'huggingface'))
@@ -459,17 +521,18 @@ async function refresh() {
 }
 async function loadNodesLocal() { loadNodes() }
 
-function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; editCapabilities.value = []; editDefaultTestMode.value = 'auto'; dialogVisible.value = true }
-function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); editCapabilities.value = Array.isArray(row.capabilities) ? [...row.capabilities] : []; editDefaultTestMode.value = row.default_test_mode || 'auto'; dialogVisible.value = true }
+function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; editCapabilities.value = []; editDefaultTestMode.value = 'auto'; editTaskType.value = 'chat'; dialogVisible.value = true }
+function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); editCapabilities.value = Array.isArray(row.capabilities) ? [...row.capabilities] : []; editDefaultTestMode.value = row.default_test_mode || 'auto'; editTaskType.value = row.task_type || 'chat'; dialogVisible.value = true }
 
 async function doSave() {
   saving.value = true
   try {
     if (!form.value.display_name) form.value.display_name = form.value.name
     const payload: any = { ...form.value }
-    // Include capabilities and default test mode.
+    // Include capabilities, default test mode, and task type (Phase C).
     payload.capabilities = editCapabilities.value
     payload.default_test_mode = editDefaultTestMode.value
+    payload.task_type = editTaskType.value
     if (editingId) await apiClient.patch(`/api/v1/model-artifacts/${editingId}`, payload)
     else await apiClient.post('/api/v1/model-artifacts', payload)
     ElMessage.success(t('artifacts.saved')); dialogVisible.value = false; await refresh()
