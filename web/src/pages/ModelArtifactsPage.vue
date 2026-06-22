@@ -201,6 +201,7 @@
       <!-- Step 3: Scan results & save -->
       <div v-if="wizardStep === 2" v-loading="wizardScanning">
         <el-alert v-if="scanResult?.error && !scanResult?.candidates?.length" type="error" :title="scanResult.error" show-icon style="margin-bottom:12px" />
+        <el-alert v-if="scanResult && !scanResult.error && !scanResult.candidates?.length" type="warning" :title="$t('modelWizard.noModelFound')" show-icon style="margin-bottom:12px" />
 
         <!-- Scan status info -->
         <el-alert v-if="scanResult && !scanResult.error" type="success" :closable="false" style="margin-bottom:12px">
@@ -540,13 +541,32 @@ async function doWizardSave() {
       default_context_length: c.detected_metadata?.context_length || 0,
       quantization: c.detected_metadata?.quantization || 'unknown',
     })
+    // Derive the model location path from the candidate (the specific discovered file).
+    // The scan root and the candidate path are needed to compute model_root and relative_path
+    // that point to the exact .gguf file, not just the scan directory (WEB-AI-RC-006).
+    const candidatePath: string = c.path || scanResult.value?.absolute_path || ''
+    const scanRoot = scanResult.value?.model_root || scanResult.value?.root || wizardSelectedEntry.value?.root || ''
+    const candidatePathType = c.path_type || (candidatePath.endsWith('.gguf') ? 'file' : 'directory')
+
+    // Compute model_root and relative_path from the candidate's specific file path.
+    let locModelRoot = scanRoot
+    let locRelativePath = ''
+    if (candidatePath && scanRoot && candidatePath.startsWith(scanRoot)) {
+      locRelativePath = candidatePath.slice(scanRoot.length).replace(/^\//, '')
+    }
+    // Fallback: use scan-level relative_path if the candidate path doesn't start with root.
+    if (!locRelativePath) {
+      locModelRoot = scanResult.value?.model_root || scanResult.value?.root || wizardSelectedEntry.value?.root
+      locRelativePath = scanResult.value?.relative_path || wizardSelectedEntry.value?.relative_path
+    }
+
     await apiClient.post(`/model-artifacts/${artifact.id}/locations`, {
       node_id: wizardNodeId.value,
       root_id: scanResult.value?.root_id || wizardSelectedEntry.value?.root_id,
-      model_root: scanResult.value?.model_root || scanResult.value?.root || wizardSelectedEntry.value?.root,
-      relative_path: scanResult.value?.relative_path || wizardSelectedEntry.value?.relative_path,
-      absolute_path: c.path || scanResult.value?.absolute_path,
-      path_type: c.path_type || 'directory',
+      model_root: locModelRoot,
+      relative_path: locRelativePath || wizardSelectedEntry.value?.relative_path,
+      absolute_path: candidatePath,
+      path_type: candidatePathType,
       verification_status: 'verified',
       match_status: 'exact_match',
       discovered_metadata_json: c.detected_metadata || {},

@@ -447,6 +447,11 @@ func (h *AgentHandler) HandleCreateModelLocation(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// GGUF models require a .gguf file path, not a directory (WEB-AI-RC-006).
+	if strVal(artifact, "format", "") == "gguf" && !strings.HasSuffix(absolutePath, ".gguf") {
+		writeError(w, http.StatusBadRequest, "GGUF models require a .gguf file path, not a directory. Please select the specific .gguf file.")
+		return
+	}
 	id := uuid.NewString()
 	tid := artifact["tenant_id"].(string)
 	now := time.Now().Format(time.RFC3339)
