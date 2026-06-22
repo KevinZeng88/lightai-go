@@ -12,4 +12,12 @@
 | WEB-AI-FU-004 | Endpoint alias / served model alias is not a dedicated deployment field. | `parameters_json` can hold backend parameters, but no explicit endpoint alias schema/API exists. | UI cannot promise a portable alias editor across backends. | DOCUMENTED_BLOCKER | Future deployment parameter contract for served model name/endpoint alias. | Dry-run/build tests verify existing presentation only. | Keep this out of first-class UI until contract exists. |
 | WEB-AI-FU-005 | Deployment list summary joins are frontend-enriched rather than server summarized. | `GET /api/v1/deployments` returns IDs and JSON fields; frontend enriches with refs from models/runtimes/NBRs/instances. | Large deployments may benefit from a future summary DTO, but current display works with existing APIs. | DOCUMENTED_BLOCKER | Future read-only deployment summary API/DTO. | `npm --prefix web run build` and `npm --prefix web test` verify current frontend enrichment compiles and passes tests. | Keep frontend enrichment in this presentation-only round. |
 
+---
+
+## Batch 4 VLM Blocker (2026-06-23)
+
+| ID | Issue | Evidence | Impact | Status | Fix Location | Verification | Final Decision |
+| -- | ----- | -------- | ------ | ------ | ------------ | ------------ | -------------- |
+| VLM-RUNTIME-001 | InternVL2_5-1B blocked on vLLM/SGLang backend architecture support. | vLLM v0.20.1 fails to load InternVLChatModel tokenizer even with sentencepiece installed and --trust-remote-code. Same image loads Qwen3/bge-small/bge-reranker. | VLM models cannot be deployed with current built-in backends; preflight now blocks via `blocked_architectures`. | BACKEND_CAPABILITY_BLOCKED | `internal/server/runplan/compat.go` (architecture check); `internal/server/db/db.go` (V27 repair + seed); `internal/server/api/deployment_lifecycle_handlers.go` (preflight passes architecture) | `go test lightai-go/internal/server/runplan/ -run TestCompatInternVLWithVLLMBlocked` verifies block; `TestCompatHFWithVLLMNoBlock` verifies other architectures unaffected | Preflight blocks InternVLChatModel. Future unlock: validated backend runtime/image that supports InternVL2.5. Not a missing dependency — sentencepiece is present. |
+
 No unresolved problem from this round exists only in chat.

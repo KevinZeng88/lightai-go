@@ -2,7 +2,7 @@
 
 > Status: **PARTIAL_PASS** — 5/6 runtime PASS, 1 BACKEND_CAPABILITY_BLOCKED (VLM), preflight now blocks VLM
 > Baseline: commit `5cb70cf` (original programmatic)
-> Triaged: commit `(pending)` (VLM architecture blocking in compat checker)
+> Triaged: commit `be56e10` (VLM architecture blocking in compat checker)
 
 ## 1. Batch 4 Final Status: PARTIAL_PASS
 
