@@ -199,6 +199,11 @@ func (db *DB) Migrate() error {
 			return fmt.Errorf("migrate v25: %w", err)
 		}
 	}
+	if currentVersion < 26 {
+		if err := db.migrateV26(); err != nil {
+			return fmt.Errorf("migrate v26: %w", err)
+		}
+	}
 
 	// Target Backend Catalog seed is idempotent and must also repair existing
 	// databases that reached V13 before the target stable IDs were added.
@@ -1536,6 +1541,44 @@ func (db *DB) migrateV25() error {
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
 		VALUES (25, 'V25: model_artifacts capability persistence columns')`); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateV26 force-updates llama.cpp backend version and frozen NBR/deployment
+// config snapshots to use {{model_container_file}} instead of {{model_container_path}}
+// for the -m flag. Previous seed-only fixes were ignored by INSERT OR IGNORE on
+// existing DB rows, and frozen NodeBackendRuntime snapshots continued to inject
+// the old variable (WEB-AI-RC-005).
+func (db *DB) migrateV26() error {
+	// 1. Update backend_versions.default_args_json for llama.cpp.
+	if _, err := db.Exec(`UPDATE backend_versions SET default_args_json = REPLACE(default_args_json, '"{{model_container_path}}"', '"{{model_container_file}}"'), updated_at = datetime('now') WHERE default_args_json LIKE '%{{model_container_path}}%' AND id LIKE '%llama%'`); err != nil {
+		log.Warn("db.migrateV26 update backend_versions warning", "error", err)
+	}
+	// Also fix uppercase variant.
+	if _, err := db.Exec(`UPDATE backend_versions SET default_args_json = REPLACE(default_args_json, '"{{MODEL_CONTAINER_PATH}}"', '"{{MODEL_CONTAINER_FILE}}"'), updated_at = datetime('now') WHERE default_args_json LIKE '%{{MODEL_CONTAINER_PATH}}%' AND id LIKE '%llama%'`); err != nil {
+		log.Warn("db.migrateV26 update backend_versions uppercase warning", "error", err)
+	}
+
+	// 2. Update node_backend_runtimes.config_snapshot_json (frozen at NBR creation).
+	if _, err := db.Exec(`UPDATE node_backend_runtimes SET config_snapshot_json = REPLACE(config_snapshot_json, '"{{MODEL_CONTAINER_PATH}}"', '"{{MODEL_CONTAINER_FILE}}"'), updated_at = datetime('now') WHERE config_snapshot_json LIKE '%{{MODEL_CONTAINER_PATH}}%' AND (backend_runtime_id LIKE '%llama%' OR config_snapshot_json LIKE '%llama%')`); err != nil {
+		log.Warn("db.migrateV26 update nbr snapshot warning", "error", err)
+	}
+	if _, err := db.Exec(`UPDATE node_backend_runtimes SET config_snapshot_json = REPLACE(config_snapshot_json, '"{{model_container_path}}"', '"{{model_container_file}}"'), updated_at = datetime('now') WHERE config_snapshot_json LIKE '%{{model_container_path}}%' AND (backend_runtime_id LIKE '%llama%' OR config_snapshot_json LIKE '%llama%')`); err != nil {
+		log.Warn("db.migrateV26 update nbr snapshot lowercase warning", "error", err)
+	}
+
+	// 3. Update model_deployments.config_snapshot_json (frozen at deployment creation).
+	if _, err := db.Exec(`UPDATE model_deployments SET config_snapshot_json = REPLACE(config_snapshot_json, '"{{MODEL_CONTAINER_PATH}}"', '"{{MODEL_CONTAINER_FILE}}"'), updated_at = datetime('now') WHERE config_snapshot_json LIKE '%{{MODEL_CONTAINER_PATH}}%' AND (config_snapshot_json LIKE '%llama%' OR config_snapshot_json LIKE '%llamacpp%')`); err != nil {
+		log.Warn("db.migrateV26 update deployment snapshot warning", "error", err)
+	}
+	if _, err := db.Exec(`UPDATE model_deployments SET config_snapshot_json = REPLACE(config_snapshot_json, '"{{model_container_path}}"', '"{{model_container_file}}"'), updated_at = datetime('now') WHERE config_snapshot_json LIKE '%{{model_container_path}}%' AND (config_snapshot_json LIKE '%llama%' OR config_snapshot_json LIKE '%llamacpp%')`); err != nil {
+		log.Warn("db.migrateV26 update deployment snapshot lowercase warning", "error", err)
+	}
+
+	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description)
+		VALUES (26, 'V26: force-update llama.cpp -m to use model_container_file in existing DB records')`); err != nil {
 		return err
 	}
 	return nil
