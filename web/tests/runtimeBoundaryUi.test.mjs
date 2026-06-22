@@ -33,7 +33,7 @@ check('deployment final step has save, save-and-run, and preview actions', deplo
 check('deployment port labels distinguish host, container, and app ports', deploymentsPage.includes('deployments.hostPort') && deploymentsPage.includes('deployments.containerPort') && deploymentsPage.includes('deployments.appPort'))
 check('deployment run button is guarded for active states', deploymentsPage.includes('isRunBlocked') && deploymentsPage.includes("'running'") && deploymentsPage.includes("'starting'"))
 check('model test empty response is rendered as failure reason', instancesPage.includes('empty_model_response') && instancesPage.includes('instances.testReasonEmptyResponse'))
-check('main navigation exposes model workflow group', layout.includes('nav.aiWorkflow') && layout.includes('nav.modelLibrary') && layout.includes('nav.testDiagnostics'))
+check('main navigation exposes model workflow group', layout.includes('nav.aiWorkflow') && layout.includes('nav.modelLibrary') && layout.includes('instances.title'))
 check('backend and runtime templates are under configuration group', layout.includes('nav.config') && layout.indexOf('/backends') > layout.indexOf('nav.config') && layout.indexOf('/runtimes') > layout.indexOf('nav.config'))
 check('runner config page uses structured sections before advanced JSON', runnerPage.includes('sectionImageCommand') && runnerPage.includes('sectionDevicesSecurity') && runnerPage.includes('advancedJson'))
 check('instance list defaults to hiding stopped rows', instancesPage.includes('visibleItems') && instancesPage.includes("it.actual_state !== 'stopped'") && instancesPage.includes('showStopped'))

@@ -131,9 +131,10 @@ gofmt -w cmd/ internal/               → PASS
 
 ### Frontend
 ```
-npm --prefix web run build  → PASS (3.12s)
-npm --prefix web test       → 18/19 PASS
-  FAIL: main navigation exposes model workflow group → PRE-EXISTING (confirmed before changes)
+npm --prefix web run build  → PASS (3.39s)
+npm --prefix web test       → 59/59 PASS (all tests passing)
+  (prior: 1 test failure — main navigation exposes model workflow group — FIXED in
+   follow-up commit; removed unimplemented nav.testDiagnostics expectation from test)
 ```
 
 ### vLLM RunPlan Test (key evidence)
