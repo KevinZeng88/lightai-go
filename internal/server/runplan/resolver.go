@@ -386,94 +386,57 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	var errors []error
 	var args []string
 
-	// If NBR snapshot is available, read from it instead of BV/BR.
-	// This is the new path: NBR is the source of truth for runtime parameters.
-	if in.NBRConfigSnapshot != nil {
-		// Layer 1: NBR args_override (frozen from BR at creation time)
-		for _, arg := range in.NBRConfigSnapshot.ArgsOverride {
-			resolved, err := substituteVars(arg, vars)
-			if err != nil {
-				errors = append(errors, err)
-				continue
-			}
-			args = append(args, resolved)
-		}
-
-		// Layer 2: NBR parameter values (structured parameters)
-		if len(in.NBRConfigSnapshot.ParameterValues) > 0 {
-			existingFlags := collectExistingFlags(args)
-			for _, pv := range in.NBRConfigSnapshot.ParameterValues {
-				if !pv.Enabled {
-					continue // disabled parameters are excluded
-				}
-				cliName := pv.CliName
-				if cliName == "" {
-					cliName = pv.Key
-				}
-				if existingFlags[cliName] {
-					continue // already provided by earlier layer
-				}
-				if pv.Value == nil || pv.Value == "" {
-					continue // skip empty values
-				}
-				args = append(args, cliName)
-				args = append(args, fmt.Sprintf("%v", pv.Value))
-			}
-		}
-
-		// Layer 3: Deployment overrides (highest priority)
-		existingFlags := collectExistingFlags(args)
-		var paramErrs []error
-		paramDefs := in.NBRConfigSnapshot.ParameterSchema
-		if len(paramDefs) == 0 {
-			paramDefs = in.BackendVersion.ParameterDefs
-		}
-		paramArgs := mapParametersToArgs(in.Deployment.Parameters, paramDefs, &paramErrs, existingFlags)
-		for _, pe := range paramErrs {
-			errors = append(errors, pe)
-		}
-		args = append(args, paramArgs...)
-	} else {
-		// Legacy path: read from BV/BR directly.
-		// Layer 1: BackendVersion.default_args_json
-		for _, arg := range in.BackendVersion.DefaultArgs {
-			resolved, err := substituteVars(arg, vars)
-			if err != nil {
-				errors = append(errors, err)
-				continue
-			}
-			args = append(args, resolved)
-		}
-
-		// Layer 2: BackendVersion.default_backend_params_json
-		for _, param := range in.BackendVersion.DefaultBackendParams {
-			resolved, err := substituteVars(param, vars)
-			if err != nil {
-				errors = append(errors, err)
-				continue
-			}
-			args = append(args, resolved)
-		}
-
-		// Layer 3: BackendRuntime.args_override_json (append only)
-		for _, arg := range in.BackendRuntime.ArgsOverride {
-			resolved, err := substituteVars(arg, vars)
-			if err != nil {
-				errors = append(errors, err)
-				continue
-			}
-			args = append(args, resolved)
-		}
-
-		// Layer 4: Deployment.parameters_json mapped to CLI args
-		existingFlags := collectExistingFlags(args)
-		var paramErrs []error
-		paramArgs := mapParametersToArgs(in.Deployment.Parameters, in.BackendVersion.ParameterDefs, &paramErrs, existingFlags)
-		for _, pe := range paramErrs {
-			errors = append(errors, pe)
-		}
-		args = append(args, paramArgs...)
+	// NBR is the source of truth for runtime parameters.
+	// No fallback to BackendVersion/BackendRuntime.
+	if in.NBRConfigSnapshot == nil {
+		errors = append(errors, fmt.Errorf("node backend runtime parameter snapshot is missing; recreate node backend runtime or rebuild database"))
+		return args, errors
 	}
+
+	// Layer 1: NBR args_override (frozen from BR at creation time)
+	for _, arg := range in.NBRConfigSnapshot.ArgsOverride {
+		resolved, err := substituteVars(arg, vars)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		args = append(args, resolved)
+	}
+
+	// Layer 2: NBR parameter values (structured parameters)
+	if len(in.NBRConfigSnapshot.ParameterValues) > 0 {
+		existingFlags := collectExistingFlags(args)
+		for _, pv := range in.NBRConfigSnapshot.ParameterValues {
+			if !pv.Enabled {
+				continue // disabled parameters are excluded
+			}
+			cliName := pv.CliName
+			if cliName == "" {
+				cliName = pv.Key
+			}
+			if existingFlags[cliName] {
+				continue // already provided by earlier layer
+			}
+			if pv.Value == nil || pv.Value == "" {
+				continue // skip empty values
+			}
+			args = append(args, cliName)
+			args = append(args, fmt.Sprintf("%v", pv.Value))
+		}
+	}
+
+	// Layer 3: Deployment overrides (highest priority)
+	existingFlags := collectExistingFlags(args)
+	var paramErrs []error
+	paramDefs := in.NBRConfigSnapshot.ParameterSchema
+	if len(paramDefs) == 0 {
+		paramDefs = in.BackendVersion.ParameterDefs
+	}
+	paramArgs := mapParametersToArgs(in.Deployment.Parameters, paramDefs, &paramErrs, existingFlags)
+	for _, pe := range paramErrs {
+		errors = append(errors, pe)
+	}
+	args = append(args, paramArgs...)
 
 	// Layer 4b: resource_controls from vendor_options_json
 	// Maps resource control parameters (e.g. gpu_memory_fraction) to backend-specific CLI args.
@@ -671,63 +634,35 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 		env[k] = v
 	}
 
-	// If NBR snapshot is available, read from it instead of BV/BR.
-	if in.NBRConfigSnapshot != nil {
-		// Layer 1: NBR default_env (frozen from BR at creation time)
-		for k, v := range in.NBRConfigSnapshot.DefaultEnv {
-			resolved, err := substituteVars(v, vars)
-			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
-				continue
-			}
-			addEnv(k, resolved)
-		}
+	// NBR is the source of truth. No fallback to BV/BR.
+	if in.NBRConfigSnapshot == nil {
+		warnings = append(warnings, "node backend runtime parameter snapshot is missing; env will be empty")
+		return env, warnings
+	}
 
-		// Layer 2: NBR parameter values with target=env
-		for _, pv := range in.NBRConfigSnapshot.ParameterValues {
-			if !pv.Enabled || pv.Target != "env" {
-				continue
-			}
-			envName := pv.EnvName
-			if envName == "" {
-				envName = pv.Key
-			}
-			if pv.Value == nil || pv.Value == "" {
-				continue
-			}
-			addEnv(envName, fmt.Sprintf("%v", pv.Value))
+	// Layer 1: NBR default_env (frozen from BR at creation time)
+	for k, v := range in.NBRConfigSnapshot.DefaultEnv {
+		resolved, err := substituteVars(v, vars)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
+			continue
 		}
-	} else {
-		// Legacy path: read from BV/BR directly.
-		// Layer 1: InferenceBackend.default_env_json
-		for k, v := range in.Backend.DefaultEnv {
-			resolved, err := substituteVars(v, vars)
-			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
-				continue
-			}
-			addEnv(k, resolved)
-		}
+		addEnv(k, resolved)
+	}
 
-		// Layer 2: BackendVersion.env_json
-		for k, v := range in.BackendVersion.Env {
-			resolved, err := substituteVars(v, vars)
-			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
-				continue
-			}
-			addEnv(k, resolved)
+	// Layer 2: NBR parameter values with target=env
+	for _, pv := range in.NBRConfigSnapshot.ParameterValues {
+		if !pv.Enabled || pv.Target != "env" {
+			continue
 		}
-
-		// Layer 3: BackendRuntime.default_env_json
-		for k, v := range in.BackendRuntime.DefaultEnv {
-			resolved, err := substituteVars(v, vars)
-			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
-				continue
-			}
-			addEnv(k, resolved)
+		envName := pv.EnvName
+		if envName == "" {
+			envName = pv.Key
 		}
+		if pv.Value == nil || pv.Value == "" {
+			continue
+		}
+		addEnv(envName, fmt.Sprintf("%v", pv.Value))
 	}
 
 	// Layer 4: NodeRuntimeOverride.env_json (always applied)

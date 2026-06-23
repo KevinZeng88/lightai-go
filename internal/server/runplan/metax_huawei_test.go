@@ -6,7 +6,7 @@ import (
 )
 
 func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			Version:              "openai-latest",
@@ -52,7 +52,7 @@ func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
 		InstanceID:   "inst-metax-001",
 		Node:         &NodeInfo{ID: "node-metax", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 6, Vendor: "metax"}, {Index: 7, Vendor: "metax"}},
-	}
+	})
 
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -96,7 +96,7 @@ func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
 }
 
 func TestResolveHuaweiRunPlanUsesAscendVisibleDevices(t *testing.T) {
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			Version:              "openai-latest",
@@ -126,7 +126,7 @@ func TestResolveHuaweiRunPlanUsesAscendVisibleDevices(t *testing.T) {
 		InstanceID:   "inst-huawei-001",
 		Node:         &NodeInfo{ID: "node-huawei", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "huawei"}},
-	}
+	})
 
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {

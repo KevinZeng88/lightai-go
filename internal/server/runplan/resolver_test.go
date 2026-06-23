@@ -42,6 +42,27 @@ func makeTestInput() ResolveInput {
 				Privileged: true, IPCMode: "host", ShmSize: "10g",
 			},
 		},
+		// NBR snapshot — source of truth for runtime parameters
+		// Contains frozen config from BR at creation time.
+		// Includes BV default_args (frozen into NBR snapshot at creation).
+		NBRConfigSnapshot: &NBRSnapshotInfo{
+			ArgsOverride: []string{
+				"{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}",
+				"--served-model-name", "{{served_model_name}}", // BV default_args, frozen at NBR creation
+				"--enforce-eager", // BV default_backend_params, frozen at NBR creation
+				"--trust-remote-code", // BR args_override
+			},
+			DefaultEnv:   map[string]string{"GLOBAL_ENV": "1", "RUNTIME_VAR": "1", "CUDA_VISIBLE_DEVICES": "0", "VLLM_USE_MODELSCOPE": "true"},
+			EntrypointOverride: []string{"vllm", "serve"},
+			Docker: DockerSpecInfo{
+				Privileged: true, IPCMode: "host", ShmSize: "10g",
+			},
+			ParameterSchema: []ParameterDef{
+				{Name: "max_model_len", CliName: "--max-model-len", Type: "integer", Default: 8192.0, Required: false},
+				{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: true},
+			},
+			ParameterValues: []ParameterValue{},
+		},
 		Artifact: &ArtifactInfo{
 			ID: "artifact-qwen", Name: "Qwen3-32B", Path: "/data/models/Qwen3-32B",
 		},
@@ -62,6 +83,19 @@ func makeTestInput() ResolveInput {
 			{Index: 2, Vendor: "nvidia"},
 			{Index: 3, Vendor: "nvidia"},
 		},
+	}
+}
+
+// makeNbrSnapshot creates an NBR snapshot from BV/BR data for tests.
+func makeNbrSnapshot(bv *VersionInfo, br *RuntimeInfo) *NBRSnapshotInfo {
+	return &NBRSnapshotInfo{
+		ArgsOverride:       br.ArgsOverride,
+		DefaultEnv:         br.DefaultEnv,
+		EntrypointOverride: bv.DefaultEntrypoint,
+		Docker:             br.Docker,
+		ModelMount:         br.ModelMount,
+		ParameterSchema:    bv.ParameterDefs,
+		ParameterValues:    []ParameterValue{},
 	}
 }
 
@@ -260,6 +294,8 @@ func TestResolveNodeOverride(t *testing.T) {
 func TestUnknownVariableError(t *testing.T) {
 	in := makeTestInput()
 	in.BackendVersion.DefaultArgs = []string{"{{undefined_variable}}"}
+	// Also update NBR snapshot since resolver reads from it
+	in.NBRConfigSnapshot.ArgsOverride = []string{"{{undefined_variable}}"}
 	_, errs, _ := Resolve(in)
 	if len(errs) == 0 {
 		t.Error("expected error for undefined variable")
@@ -371,6 +407,8 @@ func TestDefaultHealthCheck(t *testing.T) {
 func TestResolveNoGPU(t *testing.T) {
 	in := makeTestInput()
 	in.AssignedGPUs = nil
+	// Also remove CUDA_VISIBLE_DEVICES from NBR snapshot
+	delete(in.NBRConfigSnapshot.DefaultEnv, "CUDA_VISIBLE_DEVICES")
 	plan, _, _ := Resolve(in)
 	if plan.Env["CUDA_VISIBLE_DEVICES"] != "" {
 		t.Error("expected no CUDA_VISIBLE_DEVICES for no GPU")
@@ -381,6 +419,12 @@ func TestArgsOverrideAppendOnly(t *testing.T) {
 	in := makeTestInput()
 	// args_override appends, doesn't replace
 	in.BackendRuntime.ArgsOverride = []string{"--custom-flag", "--another-flag"}
+	// Update NBR snapshot: keep original BV args + new BR override
+	in.NBRConfigSnapshot.ArgsOverride = []string{
+		"{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}",
+		"--served-model-name", "{{served_model_name}}", "--enforce-eager",
+		"--custom-flag", "--another-flag",
+	}
 	plan, _, _ := Resolve(in)
 	argsStr := strings.Join(plan.Args, " ")
 	if !strings.Contains(argsStr, "--custom-flag") {
@@ -398,7 +442,7 @@ func TestArgsOverrideAppendOnly(t *testing.T) {
 // TestContainerPathSafety validates that dangerous relative paths are rejected
 // and safe paths produce correct container mounts under /models.
 func TestContainerPathSafety(t *testing.T) {
-	baseInput := ResolveInput{
+	baseInput := ensureNbrSnapshot(ResolveInput{
 		Backend:        &BackendInfo{ID: "b.vllm", Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{ID: "bv.openai", DefaultEntrypoint: []string{"serve"}, DefaultArgs: []string{}, DefaultBackendParams: []string{}, ParameterDefs: []ParameterDef{}, HealthCheck: HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200}, DefaultContainerPort: 8000, DefaultImages: map[string]string{"nvidia": "img:latest"}, Env: map[string]string{}},
 		BackendRuntime: &RuntimeInfo{ID: "rt.vllm", Vendor: "nvidia", RuntimeType: "docker", ImageName: "img:latest", ArgsOverride: []string{}, DefaultEnv: map[string]string{}, Docker: DockerSpecInfo{}, ModelMount: ModelMountInfo{ContainerPath: "/models", Readonly: true}},
@@ -406,7 +450,7 @@ func TestContainerPathSafety(t *testing.T) {
 		InstanceID:     "inst-safety",
 		Node:           &NodeInfo{ID: "n1", IP: "127.0.0.1"},
 		AssignedGPUs:   []GPUInfo{{Index: 0, Vendor: "nvidia"}},
-	}
+	})
 
 	tests := []struct {
 		name         string
@@ -504,7 +548,7 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 	// Simulates a full vLLM deployment: BackendVersion parameter_defs
 	// use "name":"--host"/"--port" without cli_name.
 	// The resolved RunPlan args must contain --host and --port flags.
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{ID: "backend.vllm", Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			ID:                "vllm-v0.23.0",
@@ -542,7 +586,7 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 		InstanceID:   "inst-vllm-test",
 		Node:         &NodeInfo{ID: "n1", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
-	}
+	})
 	plan, _, _ := Resolve(in)
 	argsStr := strings.Join(plan.Args, " ")
 
@@ -772,7 +816,7 @@ func TestRequiredParamFromDefaultArgs(t *testing.T) {
 	// Layer 1 default_args provides "-m /models/test.gguf".
 	// Deployment parameters are empty {}.
 	// Required param check should NOT report error because -m is already in args.
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			ID:         "backend.llamacpp",
 			Name:       "llamacpp",
@@ -810,7 +854,7 @@ func TestRequiredParamFromDefaultArgs(t *testing.T) {
 		AssignedGPUs: []GPUInfo{
 			{Index: 0, Vendor: "nvidia"},
 		},
-	}
+	})
 
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -828,7 +872,7 @@ func TestRequiredParamFromDefaultArgs(t *testing.T) {
 func TestRequiredParamMissingEverywhere(t *testing.T) {
 	// Scenario: required param NOT in default_args and NOT in deployment params.
 	// Should report error.
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			ID:         "backend.test",
 			Name:       "test",
@@ -859,7 +903,7 @@ func TestRequiredParamMissingEverywhere(t *testing.T) {
 		},
 		InstanceID: "inst-test-002",
 		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
-	}
+	})
 
 	_, errs, _ := Resolve(in)
 	if len(errs) == 0 {
@@ -881,7 +925,7 @@ func TestRequiredShortAliasFromDefaultArgs(t *testing.T) {
 	// Scenario: ParameterDef has Name="-m", Alias="--model".
 	// default_args provides "-m" (short form).
 	// Should NOT report error.
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			ID:         "backend.llamacpp",
 			Name:       "llamacpp",
@@ -911,7 +955,7 @@ func TestRequiredShortAliasFromDefaultArgs(t *testing.T) {
 		},
 		InstanceID: "inst-test-003",
 		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
-	}
+	})
 
 	_, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -923,7 +967,7 @@ func TestRequiredLongAliasFromDefaultArgs(t *testing.T) {
 	// Scenario: ParameterDef has Name="--model", CliName="--model".
 	// default_args provides "--model /models/test.gguf" (long form).
 	// Should NOT report error.
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			ID:         "backend.test",
 			Name:       "test",
@@ -953,7 +997,7 @@ func TestRequiredLongAliasFromDefaultArgs(t *testing.T) {
 		},
 		InstanceID: "inst-test-004",
 		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
-	}
+	})
 
 	_, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -964,7 +1008,7 @@ func TestRequiredLongAliasFromDefaultArgs(t *testing.T) {
 func TestRequiredFlagEqualsFormFromDefaultArgs(t *testing.T) {
 	// Scenario: default_args provides "--model=/models/test.gguf" (= form).
 	// Should NOT report error.
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			ID:         "backend.test",
 			Name:       "test",
@@ -994,7 +1038,7 @@ func TestRequiredFlagEqualsFormFromDefaultArgs(t *testing.T) {
 		},
 		InstanceID: "inst-test-005",
 		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
-	}
+	})
 
 	_, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -1005,7 +1049,7 @@ func TestRequiredFlagEqualsFormFromDefaultArgs(t *testing.T) {
 func TestBuildEnvFiltersNonScalarValues(t *testing.T) {
 	// Scenario: BackendVersion.Env contains array/map values from capability metadata.
 	// buildEnv should skip non-scalar values.
-	input := ResolveInput{
+	input := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			DefaultEnv: map[string]string{},
 		},
@@ -1021,7 +1065,7 @@ func TestBuildEnvFiltersNonScalarValues(t *testing.T) {
 		Deployment: &DeploymentInfo{
 			EnvOverrides: map[string]string{},
 		},
-	}
+	})
 	vars := map[string]string{
 		"assigned_gpu_count": "1",
 		"container_port":     "8000",
@@ -1039,7 +1083,7 @@ func TestBuildEnvFiltersNonScalarValues(t *testing.T) {
 func TestBuildEnvSkipsEmptyValues(t *testing.T) {
 	// Scenario: some env values resolve to empty strings.
 	// buildEnv should skip them.
-	input := ResolveInput{
+	input := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			DefaultEnv: map[string]string{},
 		},
@@ -1055,7 +1099,7 @@ func TestBuildEnvSkipsEmptyValues(t *testing.T) {
 		Deployment: &DeploymentInfo{
 			EnvOverrides: map[string]string{},
 		},
-	}
+	})
 	vars := map[string]string{}
 	env, _ := buildEnv(input, vars)
 	if env["VALID_KEY"] != "valid_value" {

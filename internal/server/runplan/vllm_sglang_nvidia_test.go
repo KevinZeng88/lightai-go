@@ -6,7 +6,7 @@ import (
 )
 
 func TestResolveVLLMNVIDIA(t *testing.T) {
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			Version:              "0.8.5",
@@ -39,7 +39,7 @@ func TestResolveVLLMNVIDIA(t *testing.T) {
 		InstanceID:   "inst-vllm-001",
 		Node:         &NodeInfo{ID: "KZ-LAPTOP", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
-	}
+	})
 
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -100,7 +100,7 @@ func TestResolveVLLMNVIDIA(t *testing.T) {
 }
 
 func TestResolveSGLangNVIDIA(t *testing.T) {
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{Name: "sglang", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			Version:              "0.4.6",
@@ -129,7 +129,7 @@ func TestResolveSGLangNVIDIA(t *testing.T) {
 		InstanceID:   "inst-sglang-001",
 		Node:         &NodeInfo{ID: "KZ-LAPTOP", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
-	}
+	})
 
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -261,7 +261,7 @@ func TestDuplicatePortArgsDetected(t *testing.T) {
 }
 
 func makeVLLMTestInput() ResolveInput {
-	return ResolveInput{
+	return ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			Version:              "v0.23.0",
@@ -303,11 +303,11 @@ func makeVLLMTestInput() ResolveInput {
 		InstanceID:   "inst-test",
 		Node:         &NodeInfo{ID: "node-a", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
-	}
+	})
 }
 
 func TestVLLMUserServedModelNameOverridesDefault(t *testing.T) {
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			Version: "v0.23.0", DefaultEntrypoint: []string{"vllm", "serve"},
@@ -329,7 +329,7 @@ func TestVLLMUserServedModelNameOverridesDefault(t *testing.T) {
 		},
 		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
-	}
+	})
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
 		t.Fatalf("errors: %v", errs)
@@ -416,7 +416,7 @@ func TestDedupKeepsUserPortOverDefault(t *testing.T) {
 
 func TestGetParamMatchesCLIFormatNames(t *testing.T) {
 	// Build input directly without makeVLLMTestInput to avoid map sharing issues.
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{Name: "vllm", DefaultEnv: map[string]string{}},
 		BackendVersion: &VersionInfo{
 			Version: "v0.23.0", DefaultEntrypoint: []string{"vllm", "serve"},
@@ -439,7 +439,7 @@ func TestGetParamMatchesCLIFormatNames(t *testing.T) {
 		},
 		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
-	}
+	})
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
 		t.Fatalf("errors: %v", errs)

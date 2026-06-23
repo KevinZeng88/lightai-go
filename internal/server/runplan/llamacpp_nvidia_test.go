@@ -9,7 +9,7 @@ import (
 // generates a structurally correct plan matching the real Docker command
 // from docs/RUNBOOK-LLAMA-CPP-GGUF-NVIDIA-5090.md.
 func TestLlamaCppNvidiaRunPlan(t *testing.T) {
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			ID:             "backend-llamacpp",
 			Name:           "llamacpp",
@@ -64,7 +64,7 @@ func TestLlamaCppNvidiaRunPlan(t *testing.T) {
 		AssignedGPUs: []GPUInfo{
 			{Index: 0, Vendor: "nvidia"},
 		},
-	}
+	})
 
 	plan, errs, warns := Resolve(in)
 	if len(errs) > 0 {
@@ -184,7 +184,7 @@ func TestLlamaCppNvidiaRunPlan(t *testing.T) {
 // specific .gguf file path while the mount uses the directory. This is the production
 // scenario where the old scan proxy stored directory-level paths (WEB-AI-RC-001).
 func TestLlamaCppGGUFFileInDirectory(t *testing.T) {
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			ID:             "backend-llamacpp",
 			Name:           "llamacpp",
@@ -235,7 +235,7 @@ func TestLlamaCppGGUFFileInDirectory(t *testing.T) {
 		AssignedGPUs: []GPUInfo{
 			{Index: 0, Vendor: "nvidia"},
 		},
-	}
+	})
 
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -271,7 +271,7 @@ func TestLlamaCppGGUFFileInDirectory(t *testing.T) {
 
 // TestLlamaCppRunPlanNoGPU verifies CPU-only mode.
 func TestLlamaCppRunPlanNoGPU(t *testing.T) {
-	in := ResolveInput{
+	in := ensureNbrSnapshot(ResolveInput{
 		Backend: &BackendInfo{
 			Name:       "llamacpp",
 			DefaultEnv: map[string]string{},
@@ -300,7 +300,7 @@ func TestLlamaCppRunPlanNoGPU(t *testing.T) {
 		InstanceID:   "inst-test",
 		Node:         &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
 		AssignedGPUs: nil, // no GPUs
-	}
+	})
 
 	plan, _, _ := Resolve(in)
 	if plan == nil {
