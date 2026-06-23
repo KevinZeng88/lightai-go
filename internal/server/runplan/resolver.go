@@ -388,8 +388,10 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	}
 
 	// Layer 4: Deployment.parameters_json mapped to CLI args
+	// Collect flags from earlier layers so required-param check can skip those already provided.
+	existingFlags := collectExistingFlags(args)
 	var paramErrs []error
-	paramArgs := mapParametersToArgs(in.Deployment.Parameters, in.BackendVersion.ParameterDefs, &paramErrs)
+	paramArgs := mapParametersToArgs(in.Deployment.Parameters, in.BackendVersion.ParameterDefs, &paramErrs, existingFlags)
 	for _, pe := range paramErrs {
 		errors = append(errors, pe)
 	}
@@ -498,7 +500,28 @@ func deduplicateArgs(args []string) []string {
 	return result
 }
 
-func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef, errs *[]error) []string {
+// collectExistingFlags extracts all flag names from an args list.
+// Handles --flag, --flag=value, -f, -f value patterns.
+func collectExistingFlags(args []string) map[string]bool {
+	flags := make(map[string]bool)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		// Handle --flag=value
+		if idx := strings.Index(arg, "="); idx > 0 {
+			flags[arg[:idx]] = true
+			continue
+		}
+		flags[arg] = true
+		// If next arg is not a flag, this is a flag+value pair (already counted)
+		// The flag itself is already recorded
+	}
+	return flags
+}
+
+func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef, errs *[]error, existingFlags map[string]bool) []string {
 	var args []string
 	for _, def := range defs {
 		// Look up value by multiple name forms:
@@ -527,6 +550,19 @@ func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef, err
 			if def.Default != nil {
 				val = def.Default
 			} else if def.Required {
+				// Check if already provided by earlier layers (default_args, args_override, etc.)
+				effCliForCheck := def.effectiveCliName()
+				if effCliForCheck == "" {
+					effCliForCheck = def.Name
+				}
+				if existingFlags[def.Name] || existingFlags[effCliForCheck] {
+					continue // already provided by earlier layer
+				}
+				// Also check normalized forms
+				normalized := strings.ReplaceAll(strings.TrimPrefix(strings.TrimPrefix(def.Name, "-"), "-"), "-", "_")
+				if normalized != def.Name && existingFlags[normalized] {
+					continue
+				}
 				if errs != nil {
 					*errs = append(*errs, fmt.Errorf("required parameter %q missing", def.Name))
 				}
@@ -549,6 +585,14 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 	env := make(map[string]string)
 	var warnings []string
 
+	// Helper: skip empty or non-scalar env values
+	addEnv := func(k, v string) {
+		if v == "" {
+			return // skip empty values (e.g. from deserialized arrays)
+		}
+		env[k] = v
+	}
+
 	// Layer 1: InferenceBackend.default_env_json
 	for k, v := range in.Backend.DefaultEnv {
 		resolved, err := substituteVars(v, vars)
@@ -556,7 +600,7 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 			warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
 			continue
 		}
-		env[k] = resolved
+		addEnv(k, resolved)
 	}
 
 	// Layer 2: BackendVersion.env_json
@@ -566,7 +610,7 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 			warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
 			continue
 		}
-		env[k] = resolved
+		addEnv(k, resolved)
 	}
 
 	// Layer 3: BackendRuntime.default_env_json
@@ -576,7 +620,7 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 			warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
 			continue
 		}
-		env[k] = resolved
+		addEnv(k, resolved)
 	}
 
 	// Layer 4: NodeRuntimeOverride.env_json
@@ -587,7 +631,7 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
 				continue
 			}
-			env[k] = resolved
+			addEnv(k, resolved)
 		}
 	}
 
@@ -597,7 +641,7 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("env_overrides %s: %v", k, err))
 		}
-		env[k] = resolved
+		addEnv(k, resolved)
 	}
 
 	return env, warnings
