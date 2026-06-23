@@ -344,3 +344,84 @@ lightai.created_by=<user_id-or-system>
 9. 身份契约不得改变 metrics、Collector、DockerRunSpec、task lease、generation 和 reconciliation 规则。
 
 修改实现前应先更新本文或确认本文无需变化；实现和测试不得引入第二套隐含契约。
+
+---
+
+## 15. Runtime Parameter Editing Contract
+
+### 15.1 Parameter Type Taxonomy
+
+参数必须严格分类，不同类型在系统中行为不同：
+
+| 类型 | 示例 | 进入 Docker env/args? | 存储位置 |
+|------|------|----------------------|----------|
+| Capability metadata | supported_formats, blocked_architectures | 否 | capabilities_json |
+| Parameter schema | {name, type, default, required} | 否 | parameter_schema_json |
+| Parameter values | gpu-memory-utilization=0.9 | 是（如 enabled） | parameter_values_json |
+| Env values | CUDA_VISIBLE_DEVICES=0 | 是（如 enabled） | default_env_json |
+| Args values | --max-model-len 4096 | 是（如 enabled） | args_override_json |
+| Container config | image, entrypoint, ports, volumes, devices | 是 | docker_json, config_snapshot_json |
+| Runtime requirements | min_gpu_memory, required_devices | 否（仅 preflight） | runtime_requirements_json |
+| Deployment overrides | 用户在部署时指定 | 是（最高优先级） | parameter_values_json, disabled_parameters_json |
+
+### 15.2 Parameter Record Structure
+
+每层参数记录必须使用结构化数组，默认 `[]`：
+
+```json
+{
+  "key": "gpu-memory-utilization",
+  "type": "float",
+  "target": "arg",
+  "cli_name": "--gpu-memory-utilization",
+  "enabled": true,
+  "value": 0.9,
+  "default": 0.9,
+  "source": "node_backend_runtime",
+  "copied_from": "backend_runtime:xxx",
+  "user_override": true,
+  "validation": {"min": 0.1, "max": 0.95}
+}
+```
+
+### 15.3 NBR 是 RunPlan 后端事实来源
+
+**硬性规则**：
+
+1. NodeBackendRuntime 保存 `parameter_schema_json` 和 `parameter_values_json`（结构化数组）。
+2. RunPlan 解析时只读 NBR snapshot + ModelArtifact/ModelLocation snapshot + Deployment overrides。
+3. RunPlan 不得在解析时动态回查 BackendVersion 或 BackendRuntime。
+4. BackendVersion / BackendRuntime 只用于创建/同步/审计/显示来源，不参与最终 RunPlan 动态合并。
+
+### 15.4 Copy-on-Create 与独立性
+
+1. BackendVersion → BackendRuntime：创建时 deep copy schema + values + env + args + container template。
+2. BackendRuntime → NodeBackendRuntime：创建时 deep copy 完整运行快照（含 schema + values + enabled 状态）。
+3. NBR 创建后独立。BackendRuntime 后续修改不影响已有 NBR。
+4. Deployment 创建时 deep copy NBR 参数值和 enabled 状态，创建后独立。
+5. 如需同步上游，只能由用户明确点击"重新同步"。
+
+### 15.5 Disabled Override / Tombstone
+
+1. Deployment 禁用上游参数必须显式保存 disabled override。
+2. 不能用 "absent" 表达禁用（无法区分：上游没有参数 / 用户明确禁用 / 用户未设置）。
+3. Disabled 参数不进入最终 args/env。
+4. Disabled ≠ empty value（empty value 仍需按参数类型校验）。
+5. Re-enable 可恢复 copied value 或用户重新输入。
+
+### 15.6 参数 JSON 字段默认值
+
+所有 parameter record 数组字段默认 `[]`，不使用 `{}`：
+
+- `parameter_schema_json TEXT NOT NULL DEFAULT '[]'`
+- `parameter_values_json TEXT NOT NULL DEFAULT '[]'`
+- `disabled_parameters_json TEXT NOT NULL DEFAULT '[]'`
+- `parameter_defaults_json TEXT NOT NULL DEFAULT '[]'`
+
+### 15.7 显存/资源参数
+
+1. 显存参数必须是 backend-specific parameter schema，不做统一 `gpu_memory_limit` 字段。
+2. vLLM：`--gpu-memory-utilization`、`--max-model-len`、`--max-num-seqs`、`--max-num-batched-tokens`
+3. SGLang：`--mem-fraction-static`、`--context-length`、`--max-running-requests`
+4. llama.cpp：`--n-gpu-layers`、`--ctx-size`、`--batch-size`、`--ubatch-size`（无直接显存百分比）
+5. UI 按"显存 / 上下文 / 并发 / 批处理"分组展示，底层是 schema 驱动。

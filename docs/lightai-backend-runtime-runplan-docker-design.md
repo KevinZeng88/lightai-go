@@ -112,3 +112,42 @@ There is NO live re-read of BackendRuntime, BackendVersion, or NodeBackendRuntim
 ## Run Idempotency
 
 The server enforces single-active-instance per deployment. `pending`, `starting`, `provisioning`, `running`, `healthy`, and `stopping` block duplicate start requests with HTTP 409. `failed`, `stopped`, and `saved` can start a new RunPlan and ModelInstance while preserving history.
+
+## Runtime Parameter Editing Contract
+
+### NBR is the Source of Truth for Runtime Parameters
+
+**Hard rule**: RunPlan resolution reads ONLY from:
+1. NodeBackendRuntime snapshot (`parameter_schema_json` + `parameter_values_json`)
+2. ModelArtifact/ModelLocation snapshot (`parameter_defaults_json`)
+3. Deployment overrides (`parameter_values_json` + `disabled_parameters_json`)
+
+RunPlan does NOT dynamically query BackendVersion or BackendRuntime at resolution time.
+
+### Structured Parameter Records
+
+All parameter JSON fields use structured arrays (default `[]`):
+- `parameter_schema_json` — parameter definitions (name, type, default, required, cli_name)
+- `parameter_values_json` — parameter values with enabled/disabled state
+- `disabled_parameters_json` — explicit tombstones for disabled parameters
+
+### Copy-on-Create Chain
+
+```
+BackendVersion (catalog/schema source)
+    ↓ deep copy at creation
+BackendRuntime (parameter_schema_json + parameter_values_json)
+    ↓ deep copy at creation
+NodeBackendRuntime (parameter_schema_json + parameter_values_json)
+    ↓ deep copy at creation
+Deployment (parameter_values_json + disabled_parameters_json)
+```
+
+Each layer is independent after creation. Parent edits do NOT propagate to children.
+
+### Disabled Override Semantics
+
+- Deployment can explicitly disable a parameter from upstream
+- Disabled ≠ absent ≠ empty value
+- Disabled parameters are saved as tombstone records in `disabled_parameters_json`
+- Disabled parameters do NOT enter final RunPlan args/env
