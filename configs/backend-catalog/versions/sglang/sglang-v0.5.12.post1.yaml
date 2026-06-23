@@ -57,6 +57,16 @@ default_args_schema:
     optional: true
   - name: --log-level
     optional: true
+  - name: --served-model-name
+    optional: true
+  - name: --mem-fraction-static
+    optional: true
+  - name: --context-length
+    optional: true
+  - name: --max-running-requests
+    optional: true
+  - name: --disable-cuda-graph
+    optional: true
 health_check:
   type: http
   path: /v1/models

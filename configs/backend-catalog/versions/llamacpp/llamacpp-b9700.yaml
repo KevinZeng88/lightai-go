@@ -56,6 +56,10 @@ default_args_schema:
   - name: --threads-batch
     alias: -tb
     optional: true
+  - name: --batch-size
+    optional: true
+  - name: --ubatch-size
+    optional: true
 health_check:
   type: http
   path: /v1/models

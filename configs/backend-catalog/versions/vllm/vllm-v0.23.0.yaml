@@ -46,6 +46,16 @@ default_args_schema:
     optional: true
   - name: --max-model-len
     optional: true
+  - name: --gpu-memory-utilization
+    optional: true
+  - name: --max-num-seqs
+    optional: true
+  - name: --max-num-batched-tokens
+    optional: true
+  - name: --enforce-eager
+    optional: true
+  - name: --trust-remote-code
+    optional: true
 health_check:
   type: http
   path: /v1/models
