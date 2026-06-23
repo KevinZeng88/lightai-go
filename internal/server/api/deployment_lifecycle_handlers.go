@@ -209,17 +209,27 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		configSnapshot = mergeNBRConfigSnapshot(configSnapshot, nbrSnapshot, nbrImageRef)
 	}
 
+	// Copy model parameter defaults from artifact into deployment parameter_values_json
+	var modelParamDefaults string
+	if artifactID != "" {
+		h.DB.QueryRow(`SELECT COALESCE(parameter_defaults_json,'[]') FROM model_artifacts WHERE id = ?`, artifactID).Scan(&modelParamDefaults)
+	}
+	if modelParamDefaults == "" || modelParamDefaults == "null" {
+		modelParamDefaults = "[]"
+	}
+
 	id := uuid.NewString()
 	tid := tenantID(r)
 	actorID := actorIDFromSession(r)
 	requestID := log.RequestIDFromContext(r.Context())
 	now := time.Now().Format(time.RFC3339)
 
-	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, config_snapshot_json, source_node_backend_runtime_id, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, parameter_values_json, config_snapshot_json, source_node_backend_runtime_id, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "description", ""),
 		artifactID, backendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(req["parameters_json"]), jsonString(req["env_overrides_json"]),
+		modelParamDefaults,
 		configSnapshot,
 		nodeBackendRuntimeID,
 		"stopped", "saved", tid, now, now,
