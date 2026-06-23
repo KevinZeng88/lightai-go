@@ -154,6 +154,8 @@
         <el-form-item :label="$t('deployments.parameters')">
           <el-input v-model="editForm.parameters_text" type="textarea" :rows="4" />
         </el-form-item>
+        <el-divider>{{ $t('deployments.structuredParameters') }}</el-divider>
+        <RuntimeParameterEditor v-model="editParameterModel" />
       </el-form>
       <template #footer>
         <div style="display:flex;justify-content:space-between;width:100%">
@@ -329,6 +331,7 @@ import { useNodeLabels } from '@/composables/useNodeLabels'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 import { translateStatus } from '@/utils/status'
 import JsonViewer from '@/components/common/JsonViewer.vue'
+import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 
 const { t } = useI18n()
 
@@ -339,6 +342,12 @@ const createVisible = ref(false); const dryRunVisible = ref(false); const runPla
 const dryRunResult = ref<any>(null); const runPlanData = ref('')
 const editVisible = ref(false); const selectedEditRow = ref<any>(null)
 const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '', source_template_name: '', source_backend_runtime_id: '', copied_at: '', env_overrides_text: '', parameters_text: '{}' })
+const editParameterValues = ref<any[]>([])
+const editDisabledParameters = ref<any[]>([])
+const editParameterModel = computed({
+  get: () => ({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: editParameterValues.value }),
+  set: (val: any) => { if (val.parameter_values_json) editParameterValues.value = val.parameter_values_json },
+})
 const createForm = ref({ name: '', model_artifact_id: '', node_backend_runtime_id: '', node_id: '', accelerator_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', parameters_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
@@ -607,6 +616,9 @@ function showEdit(row: any) {
   const envOverrides = asObject(row.env_overrides_json)
   editForm.value.env_overrides_text = Object.entries(envOverrides).map(([k, v]) => `${k}=${v}`).join('\n')
   editForm.value.parameters_text = JSON.stringify(asObject(row.parameters_json), null, 2)
+  // Load structured parameter values and disabled tombstones
+  editParameterValues.value = Array.isArray(row.parameter_values_json) ? [...row.parameter_values_json] : []
+  editDisabledParameters.value = Array.isArray(row.disabled_parameters_json) ? [...row.disabled_parameters_json] : []
   editVisible.value = true
 }
 
@@ -620,6 +632,8 @@ async function doEdit() {
       service_json: servicePayload(editForm.value.host_port, editForm.value.container_port, editForm.value.app_port),
       env_overrides_json: parseKeyValueLines(editForm.value.env_overrides_text),
       parameters_json: JSON.parse(editForm.value.parameters_text || '{}'),
+      parameter_values_json: editParameterValues.value,
+      disabled_parameters_json: editDisabledParameters.value,
     }
     await apiClient.patch(`/deployments/${selectedEditRow.value.id}`, payload)
     ElMessage.success(t('deployments.saved'))
