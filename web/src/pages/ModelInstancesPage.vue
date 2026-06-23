@@ -188,7 +188,7 @@ import { CopyDocument, Document, RefreshRight } from '@element-plus/icons-vue'
 import { apiClient } from '@/api/client'
 import StatusTag from '@/components/StatusTag.vue'
 import { formatTestFailure, recommendedTestMode, testModeLabel } from '@/utils/modelCapabilities.js'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useInstanceStatusPolling } from '@/composables/useInstanceStatusPolling'
 
 const { t, locale } = useI18n()
 
@@ -263,14 +263,17 @@ async function fetchInstances() {
   }
 }
 
-const { loading, lastUpdate, refreshError, refresh } = useAutoRefresh(async () => {
-  try {
-    await fetchInstances()
-  } catch (e: any) {
-    ElMessage.error(e?.message || t('common.requestFailed'))
-    throw e
-  }
-}, { intervalMs: 5000 })
+const { loading, lastUpdate, refreshError, refresh } = useInstanceStatusPolling(
+  async () => {
+    try {
+      await fetchInstances()
+    } catch (e: any) {
+      ElMessage.error(e?.message || t('common.requestFailed'))
+      throw e
+    }
+  },
+  () => items.value.map((it: any) => it.actual_state || 'unknown'),
+)
 
 onUnmounted(() => {
   stopLogsTimer()
