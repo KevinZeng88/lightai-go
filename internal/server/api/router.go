@@ -181,6 +181,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("DELETE /api/v1/model-artifacts/{id}", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteArtifact)))
 	mux.Handle("POST /api/v1/model-artifacts/{id}/locations", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCreateModelLocation)))
 	mux.Handle("POST /api/v1/model-artifacts/{id}/locations/{location_id}/rescan", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleRescanModelLocation)))
+	mux.Handle("GET /api/v1/model-capabilities", maReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetModelCapabilityEnums)))
 	mux.Handle("POST /api/v1/model-artifacts/{id}/locations/{location_id}/attest", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleAttestModelLocation)))
 	mux.Handle("PATCH /api/v1/model-artifacts/{id}/locations/{location_id}", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchModelLocation)))
 	mux.Handle("DELETE /api/v1/model-artifacts/{id}/locations/{location_id}", maWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteModelLocation)))

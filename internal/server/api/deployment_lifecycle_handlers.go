@@ -882,12 +882,21 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	// ── Phase D: Compatibility check before RunPlan resolution ──
 	modelFormat := strVal(artifact, "format", "custom")
 	modelTask := strVal(artifact, "task_type", "chat")
-	modelPathType := "directory"
-	if modelFormat == "gguf" {
-		modelPathType = "file"
-	}
+	modelPathType := "directory" // fallback default
 	modelDeployable := true
 	if loc := h.getModelLocationJSON(pf.locationID); loc != nil {
+		// path_type is persisted by the scanner in model_locations.path_type.
+		// Use the stored value instead of inferring from format.
+		if pt, ok := loc["path_type"].(string); ok && pt != "" {
+			modelPathType = pt
+		} else {
+			log.Warn("deployment_lifecycle: model_locations.path_type is empty for location, falling back to format inference",
+				"location_id", pf.locationID,
+				"format", modelFormat)
+			if modelFormat == "gguf" {
+				modelPathType = "file"
+			}
+		}
 		if metaRaw, ok := loc["discovered_metadata_json"]; ok {
 			var metaMap map[string]interface{}
 			switch v := metaRaw.(type) {

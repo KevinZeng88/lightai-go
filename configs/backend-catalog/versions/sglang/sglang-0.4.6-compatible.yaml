@@ -15,11 +15,9 @@ default_endpoints:
   models: /v1/models
   chat_completions: /v1/chat/completions
   completions: /v1/completions
-capabilities:
-  - models
-  - chat_completions
-  - completions
-  - openai_compatible
+# Canonical capabilities are in DB backend_versions.capabilities_json (V27 repair).
+# This YAML is a human-readable mirror; must match DB seed.
+capabilities_json: '{"supported_formats":["huggingface","sentence_transformers"],"supported_tasks":["chat","completion","embedding","rerank","vision_chat"],"supported_capabilities":["chat","completion","embedding","rerank","vision"],"model_path_modes":["directory"],"test_endpoints":{"chat":"/v1/chat/completions","completion":"/v1/completions","embedding":"/v1/embeddings","rerank":"/rerank"},"blocked_architectures":{"InternVLChatModel":"当前 SGLang runtime 未验证 InternVL2.5 兼容性。建议使用 Chat/Embedding/Reranker 模型。"}}'
 default_entrypoint:
   - python3
   - -m

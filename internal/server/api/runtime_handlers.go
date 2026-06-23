@@ -994,6 +994,9 @@ func matchBackendType(backendID, vendor string, repoTags []string, labels map[st
 	if strings.HasPrefix(baseID, "backend.") {
 		baseID = baseID[len("backend."):]
 	}
+	// patterns maps backend family names to common image name variants.
+	// This is for user input normalization only — NOT a backend capability source.
+	// Canonical capability data is in backend_versions.capabilities_json.
 	patterns := map[string][]string{
 		"vllm":     {"vllm", "vllm-openai"},
 		"sglang":   {"sglang", "lmsysorg/sglang"},
@@ -1166,12 +1169,11 @@ func joinSets(sets []string) string {
 	return s
 }
 
-// resolveTemplatePath returns the config file path for a template name.
-// It tries the new catalog layout first (configs/backend-catalog/runtimes/{backend}/{vendor}-docker.yaml),
-// then falls back to the old flat layout (configs/model-runtime/backend-runtime-templates/{name}.yaml).
+// resolveTemplatePath returns the config file path for a template name
+// using the backend-catalog layout: configs/backend-catalog/runtimes/{backend}/{vendor}-docker.yaml.
+// Template names follow the pattern {backend}-{vendor}-docker.
+// The old configs/model-runtime/ flat layout has been removed (Phase 3 Batch 4).
 func resolveTemplatePath(templateName string) string {
-	// New path: extract backend from "vllm-nvidia-docker" -> "vllm"/"nvidia-docker.yaml"
-	// Template names follow the pattern {backend}-{vendor}-docker
 	if idx := strings.Index(templateName, "-"); idx > 0 {
 		backend := templateName[:idx]
 		rest := templateName[idx+1:]
@@ -1180,8 +1182,9 @@ func resolveTemplatePath(templateName string) string {
 			return newPath
 		}
 	}
-	// Old path: flat layout for backward compatibility
-	return "configs/model-runtime/backend-runtime-templates/" + templateName + ".yaml"
+	// Fallback to the name under the first path segment as backend.
+	// If templateName has no "-", try it as a direct file under the runtimes dir.
+	return ""
 }
 
 // isNBRDeployable returns true when the NBR status allows deployment.

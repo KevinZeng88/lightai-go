@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"lightai-go/internal/runtimecontract"
 )
 
 // ScanCandidate represents one model candidate found during scanning.
@@ -130,89 +132,89 @@ var modelTypePlugins = []ModelTypePlugin{
 // Plugin defaults
 var (
 	loRADefaults = ModelTypeDefaults{
-		Kind: "adapter", Format: "lora_adapter", Task: "adapter",
-		Capabilities: []string{}, DefaultTestMode: "auto",
+		Kind: "adapter", Format: runtimecontract.FormatLoRAAdapter, Task: runtimecontract.TaskAdapter,
+		Capabilities: []string{}, DefaultTestMode: runtimecontract.TestModeAuto,
 		Deployable: false, RequiresBaseModel: true,
 		RecommendedBackends: []string{}, Confidence: "high",
 		UnsupportedReason: "这是 LoRA/Adapter，需要选择基础模型后使用，不能作为独立模型直接部署。",
 	}
 	sentenceTransformersDefaults = ModelTypeDefaults{
-		Kind: "directory", Format: "sentence_transformers", Task: "embedding",
-		Capabilities: []string{"embedding"}, DefaultTestMode: "embedding",
+		Kind: "directory", Format: runtimecontract.FormatSentenceTransformers, Task: runtimecontract.TaskEmbedding,
+		Capabilities: []string{runtimecontract.CapabilityEmbedding}, DefaultTestMode: runtimecontract.TestModeEmbedding,
 		Deployable: true, RequiresBaseModel: false,
 		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "high",
 	}
 	rerankerDefaults = ModelTypeDefaults{
-		Kind: "directory", Format: "huggingface", Task: "rerank",
-		Capabilities: []string{"rerank"}, DefaultTestMode: "rerank",
+		Kind: "directory", Format: runtimecontract.FormatHuggingFace, Task: runtimecontract.TaskRerank,
+		Capabilities: []string{runtimecontract.CapabilityRerank}, DefaultTestMode: runtimecontract.TestModeRerank,
 		Deployable: true, RequiresBaseModel: false,
 		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "medium",
 	}
 	visionLanguageDefaults = ModelTypeDefaults{
-		Kind: "directory", Format: "huggingface", Task: "vision_chat",
-		Capabilities: []string{"chat", "vision"}, DefaultTestMode: "chat",
+		Kind: "directory", Format: runtimecontract.FormatHuggingFace, Task: runtimecontract.TaskVisionChat,
+		Capabilities: []string{runtimecontract.CapabilityChat, runtimecontract.CapabilityVision}, DefaultTestMode: runtimecontract.TestModeChat,
 		Deployable: true, RequiresBaseModel: false,
 		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "high",
 	}
 	hfChatDefaults = ModelTypeDefaults{
-		Kind: "directory", Format: "huggingface", Task: "chat",
-		Capabilities: []string{"chat", "completion"}, DefaultTestMode: "chat",
+		Kind: "directory", Format: runtimecontract.FormatHuggingFace, Task: runtimecontract.TaskChat,
+		Capabilities: []string{runtimecontract.CapabilityChat, runtimecontract.CapabilityCompletion}, DefaultTestMode: runtimecontract.TestModeChat,
 		Deployable: true, RequiresBaseModel: false,
 		RecommendedBackends: []string{"vllm", "sglang"}, Confidence: "medium",
 	}
 	diffusersDefaults = ModelTypeDefaults{
-		Kind: "directory", Format: "diffusers", Task: "image_generation",
-		Capabilities: []string{"image_generation"}, DefaultTestMode: "auto",
+		Kind: "directory", Format: runtimecontract.FormatDiffusers, Task: runtimecontract.TaskImageGeneration,
+		Capabilities: []string{runtimecontract.CapabilityImageGeneration}, DefaultTestMode: runtimecontract.TestModeAuto,
 		Deployable: false, RequiresBaseModel: false,
 		RecommendedBackends: []string{}, Confidence: "high",
 		UnsupportedReason: "当前平台尚未配置 Diffusers/Image Generation 后端。",
 	}
 	asrDefaults = ModelTypeDefaults{
-		Kind: "directory", Format: "huggingface", Task: "asr",
-		Capabilities: []string{"asr"}, DefaultTestMode: "auto",
+		Kind: "directory", Format: runtimecontract.FormatHuggingFace, Task: runtimecontract.TaskASR,
+		Capabilities: []string{runtimecontract.CapabilityASR}, DefaultTestMode: runtimecontract.TestModeAuto,
 		Deployable: false, RequiresBaseModel: false,
 		RecommendedBackends: []string{}, Confidence: "medium",
 		UnsupportedReason: "当前平台尚未配置 ASR 后端。",
 	}
 	ttsDefaults = ModelTypeDefaults{
-		Kind: "directory", Format: "huggingface", Task: "tts",
-		Capabilities: []string{"tts"}, DefaultTestMode: "auto",
+		Kind: "directory", Format: runtimecontract.FormatHuggingFace, Task: runtimecontract.TaskTTS,
+		Capabilities: []string{runtimecontract.CapabilityTTS}, DefaultTestMode: runtimecontract.TestModeAuto,
 		Deployable: false, RequiresBaseModel: false,
 		RecommendedBackends: []string{}, Confidence: "medium",
 		UnsupportedReason: "当前平台尚未配置 TTS 后端。",
 	}
 	classificationDefaults = ModelTypeDefaults{
-		Kind: "directory", Format: "huggingface", Task: "classification",
-		Capabilities: []string{"classification"}, DefaultTestMode: "auto",
+		Kind: "directory", Format: runtimecontract.FormatHuggingFace, Task: runtimecontract.TaskClassification,
+		Capabilities: []string{runtimecontract.CapabilityClassification}, DefaultTestMode: runtimecontract.TestModeAuto,
 		Deployable: false, RequiresBaseModel: false,
 		RecommendedBackends: []string{}, Confidence: "medium",
 		UnsupportedReason: "当前平台尚未配置分类模型服务后端。",
 	}
 	openvinoDefaults = ModelTypeDefaults{
-		Kind: "bundle", Format: "openvino", Task: "unknown",
-		Capabilities: []string{}, DefaultTestMode: "auto",
+		Kind: "bundle", Format: runtimecontract.FormatOpenVINO, Task: runtimecontract.TaskUnknown,
+		Capabilities: []string{}, DefaultTestMode: runtimecontract.TestModeAuto,
 		Deployable: false, RequiresBaseModel: false,
 		RecommendedBackends: []string{}, Confidence: "high",
 		UnsupportedReason: "当前平台尚未配置 OpenVINO 后端。",
 	}
 	tensorrtDefaults = ModelTypeDefaults{
-		Kind: "bundle", Format: "tensorrt_engine", Task: "unknown",
-		Capabilities: []string{}, DefaultTestMode: "auto",
+		Kind: "bundle", Format: runtimecontract.FormatTensorRT, Task: runtimecontract.TaskUnknown,
+		Capabilities: []string{}, DefaultTestMode: runtimecontract.TestModeAuto,
 		Deployable: false, RequiresBaseModel: false,
 		RecommendedBackends: []string{}, Confidence: "high",
 		UnsupportedReason: "当前平台尚未配置 TensorRT-LLM 后端。",
 	}
 	onnxDefaults = ModelTypeDefaults{
-		Kind: "file", Format: "onnx", Task: "unknown",
-		Capabilities: []string{}, DefaultTestMode: "auto",
+		Kind: "file", Format: runtimecontract.FormatONNX, Task: runtimecontract.TaskUnknown,
+		Capabilities: []string{}, DefaultTestMode: runtimecontract.TestModeAuto,
 		Deployable: false, RequiresBaseModel: false,
 		RecommendedBackends: []string{}, Confidence: "high",
 		UnsupportedReason: "当前平台尚未配置 ONNX Runtime 后端。",
 	}
 
 	ggufDefaults = ModelTypeDefaults{
-		Kind: "file", Format: "gguf", Task: "chat",
-		Capabilities: []string{"chat", "completion"}, DefaultTestMode: "chat",
+		Kind: "file", Format: runtimecontract.FormatGGUF, Task: runtimecontract.TaskChat,
+		Capabilities: []string{runtimecontract.CapabilityChat, runtimecontract.CapabilityCompletion}, DefaultTestMode: runtimecontract.TestModeChat,
 		Deployable: true, RequiresBaseModel: false,
 		RecommendedBackends: []string{"llamacpp"}, Confidence: "high",
 	}

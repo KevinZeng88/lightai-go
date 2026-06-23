@@ -9,33 +9,48 @@ import (
 	"time"
 
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/runtimecontract"
 
 	"github.com/google/uuid"
 )
 
-// Allowed capability values.
+// Allowed capability values — canonical source is runtimecontract.IsValidCapability.
 var allowedCapabilities = map[string]bool{
-	"chat": true, "completion": true, "embedding": true,
-	"rerank": true, "vision": true,
-	"tool_calling": true, "structured_output": true,
+	runtimecontract.CapabilityChat:             true,
+	runtimecontract.CapabilityCompletion:       true,
+	runtimecontract.CapabilityEmbedding:        true,
+	runtimecontract.CapabilityRerank:           true,
+	runtimecontract.CapabilityVision:           true,
+	runtimecontract.CapabilityToolCalling:      true,
+	runtimecontract.CapabilityStructuredOutput: true,
 }
 
-// Allowed capability source values.
+// Allowed capability source values — canonical source is runtimecontract.IsValidCapabilitySource.
 var allowedCapabilitySources = map[string]bool{
-	"scan": true, "inferred": true,
-	"user_override": true, "backend_probe": true,
+	runtimecontract.CapabilitySourceScan:         true,
+	runtimecontract.CapabilitySourceInferred:     true,
+	runtimecontract.CapabilitySourceUserOverride: true,
+	runtimecontract.CapabilitySourceBackendProbe: true,
 }
 
-// Allowed default_test_mode values.
+// Allowed task type values — canonical source is runtimecontract.IsValidTask.
 var allowedTaskTypes = map[string]bool{
-	"chat": true, "completion": true, "embedding": true,
-	"rerank": true, "vision_chat": true, "adapter": true, "unknown": true,
+	runtimecontract.TaskChat:       true,
+	runtimecontract.TaskCompletion: true,
+	runtimecontract.TaskEmbedding:  true,
+	runtimecontract.TaskRerank:     true,
+	runtimecontract.TaskVisionChat: true,
+	runtimecontract.TaskAdapter:    true,
+	runtimecontract.TaskUnknown:    true,
 }
 
-// Allowed default_test_mode values.
+// Allowed default_test_mode values — canonical source is runtimecontract.IsValidTestMode.
 var allowedTestModes = map[string]bool{
-	"auto": true, "chat": true, "completion": true,
-	"embedding": true, "rerank": true,
+	runtimecontract.TestModeAuto:       true,
+	runtimecontract.TestModeChat:       true,
+	runtimecontract.TestModeCompletion: true,
+	runtimecontract.TestModeEmbedding:  true,
+	runtimecontract.TestModeRerank:     true,
 }
 
 // validateCapabilitiesJSON checks that all values in the given JSON array are
@@ -599,4 +614,18 @@ func scanModelLocation(row modelLocationScanner) map[string]interface{} {
 		"override_at": overrideAt, "last_scanned_at": scannedAt, "last_error": lastErr,
 		"tenant_id": tid, "created_at": ca, "updated_at": ua,
 	}
+}
+
+// HandleGetModelCapabilityEnums returns the canonical lists of valid format, task,
+// capability, and test mode values. Used by the frontend to populate option lists
+// without hardcoding enum values client-side.
+//
+// Authentication required (same as model_artifact:read).
+func (h *AgentHandler) HandleGetModelCapabilityEnums(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"formats":      runtimecontract.AllFormats(),
+		"tasks":        runtimecontract.AllTasks(),
+		"capabilities": runtimecontract.AllCapabilities(),
+		"test_modes":   runtimecontract.AllTestModes(),
+	})
 }

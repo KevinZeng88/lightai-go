@@ -4,6 +4,10 @@ const CAPABILITY_LABELS = {
   embedding: { zh: '向量', en: 'Embedding' },
   rerank: { zh: '重排', en: 'Rerank' },
   vision: { zh: '视觉', en: 'Vision' },
+  image_generation: { zh: '图像生成', en: 'Image Generation' },
+  asr: { zh: '语音识别', en: 'ASR' },
+  tts: { zh: '语音合成', en: 'TTS' },
+  classification: { zh: '分类', en: 'Classification' },
   tool_calling: { zh: '工具调用', en: 'Tool Calling' },
   structured_output: { zh: '结构化输出', en: 'Structured Output' },
 }
@@ -65,7 +69,13 @@ function addCapability(map, id, source, confidence, reason) {
   }
 }
 
-export function inferModelCapabilities(model) {
+// inferModelCapabilities returns the capability list for a model.
+// Persisted capabilities (model.capabilities) always take precedence.
+// When persisted caps are empty, behavior depends on allowInference:
+//   - false (default): return empty — no silent regex guessing.
+//     Saved models should show "not configured" rather than guessed capabilities.
+//   - true: run name/metadata-based regex inference (wizard preview use only).
+export function inferModelCapabilities(model, { allowInference = false } = {}) {
   const caps = new Map()
 
   // Phase 2: Prefer persisted capabilities from backend.
@@ -79,7 +89,12 @@ export function inferModelCapabilities(model) {
     return Array.from(caps.values())
   }
 
-  // Legacy path: infer from model fields and scan metadata.
+  // Inference is opt-in: only used for wizard temporary preview, not for saved models.
+  if (!allowInference) {
+    return Array.from(caps.values())
+  }
+
+  // Legacy path: infer from model fields and scan metadata (wizard-only).
   const explicit = explicitCapabilitySet(model)
   for (const id of explicit) {
     addCapability(caps, id, 'explicit', 'high', 'capabilities')
@@ -126,8 +141,8 @@ export function recommendedTestMode(model) {
   // Phase 2: Prefer persisted default_test_mode.
   const dtm = model?.default_test_mode
   if (dtm && dtm !== 'auto') return dtm
-  // Fall back to inference.
-  const caps = inferModelCapabilities(model)
+  // Fall back to inference (wizard preview — opt-in inference enabled).
+  const caps = inferModelCapabilities(model, { allowInference: true })
   const ids = new Set(caps.map((c) => c.id))
   if (ids.has('chat')) return 'chat'
   if (ids.has('completion')) return 'completion'
@@ -147,30 +162,31 @@ export function testModeLabel(mode, locale = 'zh-CN') {
 }
 
 export function formatTestFailure(result) {
+  const code = result?.reason_code || ''
   const mode = result?.mode === 'completion' ? 'Completion' : result?.mode === 'chat' ? 'Chat Completion' : '模型测试'
   const endpoint = result?.endpoint || (result?.mode === 'completion' ? '/v1/completions' : result?.mode === 'chat' ? '/v1/chat/completions' : '')
   const status = result?.http_status || result?.status || ''
-  const summary = result?.message || result?.error || result?.reason_code || ''
+  const requested = result?.requested_model || result?.model || ''
+  const available = result?.available_models || []
+  const hint = result?.hint || ''
 
-  if (result?.reason_code === 'instance_not_running') {
-    const state = result?.current_state || result?.state || summary.replace(/^instance is\s+/i, '').replace(/,.*/, '')
+  // Structured reason_code handling (preferred over raw HTTP status inspection).
+  switch (code) {
+  case 'instance_not_running': {
+    const state = result?.current_state || result?.state || ''
     return `实例未运行：当前状态 ${state || 'unknown'}`
   }
-  if (result?.reason_code === 'model_id_not_resolved') {
-    const requested = result?.requested_model || ''
-    const available = result?.available_models || []
-    const hint = result?.hint || ''
-    let msg = `模型 ID 解析失败`
+  case 'model_id_not_resolved': {
+    let msg = '模型 ID 解析失败'
     if (requested) msg += `；请求模型 ${requested}`
     if (available.length > 0) msg += `；可用模型 ${available.join(', ')}`
     if (hint) msg += `；${hint}`
-    if (summary) msg += `；${summary}`
     return msg
   }
-  // 404 with model-not-found: show requested vs available.
-  if (result?.http_status === 404 || result?.reason_code === 'chat_endpoint_failed' || result?.reason_code === 'completion_endpoint_failed') {
-    const requested = result?.requested_model || result?.model || ''
-    const available = result?.available_models || []
+  case 'chat_endpoint_failed':
+  case 'completion_endpoint_failed':
+  case 'embedding_endpoint_failed':
+  case 'rerank_endpoint_failed': {
     const backendError = result?.error_body || result?.raw_response || ''
     let msg = `${mode} 请求失败`
     if (endpoint) msg += `：接口 ${endpoint}`
@@ -181,12 +197,40 @@ export function formatTestFailure(result) {
       const short = typeof backendError === 'string' ? backendError.substring(0, 200) : ''
       if (short) msg += `，后端错误 ${short}`
     }
-    if (result?.hint) msg += `，提示：${result.hint}`
+    if (hint) msg += `，提示：${hint}`
+    return msg
+  }
+  case 'backend_capability_missing':
+    return '后端能力未声明，无法确认该模型是否可运行。'
+  case 'format_mismatch':
+  case 'task_mismatch':
+  case 'path_mode_mismatch':
+  case 'architecture_blocked':
+  case 'not_deployable':
+    return result?.message || result?.reason || code
+  default:
+    break
+  }
+
+  // Fallback: use raw HTTP status and endpoint info.
+  if (result?.http_status === 404) {
+    const backendError = result?.error_body || result?.raw_response || ''
+    let msg = `${mode} 请求失败`
+    if (endpoint) msg += `：接口 ${endpoint}`
+    if (status) msg += `，HTTP 状态 ${status}`
+    if (requested) msg += `，请求模型 ${requested}`
+    if (available.length > 0) msg += `，可用模型 ${available.join(', ')}`
+    if (backendError) {
+      const short = typeof backendError === 'string' ? backendError.substring(0, 200) : ''
+      if (short) msg += `，后端错误 ${short}`
+    }
+    if (hint) msg += `，提示：${hint}`
     return msg
   }
 
   const statusText = status ? `，HTTP 状态 ${status}` : ''
   const endpointText = endpoint ? `接口 ${endpoint}` : '接口未知'
-  const summaryText = summary ? `，错误摘要 ${summary}` : ''
+  const resultSummary = result?.message || result?.error || ''
+  const summaryText = resultSummary ? `，错误摘要 ${resultSummary}` : ''
   return `${mode} 请求失败：${endpointText}${statusText}${summaryText}`
 }

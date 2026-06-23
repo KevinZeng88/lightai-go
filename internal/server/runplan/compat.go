@@ -18,6 +18,7 @@ type BackendDescriptor struct {
 	SupportedTasks        []string
 	SupportedCapabilities []string
 	ModelPathModes        []string
+	ServingProtocols      []string // e.g., "openai-compatible", "ollama"
 	TestEndpoints         map[string]interface{}
 	BlockedArchitectures  map[string]string // arch → reason for blocking
 }
@@ -97,6 +98,7 @@ func ParseBackendCapabilities(capabilitiesJSON string) (BackendDescriptor, error
 		SupportedTasks        []string               `json:"supported_tasks"`
 		SupportedCapabilities []string               `json:"supported_capabilities"`
 		ModelPathModes        []string               `json:"model_path_modes"`
+		ServingProtocols      []string               `json:"serving_protocols"`
 		TestEndpoints         map[string]interface{} `json:"test_endpoints"`
 		BlockedArchitectures  map[string]string      `json:"blocked_architectures"`
 	}
@@ -111,6 +113,7 @@ func ParseBackendCapabilities(capabilitiesJSON string) (BackendDescriptor, error
 		SupportedTasks:        caps.SupportedTasks,
 		SupportedCapabilities: caps.SupportedCapabilities,
 		ModelPathModes:        caps.ModelPathModes,
+		ServingProtocols:      caps.ServingProtocols,
 		TestEndpoints:         caps.TestEndpoints,
 		BlockedArchitectures:  caps.BlockedArchitectures,
 	}, nil

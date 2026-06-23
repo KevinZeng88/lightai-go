@@ -193,3 +193,50 @@ func TestParseBackendCapabilities(t *testing.T) {
 		t.Errorf("wrong chat endpoint: %v", bd.TestEndpoints["chat"])
 	}
 }
+
+// TestParseBackendCapabilitiesOllama verifies the structured Ollama capabilities
+// parse correctly (not the bare ["ollama"] array which would silently produce zero values).
+func TestParseBackendCapabilitiesOllama(t *testing.T) {
+	capsJSON := `{"supported_formats":["ollama"],"supported_tasks":["chat","completion"],"supported_capabilities":["chat","completion"],"model_path_modes":["ollama_managed"],"serving_protocols":["ollama"],"test_endpoints":{"chat":"/api/chat","completion":"/api/generate"}}`
+	bd, err := ParseBackendCapabilities(capsJSON)
+	if err != nil {
+		t.Fatalf("failed to parse Ollama capabilities: %v", err)
+	}
+	if len(bd.SupportedFormats) == 0 {
+		t.Error("Ollama SupportedFormats should not be empty")
+	}
+	if bd.SupportedFormats[0] != "ollama" {
+		t.Errorf("expected supported_formats[0]=ollama, got %s", bd.SupportedFormats[0])
+	}
+	if len(bd.SupportedTasks) != 2 {
+		t.Errorf("expected 2 supported_tasks, got %v", bd.SupportedTasks)
+	}
+	if len(bd.ServingProtocols) == 0 {
+		t.Error("Ollama ServingProtocols should not be empty")
+	}
+	if bd.ServingProtocols[0] != "ollama" {
+		t.Errorf("expected serving_protocols[0]=ollama, got %s", bd.ServingProtocols[0])
+	}
+	if len(bd.ModelPathModes) == 0 || bd.ModelPathModes[0] != "ollama_managed" {
+		t.Errorf("expected model_path_modes[0]=ollama_managed, got %v", bd.ModelPathModes)
+	}
+}
+
+// TestCompatOllamaWithOllamaModelPasses verifies an Ollama model matches an Ollama backend.
+func TestCompatOllamaWithOllamaModelPasses(t *testing.T) {
+	result := CheckCompatibility(
+		ModelDescriptor{Format: "ollama", Task: "chat", Deployable: true, PathType: "ollama_managed"},
+		BackendDescriptor{BackendName: "ollama", SupportedFormats: []string{"ollama"}, SupportedTasks: []string{"chat", "completion"}, ModelPathModes: []string{"ollama_managed"}},
+	)
+	assertCompatPass(t, "Ollama+ollama_model", result)
+}
+
+// TestCompatOllamaMissingCapabilitiesFails verifies that empty capabilities
+// for Ollama produce a failure (no silent pass).
+func TestCompatOllamaMissingCapabilitiesFails(t *testing.T) {
+	result := CheckCompatibility(
+		ModelDescriptor{Format: "ollama", Task: "chat", Deployable: true, PathType: "ollama_managed"},
+		BackendDescriptor{BackendName: "ollama", SupportedFormats: nil, SupportedTasks: nil, ModelPathModes: nil},
+	)
+	assertCompatFail(t, "Ollama+missing_caps", result)
+}

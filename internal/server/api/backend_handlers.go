@@ -1338,29 +1338,25 @@ func boolValFromRequest(r *http.Request, key string) bool {
 // ==========================================================================
 
 func HandleListRuntimeTemplates(w http.ResponseWriter, r *http.Request) {
-	presetsDir := "configs/model-runtime/backend-runtime-templates"
-	entries, err := os.ReadDir(presetsDir)
-	if err != nil {
-		writeJSON(w, http.StatusOK, []interface{}{})
-		return
-	}
+	// Read recursively from the new catalog layout.
+	presetsDir := "configs/backend-catalog/runtimes"
 	var templates []interface{}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
-			continue
+	filepath.WalkDir(presetsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".yaml") {
+			return nil
 		}
-		path := filepath.Join(presetsDir, entry.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
-			continue
+			return nil
 		}
-		name := strings.TrimSuffix(entry.Name(), ".yaml")
+		rel, _ := filepath.Rel(presetsDir, path)
 		templates = append(templates, map[string]interface{}{
-			"name":    name,
+			"name":    strings.TrimSuffix(rel, ".yaml"),
 			"source":  path,
 			"content": string(data),
 		})
-	}
+		return nil
+	})
 	if templates == nil {
 		templates = []interface{}{}
 	}
@@ -1369,7 +1365,7 @@ func HandleListRuntimeTemplates(w http.ResponseWriter, r *http.Request) {
 
 func HandleGetRuntimeTemplate(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	path := filepath.Join("configs/model-runtime/backend-runtime-templates", name+".yaml")
+	path := resolveTemplatePath(name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "template not found")

@@ -994,6 +994,10 @@ func buildDeviceBinding(in ResolveInput, gpuIDs []string, gpuVisibleKey string, 
 		}
 	case "cpu":
 		binding.Mode = "cpu_none"
+	case "huawei", "ascend":
+		// template_only: no real device binding until hardware validation + smoke evidence.
+		// Do not fabricate device bindings or suggest the runtime can actually start.
+		binding.Mode = "template_only"
 	default:
 		binding.Mode = "nvidia_device_request"
 		binding.VisibleDeviceIDs = gpuIDs
