@@ -65,6 +65,7 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("POST /api/v1/roles", tenantChain(cfg, cfg.RBACHandler.HandleCreateRole, "role:write"))
 	mux.Handle("DELETE /api/v1/roles/{id}", tenantChain(cfg, cfg.RBACHandler.HandleDeleteRole, "role:write"))
 	mux.Handle("PUT /api/v1/roles/{id}/permissions", tenantChain(cfg, cfg.RBACHandler.HandleUpdateRolePermissions, "role:write"))
+	mux.Handle("GET /api/v1/roles/{id}/permissions", tenantChain(cfg, cfg.RBACHandler.HandleGetRolePermissions, "role:read"))
 
 	mux.Handle("GET /api/v1/permissions", tenantChain(cfg, cfg.RBACHandler.HandleListPermissions, "role:read"))
 

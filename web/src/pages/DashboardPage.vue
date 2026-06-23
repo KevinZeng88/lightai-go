@@ -123,15 +123,15 @@
         </el-descriptions-item>
         <el-descriptions-item :label="t('dashboard.heartbeatTimeout')">
           <StatusTag :status="heartbeatOk ? 'healthy' : 'warning'" />
-          {{ heartbeatOk ? '正常' : nodesWithStaleHeartbeat + ' 个节点超时' }}
+          {{ heartbeatOk ? t('dashboard.statusOk') : t('dashboard.nodesTimeout', { count: nodesWithStaleHeartbeat }) }}
         </el-descriptions-item>
         <el-descriptions-item :label="t('dashboard.collectorError')">
           <StatusTag :status="hasUnhealthyGpus ? 'warning' : 'healthy'" />
-          {{ hasUnhealthyGpus ? unhealthyGpuCount + ' 个 GPU 异常' : '正常' }}
+          {{ hasUnhealthyGpus ? t('dashboard.gpuUnhealthy', { count: unhealthyGpuCount }) : t('dashboard.statusOk') }}
         </el-descriptions-item>
         <el-descriptions-item :label="t('dashboard.staleData')">
           <StatusTag :status="hasStaleGpus ? 'warning' : 'healthy'" />
-          {{ hasStaleGpus ? staleGpuCount + ' 个 GPU 数据过期' : '正常' }}
+          {{ hasStaleGpus ? t('dashboard.gpuStale', { count: staleGpuCount }) : t('dashboard.statusOk') }}
         </el-descriptions-item>
         <el-descriptions-item :label="t('dashboard.collectorStatus')">
           {{ t('dashboard.collectorStatusUnavailable') }}

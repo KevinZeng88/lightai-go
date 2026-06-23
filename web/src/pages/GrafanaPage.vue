@@ -4,7 +4,7 @@
     <el-descriptions :column="1" border style="margin-top: 16px">
       <el-descriptions-item :label="t('observability.url')">{{ grafUrl }}</el-descriptions-item>
       <el-descriptions-item :label="t('observability.status')">{{ status }}</el-descriptions-item>
-      <el-descriptions-item :label="t('observability.defaultLogin')">{{ t('observability.credentialsHint') }}</el-descriptions-item>
+      <el-descriptions-item v-if="auth.user?.is_platform_admin" :label="t('observability.defaultLogin')">{{ t('observability.credentialsHint') }}</el-descriptions-item>
     </el-descriptions>
     <div style="margin-top: 16px">
       <el-button type="primary" @click="openGrafana">Open Grafana</el-button>
@@ -23,6 +23,8 @@
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ref, onMounted } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
 
 const grafUrl = `http://${window.location.hostname}:13000`
 const status = ref('Checking...')

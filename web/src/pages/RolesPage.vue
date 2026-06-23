@@ -41,7 +41,7 @@
 </template>
 <script setup lang="ts">
 import { ref } from 'vue'; import { useI18n } from 'vue-i18n'; import { RefreshRight } from '@element-plus/icons-vue'; import { ElMessage, ElMessageBox } from 'element-plus'
-import { fetchRoles, createRole, deleteRole, fetchPermissions, updateRolePermissions, type Role, type Permission } from '@/api/roles'; import { useAuthStore } from '@/stores/auth'
+import { fetchRoles, createRole, deleteRole, fetchPermissions, fetchRolePermissions, updateRolePermissions, type Role, type Permission } from '@/api/roles'; import { useAuthStore } from '@/stores/auth'
 const { t } = useI18n(); const auth = useAuthStore()
 const isPlatformAdmin = auth.user?.is_platform_admin || false
 const items = ref<Role[]>([]); const loading = ref(false); const errorMessage = ref('')
@@ -84,7 +84,8 @@ async function openPermissions(row: Role) {
   loadingPerms.value = true
   try {
     allPermissions.value = await fetchPermissions()
-    selectedPermIds.value = []
+    const existing = await fetchRolePermissions(row.id)
+    selectedPermIds.value = existing.map((p: any) => p.id)
   } catch (e: any) { allPermissions.value = []; permErrorMessage.value = e?.message || String(e) }
   finally { loadingPerms.value = false }
 }

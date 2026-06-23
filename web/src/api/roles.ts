@@ -12,4 +12,8 @@ export async function fetchPermissions(): Promise<Permission[]> {
 }
 export async function createRole(body: any): Promise<Role> { return apiClient.post('/roles', body) }
 export async function deleteRole(id: string): Promise<void> { await apiClient.delete(`/roles/${id}`) }
+export async function fetchRolePermissions(roleId: string): Promise<Permission[]> {
+  const data = await apiClient.get(`/roles/${roleId}/permissions`)
+  return Array.isArray(data) ? data : []
+}
 export async function updateRolePermissions(id: string, permissionIds: string[]): Promise<void> { await apiClient.put(`/roles/${id}/permissions`, { permission_ids: permissionIds }) }

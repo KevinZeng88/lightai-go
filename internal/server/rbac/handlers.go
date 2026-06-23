@@ -1033,6 +1033,63 @@ func (h *Handler) HandleUpdateRolePermissions(w http.ResponseWriter, r *http.Req
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+// HandleGetRolePermissions handles GET /api/roles/{id}/permissions.
+func (h *Handler) HandleGetRolePermissions(w http.ResponseWriter, r *http.Request) {
+	roleID := r.PathValue("id")
+	info := auth.SessionInfoFromContext(r.Context())
+	if info == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Verify role exists and belongs to the tenant (or is built-in).
+	var tenantID sql.NullString
+	err := h.DB.QueryRow(`SELECT tenant_id FROM roles WHERE id = ?`, roleID).Scan(&tenantID)
+	if err == sql.ErrNoRows {
+		http.Error(w, `{"error":"role not found"}`, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if tenantID.Valid && tenantID.String != info.TenantID {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
+	rows, err := h.DB.Query(
+		`SELECT p.id, p.code, p.scope, p.description
+		 FROM permissions p
+		 JOIN role_permissions rp ON p.id = rp.permission_id
+		 WHERE rp.role_id = ?
+		 ORDER BY p.code`,
+		roleID,
+	)
+	if err != nil {
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var perms []map[string]interface{}
+	for rows.Next() {
+		var id, code, scope, desc string
+		if err := rows.Scan(&id, &code, &scope, &desc); err != nil {
+			continue
+		}
+		perms = append(perms, map[string]interface{}{
+			"id": id, "code": code, "scope": scope, "description": desc,
+		})
+	}
+	if perms == nil {
+		perms = []map[string]interface{}{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(perms)
+}
+
 // HandleListPermissions handles GET /api/permissions.
 func (h *Handler) HandleListPermissions(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.Query(
