@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"lightai-go/internal/agent/register"
+	"lightai-go/internal/server/agentclient"
 	"lightai-go/internal/server/db"
 	"time"
 )
@@ -1166,6 +1167,7 @@ func TestCheckRequestEndpointRejectsMissingPathValues(t *testing.T) {
 func TestCheckRequestImageExistsSuccess(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
+	h.AgentClient = agentclient.New("", agentclient.DefaultTimeout)
 
 	nodeID := "node-ck-img"
 	runtimeID := "rt-ck-img"
@@ -1246,6 +1248,7 @@ func TestCheckRequestImageExistsSuccess(t *testing.T) {
 func TestCheckRequestImageMissing(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
+	h.AgentClient = agentclient.New("", agentclient.DefaultTimeout)
 
 	nodeID := "node-ck-miss"
 	runtimeID := "rt-ck-miss"
@@ -1360,6 +1363,7 @@ func TestCheckRequestAgentUnreachable(t *testing.T) {
 func TestCheckRequestProbeResultsStored(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
+	h.AgentClient = agentclient.New("", agentclient.DefaultTimeout)
 
 	nodeID := "node-ck-store"
 	runtimeID := "rt-ck-store"
@@ -1713,6 +1717,7 @@ func TestCheckRequestListMissesInspectFound(t *testing.T) {
 func TestCheckRequestInspectNotFound(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
+	h.AgentClient = agentclient.New("", agentclient.DefaultTimeout)
 
 	nodeID := "node-inf"
 	runtimeID := "rt-inf"
@@ -2083,6 +2088,7 @@ func TestGetProbeReturnsSnapshotAfterProbe(t *testing.T) {
 func TestPostProbeMissingImageOnlyFromInspectNotFound(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
+	h.AgentClient = agentclient.New("", agentclient.DefaultTimeout)
 
 	nodeID := "node-pp-reg"
 	runtimeID := "rt-pp-reg"

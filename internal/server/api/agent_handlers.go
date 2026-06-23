@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/server/agentclient"
 	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/authz"
 	"lightai-go/internal/server/db"
@@ -20,13 +21,23 @@ import (
 
 // AgentHandler handles Agent API endpoints.
 type AgentHandler struct {
-	DB      *db.DB
-	Metrics *srvmetrics.ServerMetrics
+	DB          *db.DB
+	Metrics     *srvmetrics.ServerMetrics
+	AgentClient *agentclient.Client
 }
 
 // NewAgentHandler creates a new AgentHandler.
 func NewAgentHandler(database *db.DB, m *srvmetrics.ServerMetrics) *AgentHandler {
 	return &AgentHandler{DB: database, Metrics: m}
+}
+
+// requireAgentClient returns the AgentClient or writes a 503 error and returns nil.
+func (h *AgentHandler) requireAgentClient(w http.ResponseWriter) *agentclient.Client {
+	if h.AgentClient == nil {
+		writeError(w, http.StatusServiceUnavailable, "agent client not configured")
+		return nil
+	}
+	return h.AgentClient
 }
 
 // RegisterRequest is the agent registration request.
@@ -613,17 +624,19 @@ func (h *AgentHandler) HandleGetNodeDockerImages(w http.ResponseWriter, r *http.
 	}
 	query := r.URL.Query().Get("query")
 	limit := r.URL.Query().Get("limit")
-	agentURL := fmt.Sprintf("http://%s:%d/docker-images?query=%s&limit=%s", addr, port, query, limit)
-	resp, err := http.Get(agentURL)
+	params := url.Values{"query": {query}, "limit": {limit}}
+	ac := h.requireAgentClient(w)
+	if ac == nil {
+		return
+	}
+	body, _, err := ac.GetJSON(r.Context(), addr, port, "/docker-images", params)
 	if err != nil {
-		log.Warn("failed to query agent docker images", "node_id", nodeID, "url", agentURL, "error", err)
+		log.Warn("failed to query agent docker images", "node_id", nodeID, "addr", addr, "port", port, "error", err)
 		writeError(w, http.StatusBadGateway, "agent unreachable")
 		return
 	}
-	defer resp.Body.Close()
-	// Agent returns {images: [...], count: N} or a flat array (legacy).
 	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		writeError(w, http.StatusBadGateway, "invalid agent response")
 		return
 	}
@@ -655,16 +668,19 @@ func (h *AgentHandler) HandleGetNodeDockerImageInspect(w http.ResponseWriter, r 
 		http.Error(w, `{"error":"node has no advertised address or metrics port"}`, http.StatusBadRequest)
 		return
 	}
-	agentURL := fmt.Sprintf("http://%s:%d/docker-image-inspect?ref=%s", addr, port, url.QueryEscape(imageRef))
-	resp, err := http.Get(agentURL)
+	params := url.Values{"ref": {imageRef}}
+	ac := h.requireAgentClient(w)
+	if ac == nil {
+		return
+	}
+	body, _, err := ac.GetJSON(r.Context(), addr, port, "/docker-image-inspect", params)
 	if err != nil {
-		log.Warn("failed to query agent docker image inspect", "node_id", nodeID, "url", agentURL, "error", err)
+		log.Warn("failed to query agent docker image inspect", "node_id", nodeID, "addr", addr, "port", port, "error", err)
 		writeError(w, http.StatusBadGateway, "agent unreachable")
 		return
 	}
-	defer resp.Body.Close()
 	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		writeError(w, http.StatusBadGateway, "invalid agent response")
 		return
 	}

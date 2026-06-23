@@ -21,6 +21,7 @@ import (
 	"lightai-go/internal/common/token"
 	"lightai-go/internal/common/types"
 	"lightai-go/internal/common/version"
+	"lightai-go/internal/server/agentclient"
 	"lightai-go/internal/server/api"
 	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
@@ -165,6 +166,7 @@ func main() {
 	serverMetrics := srvmetrics.New(reg, database.DB)
 
 	agentHandler := api.NewAgentHandler(database, serverMetrics)
+	agentHandler.AgentClient = agentclient.New(cfg.AgentToken, agentclient.DefaultTimeout)
 	if count, err := agentHandler.ReloadBackendCatalogProjection(); err != nil {
 		log.Warn("backend catalog reload failed", "error", err)
 	} else {

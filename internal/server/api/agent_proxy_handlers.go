@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -54,15 +53,16 @@ func (h *AgentHandler) HandleProxyNodeFiles(w http.ResponseWriter, r *http.Reque
 	q.Set("path", rel)
 	q.Set("limit", r.URL.Query().Get("limit"))
 	q.Set("extra_roots", root.Path)
-	agentURL := fmt.Sprintf("http://%s:%d/files?%s", ip, port, q.Encode())
-	resp, err := http.Get(agentURL)
+	ac := h.requireAgentClient(w)
+	if ac == nil {
+		return
+	}
+	body, statusCode, err := ac.GetJSON(r.Context(), ip, port, "/files", q)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
 		return
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+	if statusCode >= 200 && statusCode < 300 {
 		out := map[string]interface{}{}
 		if json.Unmarshal(body, &out) == nil {
 			out["root_id"] = root.ID
@@ -77,7 +77,7 @@ func (h *AgentHandler) HandleProxyNodeFiles(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
+	w.WriteHeader(statusCode)
 	w.Write(body)
 }
 
@@ -116,15 +116,16 @@ func (h *AgentHandler) HandleProxyNodeModelScan(w http.ResponseWriter, r *http.R
 	bodyBytes, _ = json.Marshal(reqMap)
 	q := url.Values{}
 	q.Set("extra_roots", root.Path)
-	agentURL := fmt.Sprintf("http://%s:%d/model-paths/scan?%s", ip, port, q.Encode())
-	resp, err := http.Post(agentURL, "application/json", bytes.NewReader(bodyBytes))
+	ac := h.requireAgentClient(w)
+	if ac == nil {
+		return
+	}
+	body, statusCode, err := ac.PostJSON(r.Context(), ip, port, "/model-paths/scan", bytes.NewReader(bodyBytes), q)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "agent unreachable: "+err.Error())
 		return
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+	if statusCode >= 200 && statusCode < 300 {
 		out := map[string]interface{}{}
 		if json.Unmarshal(body, &out) == nil {
 			out["root_id"] = root.ID
@@ -146,6 +147,6 @@ func (h *AgentHandler) HandleProxyNodeModelScan(w http.ResponseWriter, r *http.R
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
+	w.WriteHeader(statusCode)
 	w.Write(body)
 }

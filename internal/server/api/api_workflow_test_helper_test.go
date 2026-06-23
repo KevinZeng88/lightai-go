@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"lightai-go/internal/server/agentclient"
 	"lightai-go/internal/server/auth"
 	"lightai-go/internal/server/db"
 	"lightai-go/internal/server/rbac"
@@ -65,6 +66,7 @@ func newWorkflowTestApp(t *testing.T) *workflowTestApp {
 	}
 
 	agentHandler := NewAgentHandler(database, nil)
+	agentHandler.AgentClient = agentclient.New("", agentclient.DefaultTimeout)
 	if _, err := agentHandler.ReloadBackendCatalogProjection(); err != nil {
 		t.Fatalf("reload backend catalog projection: %v", err)
 	}

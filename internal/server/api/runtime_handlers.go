@@ -369,86 +369,79 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	var imageID, imageDigest, dockerErr string
 
 	nodeAddr, nodePort := h.getNodeAddress(nodeID)
-	agentID := ""
-	if nodeAddr != "" && nodePort > 0 {
-		agentID = fmt.Sprintf("%s:%d", nodeAddr, nodePort)
-	}
 
 	// ---- Level 1: Docker image list (evidence only, NOT authoritative) ----
 	// The /docker-images list is used for UI selection and supporting evidence.
 	// It does NOT determine missing_image. Only ImageInspect (Level 2) is authoritative.
-	if agentID == "" {
+	if nodeAddr == "" || nodePort == 0 {
 		dockerErr = "node has no advertised address or metrics port"
 		probeResults["level1"] = map[string]interface{}{
 			"image_present": false,
 			"source":        "docker_images_list",
 			"error":         dockerErr,
 		}
+	} else if h.AgentClient == nil {
+		dockerErr = "agent client not configured"
+		probeResults["level1"] = map[string]interface{}{
+			"image_present": false,
+			"source":        "docker_images_list",
+			"error":         dockerErr,
+		}
 	} else {
-		agentURL := fmt.Sprintf("http://%s/docker-images?limit=1000", agentID)
-		resp, err := http.Get(agentURL)
+		params := url.Values{"limit": {"1000"}}
+		body, _, err := h.AgentClient.GetJSON(r.Context(), nodeAddr, nodePort, "/docker-images", params)
 		if err != nil {
 			dockerErr = fmt.Sprintf("agent unreachable: %v", err)
-			log.Warn("nbr.check_request.agent_unreachable", "node_id", nodeID, "url", agentURL, "error", err)
+			log.Warn("nbr.check_request.agent_unreachable", "node_id", nodeID, "addr", nodeAddr, "port", nodePort, "error", err)
 			probeResults["level1"] = map[string]interface{}{
 				"image_present": false,
 				"source":        "docker_images_list",
 				"error":         dockerErr,
 			}
 		} else {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				dockerErr = fmt.Sprintf("agent returned HTTP %d", resp.StatusCode)
-				probeResults["level1"] = map[string]interface{}{
-					"image_present": false,
-					"source":        "docker_images_list",
-					"error":         dockerErr,
-				}
-			} else {
-				dockerAvailable = true
-				if nbrImageRef != "" {
-					var result map[string]interface{}
-					if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
-						imagesRaw, _ := result["images"].([]interface{})
-						for _, imgRaw := range imagesRaw {
-							img, _ := imgRaw.(map[string]interface{})
-							if img == nil {
-								continue
-							}
-							imgRef := strVal(img, "image_ref", "")
-							if imgRef == "" {
-								repo := strVal(img, "repository", "")
-								tag := strVal(img, "tag", "")
-								if repo != "" && tag != "" && tag != "<none>" {
-									imgRef = repo + ":" + tag
-								}
-							}
-							if imgRef == "" {
-								continue
-							}
-							if nbrImageRef == imgRef || strings.Contains(imgRef, nbrImageRef) || strings.Contains(nbrImageRef, imgRef) {
-								imagePresent = true
-								imageID = strVal(img, "image_id", "")
-								imageDigest = strVal(img, "digest", "")
-								probeResults["level1"] = map[string]interface{}{
-									"image_present": true,
-									"source":        "docker_images_list",
-									"image_ref":     imgRef,
-									"image_id":      imageID,
-									"digest":        imageDigest,
-									"created_at":    strVal(img, "created_at", ""),
-									"size":          strVal(img, "size", ""),
-								}
-								break
+			dockerAvailable = true
+			if nbrImageRef != "" {
+				var result map[string]interface{}
+				if err := json.Unmarshal(body, &result); err == nil {
+					imagesRaw, _ := result["images"].([]interface{})
+					for _, imgRaw := range imagesRaw {
+						img, _ := imgRaw.(map[string]interface{})
+						if img == nil {
+							continue
+						}
+						imgRef := strVal(img, "image_ref", "")
+						if imgRef == "" {
+							repo := strVal(img, "repository", "")
+							tag := strVal(img, "tag", "")
+							if repo != "" && tag != "" && tag != "<none>" {
+								imgRef = repo + ":" + tag
 							}
 						}
-						if !imagePresent {
+						if imgRef == "" {
+							continue
+						}
+						if nbrImageRef == imgRef || strings.Contains(imgRef, nbrImageRef) || strings.Contains(nbrImageRef, imgRef) {
+							imagePresent = true
+							imageID = strVal(img, "image_id", "")
+							imageDigest = strVal(img, "digest", "")
 							probeResults["level1"] = map[string]interface{}{
-								"image_present": false,
+								"image_present": true,
 								"source":        "docker_images_list",
-								"image_ref":     nbrImageRef,
-								"note":          "image not in docker images list; authoritative check via ImageInspect",
+								"image_ref":     imgRef,
+								"image_id":      imageID,
+								"digest":        imageDigest,
+								"created_at":    strVal(img, "created_at", ""),
+								"size":          strVal(img, "size", ""),
 							}
+							break
+						}
+					}
+					if !imagePresent {
+						probeResults["level1"] = map[string]interface{}{
+							"image_present": false,
+							"source":        "docker_images_list",
+							"image_ref":     nbrImageRef,
+							"note":          "image not in docker images list; authoritative check via ImageInspect",
 						}
 					}
 				}
@@ -459,19 +452,18 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	// ---- Level 2: Docker ImageInspect (AUTHORITATIVE existence check) ----
 	// ImageInspect is the single source of truth for image existence.
 	// Only ImageInspect returning a clear "not found" error produces missing_image.
-	if agentID != "" && nbrImageRef != "" {
-		inspectURL := fmt.Sprintf("http://%s/docker-image-inspect?ref=%s", agentID, url.QueryEscape(nbrImageRef))
-		inspectResp, err := http.Get(inspectURL)
-		if err != nil {
-			log.Warn("nbr.check_request.inspect_failed", "node_id", nodeID, "url", inspectURL, "error", err)
+	if nodeAddr != "" && nodePort > 0 && nbrImageRef != "" && h.AgentClient != nil {
+		inspectParams := url.Values{"ref": {nbrImageRef}}
+		inspectBody, _, inspectErr := h.AgentClient.GetJSON(r.Context(), nodeAddr, nodePort, "/docker-image-inspect", inspectParams)
+		if inspectErr != nil {
+			log.Warn("nbr.check_request.inspect_failed", "node_id", nodeID, "addr", nodeAddr, "port", nodePort, "error", inspectErr)
 			probeResults["level2"] = map[string]interface{}{
 				"inspect_success": false,
-				"error":           fmt.Sprintf("inspect request failed: %v", err),
+				"error":           fmt.Sprintf("inspect request failed: %v", inspectErr),
 			}
 		} else {
-			defer inspectResp.Body.Close()
 			var inspectResult map[string]interface{}
-			if err := json.NewDecoder(inspectResp.Body).Decode(&inspectResult); err == nil {
+			if err := json.Unmarshal(inspectBody, &inspectResult); err == nil {
 				if inspectData, ok := inspectResult["inspect"].(map[string]interface{}); ok {
 					inspectSuccess = true
 					// Authoritative: if ImageInspect succeeds, image exists — even if
@@ -590,7 +582,7 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	}
 
 	// ---- Evaluate final status from probe results ----
-	status, reason := evaluateProbeStatus(nodeID, vendor, nbrImageRef, agentID,
+	status, reason := evaluateProbeStatus(nodeID, vendor, nbrImageRef, nodeAddr, nodePort,
 		imagePresent, dockerAvailable, dockerErr, inspectSuccess, inspectNotFound, probeResults)
 
 	// ---- Update NBR with check results ----
@@ -615,7 +607,7 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 
 	probeDuration := time.Since(probeStart).Milliseconds()
 	log.Info("nbr.check_request.probe",
-		"node_id", nodeID, "agent_id", agentID, "nbr_id", nbrID,
+		"node_id", nodeID, "agent_addr", nodeAddr, "agent_port", nodePort, "nbr_id", nbrID,
 		"image_ref", nbrImageRef, "vendor", vendor, "backend_id", backendID,
 		"status", status, "reason", reason,
 		"l1_list_found", imagePresent, "l1_docker_available", dockerAvailable,
@@ -908,13 +900,13 @@ func boolInt(v bool) int {
 // ImageInspect (Level 2) is the AUTHORITATIVE source for image existence.
 // missing_image is ONLY returned when ImageInspect explicitly says "not found".
 // docker-images list (Level 1) is evidence only and never produces missing_image.
-func evaluateProbeStatus(nodeID, vendor, imageRef, agentID string,
+func evaluateProbeStatus(nodeID, vendor, imageRef, agentAddr string, agentPort int,
 	imagePresent, dockerAvailable bool,
 	dockerErr string,
 	inspectSuccess, inspectNotFound bool,
 	probeResults map[string]interface{}) (string, string) {
 
-	if agentID == "" {
+	if agentAddr == "" || agentPort == 0 {
 		return "agent_unreachable", dockerErr
 	}
 	if !dockerAvailable && dockerErr != "" {
