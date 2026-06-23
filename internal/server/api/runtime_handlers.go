@@ -779,8 +779,15 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		// silently change the behavior of existing NodeBackendRuntime records.
 		snapshotJSON := h.buildRuntimeConfigSnapshot(rt, runtimeID)
 		// Deep copy parameter schema and values from BackendRuntime
+		// Default to empty arrays if not set on the BR
 		paramSchemaJSON := jsonString(rt["parameter_schema_json"])
+		if paramSchemaJSON == "null" || paramSchemaJSON == "" {
+			paramSchemaJSON = "[]"
+		}
 		paramValuesJSON := jsonString(rt["parameter_values_json"])
+		if paramValuesJSON == "null" || paramValuesJSON == "" {
+			paramValuesJSON = "[]"
+		}
 		_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
 			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, parameter_schema_json, parameter_values_json, tenant_id, created_at, updated_at)
 			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,

@@ -110,9 +110,9 @@ func (h *AgentHandler) HandleListArtifacts(w http.ResponseWriter, r *http.Reques
 	var err error
 	var out []map[string]interface{}
 	if isPlatformAdmin(r) {
-		out, err = h.queryArtifacts(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at FROM model_artifacts ORDER BY name`)
+		out, err = h.queryArtifacts(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, parameter_defaults_json, tenant_id, created_at, updated_at FROM model_artifacts ORDER BY name`)
 	} else {
-		out, err = h.queryArtifacts(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at FROM model_artifacts WHERE tenant_id = ? ORDER BY name`, tid)
+		out, err = h.queryArtifacts(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, parameter_defaults_json, tenant_id, created_at, updated_at FROM model_artifacts WHERE tenant_id = ? ORDER BY name`, tid)
 	}
 	if err != nil {
 		log.Error("list artifacts", "error", err)
@@ -158,13 +158,14 @@ func (h *AgentHandler) HandleCreateArtifact(w http.ResponseWriter, r *http.Reque
 	tid := tenantID(r)
 	now := time.Now().Format(time.RFC3339)
 
-	_, err := h.DB.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := h.DB.Exec(`INSERT INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, parameter_defaults_json, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "source_type", "local_path"),
 		path, format, taskType,
 		strVal(req, "architecture", "custom"), strVal(req, "size_label", ""),
 		strVal(req, "quantization", "unknown"), intVal(req, "default_context_length", 0),
 		int64Val(req, "estimated_vram_bytes", 0), intVal(req, "required_gpu_count", 1),
 		strVal(req, "capabilities_json", "[]"), strVal(req, "capability_sources_json", "{}"), strVal(req, "default_test_mode", "auto"),
+		strVal(req, "parameter_defaults_json", "[]"),
 		tid, now, now,
 	)
 	if err != nil {
@@ -282,6 +283,10 @@ func (h *AgentHandler) HandlePatchArtifact(w http.ResponseWriter, r *http.Reques
 		sets = append(sets, "default_test_mode = ?")
 		args = append(args, tm)
 	}
+	if v, ok := req["parameter_defaults"]; ok {
+		sets = append(sets, "parameter_defaults_json = ?")
+		args = append(args, jsonString(v))
+	}
 	args = append(args, id)
 	_, err := h.DB.Exec(`UPDATE model_artifacts SET `+joinSets(sets)+` WHERE id = ?`, args...)
 	if err != nil {
@@ -344,11 +349,11 @@ func (h *AgentHandler) HandleDeleteArtifact(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *AgentHandler) getArtifactJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, tenant_id, created_at, updated_at FROM model_artifacts WHERE id = ?`, id)
-	var rid, name, dn, st, path, frmt, tt, arch, sl, quant, capsJSON, sourcesJSON, testMode, tid, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, source_type, path, format, task_type, architecture, size_label, quantization, default_context_length, estimated_vram_bytes, required_gpu_count, capabilities_json, capability_sources_json, default_test_mode, parameter_defaults_json, tenant_id, created_at, updated_at FROM model_artifacts WHERE id = ?`, id)
+	var rid, name, dn, st, path, frmt, tt, arch, sl, quant, capsJSON, sourcesJSON, testMode, paramDefaultsJSON, tid, ca, ua string
 	var ctxLen, gpuCount int
 	var vram int64
-	if err := row.Scan(&rid, &name, &dn, &st, &path, &frmt, &tt, &arch, &sl, &quant, &ctxLen, &vram, &gpuCount, &capsJSON, &sourcesJSON, &testMode, &tid, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &st, &path, &frmt, &tt, &arch, &sl, &quant, &ctxLen, &vram, &gpuCount, &capsJSON, &sourcesJSON, &testMode, &paramDefaultsJSON, &tid, &ca, &ua); err != nil {
 		return nil
 	}
 	var caps interface{}
@@ -359,7 +364,11 @@ func (h *AgentHandler) getArtifactJSON(id string) map[string]interface{} {
 	if err := json.Unmarshal([]byte(sourcesJSON), &sources); err != nil {
 		sources = map[string]interface{}{}
 	}
-	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "capabilities": caps, "capability_sources": sources, "default_test_mode": testMode, "tenant_id": tid, "created_at": ca, "updated_at": ua, "locations": h.listModelLocations(id)}
+	var paramDefaults interface{}
+	if err := json.Unmarshal([]byte(paramDefaultsJSON), &paramDefaults); err != nil {
+		paramDefaults = []interface{}{}
+	}
+	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "capabilities": caps, "capability_sources": sources, "default_test_mode": testMode, "parameter_defaults": paramDefaults, "tenant_id": tid, "created_at": ca, "updated_at": ua, "locations": h.listModelLocations(id)}
 }
 
 func (h *AgentHandler) queryArtifacts(query string, args ...interface{}) ([]map[string]interface{}, error) {
@@ -370,10 +379,10 @@ func (h *AgentHandler) queryArtifacts(query string, args ...interface{}) ([]map[
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var rid, name, dn, st, path, frmt, tt, arch, sl, quant, capsJSON, sourcesJSON, testMode, tid, ca, ua string
+		var rid, name, dn, st, path, frmt, tt, arch, sl, quant, capsJSON, sourcesJSON, testMode, paramDefaultsJSON, tid, ca, ua string
 		var ctxLen, gpuCount int
 		var vram int64
-		if err := rows.Scan(&rid, &name, &dn, &st, &path, &frmt, &tt, &arch, &sl, &quant, &ctxLen, &vram, &gpuCount, &capsJSON, &sourcesJSON, &testMode, &tid, &ca, &ua); err != nil {
+		if err := rows.Scan(&rid, &name, &dn, &st, &path, &frmt, &tt, &arch, &sl, &quant, &ctxLen, &vram, &gpuCount, &capsJSON, &sourcesJSON, &testMode, &paramDefaultsJSON, &tid, &ca, &ua); err != nil {
 			continue
 		}
 		var caps interface{}
@@ -384,7 +393,11 @@ func (h *AgentHandler) queryArtifacts(query string, args ...interface{}) ([]map[
 		if err := json.Unmarshal([]byte(sourcesJSON), &sources); err != nil {
 			sources = map[string]interface{}{}
 		}
-		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "capabilities": caps, "capability_sources": sources, "default_test_mode": testMode, "tenant_id": tid, "created_at": ca, "updated_at": ua})
+		var paramDefaults interface{}
+		if err := json.Unmarshal([]byte(paramDefaultsJSON), &paramDefaults); err != nil {
+			paramDefaults = []interface{}{}
+		}
+		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "capabilities": caps, "capability_sources": sources, "default_test_mode": testMode, "parameter_defaults": paramDefaults, "tenant_id": tid, "created_at": ca, "updated_at": ua})
 	}
 	if out == nil {
 		out = []map[string]interface{}{}

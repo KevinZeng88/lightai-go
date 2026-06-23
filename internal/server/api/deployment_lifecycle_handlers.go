@@ -784,7 +784,8 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 
 	// Validate NodeBackendRuntime readiness and read snapshot + image_ref.
 	var nodeRuntimeStatus string
-	h.DB.QueryRow(`SELECT status, backend_runtime_id, node_id, COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,'') FROM node_backend_runtimes WHERE id = ?`, pf.nodeRuntimeID).Scan(&nodeRuntimeStatus, &pf.runtimeID, &pf.placement.NodeID, &pf.nbrSnapshot, &pf.nbrImageRef)
+	var nbrParamSchemaJSON, nbrParamValuesJSON string
+	h.DB.QueryRow(`SELECT status, backend_runtime_id, node_id, COALESCE(config_snapshot_json,'{}'), COALESCE(image_ref,''), COALESCE(parameter_schema_json,'[]'), COALESCE(parameter_values_json,'[]') FROM node_backend_runtimes WHERE id = ?`, pf.nodeRuntimeID).Scan(&nodeRuntimeStatus, &pf.runtimeID, &pf.placement.NodeID, &pf.nbrSnapshot, &pf.nbrImageRef, &nbrParamSchemaJSON, &nbrParamValuesJSON)
 	if !isNBRDeployable(nodeRuntimeStatus) {
 		reason := nbrDisabledReason(nodeRuntimeStatus, "")
 		if nodeRuntimeStatus == "" {
@@ -934,6 +935,22 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		return pf
 	}
 
+	// Build NBR snapshot for resolver
+	var nbrParamSchema []runplan.ParameterDef
+	var nbrParamValues []runplan.ParameterValue
+	json.Unmarshal([]byte(nbrParamSchemaJSON), &nbrParamSchema)
+	json.Unmarshal([]byte(nbrParamValuesJSON), &nbrParamValues)
+	nbrSnapshot := &runplan.NBRSnapshotInfo{
+		ArgsOverride:       argsOverride,
+		DefaultEnv:         rtEnvMap,
+		EntrypointOverride: rtEntryOverride,
+		Docker:             dockerSpec,
+		ModelMount:         modelMount,
+		HealthCheckOverride: rtHCOverridePtr(rtHC),
+		ParameterSchema:    nbrParamSchema,
+		ParameterValues:    nbrParamValues,
+	}
+
 	// Call the real RunPlan resolver with snapshot-based RuntimeInfo.
 	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
 		Backend:             &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
@@ -952,6 +969,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		Node:               &runplan.NodeInfo{ID: pf.placement.NodeID, IP: pf.nodeIP},
 		AssignedGPUs:       pf.gpuInfos,
 		ProcessStartConfig: pf.processStartConfig,
+		NBRConfigSnapshot:  nbrSnapshot,
 	})
 	for _, e := range resolveErrs {
 		pf.addErr("unknown", e.Error(), nil)
