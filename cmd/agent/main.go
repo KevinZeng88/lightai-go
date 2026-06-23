@@ -288,13 +288,25 @@ func main() {
 	// P1-003: Only start metrics HTTP server if enabled.
 	var healthSrv *http.Server
 	if cfg.Metrics.Enabled {
+		requireAgentToken := func(next http.HandlerFunc) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				auth := r.Header.Get("Authorization")
+				if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != cfg.AgentToken {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+					return
+				}
+				next(w, r)
+			}
+		}
 		healthMux := http.NewServeMux()
 		healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(types.HealthResponse{Status: "ok"})
 		})
 		healthMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-		healthMux.HandleFunc("GET /docker-images", func(w http.ResponseWriter, r *http.Request) {
+		healthMux.HandleFunc("GET /docker-images", requireAgentToken(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("query")))
 			limit := 100
@@ -336,10 +348,10 @@ func main() {
 				images = []map[string]interface{}{}
 			}
 			json.NewEncoder(w).Encode(map[string]interface{}{"images": images, "count": len(images)})
-		})
+		}))
 
 		// Docker image inspect endpoint.
-		healthMux.HandleFunc("GET /docker-image-inspect", func(w http.ResponseWriter, r *http.Request) {
+		healthMux.HandleFunc("GET /docker-image-inspect", requireAgentToken(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			ref := strings.TrimSpace(r.URL.Query().Get("ref"))
 			if ref == "" {
@@ -366,10 +378,10 @@ func main() {
 				"image_ref": ref,
 				"inspect":   inspectData,
 			})
-		})
+		}))
 
 		// File browser endpoint.
-		healthMux.HandleFunc("GET /files", func(w http.ResponseWriter, r *http.Request) {
+		healthMux.HandleFunc("GET /files", requireAgentToken(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			root := strings.TrimSpace(r.URL.Query().Get("root"))
 			relPath := strings.TrimSpace(r.URL.Query().Get("path"))
@@ -431,10 +443,10 @@ func main() {
 				result = []map[string]interface{}{}
 			}
 			json.NewEncoder(w).Encode(map[string]interface{}{"entries": result, "count": len(result), "root": root, "path": relPath, "truncated": len(entries) > maxE})
-		})
+		}))
 
 		// Model scanner endpoint.
-		healthMux.HandleFunc("POST /model-paths/scan", func(w http.ResponseWriter, r *http.Request) {
+		healthMux.HandleFunc("POST /model-paths/scan", requireAgentToken(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			var req struct {
 				Root         string `json:"root"`
@@ -457,7 +469,7 @@ func main() {
 				return
 			}
 			json.NewEncoder(w).Encode(collector.ScanModelPath(req.Root, req.RelativePath))
-		})
+		}))
 
 		metricsAddr := fmt.Sprintf("%s:%d", cfg.Metrics.Host, cfg.Metrics.Port)
 		healthSrv = &http.Server{
