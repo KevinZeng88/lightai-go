@@ -22,6 +22,35 @@ type ResolveInput struct {
 	Node                *NodeInfo
 	AssignedGPUs        []GPUInfo
 	ProcessStartConfig  *ProcessStartConfig // nil if none (legacy behavior)
+	NBRConfigSnapshot   *NBRSnapshotInfo    // nil if not available from NBR
+}
+
+// NBRSnapshotInfo holds the frozen config snapshot from NodeBackendRuntime.
+// When present, the resolver reads from this instead of BackendVersion/BackendRuntime.
+type NBRSnapshotInfo struct {
+	ArgsOverride        []string          `json:"args_override_json"`
+	DefaultEnv          map[string]string `json:"default_env_json"`
+	EntrypointOverride  []string          `json:"entrypoint_override_json"`
+	Docker              DockerSpecInfo    `json:"docker_json"`
+	ModelMount          ModelMountInfo    `json:"model_mount_json"`
+	HealthCheckOverride *HealthCheckInput `json:"health_check_override_json"`
+	ParameterSchema     []ParameterDef    `json:"parameter_schema_json"`
+	ParameterValues     []ParameterValue  `json:"parameter_values_json"`
+}
+
+// ParameterValue holds a structured parameter value with metadata.
+type ParameterValue struct {
+	Key          string      `json:"key"`
+	Type         string      `json:"type"`
+	Target       string      `json:"target"` // "arg", "env", "container", "metadata"
+	CliName      string      `json:"cli_name"`
+	EnvName      string      `json:"env_name"`
+	Enabled      bool        `json:"enabled"`
+	Value        interface{} `json:"value"`
+	Default      interface{} `json:"default"`
+	Source       string      `json:"source"`
+	CopiedFrom   string      `json:"copied_from"`
+	UserOverride bool        `json:"user_override"`
 }
 
 // BackendInfo is the minimal backend data needed for resolution.
@@ -357,45 +386,94 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	var errors []error
 	var args []string
 
-	// Layer 1: BackendVersion.default_args_json
-	for _, arg := range in.BackendVersion.DefaultArgs {
-		resolved, err := substituteVars(arg, vars)
-		if err != nil {
-			errors = append(errors, err)
-			continue
+	// If NBR snapshot is available, read from it instead of BV/BR.
+	// This is the new path: NBR is the source of truth for runtime parameters.
+	if in.NBRConfigSnapshot != nil {
+		// Layer 1: NBR args_override (frozen from BR at creation time)
+		for _, arg := range in.NBRConfigSnapshot.ArgsOverride {
+			resolved, err := substituteVars(arg, vars)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+			args = append(args, resolved)
 		}
-		args = append(args, resolved)
-	}
 
-	// Layer 2: BackendVersion.default_backend_params_json
-	for _, param := range in.BackendVersion.DefaultBackendParams {
-		resolved, err := substituteVars(param, vars)
-		if err != nil {
-			errors = append(errors, err)
-			continue
+		// Layer 2: NBR parameter values (structured parameters)
+		if len(in.NBRConfigSnapshot.ParameterValues) > 0 {
+			existingFlags := collectExistingFlags(args)
+			for _, pv := range in.NBRConfigSnapshot.ParameterValues {
+				if !pv.Enabled {
+					continue // disabled parameters are excluded
+				}
+				cliName := pv.CliName
+				if cliName == "" {
+					cliName = pv.Key
+				}
+				if existingFlags[cliName] {
+					continue // already provided by earlier layer
+				}
+				if pv.Value == nil || pv.Value == "" {
+					continue // skip empty values
+				}
+				args = append(args, cliName)
+				args = append(args, fmt.Sprintf("%v", pv.Value))
+			}
 		}
-		args = append(args, resolved)
-	}
 
-	// Layer 3: BackendRuntime.args_override_json (append only)
-	for _, arg := range in.BackendRuntime.ArgsOverride {
-		resolved, err := substituteVars(arg, vars)
-		if err != nil {
-			errors = append(errors, err)
-			continue
+		// Layer 3: Deployment overrides (highest priority)
+		existingFlags := collectExistingFlags(args)
+		var paramErrs []error
+		paramDefs := in.NBRConfigSnapshot.ParameterSchema
+		if len(paramDefs) == 0 {
+			paramDefs = in.BackendVersion.ParameterDefs
 		}
-		args = append(args, resolved)
-	}
+		paramArgs := mapParametersToArgs(in.Deployment.Parameters, paramDefs, &paramErrs, existingFlags)
+		for _, pe := range paramErrs {
+			errors = append(errors, pe)
+		}
+		args = append(args, paramArgs...)
+	} else {
+		// Legacy path: read from BV/BR directly.
+		// Layer 1: BackendVersion.default_args_json
+		for _, arg := range in.BackendVersion.DefaultArgs {
+			resolved, err := substituteVars(arg, vars)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+			args = append(args, resolved)
+		}
 
-	// Layer 4: Deployment.parameters_json mapped to CLI args
-	// Collect flags from earlier layers so required-param check can skip those already provided.
-	existingFlags := collectExistingFlags(args)
-	var paramErrs []error
-	paramArgs := mapParametersToArgs(in.Deployment.Parameters, in.BackendVersion.ParameterDefs, &paramErrs, existingFlags)
-	for _, pe := range paramErrs {
-		errors = append(errors, pe)
+		// Layer 2: BackendVersion.default_backend_params_json
+		for _, param := range in.BackendVersion.DefaultBackendParams {
+			resolved, err := substituteVars(param, vars)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+			args = append(args, resolved)
+		}
+
+		// Layer 3: BackendRuntime.args_override_json (append only)
+		for _, arg := range in.BackendRuntime.ArgsOverride {
+			resolved, err := substituteVars(arg, vars)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+			args = append(args, resolved)
+		}
+
+		// Layer 4: Deployment.parameters_json mapped to CLI args
+		existingFlags := collectExistingFlags(args)
+		var paramErrs []error
+		paramArgs := mapParametersToArgs(in.Deployment.Parameters, in.BackendVersion.ParameterDefs, &paramErrs, existingFlags)
+		for _, pe := range paramErrs {
+			errors = append(errors, pe)
+		}
+		args = append(args, paramArgs...)
 	}
-	args = append(args, paramArgs...)
 
 	// Layer 4b: resource_controls from vendor_options_json
 	// Maps resource control parameters (e.g. gpu_memory_fraction) to backend-specific CLI args.
@@ -593,37 +671,66 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 		env[k] = v
 	}
 
-	// Layer 1: InferenceBackend.default_env_json
-	for k, v := range in.Backend.DefaultEnv {
-		resolved, err := substituteVars(v, vars)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
-			continue
+	// If NBR snapshot is available, read from it instead of BV/BR.
+	if in.NBRConfigSnapshot != nil {
+		// Layer 1: NBR default_env (frozen from BR at creation time)
+		for k, v := range in.NBRConfigSnapshot.DefaultEnv {
+			resolved, err := substituteVars(v, vars)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
+				continue
+			}
+			addEnv(k, resolved)
 		}
-		addEnv(k, resolved)
+
+		// Layer 2: NBR parameter values with target=env
+		for _, pv := range in.NBRConfigSnapshot.ParameterValues {
+			if !pv.Enabled || pv.Target != "env" {
+				continue
+			}
+			envName := pv.EnvName
+			if envName == "" {
+				envName = pv.Key
+			}
+			if pv.Value == nil || pv.Value == "" {
+				continue
+			}
+			addEnv(envName, fmt.Sprintf("%v", pv.Value))
+		}
+	} else {
+		// Legacy path: read from BV/BR directly.
+		// Layer 1: InferenceBackend.default_env_json
+		for k, v := range in.Backend.DefaultEnv {
+			resolved, err := substituteVars(v, vars)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
+				continue
+			}
+			addEnv(k, resolved)
+		}
+
+		// Layer 2: BackendVersion.env_json
+		for k, v := range in.BackendVersion.Env {
+			resolved, err := substituteVars(v, vars)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
+				continue
+			}
+			addEnv(k, resolved)
+		}
+
+		// Layer 3: BackendRuntime.default_env_json
+		for k, v := range in.BackendRuntime.DefaultEnv {
+			resolved, err := substituteVars(v, vars)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
+				continue
+			}
+			addEnv(k, resolved)
+		}
 	}
 
-	// Layer 2: BackendVersion.env_json
-	for k, v := range in.BackendVersion.Env {
-		resolved, err := substituteVars(v, vars)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
-			continue
-		}
-		addEnv(k, resolved)
-	}
-
-	// Layer 3: BackendRuntime.default_env_json
-	for k, v := range in.BackendRuntime.DefaultEnv {
-		resolved, err := substituteVars(v, vars)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("env %s: %v", k, err))
-			continue
-		}
-		addEnv(k, resolved)
-	}
-
-	// Layer 4: NodeRuntimeOverride.env_json
+	// Layer 4: NodeRuntimeOverride.env_json (always applied)
 	if in.NodeRuntimeOverride != nil {
 		for k, v := range in.NodeRuntimeOverride.Env {
 			resolved, err := substituteVars(v, vars)
@@ -635,7 +742,7 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 		}
 	}
 
-	// Layer 5: ModelDeployment.env_overrides_json
+	// Layer 5: ModelDeployment.env_overrides_json (always applied, highest priority)
 	for k, v := range in.Deployment.EnvOverrides {
 		resolved, err := substituteVars(v, vars)
 		if err != nil {
