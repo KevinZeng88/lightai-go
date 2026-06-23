@@ -198,5 +198,5 @@ $ git diff --check
 
 ## 11. Commit and Push
 
-- **commit id**: (see git log below)
-- **push result**: (see push output below)
+- **commit id**: ff3d792
+- **push result**: main -> main (0bb9301..ff3d792)
