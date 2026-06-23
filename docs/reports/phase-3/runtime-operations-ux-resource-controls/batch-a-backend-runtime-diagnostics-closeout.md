@@ -160,6 +160,6 @@ $ git diff --check
 
 ## 6. Commit 信息
 
-- **commit id**: (待提交后填写)
-- **push result**: (待推送后填写)
-- **git status**: (待提交后检查)
+- **commit id**: a07c79f
+- **push result**: main -> main (4a00e7f..a07c79f)
+- **git status**: `M VERSION`（既有修改，本轮未处理）、`?? .mimocode/skills/`（MiMoCode 内部目录，未入库）

@@ -507,6 +507,7 @@ type preflightResult struct {
 	bvPort             int
 	bvDefaultImages    string
 	bvEnv              string
+	bvVendorOptions    string
 	nodeIP             string
 	gpuInfos           []runplan.GPUInfo
 	nodeRuntimeID      string
@@ -756,7 +757,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	// Fetch runtime chain: backend_runtime → inference_backend → backend_version.
 	h.DB.QueryRow(`SELECT vendor, image_name, docker_json, args_override_json, entrypoint_override_json, default_env_json, backend_id, backend_version_id, model_mount_json, COALESCE(health_check_override_json,'{}'), COALESCE(version_snapshot_json,'{}') FROM backend_runtimes WHERE id = ?`, pf.runtimeID).Scan(&pf.rtVendor, &pf.rtImage, &pf.rtDockerJSON, &pf.rtArgsOverride, &pf.rtEntryOverride, &pf.rtDefaultEnv, &pf.rtBackendID, &pf.rtVersionID, &pf.rtModelMount, &pf.rtHC, &pf.rtVersionSnapshot)
 	h.DB.QueryRow(`SELECT name, default_env_json FROM inference_backends WHERE id = ?`, pf.rtBackendID).Scan(&pf.backendName, &pf.backendDefaultEnv)
-	h.DB.QueryRow(`SELECT default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json FROM backend_versions WHERE id = ?`, pf.rtVersionID).Scan(&pf.bvEntrypoint, &pf.bvArgs, &pf.bvBackendParams, &pf.bvParamDefs, &pf.bvHC, &pf.bvPort, &pf.bvDefaultImages, &pf.bvEnv)
+	h.DB.QueryRow(`SELECT default_entrypoint_json, default_args_json, default_backend_params_json, parameter_defs_json, health_check_json, default_container_port, default_images_json, env_json, COALESCE(vendor_options_json,'{}') FROM backend_versions WHERE id = ?`, pf.rtVersionID).Scan(&pf.bvEntrypoint, &pf.bvArgs, &pf.bvBackendParams, &pf.bvParamDefs, &pf.bvHC, &pf.bvPort, &pf.bvDefaultImages, &pf.bvEnv, &pf.bvVendorOptions)
 	pf.applyRuntimeVersionSnapshot()
 
 	// Apply deployment config snapshot (copied at creation time).
@@ -936,7 +937,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	// Call the real RunPlan resolver with snapshot-based RuntimeInfo.
 	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
 		Backend:             &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
-		BackendVersion:      &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap},
+		BackendVersion:      &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap, VendorOptionsJSON: pf.bvVendorOptions},
 		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount, HealthCheckOverride: rtHCOverridePtr(rtHC)},
 		NodeRuntimeOverride: nbrOverride,
 		Artifact:            &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
@@ -1732,20 +1733,26 @@ func (h *AgentHandler) HandleGetNodeRunPlanLogs(w http.ResponseWriter, r *http.R
 	stdout := redactDockerLogText(strVal(result, "stdout", ""))
 	stderr := redactDockerLogText(strVal(result, "stderr", ""))
 	logsText := redactDockerLogText(strVal(result, "logs", strVal(result, "logs_summary", stdout+stderr)))
+
+	// Classify known log patterns.
+	classifier := runplan.NewRuntimeLogClassifier()
+	classifiedEvents := classifier.ClassifyLogText(logsText + "\n" + stderr)
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"id":            runPlanID,
-		"task_id":       taskID,
-		"deployment_id": deploymentID,
-		"instance_id":   instanceID,
-		"node_id":       nodeID,
-		"container_id":  strVal(result, "container_id", containerID),
-		"tail":          tail,
-		"since":         since,
-		"status":        "ok",
-		"runtime_state": strVal(result, "runtime_state", "ok"),
-		"stdout":        stdout,
-		"stderr":        stderr,
-		"logs":          logsText,
+		"id":                    runPlanID,
+		"task_id":               taskID,
+		"deployment_id":         deploymentID,
+		"instance_id":           instanceID,
+		"node_id":               nodeID,
+		"container_id":          strVal(result, "container_id", containerID),
+		"tail":                  tail,
+		"since":                 since,
+		"status":                "ok",
+		"runtime_state":         strVal(result, "runtime_state", "ok"),
+		"stdout":                stdout,
+		"stderr":                stderr,
+		"logs":                  logsText,
+		"classified_log_events": classifiedEvents,
 	})
 }
 

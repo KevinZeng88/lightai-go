@@ -569,3 +569,228 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 		}
 	}
 }
+
+// --- resource_controls integration tests ---
+
+const vllmVendorOptionsJSON = `{
+	"resource_controls": {
+		"gpu_memory_fraction": {
+			"arg": "--gpu-memory-utilization",
+			"type": "float",
+			"min": 0.1,
+			"max": 0.95,
+			"default": 0.9
+		},
+		"max_model_len": {
+			"arg": "--max-model-len",
+			"type": "int"
+		},
+		"max_num_seqs": {
+			"arg": "--max-num-seqs",
+			"type": "int"
+		}
+	}
+}`
+
+const sglangVendorOptionsJSON = `{
+	"resource_controls": {
+		"gpu_memory_fraction": {
+			"arg": "--mem-fraction-static",
+			"type": "float",
+			"min": 0.1,
+			"max": 0.95
+		},
+		"attention_backend": {
+			"arg": "--attention-backend",
+			"type": "enum",
+			"values": ["auto", "flashinfer", "triton", "fa3"]
+		}
+	}
+}`
+
+const llamacppVendorOptionsJSON = `{
+	"resource_controls": {
+		"gpu_memory_fraction": {
+			"supported": false,
+			"reason": "llama.cpp does not expose a vLLM-style GPU memory fraction."
+		},
+		"gpu_layers": {"arg": "--n-gpu-layers", "type": "string_or_int"},
+		"ctx_size": {"arg": "--ctx-size", "type": "int"},
+		"batch_size": {"arg": "--batch-size", "type": "int"}
+	}
+}`
+
+func TestResolveVLLMResourceControlsGPUFraction(t *testing.T) {
+	input := makeTestInput()
+	input.BackendVersion.VendorOptionsJSON = vllmVendorOptionsJSON
+	input.Deployment.Parameters = map[string]interface{}{
+		"served_model_name":   "qwen3-32b",
+		"gpu_memory_fraction": 0.7,
+	}
+	input.BackendVersion.ParameterDefs = []ParameterDef{
+		{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: true},
+	}
+
+	plan, errors, _ := Resolve(input)
+	if len(errors) > 0 {
+		t.Fatalf("unexpected errors: %v", errors)
+	}
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "--gpu-memory-utilization") {
+		t.Errorf("expected --gpu-memory-utilization in args, got: %s", argsStr)
+	}
+	// Find the value after --gpu-memory-utilization
+	idx := strings.Index(argsStr, "--gpu-memory-utilization")
+	if idx >= 0 {
+		after := strings.TrimSpace(argsStr[idx+len("--gpu-memory-utilization"):])
+		if !strings.HasPrefix(after, "0.7") {
+			t.Errorf("expected 0.7 after --gpu-memory-utilization, got: %s", after)
+		}
+	}
+}
+
+func TestResolveVLLMResourceControlsMaxNumSeqs(t *testing.T) {
+	input := makeTestInput()
+	input.BackendVersion.VendorOptionsJSON = vllmVendorOptionsJSON
+	input.Deployment.Parameters = map[string]interface{}{
+		"served_model_name": "qwen3-32b",
+		"max_num_seqs":      16.0,
+	}
+	input.BackendVersion.ParameterDefs = []ParameterDef{
+		{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: true},
+	}
+
+	plan, errors, _ := Resolve(input)
+	if len(errors) > 0 {
+		t.Fatalf("unexpected errors: %v", errors)
+	}
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "--max-num-seqs") {
+		t.Errorf("expected --max-num-seqs in args, got: %s", argsStr)
+	}
+	if !strings.Contains(argsStr, "16") {
+		t.Errorf("expected 16 in args, got: %s", argsStr)
+	}
+}
+
+func TestResolveSGLangResourceControlsMemFraction(t *testing.T) {
+	input := makeTestInput()
+	input.Backend.Name = "sglang"
+	input.BackendVersion.VendorOptionsJSON = sglangVendorOptionsJSON
+	input.Deployment.Parameters = map[string]interface{}{
+		"gpu_memory_fraction": 0.65,
+	}
+	input.BackendVersion.ParameterDefs = nil
+
+	plan, errors, _ := Resolve(input)
+	if len(errors) > 0 {
+		t.Fatalf("unexpected errors: %v", errors)
+	}
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "--mem-fraction-static") {
+		t.Errorf("expected --mem-fraction-static in args, got: %s", argsStr)
+	}
+	if !strings.Contains(argsStr, "0.65") {
+		t.Errorf("expected 0.65 in args, got: %s", argsStr)
+	}
+}
+
+func TestResolveSGLangResourceControlsAttentionBackend(t *testing.T) {
+	input := makeTestInput()
+	input.Backend.Name = "sglang"
+	input.BackendVersion.VendorOptionsJSON = sglangVendorOptionsJSON
+	input.Deployment.Parameters = map[string]interface{}{
+		"attention_backend": "triton",
+	}
+	input.BackendVersion.ParameterDefs = nil
+
+	plan, errors, _ := Resolve(input)
+	if len(errors) > 0 {
+		t.Fatalf("unexpected errors: %v", errors)
+	}
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "--attention-backend") {
+		t.Errorf("expected --attention-backend in args, got: %s", argsStr)
+	}
+	if !strings.Contains(argsStr, "triton") {
+		t.Errorf("expected triton in args, got: %s", argsStr)
+	}
+}
+
+func TestResolveLlamaCppNoFakeMemoryFraction(t *testing.T) {
+	input := makeTestInput()
+	input.Backend.Name = "llamacpp"
+	input.BackendVersion.VendorOptionsJSON = llamacppVendorOptionsJSON
+	input.Deployment.Parameters = map[string]interface{}{
+		"gpu_memory_fraction": 0.8,
+		"ctx_size":            4096.0,
+	}
+	input.BackendVersion.ParameterDefs = nil
+
+	plan, errors, _ := Resolve(input)
+	if len(errors) > 0 {
+		t.Fatalf("unexpected errors: %v", errors)
+	}
+	argsStr := strings.Join(plan.Args, " ")
+	// gpu_memory_fraction should NOT generate any arg for llama.cpp (supported=false)
+	if strings.Contains(argsStr, "--gpu-memory-utilization") {
+		t.Errorf("llama.cpp should NOT have --gpu-memory-utilization, got: %s", argsStr)
+	}
+	if strings.Contains(argsStr, "--mem-fraction-static") {
+		t.Errorf("llama.cpp should NOT have --mem-fraction-static, got: %s", argsStr)
+	}
+	// ctx_size should be mapped
+	if !strings.Contains(argsStr, "--ctx-size") {
+		t.Errorf("expected --ctx-size in args, got: %s", argsStr)
+	}
+	if !strings.Contains(argsStr, "4096") {
+		t.Errorf("expected 4096 in args, got: %s", argsStr)
+	}
+}
+
+func TestResolveLlamaCppResourceControlsGpuLayers(t *testing.T) {
+	input := makeTestInput()
+	input.Backend.Name = "llamacpp"
+	input.BackendVersion.VendorOptionsJSON = llamacppVendorOptionsJSON
+	input.Deployment.Parameters = map[string]interface{}{
+		"gpu_layers": 99.0,
+	}
+	input.BackendVersion.ParameterDefs = nil
+
+	plan, errors, _ := Resolve(input)
+	if len(errors) > 0 {
+		t.Fatalf("unexpected errors: %v", errors)
+	}
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "--n-gpu-layers") {
+		t.Errorf("expected --n-gpu-layers in args, got: %s", argsStr)
+	}
+}
+
+func TestResolveResourceControlsNoDuplicateWithParameterDefs(t *testing.T) {
+	// max_model_len is in BOTH ParameterDefs and resource_controls.
+	// ParameterDefs maps "max_model_len" → "--max-model-len".
+	// resource_controls maps "max_model_len" → "--max-model-len".
+	// Should NOT produce duplicate --max-model-len.
+	input := makeTestInput()
+	input.BackendVersion.VendorOptionsJSON = vllmVendorOptionsJSON
+	input.Deployment.Parameters = map[string]interface{}{
+		"served_model_name": "qwen3-32b",
+		"max_model_len":     16384.0,
+	}
+	input.BackendVersion.ParameterDefs = []ParameterDef{
+		{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: true},
+		{Name: "max_model_len", CliName: "--max-model-len", Type: "integer"},
+	}
+
+	plan, errors, _ := Resolve(input)
+	if len(errors) > 0 {
+		t.Fatalf("unexpected errors: %v", errors)
+	}
+	argsStr := strings.Join(plan.Args, " ")
+	// Count occurrences of --max-model-len
+	count := strings.Count(argsStr, "--max-model-len")
+	if count != 1 {
+		t.Errorf("expected exactly 1 --max-model-len, got %d in: %s", count, argsStr)
+	}
+}

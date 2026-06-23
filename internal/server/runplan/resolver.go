@@ -44,6 +44,7 @@ type VersionInfo struct {
 	DefaultContainerPort int
 	DefaultImages        map[string]string // vendor → image
 	Env                  map[string]string
+	VendorOptionsJSON    string // raw vendor_options_json for resource_controls
 }
 
 // ParameterDef defines a configurable parameter.
@@ -389,6 +390,26 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	// Layer 4: Deployment.parameters_json mapped to CLI args
 	paramArgs := mapParametersToArgs(in.Deployment.Parameters, in.BackendVersion.ParameterDefs)
 	args = append(args, paramArgs...)
+
+	// Layer 4b: resource_controls from vendor_options_json
+	// Maps resource control parameters (e.g. gpu_memory_fraction) to backend-specific CLI args.
+	// Only adds args not already present from ParameterDefs to avoid duplicates.
+	if in.BackendVersion.VendorOptionsJSON != "" {
+		rcm := ParseResourceControls(in.BackendVersion.VendorOptionsJSON)
+		rcArgs := BuildResourceControlArgs(in.Deployment.Parameters, rcm)
+		// Only add args whose flags are not already in the args list.
+		existingFlags := make(map[string]bool)
+		for _, a := range args {
+			if strings.HasPrefix(a, "-") {
+				existingFlags[a] = true
+			}
+		}
+		for i := 0; i < len(rcArgs); i += 2 {
+			if i+1 < len(rcArgs) && !existingFlags[rcArgs[i]] {
+				args = append(args, rcArgs[i], rcArgs[i+1])
+			}
+		}
+	}
 
 	// Deduplicate: remove duplicate consecutive flag-value pairs
 	args = deduplicateArgs(args)

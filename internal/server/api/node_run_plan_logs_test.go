@@ -114,3 +114,86 @@ func TestNodeRunPlanLogsRejectsOfflineNode(t *testing.T) {
 		t.Fatalf("offline error should be explicit: %s", w.Body.String())
 	}
 }
+
+func TestNodeRunPlanLogsClassifiesLogEvents(t *testing.T) {
+	h, _ := insertRunPlanLogsFixture(t, "online")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			var taskID string
+			err := h.DB.QueryRow(`SELECT id FROM agent_tasks WHERE task_type='model_instance_logs' AND status='pending' ORDER BY created_at DESC LIMIT 1`).Scan(&taskID)
+			if err == nil {
+				// Return logs containing known warning patterns.
+				req := newReq("POST", "/api/v1/agent/tasks/"+taskID+"/result", `{
+					"status":"completed",
+					"success":true,
+					"instance_id":"inst-logs",
+					"container_id":"container-logs",
+					"runtime_state":"ok",
+					"stdout":"",
+					"stderr":"",
+					"logs":"Attention backend not specified. Use flashinfer backend by default.\nwarn: LLAMA_ARG_HOST environment variable is set, but will be overwritten by command line argument --host\n"
+				}`, nil, map[string]string{"id": taskID})
+				h.HandleTaskResult(httptest.NewRecorder(), req)
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	req := newReq("GET", "/api/v1/node-run-plans/runplan-logs/logs?tail=123", "", adminSession(), map[string]string{"id": "runplan-logs"})
+	w := httptest.NewRecorder()
+	h.HandleGetNodeRunPlanLogs(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	<-done
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	// Verify classified_log_events is present.
+	eventsRaw, ok := resp["classified_log_events"]
+	if !ok {
+		t.Fatal("response missing classified_log_events")
+	}
+	events, ok := eventsRaw.([]interface{})
+	if !ok {
+		t.Fatalf("classified_log_events is not an array: %T", eventsRaw)
+	}
+	if len(events) == 0 {
+		t.Fatal("classified_log_events is empty, expected at least 1 event")
+	}
+
+	// Verify at least one known rule matched.
+	ruleIDs := make(map[string]bool)
+	for _, ev := range events {
+		if m, ok := ev.(map[string]interface{}); ok {
+			if rid, ok := m["rule_id"].(string); ok {
+				ruleIDs[rid] = true
+			}
+			// Verify required fields exist.
+			if _, ok := m["severity"]; !ok {
+				t.Error("event missing severity")
+			}
+			if _, ok := m["category"]; !ok {
+				t.Error("event missing category")
+			}
+			if _, ok := m["message"]; !ok {
+				t.Error("event missing message")
+			}
+		}
+	}
+	if !ruleIDs["sglang.attention_backend.default"] {
+		t.Errorf("expected sglang.attention_backend.default rule, got rules: %v", ruleIDs)
+	}
+	if !ruleIDs["llamacpp.env_overwritten.host"] {
+		t.Errorf("expected llamacpp.env_overwritten.host rule, got rules: %v", ruleIDs)
+	}
+}
