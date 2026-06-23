@@ -249,6 +249,8 @@
         <el-form-item :label="$t('backends.healthCheck')">
           <HealthCheckEditor v-model="editHealthModel" />
         </el-form-item>
+        <h4>{{ $t('runtimes.structuredParameters') }}</h4>
+        <RuntimeParameterEditor v-model="editParameterModel" />
         <el-collapse>
           <el-collapse-item :title="$t('runnerConfigs.advancedJson')">
             <el-form-item :label="$t('runnerConfigs.snapshotJson')"><el-input v-model="editSnapshotText" type="textarea" :rows="8" /></el-form-item>
@@ -272,6 +274,7 @@ import { listRuntimes } from '@/api/runtimes'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import HealthCheckEditor from '@/components/common/HealthCheckEditor.vue'
+import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 import { getStatusType, translateStatus, translateStatusReason } from '@/utils/status'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
@@ -285,6 +288,7 @@ const editArgsText = ref(''); const editEnvText = ref(''); const editVolumesText
 const editDevicesText = ref(''); const editGroupAddText = ref(''); const editSecurityOptText = ref('')
 const editPrivileged = ref(false); const editIpcMode = ref(''); const editShmSize = ref(''); const editUlimitsText = ref(''); const editHealthText = ref('{}')
 const editHealthModel = ref<Record<string, unknown>>({})
+const editParameterModel = ref({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
 
 // Wizard
 const wizardVisible = ref(false); const step = ref(0)

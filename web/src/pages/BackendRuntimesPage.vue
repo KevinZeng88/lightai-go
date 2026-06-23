@@ -85,6 +85,9 @@
         </div>
       </el-form>
       <el-divider /><h3>{{ $t('runtimes.commandPreview') }}</h3><pre class="preview">{{ commandPreview }}</pre>
+      <el-divider />
+      <h3>{{ $t('runtimes.structuredParameters') }}</h3>
+      <RuntimeParameterEditor v-model="parameterEditorModel" :readonly="!!(selected && !selected.is_editable)" />
       <template #footer><el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doEdit" :loading="editing" :disabled="selected && !selected.is_editable">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
 
@@ -190,6 +193,7 @@ import { listBackends, listBackendVersions, listRuntimeTemplates, type BackendRu
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import { translateStatus } from '@/utils/status'
+import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
 import { useI18n } from 'vue-i18n'
 
@@ -245,6 +249,7 @@ const listOptions = reactive([
   { key: 'extra_mounts', label: 'runtimes.extraMounts', enabled: false, value: '' },
 ])
 const customArgs = reactive({ enabled: false, value: '' }); const customEnv = reactive({ enabled: false, value: '' }); const customDocker = reactive({ enabled: false, value: '' })
+const parameterValues = ref<any[]>([]); const parameterSchema = ref<any[]>([])
 
 // Clone-to-user state
 const cloneVisible = ref(false); const cloneSaving = ref(false); const cloneSource = ref<BackendRuntime | null>(null)
@@ -411,12 +416,26 @@ function loadDockerJson(row: BackendRuntime) {
   for (const opt of scalarOptions) { const v = docker[opt.key]; opt.enabled = v !== undefined && v !== '' && v !== false; opt.value = typeof v === 'boolean' ? String(v) : (v || opt.value) }
   for (const opt of listOptions) { const v = docker[opt.key]; opt.enabled = Array.isArray(v) ? v.length > 0 : !!v; opt.value = Array.isArray(v) ? v.map(formatListValue).join('\n') : '' }
   customArgs.enabled = Array.isArray(row.args_override_json) && row.args_override_json.length > 0; customArgs.value = Array.isArray(row.args_override_json) ? row.args_override_json.join('\n') : ''
+  // Load structured parameter values
+  parameterValues.value = Array.isArray(row.parameter_values_json) ? [...row.parameter_values_json] : []
+  parameterSchema.value = Array.isArray(row.parameter_schema_json) ? [...row.parameter_schema_json] : []
 }
+const parameterEditorModel = computed({
+  get: () => ({
+    docker_json: buildPayload().docker_json,
+    args_override_json: customArgs.enabled ? parseLines(customArgs.value) : [],
+    default_env_json: {},
+    parameter_values_json: parameterValues.value,
+  }),
+  set: (val: any) => {
+    if (val.parameter_values_json) parameterValues.value = val.parameter_values_json
+  },
+})
 function buildPayload() {
   const docker: Record<string, any> = {}
   for (const opt of scalarOptions) { if (!opt.enabled) continue; docker[opt.key] = opt.key === 'privileged' ? opt.value === 'true' : opt.value }
   for (const opt of listOptions) { if (!opt.enabled) continue; const lines = parseLines(opt.value); if (opt.key === 'devices' || opt.key === 'optional_devices' || opt.key === 'extra_mounts') docker[opt.key] = lines.map(parseMapping); else if (opt.key === 'ulimits') docker[opt.key] = Object.fromEntries(lines.map(parseKeyValue)); else if (opt.key === 'env') (docker as any).default_env = Object.fromEntries(lines.map(parseKeyValue)); else docker[opt.key] = lines }
-  return { display_name: editForm.display_name, image_name: editForm.image_name, vendor: editForm.vendor, docker_json: docker, args_override_json: customArgs.enabled ? parseLines(customArgs.value) : [] }
+  return { display_name: editForm.display_name, image_name: editForm.image_name, vendor: editForm.vendor, docker_json: docker, args_override_json: customArgs.enabled ? parseLines(customArgs.value) : [], parameter_values_json: parameterValues.value, parameter_schema_json: parameterSchema.value }
 }
 const commandPreview = computed(() => {
   const payload = buildPayload(); const docker = payload.docker_json; const parts = ['docker', 'run', '-d']
