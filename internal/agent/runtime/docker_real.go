@@ -220,6 +220,10 @@ func (r *RealDockerClient) ContainerInspect(ctx context.Context, containerID str
 	}, nil
 }
 
+func (r *RealDockerClient) ContainerRemove(ctx context.Context, containerID string, force bool) error {
+	return r.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: force})
+}
+
 func (r *RealDockerClient) ContainerLogs(ctx context.Context, containerID string, opts LogFetchOptions) (string, string, error) {
 	tailStr := "all"
 	if opts.Tail > 0 {

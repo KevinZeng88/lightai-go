@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -1130,6 +1131,7 @@ func processStopTask(ctx context.Context, task register.AgentTask, result *regis
 
 // logsTaskState tracks stderr bytes per instance for change detection.
 var logsTaskState struct {
+	mu              sync.Mutex
 	lastStderrBytes map[string]int
 }
 
@@ -1206,9 +1208,11 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 	stdoutBytes := len(logs.Stdout)
 
 	// Check if stderr changed since last successful call for this instance.
+	logsTaskState.mu.Lock()
 	lastStderr := logsTaskState.lastStderrBytes[payload.InstanceID]
 	stderrChanged := stderrBytes != lastStderr && stderrBytes > 0
 	logsTaskState.lastStderrBytes[payload.InstanceID] = stderrBytes
+	logsTaskState.mu.Unlock()
 
 	// Log at INFO only if stderr changed (new error output), otherwise DEBUG.
 	if stderrChanged {
@@ -1342,7 +1346,7 @@ func agentPathWithinRoot(path, root string) bool {
 var reconcileState struct {
 	tracker        *log.ChangedTracker
 	summaryCounter int
-	unloggedCount  int
+	unloggedCount  atomic.Int32
 }
 
 func init() {
@@ -1386,15 +1390,15 @@ func reconcileManagedContainers(ctx context.Context) {
 			// State changed — log at INFO.
 			log.Info("reconcile: managed containers found",
 				"total", managed, "exited", exited, "running", running)
-			reconcileState.unloggedCount = 0
+			reconcileState.unloggedCount.Store(0)
 		} else {
-			reconcileState.unloggedCount++
+			reconcileState.unloggedCount.Add(1)
 			// Log summary INFO every 5 unlogged invocations (~5 minutes).
-			if reconcileState.unloggedCount >= 5 {
+			if reconcileState.unloggedCount.Load() >= 5 {
 				log.Info("reconcile: containers unchanged",
 					"total", managed, "exited", exited, "running", running,
-					"unchanged_checks", reconcileState.unloggedCount)
-				reconcileState.unloggedCount = 0
+					"unchanged_checks", reconcileState.unloggedCount.Load())
+				reconcileState.unloggedCount.Store(0)
 			} else {
 				log.Debug("reconcile: managed containers found",
 					"total", managed, "exited", exited, "running", running)

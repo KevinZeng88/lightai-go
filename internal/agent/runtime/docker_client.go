@@ -27,6 +27,9 @@ type DockerClient interface {
 	// ContainerLogs returns log output from a container.
 	// Returns stdout, stderr, and any error.
 	ContainerLogs(ctx context.Context, containerID string, opts LogFetchOptions) (string, string, error)
+
+	// ContainerRemove removes a container. force=true kills running containers.
+	ContainerRemove(ctx context.Context, containerID string, force bool) error
 }
 
 // ContainerCreateOptions holds parameters for creating a container.

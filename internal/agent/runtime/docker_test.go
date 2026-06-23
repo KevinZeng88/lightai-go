@@ -281,10 +281,9 @@ func TestDockerRuntimeDriverStop(t *testing.T) {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
-	// Verify container is stopped.
-	c := fake.LastContainer()
-	if c.State != "exited" {
-		t.Errorf("State after stop = %q, want exited", c.State)
+	// Verify container is removed after stop.
+	if fake.Count() != 0 {
+		t.Errorf("container count after stop = %d, want 0 (removed)", fake.Count())
 	}
 	_ = inst
 }

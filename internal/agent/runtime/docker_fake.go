@@ -198,6 +198,19 @@ func (f *FakeDockerClient) ContainerLogs(ctx context.Context, containerID string
 	return c.Logs.String(), "", nil
 }
 
+func (f *FakeDockerClient) ContainerRemove(ctx context.Context, containerID string, force bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	c, ok := f.containers[containerID]
+	if !ok {
+		return nil
+	}
+	delete(f.nameIndex, c.Name)
+	delete(f.containers, containerID)
+	return nil
+}
+
 // SetState allows tests to directly manipulate container state.
 func (f *FakeDockerClient) SetState(containerID string, state string, exitCode int) {
 	f.mu.Lock()

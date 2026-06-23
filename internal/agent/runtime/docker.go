@@ -35,7 +35,7 @@ func NewDockerRuntimeDriver(client DockerClient) *DockerRuntimeDriver {
 //  3. Creates the container
 //  4. Starts the container
 //  5. Returns a RuntimeInstance descriptor
-func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*RuntimeInstance, error) {
+func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (retInst *RuntimeInstance, retErr error) {
 	startTime := time.Now()
 	opID := spec.OperationID
 	if opID == "" {
@@ -95,6 +95,14 @@ func (d *DockerRuntimeDriver) Start(ctx context.Context, spec AgentRunSpec) (*Ru
 		)
 		return nil, fmt.Errorf("docker create: %w", err)
 	}
+	defer func() {
+		if retErr != nil {
+			stdout, stderr, _ := d.client.ContainerLogs(ctx, containerID, LogFetchOptions{Tail: 100})
+			_ = stdout
+			_ = stderr
+			d.client.ContainerRemove(ctx, containerID, true)
+		}
+	}()
 
 	log.Info("docker.create.completed",
 		"operation_id", opID,
@@ -270,6 +278,15 @@ func (d *DockerRuntimeDriver) Stop(ctx context.Context, instanceID string) error
 	if stopDuration > log.SummaryConfig.SlowDockerThresholdMs {
 		log.SlowOperation(ctx, "docker.stop", "container_stop", stopDuration, log.SummaryConfig.SlowDockerThresholdMs,
 			"container_id", info.ID, "instance_id", instanceID)
+	}
+
+	if err := d.client.ContainerRemove(ctx, info.ID, false); err != nil {
+		log.Error("docker.remove.failed",
+			"container_id", info.ID,
+			"instance_id", instanceID,
+			"error", err,
+		)
+		return fmt.Errorf("docker remove: %w", err)
 	}
 
 	return nil
