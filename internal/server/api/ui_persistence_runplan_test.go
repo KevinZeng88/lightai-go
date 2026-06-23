@@ -536,7 +536,7 @@ func TestNBRConfigModificationDoesNotAffectDeploymentDryRun(t *testing.T) {
 	// Create deployment with node_id
 	cw := httptest.NewRecorder()
 	h.HandleCreateDeployment(cw, newReq("POST", "/x",
-		`{"name":"dep-dryrun","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8005}}`,
+		`{"name":"dep-dryrun","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8005},"parameters_json":{"served_model_name":"dep-dryrun"}}`,
 		adminSession(), nil))
 	if cw.Code != 201 {
 		t.Fatalf("create deployment code=%d body=%s", cw.Code, cw.Body.String())
@@ -667,7 +667,7 @@ func TestRunPlanImmutableAfterDeploymentEdit(t *testing.T) {
 	// Create deployment
 	cw := httptest.NewRecorder()
 	h.HandleCreateDeployment(cw, newReq("POST", "/x",
-		`{"name":"dep-rp-imm","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8005}}`,
+		`{"name":"dep-rp-imm","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8005},"parameters_json":{"served_model_name":"dep-rp-imm"}}`,
 		adminSession(), nil))
 	if cw.Code != 201 {
 		t.Fatalf("create deployment code=%d body=%s", cw.Code, cw.Body.String())
