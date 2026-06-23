@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/server/authz"
 
 	"github.com/google/uuid"
 )
@@ -97,6 +98,10 @@ func (h *AgentHandler) uniqueRuntimeName(tenantID, base string) string {
 // HandlePatchNodeBackendRuntime updates node-level fields on a NodeBackendRuntime.
 func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *http.Request) {
 	nbrID := r.PathValue("nbr_id")
+	if !authz.CheckNBRTenant(r, h.DB.DB, nbrID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	var req map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
@@ -169,6 +174,10 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 // Blocks if active instances reference it.
 func (h *AgentHandler) HandleDeleteNodeBackendRuntime(w http.ResponseWriter, r *http.Request) {
 	nbrID := r.PathValue("nbr_id")
+	if !authz.CheckNBRTenant(r, h.DB.DB, nbrID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	var nbrNodeID, nbrRuntimeID string
 	if err := h.DB.QueryRow(`SELECT node_id, backend_runtime_id FROM node_backend_runtimes WHERE id = ?`, nbrID).Scan(&nbrNodeID, &nbrRuntimeID); err != nil {
 		writeError(w, http.StatusNotFound, "not found")

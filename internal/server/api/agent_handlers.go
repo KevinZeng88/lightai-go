@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/server/auth"
+	"lightai-go/internal/server/authz"
 	"lightai-go/internal/server/db"
 	srvmetrics "lightai-go/internal/server/metrics"
 )
@@ -593,6 +594,10 @@ func (h *AgentHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 // HandleGetNodeDockerImages proxies to the Agent's /docker-images endpoint.
 func (h *AgentHandler) HandleGetNodeDockerImages(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
+	if !authz.CheckNodeTenant(r, h.DB.DB, nodeID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	var addr string
 	var port int
 	err := h.DB.QueryRow(
@@ -628,6 +633,10 @@ func (h *AgentHandler) HandleGetNodeDockerImages(w http.ResponseWriter, r *http.
 // HandleGetNodeDockerImageInspect proxies to the Agent's /docker-image-inspect endpoint.
 func (h *AgentHandler) HandleGetNodeDockerImageInspect(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
+	if !authz.CheckNodeTenant(r, h.DB.DB, nodeID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	imageRef := r.URL.Query().Get("ref")
 	if imageRef == "" {
 		writeError(w, http.StatusBadRequest, "ref query parameter is required")

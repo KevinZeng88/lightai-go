@@ -7,11 +7,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+
+	"lightai-go/internal/server/authz"
 )
 
 // HandleProxyNodeFiles proxies file browsing requests to the agent's /files endpoint.
 func (h *AgentHandler) HandleProxyNodeFiles(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
+	if !authz.CheckNodeTenant(r, h.DB.DB, nodeID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	var ip string
 	var port int
 	h.DB.QueryRow("SELECT primary_ip, metrics_port FROM nodes WHERE id = ?", nodeID).Scan(&ip, &port)
@@ -78,6 +84,10 @@ func (h *AgentHandler) HandleProxyNodeFiles(w http.ResponseWriter, r *http.Reque
 // HandleProxyNodeModelScan proxies model scan requests to the agent's /model-paths/scan endpoint.
 func (h *AgentHandler) HandleProxyNodeModelScan(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
+	if !authz.CheckNodeTenant(r, h.DB.DB, nodeID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	var ip string
 	var port int
 	h.DB.QueryRow("SELECT primary_ip, metrics_port FROM nodes WHERE id = ?", nodeID).Scan(&ip, &port)

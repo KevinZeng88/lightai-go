@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/server/authz"
 	"lightai-go/internal/server/runplan"
 
 	"github.com/google/uuid"
@@ -247,6 +248,10 @@ func (h *AgentHandler) HandleDeleteBackendRuntime(w http.ResponseWriter, r *http
 
 func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
+	if !authz.CheckNodeTenant(r, h.DB.DB, nodeID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, COALESCE(nbr.config_snapshot_json,'{}'), COALESCE(nbr.probe_results_json,'{}'), br.name, br.display_name, br.vendor
 		FROM node_backend_runtimes nbr
 		JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id
@@ -319,6 +324,10 @@ func (h *AgentHandler) HandleCheckNodeBackendRuntime(w http.ResponseWriter, r *h
 func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
 	nbrID := r.PathValue("nbr_id")
+	if !authz.CheckNBRTenant(r, h.DB.DB, nbrID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	if nodeID == "" || nbrID == "" {
 		writeError(w, http.StatusBadRequest, "node_id and nbr_id are required")
 		return
@@ -645,6 +654,10 @@ func (h *AgentHandler) HandleProbeNodeBackendRuntime(w http.ResponseWriter, r *h
 func (h *AgentHandler) HandleGetNodeBackendRuntimeProbe(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
 	nbrID := r.PathValue("nbr_id")
+	if !authz.CheckNBRTenant(r, h.DB.DB, nbrID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	if nodeID == "" || nbrID == "" {
 		writeError(w, http.StatusBadRequest, "node_id and nbr_id are required")
 		return
@@ -699,6 +712,10 @@ func toStringSlice(v interface{}) []string {
 
 func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.Request, checkOnly bool) {
 	nodeID := r.PathValue("id")
+	if !authz.CheckNodeTenant(r, h.DB.DB, nodeID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	var req map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")

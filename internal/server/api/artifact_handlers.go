@@ -10,6 +10,7 @@ import (
 
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/runtimecontract"
+	"lightai-go/internal/server/authz"
 
 	"github.com/google/uuid"
 )
@@ -548,6 +549,10 @@ func (h *AgentHandler) resolveModelLocationRequestPath(nodeID string, req map[st
 
 func (h *AgentHandler) HandleRescanModelLocation(w http.ResponseWriter, r *http.Request) {
 	locationID := r.PathValue("location_id")
+	if !authz.CheckModelLocationTenant(r, h.DB.DB, locationID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	now := time.Now().Format(time.RFC3339)
 	if _, err := h.DB.Exec(`UPDATE model_locations SET last_scanned_at = ?, last_error = '', updated_at = ? WHERE id = ?`, now, now, locationID); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -558,6 +563,10 @@ func (h *AgentHandler) HandleRescanModelLocation(w http.ResponseWriter, r *http.
 
 func (h *AgentHandler) HandleAttestModelLocation(w http.ResponseWriter, r *http.Request) {
 	locationID := r.PathValue("location_id")
+	if !authz.CheckModelLocationTenant(r, h.DB.DB, locationID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	var req map[string]interface{}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	now := time.Now().Format(time.RFC3339)

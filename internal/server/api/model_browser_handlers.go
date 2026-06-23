@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"lightai-go/internal/common/log"
+	"lightai-go/internal/server/authz"
 
 	"github.com/google/uuid"
 )
@@ -161,6 +162,10 @@ func (h *AgentHandler) nodeTenant(nodeID string) (string, error) {
 // HandleListNodeModelRoots returns persisted allowed model roots for a node.
 func (h *AgentHandler) HandleListNodeModelRoots(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
+	if !authz.CheckNodeTenant(r, h.DB.DB, nodeID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	includeDisabled := r.URL.Query().Get("include_disabled") == "true"
 	if _, err := h.nodeTenant(nodeID); err != nil {
 		writeError(w, http.StatusNotFound, "node not found")
@@ -181,6 +186,10 @@ func (h *AgentHandler) HandleListNodeModelRoots(w http.ResponseWriter, r *http.R
 // HandleAddNodeModelRoot adds a persisted allowed model root for a node.
 func (h *AgentHandler) HandleAddNodeModelRoot(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
+	if !authz.CheckNodeTenant(r, h.DB.DB, nodeID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	tid, err := h.nodeTenant(nodeID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "node not found")
@@ -232,6 +241,10 @@ func (h *AgentHandler) HandleAddNodeModelRoot(w http.ResponseWriter, r *http.Req
 func (h *AgentHandler) HandlePatchNodeModelRoot(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
 	rootID := r.PathValue("root_id")
+	if !authz.CheckModelRootTenant(r, h.DB.DB, rootID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	root, err := h.resolveNodeModelRoot(nodeID, rootID, "")
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not found")
@@ -261,6 +274,10 @@ func (h *AgentHandler) HandlePatchNodeModelRoot(w http.ResponseWriter, r *http.R
 func (h *AgentHandler) HandleDeleteNodeModelRoot(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("id")
 	rootID := r.PathValue("root_id")
+	if !authz.CheckModelRootTenant(r, h.DB.DB, rootID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	root, err := h.resolveNodeModelRoot(nodeID, rootID, "")
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not found")
