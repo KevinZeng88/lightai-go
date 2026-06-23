@@ -464,7 +464,7 @@ func TestMapParametersToArgsClipsNameFallback(t *testing.T) {
 		{Name: "--model", Required: true, CliName: "--model"},
 	}
 	// No deployment params → all come from defaults.
-	args := mapParametersToArgs(map[string]interface{}{}, defs)
+	args := mapParametersToArgs(map[string]interface{}{}, defs, nil)
 	joined := strings.Join(args, " ")
 
 	// Must contain " --host 0.0.0.0", not bare " 0.0.0.0".
@@ -490,7 +490,7 @@ func TestMapParametersToArgsClipsNameFallback(t *testing.T) {
 	args2 := mapParametersToArgs(map[string]interface{}{
 		"--host": "1.2.3.4",
 		"--port": "9999",
-	}, defs)
+	}, defs, nil)
 	joined2 := strings.Join(args2, " ")
 	if !strings.Contains(joined2, "--host 1.2.3.4") {
 		t.Errorf("deployment param --host override not applied: %q", joined2)
