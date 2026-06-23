@@ -167,12 +167,14 @@ type ArtifactInfo struct {
 
 // DeploymentInfo is the minimal deployment data.
 type DeploymentInfo struct {
-	ID           string
-	Name         string
-	Parameters   map[string]interface{}
-	EnvOverrides map[string]string
-	Placement    PlacementInfo
-	Service      ServiceInfo
+	ID                 string
+	Name               string
+	Parameters         map[string]interface{}
+	EnvOverrides       map[string]string
+	ParameterValues    []ParameterValue  // structured parameter overrides
+	DisabledParameters []ParameterValue  // disabled tombstones
+	Placement          PlacementInfo
+	Service            ServiceInfo
 }
 
 // PlacementInfo holds deployment placement configuration.
@@ -425,7 +427,29 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 		}
 	}
 
-	// Layer 3: Deployment overrides (highest priority)
+	// Layer 3: Deployment parameter overrides (highest priority)
+	if in.Deployment.ParameterValues != nil {
+		existingFlags := collectExistingFlags(args)
+		for _, pv := range in.Deployment.ParameterValues {
+			if !pv.Enabled {
+				continue // disabled parameters are excluded
+			}
+			cliName := pv.CliName
+			if cliName == "" {
+				cliName = pv.Key
+			}
+			if existingFlags[cliName] {
+				continue // already provided by earlier layer
+			}
+			if pv.Value == nil || pv.Value == "" {
+				continue // skip empty values
+			}
+			args = append(args, cliName)
+			args = append(args, fmt.Sprintf("%v", pv.Value))
+		}
+	}
+
+	// Layer 4: Deployment parameters_json mapped to CLI args (legacy support)
 	existingFlags := collectExistingFlags(args)
 	var paramErrs []error
 	paramDefs := in.NBRConfigSnapshot.ParameterSchema
@@ -460,6 +484,30 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 
 	// Deduplicate: remove duplicate consecutive flag-value pairs
 	args = deduplicateArgs(args)
+
+	// Apply disabled tombstones: remove parameters explicitly disabled by deployment
+	if len(in.Deployment.DisabledParameters) > 0 {
+		disabledFlags := make(map[string]bool)
+		for _, dp := range in.Deployment.DisabledParameters {
+			cliName := dp.CliName
+			if cliName == "" {
+				cliName = dp.Key
+			}
+			disabledFlags[cliName] = true
+		}
+		var filtered []string
+		for i := 0; i < len(args); i++ {
+			if disabledFlags[args[i]] {
+				// Skip this flag and its value (if next arg is not a flag)
+				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++ // skip value too
+				}
+				continue
+			}
+			filtered = append(filtered, args[i])
+		}
+		args = filtered
+	}
 
 	// Apply service-level config to args.  Service fields (app_port, host, etc.)
 	// always take priority over ParameterDef defaults from any layer.
@@ -684,6 +732,19 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 			warnings = append(warnings, fmt.Sprintf("env_overrides %s: %v", k, err))
 		}
 		addEnv(k, resolved)
+	}
+
+	// Apply disabled tombstones: remove env vars explicitly disabled by deployment
+	if len(in.Deployment.DisabledParameters) > 0 {
+		for _, dp := range in.Deployment.DisabledParameters {
+			if dp.Target == "env" {
+				envName := dp.EnvName
+				if envName == "" {
+					envName = dp.Key
+				}
+				delete(env, envName)
+			}
+		}
 	}
 
 	return env, warnings

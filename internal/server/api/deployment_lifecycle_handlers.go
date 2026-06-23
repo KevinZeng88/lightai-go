@@ -26,7 +26,7 @@ import (
 
 func (h *AgentHandler) HandleListDeployments(w http.ResponseWriter, r *http.Request) {
 	tid := tenantID(r)
-	q := `SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(config_snapshot_json,'{}'), COALESCE(source_backend_runtime_id,''), COALESCE(source_node_backend_runtime_id,''), COALESCE(source_template_name,''), COALESCE(source_template_version,''), COALESCE(source_config_hash,''), COALESCE(copied_at,''), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments`
+	q := `SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(parameter_values_json,'[]'), COALESCE(disabled_parameters_json,'[]'), COALESCE(config_snapshot_json,'{}'), COALESCE(source_backend_runtime_id,''), COALESCE(source_node_backend_runtime_id,''), COALESCE(source_template_name,''), COALESCE(source_template_version,''), COALESCE(source_config_hash,''), COALESCE(copied_at,''), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments`
 	var out []map[string]interface{}
 	var err error
 	if isPlatformAdmin(r) {
@@ -224,12 +224,13 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 	requestID := log.RequestIDFromContext(r.Context())
 	now := time.Now().Format(time.RFC3339)
 
-	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, parameter_values_json, config_snapshot_json, source_node_backend_runtime_id, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, parameter_values_json, disabled_parameters_json, config_snapshot_json, source_node_backend_runtime_id, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "description", ""),
 		artifactID, backendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(req["parameters_json"]), jsonString(req["env_overrides_json"]),
 		modelParamDefaults,
+		"[]", // disabled_parameters_json starts empty
 		configSnapshot,
 		nodeBackendRuntimeID,
 		"stopped", "saved", tid, now, now,
@@ -307,7 +308,7 @@ func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Requ
 			args = append(args, v)
 		}
 	}
-	for _, f := range []string{"placement_json", "parameters_json", "env_overrides_json", "service_json"} {
+	for _, f := range []string{"placement_json", "parameters_json", "env_overrides_json", "service_json", "parameter_values_json", "disabled_parameters_json"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
 			args = append(args, jsonString(v))
@@ -2165,13 +2166,13 @@ func parseJSONMap(raw string) map[string]interface{} {
 // ==========================================================================
 
 func (h *AgentHandler) getDeploymentJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(config_snapshot_json,'{}'), COALESCE(source_backend_runtime_id,''), COALESCE(source_node_backend_runtime_id,''), COALESCE(source_template_name,''), COALESCE(source_template_version,''), COALESCE(source_config_hash,''), COALESCE(copied_at,''), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments WHERE id = ?`, id)
-	var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, css, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, COALESCE(parameter_values_json,'[]'), COALESCE(disabled_parameters_json,'[]'), COALESCE(config_snapshot_json,'{}'), COALESCE(source_backend_runtime_id,''), COALESCE(source_node_backend_runtime_id,''), COALESCE(source_template_name,''), COALESCE(source_template_version,''), COALESCE(source_config_hash,''), COALESCE(copied_at,''), desired_state, status, tenant_id, created_at, updated_at FROM model_deployments WHERE id = ?`, id)
+	var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, pvj, dpj, css, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua string
 	var replicas int
-	if err := row.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &css, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &pvj, &dpj, &css, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua); err != nil {
 		return nil
 	}
-	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "config_snapshot_json": json.RawMessage(css), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua}
+	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "parameter_values_json": json.RawMessage(pvj), "disabled_parameters_json": json.RawMessage(dpj), "config_snapshot_json": json.RawMessage(css), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua}
 }
 
 func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]map[string]interface{}, error) {
@@ -2182,12 +2183,12 @@ func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]ma
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, css, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua string
+		var rid, name, dn, desc, maid, rtid, pj, sj, pj2, eoj, pvj, dpj, css, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua string
 		var replicas int
-		if err := rows.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &css, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua); err != nil {
+		if err := rows.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &pj2, &eoj, &pvj, &dpj, &css, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua); err != nil {
 			continue
 		}
-		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "config_snapshot_json": json.RawMessage(css), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua})
+		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "parameters_json": json.RawMessage(pj2), "env_overrides_json": json.RawMessage(eoj), "parameter_values_json": json.RawMessage(pvj), "disabled_parameters_json": json.RawMessage(dpj), "config_snapshot_json": json.RawMessage(css), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua})
 	}
 	if out == nil {
 		out = []map[string]interface{}{}
