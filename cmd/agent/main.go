@@ -1116,6 +1116,15 @@ func processStopTask(ctx context.Context, task register.AgentTask, result *regis
 	result.NodeID = task.NodeID
 }
 
+// logsTaskState tracks stderr bytes per instance for change detection.
+var logsTaskState struct {
+	lastStderrBytes map[string]int
+}
+
+func init() {
+	logsTaskState.lastStderrBytes = make(map[string]int)
+}
+
 func processLogsTask(ctx context.Context, task register.AgentTask, result *register.TaskResult) {
 	var payload struct {
 		InstanceID    string `json:"instance_id"`
@@ -1133,12 +1142,19 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 		payload.Tail = 200
 	}
 
-	log.Info("processing logs task",
+	// Build log context fields, omitting empty container_id.
+	logFields := []any{
 		"task_id", task.ID,
 		"instance_id", payload.InstanceID,
-		"container_id", payload.ContainerID,
 		"tail", payload.Tail,
-	)
+	}
+	if payload.ContainerID != "" {
+		logFields = append(logFields, "container_id", payload.ContainerID)
+	} else {
+		logFields = append(logFields, "container_id_status", "not_allocated")
+	}
+
+	log.Debug("processing logs task", logFields...)
 
 	realCli, err := agentruntime.NewRealDockerClient()
 	// Docker client created successfully
@@ -1174,12 +1190,31 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 		return
 	}
 
-	log.Info("logs task completed",
-		"task_id", task.ID,
-		"instance_id", payload.InstanceID,
-		"stdout_bytes", len(logs.Stdout),
-		"stderr_bytes", len(logs.Stderr),
-	)
+	stderrBytes := len(logs.Stderr)
+	stdoutBytes := len(logs.Stdout)
+
+	// Check if stderr changed since last successful call for this instance.
+	lastStderr := logsTaskState.lastStderrBytes[payload.InstanceID]
+	stderrChanged := stderrBytes != lastStderr && stderrBytes > 0
+	logsTaskState.lastStderrBytes[payload.InstanceID] = stderrBytes
+
+	// Log at INFO only if stderr changed (new error output), otherwise DEBUG.
+	if stderrChanged {
+		log.Info("logs task completed",
+			"task_id", task.ID,
+			"instance_id", payload.InstanceID,
+			"stdout_bytes", stdoutBytes,
+			"stderr_bytes", stderrBytes,
+			"stderr_changed", true,
+		)
+	} else {
+		log.Debug("logs task completed",
+			"task_id", task.ID,
+			"instance_id", payload.InstanceID,
+			"stdout_bytes", stdoutBytes,
+			"stderr_bytes", stderrBytes,
+		)
+	}
 
 	result.Success = true
 	result.RuntimeState = "ok"
@@ -1291,8 +1326,24 @@ func agentPathWithinRoot(path, root string) bool {
 	return cleanPath == cleanRoot || strings.HasPrefix(cleanPath, cleanRoot+string(os.PathSeparator))
 }
 
+// reconcileState tracks the last known container state for change detection.
+var reconcileState struct {
+	tracker        *log.ChangedTracker
+	summaryCounter int
+	unloggedCount  int
+}
+
+func init() {
+	reconcileState.tracker = log.NewChangedTracker()
+}
+
 // reconcileManagedContainers lists Docker containers with the LightAI naming prefix
 // and logs discrepancies against what the agent expects. REVIEW-005: Agent reconciliation.
+//
+// Logging behavior:
+//   - State change (total/exited/running differs): INFO
+//   - No change: DEBUG
+//   - Every 5th invocation with no change: summary INFO (approximately every 5 minutes)
 func reconcileManagedContainers(ctx context.Context) {
 	out, err := execCmd("docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}", "--filter", "name=lightai-")
 	if err != nil {
@@ -1312,11 +1363,37 @@ func reconcileManagedContainers(ctx context.Context) {
 			exited++
 		}
 	}
+	running := managed - exited
+
+	// Create a state key for change detection.
+	stateKey := fmt.Sprintf("%d/%d/%d", managed, exited, running)
+	changed := reconcileState.tracker.ChangedString(stateKey)
+
 	if managed > 0 {
-		log.Info("reconcile: managed containers found",
-			"total", managed, "exited", exited, "running", managed-exited)
+		if changed {
+			// State changed — log at INFO.
+			log.Info("reconcile: managed containers found",
+				"total", managed, "exited", exited, "running", running)
+			reconcileState.unloggedCount = 0
+		} else {
+			reconcileState.unloggedCount++
+			// Log summary INFO every 5 unlogged invocations (~5 minutes).
+			if reconcileState.unloggedCount >= 5 {
+				log.Info("reconcile: containers unchanged",
+					"total", managed, "exited", exited, "running", running,
+					"unchanged_checks", reconcileState.unloggedCount)
+				reconcileState.unloggedCount = 0
+			} else {
+				log.Debug("reconcile: managed containers found",
+					"total", managed, "exited", exited, "running", running)
+			}
+		}
 	} else {
-		log.Debug("reconcile: no managed containers found")
+		if changed {
+			log.Info("reconcile: no managed containers found")
+		} else {
+			log.Debug("reconcile: no managed containers found")
+		}
 	}
 }
 

@@ -214,10 +214,11 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
-	// Wrap mux with request logging (outermost) → metrics → mux.
+	// Wrap mux with recovery (outermost) → request logging → metrics → mux.
 	var handler http.Handler = mux
 	handler = metricsWrapper(handler, serverMetrics)
 	handler = api.RequestLoggingMiddleware(handler)
+	handler = api.RecoveryMiddleware(handler)
 
 	srv := &http.Server{
 		Addr:         addr,
