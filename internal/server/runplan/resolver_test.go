@@ -767,6 +767,360 @@ func TestResolveLlamaCppResourceControlsGpuLayers(t *testing.T) {
 	}
 }
 
+func TestRequiredParamFromDefaultArgs(t *testing.T) {
+	// Scenario: llama.cpp catalog has "-m" (alias "--model") as required.
+	// Layer 1 default_args provides "-m /models/test.gguf".
+	// Deployment parameters are empty {}.
+	// Required param check should NOT report error because -m is already in args.
+	in := ResolveInput{
+		Backend: &BackendInfo{
+			ID:         "backend.llamacpp",
+			Name:       "llamacpp",
+			DefaultEnv: map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			ID:                "llamacpp-b9700",
+			DefaultEntrypoint: []string{},
+			DefaultArgs:       []string{"-m", "/models/test.gguf", "--host", "0.0.0.0", "--port", "8080"},
+			ParameterDefs: []ParameterDef{
+				{Name: "-m", Alias: "--model", Required: true},
+				{Name: "--host", Default: "0.0.0.0"},
+				{Name: "--port", Default: "8080"},
+			},
+			HealthCheck:          HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
+			DefaultContainerPort: 8080,
+			DefaultImages:        map[string]string{"nvidia": "ghcr.io/ggml-org/llama.cpp:server-cuda13"},
+			Env:                  map[string]string{},
+		},
+		BackendRuntime: &RuntimeInfo{
+			Vendor:      "nvidia",
+			RuntimeType: "docker",
+			DefaultEnv:  map[string]string{},
+			Docker:      DockerSpecInfo{},
+		},
+		Artifact: &ArtifactInfo{
+			Path: "/models/test.gguf",
+		},
+		Deployment: &DeploymentInfo{
+			Parameters: map[string]interface{}{}, // empty — all from defaults
+			Service:    ServiceInfo{HostPort: 8004},
+		},
+		InstanceID: "inst-test-001",
+		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
+		AssignedGPUs: []GPUInfo{
+			{Index: 0, Vendor: "nvidia"},
+		},
+	}
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors (required param -m provided by default_args), got: %v", errs)
+	}
+	if plan == nil {
+		t.Fatal("plan is nil")
+	}
+	argsStr := strings.Join(plan.Args, " ")
+	if !strings.Contains(argsStr, "-m /models/test.gguf") {
+		t.Errorf("expected -m /models/test.gguf in args, got: %s", argsStr)
+	}
+}
+
+func TestRequiredParamMissingEverywhere(t *testing.T) {
+	// Scenario: required param NOT in default_args and NOT in deployment params.
+	// Should report error.
+	in := ResolveInput{
+		Backend: &BackendInfo{
+			ID:         "backend.test",
+			Name:       "test",
+			DefaultEnv: map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			ID:                "test-v1",
+			DefaultEntrypoint: []string{},
+			DefaultArgs:       []string{"--host", "0.0.0.0"},
+			ParameterDefs: []ParameterDef{
+				{Name: "--model", Required: true},
+				{Name: "--host", Default: "0.0.0.0"},
+			},
+			HealthCheck:          HealthCheckInput{Path: "/health", ExpectedStatus: 200},
+			DefaultContainerPort: 8080,
+			DefaultImages:        map[string]string{"nvidia": "test:latest"},
+			Env:                  map[string]string{},
+		},
+		BackendRuntime: &RuntimeInfo{
+			Vendor:      "nvidia",
+			RuntimeType: "docker",
+			ImageName:   "test:latest",
+			DefaultEnv:  map[string]string{},
+		},
+		Artifact: &ArtifactInfo{Path: "/tmp/test"},
+		Deployment: &DeploymentInfo{
+			Parameters: map[string]interface{}{},
+		},
+		InstanceID: "inst-test-002",
+		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
+	}
+
+	_, errs, _ := Resolve(in)
+	if len(errs) == 0 {
+		t.Fatal("expected error for missing required param --model, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "required parameter") && strings.Contains(e.Error(), "--model") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'required parameter --model missing' error, got: %v", errs)
+	}
+}
+
+func TestRequiredShortAliasFromDefaultArgs(t *testing.T) {
+	// Scenario: ParameterDef has Name="-m", Alias="--model".
+	// default_args provides "-m" (short form).
+	// Should NOT report error.
+	in := ResolveInput{
+		Backend: &BackendInfo{
+			ID:         "backend.llamacpp",
+			Name:       "llamacpp",
+			DefaultEnv: map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			ID:                "llamacpp-b9700",
+			DefaultEntrypoint: []string{},
+			DefaultArgs:       []string{"-m", "/models/test.gguf"},
+			ParameterDefs: []ParameterDef{
+				{Name: "-m", Alias: "--model", Required: true},
+			},
+			HealthCheck:          HealthCheckInput{Path: "/v1/models", ExpectedStatus: 200},
+			DefaultContainerPort: 8080,
+			DefaultImages:        map[string]string{"nvidia": "ghcr.io/ggml-org/llama.cpp:server-cuda13"},
+			Env:                  map[string]string{},
+		},
+		BackendRuntime: &RuntimeInfo{
+			Vendor:      "nvidia",
+			RuntimeType: "docker",
+			ImageName:   "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+			DefaultEnv:  map[string]string{},
+		},
+		Artifact: &ArtifactInfo{Path: "/models/test.gguf"},
+		Deployment: &DeploymentInfo{
+			Parameters: map[string]interface{}{},
+		},
+		InstanceID: "inst-test-003",
+		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
+	}
+
+	_, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors (short alias -m provided by default_args), got: %v", errs)
+	}
+}
+
+func TestRequiredLongAliasFromDefaultArgs(t *testing.T) {
+	// Scenario: ParameterDef has Name="--model", CliName="--model".
+	// default_args provides "--model /models/test.gguf" (long form).
+	// Should NOT report error.
+	in := ResolveInput{
+		Backend: &BackendInfo{
+			ID:         "backend.test",
+			Name:       "test",
+			DefaultEnv: map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			ID:                "test-v1",
+			DefaultEntrypoint: []string{},
+			DefaultArgs:       []string{"--model", "/models/test.gguf"},
+			ParameterDefs: []ParameterDef{
+				{Name: "--model", CliName: "--model", Required: true},
+			},
+			HealthCheck:          HealthCheckInput{Path: "/health", ExpectedStatus: 200},
+			DefaultContainerPort: 8080,
+			DefaultImages:        map[string]string{"nvidia": "test:latest"},
+			Env:                  map[string]string{},
+		},
+		BackendRuntime: &RuntimeInfo{
+			Vendor:      "nvidia",
+			RuntimeType: "docker",
+			ImageName:   "test:latest",
+			DefaultEnv:  map[string]string{},
+		},
+		Artifact: &ArtifactInfo{Path: "/models/test.gguf"},
+		Deployment: &DeploymentInfo{
+			Parameters: map[string]interface{}{},
+		},
+		InstanceID: "inst-test-004",
+		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
+	}
+
+	_, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors (long alias --model provided by default_args), got: %v", errs)
+	}
+}
+
+func TestRequiredFlagEqualsFormFromDefaultArgs(t *testing.T) {
+	// Scenario: default_args provides "--model=/models/test.gguf" (= form).
+	// Should NOT report error.
+	in := ResolveInput{
+		Backend: &BackendInfo{
+			ID:         "backend.test",
+			Name:       "test",
+			DefaultEnv: map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			ID:                "test-v1",
+			DefaultEntrypoint: []string{},
+			DefaultArgs:       []string{"--model=/models/test.gguf"},
+			ParameterDefs: []ParameterDef{
+				{Name: "--model", CliName: "--model", Required: true},
+			},
+			HealthCheck:          HealthCheckInput{Path: "/health", ExpectedStatus: 200},
+			DefaultContainerPort: 8080,
+			DefaultImages:        map[string]string{"nvidia": "test:latest"},
+			Env:                  map[string]string{},
+		},
+		BackendRuntime: &RuntimeInfo{
+			Vendor:      "nvidia",
+			RuntimeType: "docker",
+			ImageName:   "test:latest",
+			DefaultEnv:  map[string]string{},
+		},
+		Artifact: &ArtifactInfo{Path: "/models/test.gguf"},
+		Deployment: &DeploymentInfo{
+			Parameters: map[string]interface{}{},
+		},
+		InstanceID: "inst-test-005",
+		Node:       &NodeInfo{ID: "node-1", IP: "127.0.0.1"},
+	}
+
+	_, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors (--model= form provided by default_args), got: %v", errs)
+	}
+}
+
+func TestBuildEnvFiltersNonScalarValues(t *testing.T) {
+	// Scenario: BackendVersion.Env contains array/map values from capability metadata.
+	// buildEnv should skip non-scalar values.
+	input := ResolveInput{
+		Backend: &BackendInfo{
+			DefaultEnv: map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			Env: map[string]string{
+				"CUDA_VISIBLE_DEVICES": "0",
+				"VLLM_USE_MODELSCOPE": "false",
+			},
+		},
+		BackendRuntime: &RuntimeInfo{
+			DefaultEnv: map[string]string{},
+		},
+		Deployment: &DeploymentInfo{
+			EnvOverrides: map[string]string{},
+		},
+	}
+	vars := map[string]string{
+		"assigned_gpu_count": "1",
+		"container_port":     "8000",
+	}
+	env, warns := buildEnv(input, vars)
+	_ = warns
+	if env["CUDA_VISIBLE_DEVICES"] != "0" {
+		t.Errorf("expected CUDA_VISIBLE_DEVICES=0, got: %s", env["CUDA_VISIBLE_DEVICES"])
+	}
+	if env["VLLM_USE_MODELSCOPE"] != "false" {
+		t.Errorf("expected VLLM_USE_MODELSCOPE=false, got: %s", env["VLLM_USE_MODELSCOPE"])
+	}
+}
+
+func TestBuildEnvSkipsEmptyValues(t *testing.T) {
+	// Scenario: some env values resolve to empty strings.
+	// buildEnv should skip them.
+	input := ResolveInput{
+		Backend: &BackendInfo{
+			DefaultEnv: map[string]string{},
+		},
+		BackendVersion: &VersionInfo{
+			Env: map[string]string{
+				"VALID_KEY":   "valid_value",
+				"EMPTY_KEY":   "",
+			},
+		},
+		BackendRuntime: &RuntimeInfo{
+			DefaultEnv: map[string]string{},
+		},
+		Deployment: &DeploymentInfo{
+			EnvOverrides: map[string]string{},
+		},
+	}
+	vars := map[string]string{}
+	env, _ := buildEnv(input, vars)
+	if env["VALID_KEY"] != "valid_value" {
+		t.Errorf("expected VALID_KEY=valid_value, got: %s", env["VALID_KEY"])
+	}
+	if _, exists := env["EMPTY_KEY"]; exists {
+		t.Errorf("expected EMPTY_KEY to be skipped, but it exists with value: %s", env["EMPTY_KEY"])
+	}
+}
+
+func TestCollectExistingFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected map[string]bool
+	}{
+		{
+			name:     "long flags",
+			args:     []string{"--host", "0.0.0.0", "--port", "8080"},
+			expected: map[string]bool{"--host": true, "--port": true},
+		},
+		{
+			name:     "short flags",
+			args:     []string{"-m", "/models/test.gguf", "-ngl", "999"},
+			expected: map[string]bool{"-m": true, "-ngl": true},
+		},
+		{
+			name:     "equals form",
+			args:     []string{"--model=/models/test.gguf", "--host=0.0.0.0"},
+			expected: map[string]bool{"--model": true, "--host": true},
+		},
+		{
+			name:     "mixed",
+			args:     []string{"-m", "/models/test.gguf", "--host", "0.0.0.0", "--port=8080"},
+			expected: map[string]bool{"-m": true, "--host": true, "--port": true},
+		},
+		{
+			name:     "empty",
+			args:     []string{},
+			expected: map[string]bool{},
+		},
+		{
+			name:     "boolean flags",
+			args:     []string{"--verbose", "--host", "0.0.0.0"},
+			expected: map[string]bool{"--verbose": true, "--host": true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := collectExistingFlags(tt.args)
+			for flag := range tt.expected {
+				if !result[flag] {
+					t.Errorf("expected flag %q to be collected, args=%v, result=%v", flag, tt.args, result)
+				}
+			}
+			for flag := range result {
+				if !tt.expected[flag] {
+					t.Errorf("unexpected flag %q collected, args=%v, result=%v", flag, tt.args, result)
+				}
+			}
+		})
+	}
+}
+
 func TestResolveResourceControlsNoDuplicateWithParameterDefs(t *testing.T) {
 	// max_model_len is in BOTH ParameterDefs and resource_controls.
 	// ParameterDefs maps "max_model_len" → "--max-model-len".
