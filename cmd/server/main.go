@@ -216,8 +216,9 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
-	// Wrap mux with recovery (outermost) → request logging → metrics → mux.
+	// Wrap mux with recovery (outermost) → request logging → metrics → body limit → mux.
 	var handler http.Handler = mux
+	handler = bodyLimitMiddleware(10 << 20)(handler)
 	handler = metricsWrapper(handler, serverMetrics)
 	handler = api.RequestLoggingMiddleware(handler)
 	handler = api.RecoveryMiddleware(handler)
@@ -486,5 +487,14 @@ func runNodeHealthChecker(agentHandler *api.AgentHandler, resourceHandler *api.R
 				}
 			}
 		}
+	}
+}
+
+func bodyLimitMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			next.ServeHTTP(w, r)
+		})
 	}
 }

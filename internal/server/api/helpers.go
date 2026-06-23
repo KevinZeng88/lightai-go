@@ -223,14 +223,33 @@ func isSensitive(key string) bool {
 }
 
 func redactDetailString(s string) string {
-	result := s
-	for _, sk := range sensitiveKeys() {
-		upper := strings.ToUpper(sk)
-		lower := strings.ToLower(sk)
-		result = strings.ReplaceAll(result, upper, "<redacted>")
-		result = strings.ReplaceAll(result, lower, "<redacted>")
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(s), &m); err != nil {
+		return s
 	}
-	return result
+	redacted := false
+	for key := range m {
+		if isSensitiveKey(key) {
+			m[key] = "<redacted>"
+			redacted = true
+		}
+	}
+	if !redacted {
+		return s
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+func isSensitiveKey(key string) bool {
+	upper := strings.ToUpper(key)
+	fragments := []string{"KEY", "TOKEN", "PASSWORD", "SECRET", "AUTH", "CREDENTIAL", "ACCESS"}
+	for _, f := range fragments {
+		if strings.Contains(upper, f) {
+			return true
+		}
+	}
+	return false
 }
 
 func redactEnvMap(env map[string]interface{}) map[string]interface{} {

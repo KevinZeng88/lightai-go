@@ -1234,9 +1234,20 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 
 	result.Success = true
 	result.RuntimeState = "ok"
-	result.Stdout = logs.Stdout
-	result.Stderr = logs.Stderr
-	result.Logs = logs.Stdout + logs.Stderr
+
+	const maxTaskResultBytes = 10 * 1024 * 1024 // 10MB
+	stdout := logs.Stdout
+	stderr := logs.Stderr
+	if len(stdout) > maxTaskResultBytes {
+		stdout = stdout[:maxTaskResultBytes] + "\n... [truncated]"
+	}
+	if len(stderr) > maxTaskResultBytes {
+		stderr = stderr[:maxTaskResultBytes] + "\n... [truncated]"
+	}
+
+	result.Stdout = stdout
+	result.Stderr = stderr
+	result.Logs = stdout + stderr
 	result.LogsSummary = result.Logs
 	result.InstanceID = payload.InstanceID
 	result.ContainerID = payload.ContainerID

@@ -904,8 +904,9 @@ func (h *AgentHandler) HandlePatchNodeTenant(w http.ResponseWriter, r *http.Requ
 
 	// Audit log — if this fails, the whole transfer rolls back.
 	auditID := uuid.NewString()
-	detail := fmt.Sprintf(`{"from_tenant_id":"%s","to_tenant_id":"%s","reason":"%s"}`,
-		currentTenant, req.TenantID, req.Reason)
+	detailMap := map[string]string{"from_tenant_id": currentTenant, "to_tenant_id": req.TenantID, "reason": req.Reason}
+	detailBytes, _ := json.Marshal(detailMap)
+	detail := string(detailBytes)
 	if _, err := tx.Exec(`INSERT INTO audit_logs (id, action, entity_type, entity_id, detail, operator_user_id, created_at)
 		VALUES (?, 'transfer_tenant', 'node', ?, ?, ?, ?)`,
 		auditID, nodeID, detail, info.UserID, now); err != nil {

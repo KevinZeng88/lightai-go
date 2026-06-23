@@ -273,6 +273,11 @@ func decodeDockerStream(reader io.Reader) (string, string, error) {
 		streamType := header[0]
 		payloadLen := binary.BigEndian.Uint32(header[4:8])
 
+		const maxStreamPayload = 100 * 1024 * 1024 // 100MB
+		if payloadLen > maxStreamPayload {
+			return "", "", fmt.Errorf("stream payload too large: %d bytes (max %d)", payloadLen, maxStreamPayload)
+		}
+
 		if payloadLen == 0 {
 			continue
 		}
