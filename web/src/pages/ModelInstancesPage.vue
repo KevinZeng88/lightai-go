@@ -3,6 +3,8 @@
     <div class="page-header">
       <h2>{{ t('instances.title') }}</h2>
       <div class="header-actions">
+        <span v-if="lastUpdate" class="last-refreshed">{{ t('common.lastRefreshed') || 'Last refreshed' }}: {{ new Date(lastUpdate).toLocaleTimeString() }}</span>
+        <span v-if="refreshError" class="refresh-error">{{ t('common.staleData') || 'Stale data' }}</span>
         <el-checkbox v-model="showStopped">{{ t('instances.showStopped') }}</el-checkbox>
         <el-button :icon="RefreshRight" :loading="loading" @click="refresh">{{ t('common.refresh') }}</el-button>
       </div>
@@ -162,6 +164,17 @@
         <el-descriptions-item :label="t('dockerLogs.runtimeState')">{{ logsMeta.runtime_state || '-' }}</el-descriptions-item>
       </el-descriptions>
 
+      <template v-if="logsMeta?.classified_log_events?.length">
+        <h4 style="margin:12px 0 8px">{{ t('dockerLogs.classifiedEvents') || 'Classified Log Events' }}</h4>
+        <div v-for="ev in logsMeta.classified_log_events" :key="ev.rule_id" class="classified-event" :class="'classified-event--' + ev.severity">
+          <el-tag :type="severityTagType(ev.severity)" size="small" style="margin-right:8px">{{ ev.severity }}</el-tag>
+          <strong>{{ ev.rule_id }}</strong>
+          <span v-if="ev.occurrences > 1" class="classified-event__count">({{ ev.occurrences }}x)</span>
+          <div class="classified-event__message">{{ ev.message }}</div>
+          <div v-if="ev.suggestion" class="classified-event__suggestion">{{ ev.suggestion }}</div>
+        </div>
+      </template>
+
       <pre class="docker-log-output">{{ logsText || t('dockerLogs.empty') }}</pre>
     </el-drawer>
   </div>
@@ -175,10 +188,10 @@ import { CopyDocument, Document, RefreshRight } from '@element-plus/icons-vue'
 import { apiClient } from '@/api/client'
 import StatusTag from '@/components/StatusTag.vue'
 import { formatTestFailure, recommendedTestMode, testModeLabel } from '@/utils/modelCapabilities.js'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { t, locale } = useI18n()
 
-const loading = ref(false)
 const items = ref<any[]>([])
 const deployments = ref<any[]>([])
 const models = ref<any[]>([])
@@ -236,34 +249,32 @@ const testErrorMessage = computed(() => {
 
 const visibleItems = computed(() => items.value.filter((it) => showStopped.value || it.actual_state !== 'stopped'))
 
-onMounted(async () => {
-  await refresh()
-})
+async function fetchInstances() {
+  items.value = await apiClient.get('/model-instances')
+  try { deployments.value = await apiClient.get('/deployments') } catch { deployments.value = [] }
+  try { models.value = await apiClient.get('/model-artifacts') } catch { models.value = [] }
+  if (!autoOpenedFailedLogs.value) {
+    const failed = items.value.find((it) => it.actual_state === 'failed' && it.current_run_plan_id)
+    if (failed) {
+      autoOpenedFailedLogs.value = true
+      await nextTick()
+      openLogs(failed)
+    }
+  }
+}
+
+const { loading, lastUpdate, refreshError, refresh } = useAutoRefresh(async () => {
+  try {
+    await fetchInstances()
+  } catch (e: any) {
+    ElMessage.error(e?.message || t('common.requestFailed'))
+    throw e
+  }
+}, { intervalMs: 5000 })
 
 onUnmounted(() => {
   stopLogsTimer()
 })
-
-async function refresh() {
-  loading.value = true
-  try {
-    items.value = await apiClient.get('/model-instances')
-    try { deployments.value = await apiClient.get('/deployments') } catch { deployments.value = [] }
-    try { models.value = await apiClient.get('/model-artifacts') } catch { models.value = [] }
-    if (!autoOpenedFailedLogs.value) {
-      const failed = items.value.find((it) => it.actual_state === 'failed' && it.current_run_plan_id)
-      if (failed) {
-        autoOpenedFailedLogs.value = true
-        await nextTick()
-        openLogs(failed)
-      }
-    }
-  } catch (e: any) {
-    ElMessage.error(e?.message || t('common.requestFailed'))
-  } finally {
-    loading.value = false
-  }
-}
 
 function showDetail(row: any) {
   selected.value = row
@@ -278,6 +289,13 @@ function modelForInstance(row: any): any {
 
 function testModeText(mode: string): string {
   return testModeLabel(mode || 'auto', locale.value)
+}
+
+function severityTagType(severity: string): string {
+  if (severity === 'error' || severity === 'fatal') return 'danger'
+  if (severity === 'warning') return 'warning'
+  if (severity === 'advisory') return 'info'
+  return 'info'
 }
 
 function stopLogsTimer() {
@@ -419,5 +437,44 @@ async function runSelectedTest() {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.last-refreshed {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.refresh-error {
+  font-size: 12px;
+  color: var(--el-color-warning);
+  margin-right: 8px;
+}
+.classified-event {
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-lighter);
+}
+.classified-event--error, .classified-event--fatal {
+  border-color: var(--el-color-danger-light-5);
+  background: var(--el-color-danger-light-9);
+}
+.classified-event--warning {
+  border-color: var(--el-color-warning-light-5);
+  background: var(--el-color-warning-light-9);
+}
+.classified-event__message {
+  font-size: 13px;
+  margin-top: 4px;
+}
+.classified-event__suggestion {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+}
+.classified-event__count {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-left: 4px;
 }
 </style>

@@ -177,9 +177,11 @@
 
         <h4 style="margin-top:16px">{{ $t('runnerConfigs.sectionHealthPreview') }}</h4>
         <el-descriptions :column="1" border size="small">
-          <el-descriptions-item :label="$t('backends.healthCheck')">{{ runParamSummary(selected).health || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runnerConfigs.nbrTemplatePreview')">{{ runParamSummary(selected).preview || '-' }}</el-descriptions-item>
         </el-descriptions>
+        <div style="margin-top:8px">
+          <JsonViewer :value="runParamSummary(selected).healthObj" title="Health Check Config" max-height="300px" />
+        </div>
         <el-collapse v-if="selected?.probe_results_json && typeof selected.probe_results_json === 'object' && Object.keys(selected.probe_results_json).length > 0" style="margin-top:12px">
           <el-collapse-item :title="$t('nodeRuntimeProbe.imageMetadata')" name="level2" v-if="selected.probe_results_json.level2?.inspect_success">
             <el-descriptions :column="2" border size="small">
@@ -216,7 +218,7 @@
         <!-- Advanced diagnostic JSON -->
         <el-collapse v-if="selected?.config_snapshot_json && Object.keys(selected.config_snapshot_json).length > 0" style="margin-top:12px">
           <el-collapse-item :title="$t('runnerConfigs.advancedJson')" name="runParams">
-            <pre class="preview">{{ JSON.stringify(selected.config_snapshot_json, null, 2) }}</pre>
+            <JsonViewer :value="selected.config_snapshot_json" title="Config Snapshot" max-height="500px" :allow-download="true" :searchable="true" />
           </el-collapse-item>
         </el-collapse>
       </template>
@@ -244,7 +246,9 @@
         <el-form-item :label="$t('runtimes.shmSize')"><el-input v-model="editShmSize" /></el-form-item>
         <el-form-item :label="$t('runtimes.ulimits')"><el-input v-model="editUlimitsText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.keyValueLines')" /></el-form-item>
         <h4>{{ $t('runnerConfigs.sectionHealthPreview') }}</h4>
-        <el-form-item :label="$t('backends.healthCheck')"><el-input v-model="editHealthText" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item :label="$t('backends.healthCheck')">
+          <HealthCheckEditor v-model="editHealthModel" />
+        </el-form-item>
         <el-collapse>
           <el-collapse-item :title="$t('runnerConfigs.advancedJson')">
             <el-form-item :label="$t('runnerConfigs.snapshotJson')"><el-input v-model="editSnapshotText" type="textarea" :rows="8" /></el-form-item>
@@ -266,6 +270,8 @@ import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import { listRuntimes } from '@/api/runtimes'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
+import JsonViewer from '@/components/common/JsonViewer.vue'
+import HealthCheckEditor from '@/components/common/HealthCheckEditor.vue'
 import { getStatusType, translateStatus, translateStatusReason } from '@/utils/status'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
@@ -278,6 +284,7 @@ const editVisible = ref(false); const editConfigName = ref(''); const editImageR
 const editArgsText = ref(''); const editEnvText = ref(''); const editVolumesText = ref(''); const editPortsText = ref('')
 const editDevicesText = ref(''); const editGroupAddText = ref(''); const editSecurityOptText = ref('')
 const editPrivileged = ref(false); const editIpcMode = ref(''); const editShmSize = ref(''); const editUlimitsText = ref(''); const editHealthText = ref('{}')
+const editHealthModel = ref<Record<string, unknown>>({})
 
 // Wizard
 const wizardVisible = ref(false); const step = ref(0)
@@ -409,6 +416,7 @@ function runParamSummary(row: any) {
   const shmSize = docker.shm_size || snapshot.shm_size || ''
   const ulimits = typeof docker.ulimits === 'object' ? JSON.stringify(docker.ulimits) : joinList(docker.ulimits || snapshot.ulimits)
   const health = JSON.stringify(snapshot.health_check_override_json || snapshot.health_check_json || snapshot.health_check || {}, null, 2)
+  const healthObj = snapshot.health_check_override_json || snapshot.health_check_json || snapshot.health_check || {}
   const volumeRows = asArray(volumes).map((v) => {
     if (typeof v === 'string') {
       const parts = v.split(':')
@@ -421,7 +429,7 @@ function runParamSummary(row: any) {
     : { host: p.host_port || p.host || '', container: p.container_port || p.container || '', protocol: p.protocol || 'tcp' })
   const riskText = (docker.privileged || ipc === 'host' || securityOpt) ? t('runnerConfigs.highRiskWarning') : ''
   const preview = image ? ['docker run -d', docker.privileged ? '--privileged' : '', ipc ? `--ipc ${ipc}` : '', shmSize ? `--shm-size ${shmSize}` : '', image, args].filter(Boolean).join(' ') : ''
-  return { image, entrypoint, command, args, envRows: envRows(env), volumeRows, portRows, devices, groupAdd, privileged, ipc, securityOpt, shmSize, ulimits, health, riskText, preview }
+  return { image, entrypoint, command, args, envRows: envRows(env), volumeRows, portRows, devices, groupAdd, privileged, ipc, securityOpt, shmSize, ulimits, health, healthObj, riskText, preview }
 }
 
 onMounted(async () => { await loadRefs(); await refresh() })
@@ -549,6 +557,7 @@ function showEdit(row: any) {
     try { return Object.entries(JSON.parse(summary.ulimits || '{}')).map(([k, v]) => `${k}=${v}`).join('\n') } catch { return summary.ulimits }
   })()
   editHealthText.value = summary.health || '{}'
+  try { editHealthModel.value = JSON.parse(summary.health || '{}') } catch { editHealthModel.value = {} }
   editVisible.value = true
 }
 
@@ -571,7 +580,7 @@ async function doEdit() {
     if (editIpcMode.value) snapshot.docker_json.ipc_mode = editIpcMode.value
     if (editShmSize.value) snapshot.docker_json.shm_size = editShmSize.value
     snapshot.docker_json.ulimits = parseKeyValueLines(editUlimitsText.value)
-    try { snapshot.health_check_override_json = JSON.parse(editHealthText.value || '{}') } catch { ElMessage.error(t('runnerConfigs.invalidJson')); saving.value = false; return }
+    snapshot.health_check_override_json = editHealthModel.value
     await apiClient.patch(`/nodes/${selected.value.node_id}/backend-runtimes/${selected.value.id}`, { display_name: editConfigName.value, image_ref: editImageRef.value, config_snapshot_json: snapshot })
     ElMessage.success(t('runnerConfigs.savedNeedsCheck'))
     editVisible.value = false

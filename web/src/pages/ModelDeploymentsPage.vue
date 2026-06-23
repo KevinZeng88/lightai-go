@@ -112,7 +112,7 @@
         </el-descriptions>
         <el-collapse style="margin-top:12px">
           <el-collapse-item :title="$t('runnerConfigs.advancedJson')">
-            <pre class="json-preview">{{ JSON.stringify(dryRunResult, null, 2) }}</pre>
+            <JsonViewer :value="dryRunResult" title="Dry Run Response" max-height="500px" :allow-download="true" :searchable="true" />
           </el-collapse-item>
         </el-collapse>
       </template>
@@ -328,6 +328,7 @@ import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 import { translateStatus } from '@/utils/status'
+import JsonViewer from '@/components/common/JsonViewer.vue'
 
 const { t } = useI18n()
 
