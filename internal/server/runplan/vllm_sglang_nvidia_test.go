@@ -292,11 +292,10 @@ func makeVLLMTestInput() ResolveInput {
 		},
 		Deployment: &DeploymentInfo{
 			ID: "dep-test", Name: "test",
-			Parameters: map[string]interface{}{
-				"--served-model-name":      "Qwen3-0.6B-Instruct-2512",
-				"--max-model-len":          float64(4096),
-				"--gpu-memory-utilization": float64(0.6),
-				"--enforce-eager":          "",
+			ParameterValues: []ParameterValue{
+				{Key: "served_model_name", CliName: "--served-model-name", Type: "string", Enabled: true, Value: "Qwen3-0.6B-Instruct-2512"},
+				{Key: "max_model_len", CliName: "--max-model-len", Type: "integer", Enabled: true, Value: float64(4096)},
+				{Key: "gpu_memory_utilization", CliName: "--gpu-memory-utilization", Type: "float", Enabled: true, Value: float64(0.6)},
 			},
 			Service: ServiceInfo{HostPort: 8004},
 		},
@@ -324,8 +323,10 @@ func TestVLLMUserServedModelNameOverridesDefault(t *testing.T) {
 		Artifact:       &ArtifactInfo{Name: "M", Path: "/models/M", ModelRoot: "/models", RelativePath: "M"},
 		Deployment: &DeploymentInfo{
 			ID: "dep", Name: "test",
-			Parameters: map[string]interface{}{"served_model_name": "my-custom-model"},
-			Service:    ServiceInfo{HostPort: 8004},
+			ParameterValues: []ParameterValue{
+				{Key: "served_model_name", CliName: "--served-model-name", Type: "string", Enabled: true, Value: "my-custom-model"},
+			},
+			Service: ServiceInfo{HostPort: 8004},
 		},
 		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},
@@ -348,7 +349,9 @@ func TestVLLMUserServedModelNameOverridesDefault(t *testing.T) {
 
 func TestVLLMUserGpuMemoryUtilizationPropagates(t *testing.T) {
 	in := makeVLLMTestInput()
-	in.Deployment.Parameters["gpu_memory_utilization"] = 0.85
+	in.Deployment.ParameterValues = append(in.Deployment.ParameterValues, ParameterValue{
+		Key: "gpu_memory_utilization", CliName: "--gpu-memory-utilization", Type: "float", Enabled: true, Value: 0.85,
+	})
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
 		t.Fatalf("unexpected errors: %v", errs)
@@ -367,9 +370,10 @@ func TestVLLMUserGpuMemoryUtilizationPropagates(t *testing.T) {
 
 func TestVLLMEnforceEagerUserOverride(t *testing.T) {
 	in := makeVLLMTestInput()
-	// User explicitly disables enforce_eager
-	delete(in.Deployment.Parameters, "--enforce-eager")
-	in.Deployment.Parameters["enforce_eager"] = ""
+	// User explicitly enables enforce_eager
+	in.Deployment.ParameterValues = append(in.Deployment.ParameterValues, ParameterValue{
+		Key: "enforce_eager", CliName: "--enforce-eager", Type: "bool", Enabled: true, Value: true,
+	})
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
 		t.Fatalf("unexpected errors: %v", errs)
@@ -434,7 +438,9 @@ func TestGetParamMatchesCLIFormatNames(t *testing.T) {
 		Artifact:       &ArtifactInfo{Name: "Qwen3", Path: "/models/Qwen3", ModelRoot: "/models", RelativePath: "Qwen3"},
 		Deployment: &DeploymentInfo{
 			ID: "dep", Name: "test",
-			Parameters: map[string]interface{}{"max_model_len": 16384.0},
+			ParameterValues: []ParameterValue{
+				{Key: "max_model_len", CliName: "--max-model-len", Type: "int", Enabled: true, Value: 16384.0},
+			},
 			Service:    ServiceInfo{HostPort: 8004},
 		},
 		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},

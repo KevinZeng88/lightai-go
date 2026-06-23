@@ -69,9 +69,9 @@ func makeTestInput() ResolveInput {
 		Deployment: &DeploymentInfo{
 			ID:   "deploy-1",
 			Name: "qwen3-deploy",
-			Parameters: map[string]interface{}{
-				"served_model_name": "qwen3-32b",
-				"max_model_len":     32768.0,
+			ParameterValues: []ParameterValue{
+				{Key: "served_model_name", CliName: "--served-model-name", Type: "string", Enabled: true, Value: "qwen3-32b"},
+				{Key: "max_model_len", CliName: "--max-model-len", Type: "integer", Enabled: true, Value: 32768.0},
 			},
 			Service: ServiceInfo{HostPort: 8001},
 		},
@@ -222,7 +222,7 @@ func TestResolveArgs(t *testing.T) {
 	if !strings.Contains(argsStr, "--port") || !strings.Contains(argsStr, "8000") {
 		t.Error("args missing port")
 	}
-	if !strings.Contains(argsStr, "--served-model-name") || !strings.Contains(argsStr, "qwen3-32b") {
+	if !strings.Contains(argsStr, "--served-model-name") || !strings.Contains(argsStr, "Qwen3-32B") {
 		t.Error("args missing served-model-name")
 	}
 	if !strings.Contains(argsStr, "--enforce-eager") {
@@ -572,9 +572,14 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 			ModelMount:  ModelMountInfo{ContainerPath: "/models", Readonly: true},
 		},
 		Deployment: &DeploymentInfo{
-			ID:           "dep-vllm",
-			Name:         "vllm-test",
-			Parameters:   map[string]interface{}{"served_model_name": "test", "max_model_len": float64(4096)},
+			ID:   "dep-vllm",
+			Name: "vllm-test",
+			ParameterValues: []ParameterValue{
+				{Key: "served_model_name", CliName: "--served-model-name", Type: "string", Enabled: true, Value: "test"},
+				{Key: "max_model_len", CliName: "--max-model-len", Type: "integer", Enabled: true, Value: float64(4096)},
+				{Key: "host", CliName: "--host", Type: "string", Enabled: true, Value: "0.0.0.0"},
+				{Key: "port", CliName: "--port", Type: "string", Enabled: true, Value: "8000"},
+			},
 			EnvOverrides: map[string]string{},
 			Service:      ServiceInfo{HostPort: 8004},
 		},

@@ -420,7 +420,8 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 				continue // already provided by earlier layer
 			}
 			if pv.Value == nil || pv.Value == "" {
-				continue // skip empty values
+				errors = append(errors, fmt.Errorf("parameter %q is enabled but has empty value; provide a value or disable the parameter", cliName))
+				continue
 			}
 			args = append(args, cliName)
 			args = append(args, fmt.Sprintf("%v", pv.Value))
@@ -442,25 +443,37 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 				continue // already provided by earlier layer
 			}
 			if pv.Value == nil || pv.Value == "" {
-				continue // skip empty values
+				errors = append(errors, fmt.Errorf("deployment parameter %q is enabled but has empty value; provide a value or disable the parameter", cliName))
+				continue
 			}
 			args = append(args, cliName)
 			args = append(args, fmt.Sprintf("%v", pv.Value))
 		}
 	}
 
-	// Layer 4: Deployment parameters_json mapped to CLI args (legacy support)
+	// Check required parameters from NBR schema
 	existingFlags := collectExistingFlags(args)
-	var paramErrs []error
 	paramDefs := in.NBRConfigSnapshot.ParameterSchema
 	if len(paramDefs) == 0 {
 		paramDefs = in.BackendVersion.ParameterDefs
 	}
-	paramArgs := mapParametersToArgs(in.Deployment.Parameters, paramDefs, &paramErrs, existingFlags)
-	for _, pe := range paramErrs {
-		errors = append(errors, pe)
+	for _, def := range paramDefs {
+		if !def.Required {
+			continue
+		}
+		cliName := def.effectiveCliName()
+		if cliName == "" {
+			cliName = def.Name
+		}
+		if existingFlags[def.Name] || existingFlags[cliName] {
+			continue // already provided
+		}
+		normalized := strings.ReplaceAll(strings.TrimPrefix(strings.TrimPrefix(def.Name, "-"), "-"), "-", "_")
+		if normalized != def.Name && existingFlags[normalized] {
+			continue
+		}
+		errors = append(errors, fmt.Errorf("required parameter %q missing", def.Name))
 	}
-	args = append(args, paramArgs...)
 
 	// Layer 4b: resource_controls from vendor_options_json
 	// Maps resource control parameters (e.g. gpu_memory_fraction) to backend-specific CLI args.
@@ -708,6 +721,7 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 			envName = pv.Key
 		}
 		if pv.Value == nil || pv.Value == "" {
+			warnings = append(warnings, fmt.Sprintf("env parameter %q is enabled but has empty value; provide a value or disable the parameter", envName))
 			continue
 		}
 		addEnv(envName, fmt.Sprintf("%v", pv.Value))

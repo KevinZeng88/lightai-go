@@ -52,10 +52,10 @@ func TestLlamaCppNvidiaRunPlan(t *testing.T) {
 		Deployment: &DeploymentInfo{
 			ID:   "deploy-llamacpp",
 			Name: "qwen35-9b-llamacpp",
-			Parameters: map[string]interface{}{
-				"served_model_name": "Qwen3.5-9B-Q4_K_M.gguf",
-				"ctx_size":          4096.0,
-				"n_gpu_layers":      999.0,
+			ParameterValues: []ParameterValue{
+				{Key: "served_model_name", CliName: "--model", Type: "string", Enabled: true, Value: "Qwen3.5-9B-Q4_K_M.gguf"},
+				{Key: "ctx_size", CliName: "--ctx-size", Type: "integer", Enabled: true, Value: 4096.0},
+				{Key: "n_gpu_layers", CliName: "--n-gpu-layers", Type: "integer", Enabled: true, Value: 999.0},
 			},
 			Service: ServiceInfo{HostPort: 8002},
 		},
