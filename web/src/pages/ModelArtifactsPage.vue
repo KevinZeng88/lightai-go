@@ -71,6 +71,10 @@
           <el-form-item :label="$t('artifacts.contextLength')"><el-input :model-value="form.default_context_length || '-'" disabled /></el-form-item>
           <el-form-item :label="$t('artifacts.taskType')"><el-input :model-value="form.task_type || '-'" disabled /></el-form-item>
         </template>
+
+        <!-- Model Parameter Defaults -->
+        <el-divider content-position="left">{{ $t('artifacts.parameterDefaults') }}</el-divider>
+        <RuntimeParameterEditor v-model="parameterEditorModel" />
       </el-form>
       <template #footer><el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doSave" :loading="saving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
@@ -342,6 +346,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import RemoteFileBrowser from '@/components/RemoteFileBrowser.vue'
+import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 import { capabilityLabel, inferModelCapabilities, recommendedTestMode, testModeLabel } from '@/utils/modelCapabilities.js'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
@@ -372,6 +377,11 @@ const quantOptions = ['Q4_K_M', 'Q5_K_M', 'Q8_0', 'FP16', 'BF16', 'FP8', 'INT8',
 const editCapabilities = ref<string[]>([])
 const editDefaultTestMode = ref('auto')
 const editTaskType = ref('chat')
+const parameterDefaults = ref<any[]>([])
+const parameterEditorModel = computed({
+  get: () => ({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: parameterDefaults.value }),
+  set: (val: any) => { if (val.parameter_values_json) parameterDefaults.value = val.parameter_values_json },
+})
 const TASK_TYPE_OPTIONS = [
   { value: 'chat', labelKey: 'artifacts.task_chat' },
   { value: 'completion', labelKey: 'artifacts.task_completion' },
@@ -522,7 +532,7 @@ async function refresh() {
 async function loadNodesLocal() { loadNodes() }
 
 function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; editCapabilities.value = []; editDefaultTestMode.value = 'auto'; editTaskType.value = 'chat'; dialogVisible.value = true }
-function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); editCapabilities.value = Array.isArray(row.capabilities) ? [...row.capabilities] : []; editDefaultTestMode.value = row.default_test_mode || 'auto'; editTaskType.value = row.task_type || 'chat'; dialogVisible.value = true }
+function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); editCapabilities.value = Array.isArray(row.capabilities) ? [...row.capabilities] : []; editDefaultTestMode.value = row.default_test_mode || 'auto'; editTaskType.value = row.task_type || 'chat'; parameterDefaults.value = Array.isArray(row.parameter_defaults) ? [...row.parameter_defaults] : []; dialogVisible.value = true }
 
 async function doSave() {
   saving.value = true
@@ -533,6 +543,8 @@ async function doSave() {
     payload.capabilities = editCapabilities.value
     payload.default_test_mode = editDefaultTestMode.value
     payload.task_type = editTaskType.value
+    // Include parameter defaults (structured array)
+    payload.parameter_defaults = parameterDefaults.value
     if (editingId) await apiClient.patch(`/api/v1/model-artifacts/${editingId}`, payload)
     else await apiClient.post('/api/v1/model-artifacts', payload)
     ElMessage.success(t('artifacts.saved')); dialogVisible.value = false; await refresh()
