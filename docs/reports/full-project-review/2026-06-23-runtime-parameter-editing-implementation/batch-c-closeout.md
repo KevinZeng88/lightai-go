@@ -1,101 +1,85 @@
 # Batch C Closeout: BackendRuntime / NodeBackendRuntime Parameter Editing
 
 > Date: 2026-06-24
-> Status: PASS
+> Status: PASS (corrected)
 
 ---
 
 ## Summary
 
-Implemented BackendRuntime and NodeBackendRuntime parameter snapshot support. Added NBR snapshot reading to RunPlan resolver. Created RuntimeParameterEditor component.
+Corrected Batch C to remove BV/BR fallback from RunPlan resolver and integrate RuntimeParameterEditor into BR/NBR pages.
 
-## C1: BackendRuntime / NodeBackendRuntime API
+## Corrections Made
 
-### Changes
-- BackendRuntime PATCH handler accepts `parameter_schema_json` and `parameter_values_json`
-- NodeBackendRuntime PATCH handler accepts `parameter_schema_json` and `parameter_values_json`
-- NBR creation deep-copies `parameter_schema_json` and `parameter_values_json` from BR
-- `buildRuntimeConfigSnapshot` includes parameter fields in NBR snapshot
+### C2 Correction: Remove BV/BR Fallback
 
-### Commit
+**Original issue**: RunPlan resolver had legacy path that fell back to BackendVersion/BackendRuntime when NBR snapshot was missing.
+
+**Fix**: Removed legacy path. Resolver now returns explicit error if NBRConfigSnapshot is missing: "node backend runtime parameter snapshot is missing; recreate node backend runtime or rebuild database"
+
+**Commits**:
 ```
-8e1b41d feat(runtime): add BR and NBR parameter snapshots
-```
-
-## C2: RunPlan Resolver NBR Snapshot Reading
-
-### Changes
-- Added `NBRSnapshotInfo` and `ParameterValue` structs to resolver
-- Added `NBRConfigSnapshot` field to `ResolveInput`
-- `buildArgs` reads from NBR snapshot when available (new path) or BV/BR (legacy path)
-- `buildEnv` reads from NBR snapshot when available (new path) or BV/BR (legacy path)
-- Incremental migration — old path preserved for NBRs without snapshots
-
-### Commit
-```
-9930da5 feat(runplan): resolve backend parameters from NBR snapshots
+b8a8756 fix(runplan): remove BV/BR fallback from parameter resolution
 ```
 
-## C3: Web RuntimeParameterEditor
+### C3 Correction: Integrate RuntimeParameterEditor
 
-### Changes
-- Created `web/src/components/common/RuntimeParameterEditor.vue`
-- Supports {enabled, value} pairs for docker options
-- High-risk, list, custom groups
-- Command preview
-- i18n support
+**Original issue**: RuntimeParameterEditor component created but not integrated into pages.
 
-### Integration Status
-- Component created and tested (build passes)
-- Integration into BackendRuntimesPage deferred (existing inline components work)
-- Integration into RunnerConfigsPage deferred (existing edit dialog works)
+**Fix**: Integrated into BackendRuntimesPage and RunnerConfigsPage edit dialogs.
 
-### Commit
+**Commits**:
 ```
-e5cb298 feat(web): add RuntimeParameterEditor component
+ccb604f fix(web): wire runtime parameter editor into BR and NBR pages
 ```
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `internal/server/api/runtime_handlers.go` | BR/NBR PATCH accepts new fields, NBR creation deep-copies params |
-| `internal/server/api/node_runtime_handlers.go` | NBR PATCH accepts new fields |
-| `internal/server/runplan/resolver.go` | NBR snapshot reading, NBRSnapshotInfo struct |
-| `web/src/components/common/RuntimeParameterEditor.vue` | New component |
-
-## API Changes
-
-- `PATCH /api/v1/backend-runtimes/{id}` now accepts `parameter_schema_json` and `parameter_values_json`
-- `PATCH /api/v1/nodes/{id}/backend-runtimes/{nbr_id}` now accepts `parameter_schema_json` and `parameter_values_json`
-- NBR creation automatically copies `parameter_schema_json` and `parameter_values_json` from BR
+| `internal/server/runplan/resolver.go` | Remove BV/BR fallback, NBR-only path |
+| `internal/server/runplan/resolver_test.go` | Update tests for NBR-only path |
+| `internal/server/runplan/test_helpers_test.go` | New: ensureNbrSnapshot helper |
+| `internal/server/runplan/llamacpp_nvidia_test.go` | Add NBR snapshot to tests |
+| `internal/server/runplan/vllm_sglang_nvidia_test.go` | Add NBR snapshot to tests |
+| `internal/server/runplan/metax_huawei_test.go` | Add NBR snapshot to tests |
+| `web/src/pages/BackendRuntimesPage.vue` | Integrate RuntimeParameterEditor |
+| `web/src/pages/RunnerConfigsPage.vue` | Integrate RuntimeParameterEditor |
+| `web/src/api/runtimes.ts` | Add parameter fields to BackendRuntime |
+| `web/src/locales/en-US.ts` | Add structuredParameters key |
+| `web/src/locales/zh-CN.ts` | Add structuredParameters key |
 
 ## RunPlan Changes
 
-- New `NBRConfigSnapshot` field in `ResolveInput`
-- When present, resolver reads from NBR snapshot instead of BV/BR
-- Legacy path preserved for NBRs without snapshots
-- Full migration will happen when all NBRs have structured parameter values
+- **No fallback**: Resolver returns error if NBR snapshot missing
+- **NBR is sole source**: All runtime params read from NBR snapshot
+- **BV/BR only for creation**: BV/BR used when creating NBR, not at resolution time
+
+## Web Changes
+
+- RuntimeParameterEditor integrated into BackendRuntimesPage edit dialog
+- RuntimeParameterEditor integrated into RunnerConfigsPage edit dialog
+- parameter_values_json and parameter_schema_json included in API payloads
 
 ## `/tmp/lightai` Status
 
-**NOT updated.** Running server/agent has NOT been rebuilt. New API fields and resolver logic NOT active.
+**NOT updated.** Running server/agent has NOT been rebuilt.
 
 ## Test Results
 
 | Command | Result |
 |---------|--------|
 | `go build ./internal/server/...` | PASS |
-| `go test ./internal/server/api/...` | PASS |
 | `go test ./internal/server/runplan/...` | PASS |
 | `cd web && npm run build` | PASS |
 | `cd web && npm test` | PASS |
 
-## Unresolved Issues
+## Commits
 
-1. RuntimeParameterEditor not yet integrated into BackendRuntimesPage/RunnerConfigsPage
-2. NBR snapshot reading is incremental (old path preserved for NBRs without snapshots)
-3. Full migration to NBR-only resolver requires all NBRs to have structured parameter values
+```
+ccb604f fix(web): wire runtime parameter editor into BR and NBR pages
+b8a8756 fix(runplan): remove BV/BR fallback from parameter resolution
+```
 
 ## Git Status
 
