@@ -191,7 +191,7 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
-	for _, f := range []string{"name", "display_name", "image_name", "image_pull_policy", "vendor", "default_env_json", "docker_json", "model_mount_json", "health_check_override_json", "args_override_json", "entrypoint_override_json"} {
+	for _, f := range []string{"name", "display_name", "image_name", "image_pull_policy", "vendor", "default_env_json", "docker_json", "model_mount_json", "health_check_override_json", "args_override_json", "entrypoint_override_json", "parameter_schema_json", "parameter_values_json"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
 			if strings.HasSuffix(f, "_json") || f == "docker_json" {
@@ -778,12 +778,16 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		// This freezes the runtime configuration so future template edits do not
 		// silently change the behavior of existing NodeBackendRuntime records.
 		snapshotJSON := h.buildRuntimeConfigSnapshot(rt, runtimeID)
+		// Deep copy parameter schema and values from BackendRuntime
+		paramSchemaJSON := jsonString(rt["parameter_schema_json"])
+		paramValuesJSON := jsonString(rt["parameter_values_json"])
 		_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
-			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, tenant_id, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, parameter_schema_json, parameter_values_json, tenant_id, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			id, runtimeID, nodeID, displayName, "docker", imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
 			strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
-			status, reason, now, snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""), tid, now, now)
+			status, reason, now, snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""),
+			paramSchemaJSON, paramValuesJSON, tid, now, now)
 		if err != nil {
 			log.Error("node backend runtime insert failed", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
@@ -861,6 +865,8 @@ func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, run
 		"model_mount_json":           rt["model_mount_json"],
 		"health_check_override_json": rt["health_check_override_json"],
 		"version_snapshot_json":      rt["version_snapshot_json"],
+		"parameter_schema_json":      rt["parameter_schema_json"],
+		"parameter_values_json":      rt["parameter_values_json"],
 	}
 	return jsonString(snapshot)
 }

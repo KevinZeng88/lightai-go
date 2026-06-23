@@ -137,7 +137,7 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 			needsRecheck = true
 		}
 	}
-	for _, f := range []string{"config_snapshot_json", "device_check_json"} {
+	for _, f := range []string{"config_snapshot_json", "device_check_json", "parameter_schema_json", "parameter_values_json"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
 			args = append(args, jsonString(v))
