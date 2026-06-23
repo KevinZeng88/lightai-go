@@ -1,9 +1,9 @@
-id: sglang-v0.5.12-nvidia-cuda
-name: sglang-v0.5.12-nvidia-cuda
-display_name: SGLang v0.5.12 NVIDIA CUDA
-slug: sglang-v0-5-12-nvidia-cuda
+id: sglang-v0.5.13.post1-nvidia-cuda
+name: sglang-v0.5.13.post1-nvidia-cuda
+display_name: SGLang v0.5.13.post1 NVIDIA CUDA
+slug: sglang-v0-5-13-post1-nvidia-cuda
 backend_id: backend.sglang
-backend_version_id: sglang-v0.5.12.post1
+backend_version_id: sglang-v0.5.13.post1
 managed_by: system
 source: system
 readonly: true
@@ -12,7 +12,7 @@ hardware_family: nvidia-gpu
 accelerator_api: cuda
 runtime_distribution: official-sglang
 image_candidates:
-  - lmsysorg/sglang:v0.5.12.post1
+  - lmsysorg/sglang:v0.5.13.post1
   - lmsysorg/sglang:latest-runtime
   - lmsysorg/sglang:latest
 runner_type: docker

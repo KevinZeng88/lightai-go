@@ -388,7 +388,11 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	}
 
 	// Layer 4: Deployment.parameters_json mapped to CLI args
-	paramArgs := mapParametersToArgs(in.Deployment.Parameters, in.BackendVersion.ParameterDefs)
+	var paramErrs []error
+	paramArgs := mapParametersToArgs(in.Deployment.Parameters, in.BackendVersion.ParameterDefs, &paramErrs)
+	for _, pe := range paramErrs {
+		errors = append(errors, pe)
+	}
 	args = append(args, paramArgs...)
 
 	// Layer 4b: resource_controls from vendor_options_json
@@ -468,42 +472,33 @@ func overridePortArg(args []string, port int) []string {
 // (highest priority — user parameters from Layer 4 override defaults from Layer 1).
 // Processes in reverse so later values naturally win.
 func deduplicateArgs(args []string) []string {
-	seen := make(map[string]bool)
-	// First pass: identify all flag keys (in order, so later occurrences win).
-	type flagPair struct{ idx, valIdx int }
-	lastSeen := make(map[string]flagPair)
-	i := 0
-	for i < len(args) {
-		if strings.HasPrefix(args[i], "-") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			lastSeen[args[i]] = flagPair{idx: i, valIdx: i + 1}
-			i += 2
-		} else {
-			i++
-		}
-	}
-	// Second pass: keep only the last occurrence of each flag.
+	lastSeen := make(map[string]int) // flag -> index in result
 	var result []string
-	i = 0
-	for i < len(args) {
+	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if strings.HasPrefix(arg, "-") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			if fp, ok := lastSeen[arg]; ok && fp.idx == i {
-				// This is the last occurrence — keep it.
-				if !seen[arg] {
-					seen[arg] = true
+		if strings.HasPrefix(arg, "-") {
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				// key-value pair: flag + value
+				if idx, exists := lastSeen[arg]; exists {
+					result[idx] = arg
+					result[idx+1] = args[i+1]
+				} else {
+					lastSeen[arg] = len(result)
 					result = append(result, arg, args[i+1])
 				}
+				i++ // skip value
+			} else {
+				// standalone flag (boolean)
+				result = append(result, arg)
 			}
-			i += 2
 		} else {
 			result = append(result, arg)
-			i++
 		}
 	}
 	return result
 }
 
-func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef) []string {
+func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef, errs *[]error) []string {
 	var args []string
 	for _, def := range defs {
 		// Look up value by multiple name forms:
@@ -532,7 +527,9 @@ func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef) []s
 			if def.Default != nil {
 				val = def.Default
 			} else if def.Required {
-				// Required parameter missing — skip for now, resolver will report
+				if errs != nil {
+					*errs = append(*errs, fmt.Errorf("required parameter %q missing", def.Name))
+				}
 				continue
 			} else {
 				continue
@@ -596,7 +593,11 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 
 	// Layer 5: ModelDeployment.env_overrides_json
 	for k, v := range in.Deployment.EnvOverrides {
-		env[k] = v
+		resolved, err := substituteVars(v, vars)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("env_overrides %s: %v", k, err))
+		}
+		env[k] = resolved
 	}
 
 	return env, warnings
@@ -942,8 +943,11 @@ func computeInputHash(in ResolveInput) string {
 		"app_port":        in.Deployment.Service.AppPort,
 		"parameters":      in.Deployment.Parameters,
 		"env_overrides":   in.Deployment.EnvOverrides,
-		"accelerator_ids": in.Deployment.Placement.AcceleratorIds,
-		"node_id":         in.Deployment.Placement.NodeID,
+		"accelerator_ids":         in.Deployment.Placement.AcceleratorIds,
+		"node_id":                 in.Deployment.Placement.NodeID,
+		"assigned_gpus":           in.AssignedGPUs,
+		"node_runtime_override":   in.NodeRuntimeOverride != nil,
+		"process_start_config":    in.ProcessStartConfig != nil,
 	})
 	h := sha256.Sum256(data)
 	return fmt.Sprintf("sha256:%x", h[:8])
@@ -982,49 +986,3 @@ func minInt(a, b int) int {
 	return b
 }
 
-// buildDeviceBinding creates a vendor-specific DeviceBinding from resolver inputs.
-func buildDeviceBinding(in ResolveInput, gpuIDs []string, gpuVisibleKey string, docker DockerSpecInfo) *DeviceBinding {
-	binding := &DeviceBinding{
-		Vendor:           in.BackendRuntime.Vendor,
-		GPUVisibleEnvKey: gpuVisibleKey,
-		Privileged:       docker.Privileged,
-		IPCMode:          docker.IPCMode,
-		ShmSize:          docker.ShmSize,
-		Devices:          docker.Devices,
-		GroupAdd:         docker.GroupAdd,
-		SecurityOpt:      docker.SecurityOptions,
-		Ulimits:          docker.Ulimits,
-	}
-
-	// Collect platform accelerator indices from assigned GPUs
-	for _, g := range in.AssignedGPUs {
-		binding.AcceleratorIds = append(binding.AcceleratorIds, fmt.Sprintf("%d", g.Index))
-	}
-
-	switch strings.ToLower(in.BackendRuntime.Vendor) {
-	case "nvidia":
-		binding.Mode = "nvidia_device_request"
-		binding.VisibleDeviceIDs = gpuIDs
-		binding.GPUDriver = docker.GpuDriver
-		binding.GPUCapabilities = docker.GpuCapabilities
-	case "metax":
-		// Privileged with device paths = native device_paths mode
-		binding.Mode = "metax_device_paths"
-		for _, d := range docker.Devices {
-			binding.DevicePaths = append(binding.DevicePaths, d.HostPath)
-		}
-	case "cpu":
-		binding.Mode = "cpu_none"
-	case "huawei", "ascend":
-		// template_only: no real device binding until hardware validation + smoke evidence.
-		// Do not fabricate device bindings or suggest the runtime can actually start.
-		binding.Mode = "template_only"
-	default:
-		binding.Mode = "nvidia_device_request"
-		binding.VisibleDeviceIDs = gpuIDs
-		binding.GPUDriver = docker.GpuDriver
-		binding.GPUCapabilities = docker.GpuCapabilities
-	}
-
-	return binding
-}

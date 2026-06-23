@@ -21,10 +21,8 @@ model_mount:
   container_path: /models
   readonly: true
 docker_options:
-  gpus: all
   ipc_mode: host
   shm_size: "16gb"
-  runtime: nvidia
 env_schema:
   - name: HF_TOKEN
     optional: true
