@@ -63,6 +63,25 @@ health_check:
   success_status:
     - 200
   startup_timeout_seconds: 120
+vendor_options:
+  resource_controls:
+    gpu_memory_fraction:
+      arg: "--mem-fraction-static"
+      type: float
+      min: 0.1
+      max: 0.95
+      default: 0.9
+      semantics: static_weights_and_kv_pool
+    max_running_requests:
+      arg: "--max-running-requests"
+      type: int
+    chunked_prefill_size:
+      arg: "--chunked-prefill-size"
+      type: int
+    attention_backend:
+      arg: "--attention-backend"
+      type: enum
+      values: ["auto", "flashinfer", "triton", "fa3"]
 official_reference_note:
   - SGLang install docs: Docker images are lmsysorg/sglang and lmsysorg/sglang:latest-runtime.
   - SGLang launch command: python3 -m sglang.launch_server --model-path ... --host ... --port ...

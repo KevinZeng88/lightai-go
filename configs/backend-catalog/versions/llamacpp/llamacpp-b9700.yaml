@@ -61,6 +61,40 @@ health_check:
   path: /v1/models
   success_status:
     - 200
+vendor_options:
+  resource_controls:
+    gpu_memory_fraction:
+      supported: false
+      reason: "llama.cpp does not expose a vLLM-style GPU memory fraction. Use gpu_layers/context/batch/cache controls."
+    gpu_layers:
+      arg: "--n-gpu-layers"
+      type: string_or_int
+      values_hint: ["auto", "all"]
+    ctx_size:
+      arg: "--ctx-size"
+      type: int
+    batch_size:
+      arg: "--batch-size"
+      type: int
+    ubatch_size:
+      arg: "--ubatch-size"
+      type: int
+    cache_type_k:
+      arg: "--cache-type-k"
+      type: string
+    cache_type_v:
+      arg: "--cache-type-v"
+      type: string
+    split_mode:
+      arg: "--split-mode"
+      type: enum
+      values: ["none", "layer", "row"]
+    main_gpu:
+      arg: "--main-gpu"
+      type: int
+    tensor_split:
+      arg: "--tensor-split"
+      type: string
 official_reference_note:
   - llama.cpp tools/server README: llama-server is HTTP server with REST APIs and Web UI.
   - llama.cpp server README: supports OpenAI API-compatible chat completions, responses, embeddings routes.

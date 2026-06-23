@@ -515,6 +515,7 @@ type preflightResult struct {
 	relativePath       string
 	absolutePath       string
 	plan               *runplan.ResolvedRunPlan
+	lintResult         *runplan.LintResult
 	errs               []PreflightError
 	warns              []string
 	commandPreview     string
@@ -960,12 +961,38 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	if plan != nil {
 		pf.plan = plan
 		pf.commandPreview = runplan.EquivalentCommandPreview(plan)
+
+		// Run lint on the resolved plan.
+		envSources := make(map[string]string)
+		for k := range plan.Env {
+			envSources[k] = "platform" // simplified; actual source tracking requires layer metadata
+		}
+		dockerForLint := planRunplanDockerSpec(plan)
+		lintResult := runplan.LintRunPlan(runplan.LintInput{
+			FinalArgs:           plan.Args,
+			Env:                 plan.Env,
+			PlatformOwnedParams: runplan.DefaultLogicalParamSpecs(),
+			BackendName:         pf.backendName,
+			DockerSpec:          &dockerForLint,
+			EnvSources:          envSources,
+		})
+		pf.lintResult = &lintResult
 	} else if len(pf.errs) == 0 {
 		// Resolver returned nil plan without explicit errors — add a catch-all.
 		pf.addErr("unknown", "runplan resolution returned no plan", nil)
 	}
 
 	return pf
+}
+
+// planRunplanDockerSpec extracts a DockerSpecInfo from a ResolvedRunPlan for lint.
+func planRunplanDockerSpec(plan *runplan.ResolvedRunPlan) runplan.DockerSpecInfo {
+	return runplan.DockerSpecInfo{
+		Privileged:      plan.Privileged,
+		IPCMode:         plan.IPCMode,
+		ShmSize:         plan.ShmSize,
+		SecurityOptions: plan.SecurityOptions,
+	}
 }
 
 // applyDeploymentConfigSnapshot applies the deployment's config_snapshot_json
@@ -1839,6 +1866,19 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 		if pf.plan.Image != "" {
 			result["resolved_image"] = pf.plan.Image
 		}
+	}
+	if pf.lintResult != nil {
+		result["lint"] = pf.lintResult
+		// Merge lint errors/warnings into top-level for backward compatibility.
+		for _, f := range pf.lintResult.Findings {
+			switch f.Severity {
+			case runplan.LintSeverityError:
+				pf.warns = append(pf.warns, fmt.Sprintf("[lint] %s: %s", f.ID, f.Message))
+			case runplan.LintSeverityWarning, runplan.LintSeverityAdvisory:
+				pf.warns = append(pf.warns, fmt.Sprintf("[lint] %s: %s", f.ID, f.Message))
+			}
+		}
+		result["warnings"] = pf.warns
 	}
 
 	if valid {

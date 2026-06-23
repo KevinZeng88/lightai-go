@@ -1,0 +1,1 @@
+RuntimeError: CUDA out of memory. Tried to allocate 2.00 GiB. GPU 0 has a total capacity of 23.65 GiB of which 1.52 GiB is free. Including non-PyTorch memory, this process has 22.12 GiB memory in use. Of the allocated memory 20.89 GiB is allocated by PyTorch, and 0.73 GiB is reserved by PyTorch but unallocated.

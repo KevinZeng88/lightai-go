@@ -52,6 +52,24 @@ health_check:
   success_status:
     - 200
   startup_timeout_seconds: 120
+vendor_options:
+  resource_controls:
+    gpu_memory_fraction:
+      arg: "--gpu-memory-utilization"
+      type: float
+      min: 0.1
+      max: 0.95
+      default: 0.9
+      semantics: per_instance_backend_allocation_budget
+    max_model_len:
+      arg: "--max-model-len"
+      type: int
+    max_num_seqs:
+      arg: "--max-num-seqs"
+      type: int
+    max_num_batched_tokens:
+      arg: "--max-num-batched-tokens"
+      type: int
 official_reference_note:
   - vLLM official Docker docs: vllm/vllm-openai runs OpenAI-compatible server.
   - vLLM online serving docs: supports /v1/completions, /v1/chat/completions, /v1/embeddings.

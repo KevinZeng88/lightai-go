@@ -60,6 +60,25 @@ health_check:
   path: /v1/models
   success_status:
     - 200
+vendor_options:
+  resource_controls:
+    gpu_memory_fraction:
+      arg: "--mem-fraction-static"
+      type: float
+      min: 0.1
+      max: 0.95
+      default: 0.9
+      semantics: static_weights_and_kv_pool
+    max_running_requests:
+      arg: "--max-running-requests"
+      type: int
+    chunked_prefill_size:
+      arg: "--chunked-prefill-size"
+      type: int
+    attention_backend:
+      arg: "--attention-backend"
+      type: enum
+      values: ["auto", "flashinfer", "triton"]
 official_reference_note:
   - "SGLang 0.4.6-compatible is a vendor abstraction layer for MacaRT-SGLang and similar distributions."
   - "MacaRT-SGLang wraps SGLang 0.4.6 with MetaX MXMACA acceleration."
