@@ -555,8 +555,8 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 			DefaultEntrypoint: []string{"vllm", "serve"},
 			DefaultArgs:       []string{"{{MODEL_CONTAINER_PATH}}"},
 			ParameterDefs: []ParameterDef{
-				{Name: "--host", Default: "0.0.0.0"},
-				{Name: "--port", Default: "8000"},
+				{Name: "--host", Default: "0.0.0.0", Required: true},
+				{Name: "--port", Default: "8000", Required: true},
 				{Name: "--served-model-name"},
 				{Name: "--max-model-len"},
 			},

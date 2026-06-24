@@ -47,7 +47,7 @@
         </el-alert>
         <div v-for="param in backendParams" :key="param.key" class="param-row">
           <div class="param-header">
-            <el-checkbox v-model:checked="param.enabled" :disabled="readonly">
+            <el-checkbox v-model:checked="param.enabled" :disabled="readonly || param.required">
               {{ param.cli_name }}
               <el-tag v-if="param.required" size="small" type="danger" style="margin-left:4px">required</el-tag>
             </el-checkbox>
@@ -213,7 +213,8 @@ function syncBackendParamsFromSchema() {
       alias: def.alias || '',
       cli_name: cliName,
       required: !!def.required,
-      enabled: existing ? !!existing.enabled : !!def.required,
+      // Required params are always enabled — cannot be disabled
+      enabled: def.required ? true : (existing ? !!existing.enabled : false),
       value: existing?.value != null ? String(existing.value) : (def.default || def.value || ''),
       default: def.default || def.value || '',
       type: def.type || 'string',

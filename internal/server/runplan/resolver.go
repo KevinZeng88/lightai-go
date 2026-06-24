@@ -436,8 +436,15 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	}
 
 	// Layer 3: Deployment parameter overrides (highest priority)
+	// Policy: host and container_port are NOT allowed to be overridden by Deployment.
+	// host is a container-internal setting. container_port is controlled by service config.
 	if in.Deployment.ParameterValues != nil {
 		existingFlags := collectExistingFlags(args)
+		// Protected flags that Deployment override must not touch
+		protectedFlags := map[string]bool{
+			"--host": true, "-h": true,
+			"--port": true,
+		}
 		for _, pv := range in.Deployment.ParameterValues {
 			if !pv.Enabled {
 				continue // disabled parameters are excluded
@@ -446,6 +453,10 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 			if cliName == "" {
 				cliName = pv.Key
 			}
+			if protectedFlags[cliName] {
+				errors = append(errors, fmt.Errorf("deployment parameter %q is protected and cannot be overridden by deployment; modify at NBR or BackendRuntime layer", cliName))
+				continue
+			}
 			if existingFlags[cliName] {
 				continue // already provided by earlier layer
 			}
@@ -453,8 +464,15 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 				errors = append(errors, fmt.Errorf("deployment parameter %q is enabled but has empty value; provide a value or disable the parameter", cliName))
 				continue
 			}
+			// Substitute template variables in deployment override values.
+			valStr := fmt.Sprintf("%v", pv.Value)
+			resolved, err := substituteVars(valStr, vars)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("deployment parameter %q: %w", cliName, err))
+				continue
+			}
 			args = append(args, cliName)
-			args = append(args, fmt.Sprintf("%v", pv.Value))
+			args = append(args, resolved)
 		}
 	}
 

@@ -1,6 +1,33 @@
 package runplan
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+// buildDefaultParamValues creates default parameter values from schema defs.
+// Mirrors the server-side buildDefaultParamValuesFromSchema logic.
+func buildDefaultParamValues(defs []ParameterDef) []ParameterValue {
+	var values []ParameterValue
+	for _, def := range defs {
+		val := ""
+		if def.Default != nil {
+			val = fmt.Sprintf("%v", def.Default)
+		}
+		cliName := def.CliName
+		if cliName == "" {
+			cliName = def.Name
+		}
+		pv := ParameterValue{
+			Key:     strings.TrimLeft(def.Name, "-"),
+			CliName: cliName,
+			Enabled: def.Required && val != "",
+			Value:   val,
+		}
+		values = append(values, pv)
+	}
+	return values
+}
 
 // makeNbrSnapshotFromInput creates an NBR snapshot from ResolveInput's BV/BR data.
 // At NBR creation time, the server freezes BV default_args + BR args_override into NBR snapshot.
@@ -37,7 +64,7 @@ func makeNbrSnapshotFromInput(in ResolveInput) *NBRSnapshotInfo {
 		Docker:             in.BackendRuntime.Docker,
 		ModelMount:         in.BackendRuntime.ModelMount,
 		ParameterSchema:    in.BackendVersion.ParameterDefs,
-		ParameterValues:    []ParameterValue{},
+		ParameterValues:    buildDefaultParamValues(in.BackendVersion.ParameterDefs),
 	}
 	if in.BackendRuntime.HealthCheckOverride != nil {
 		snapshot.HealthCheckOverride = in.BackendRuntime.HealthCheckOverride
