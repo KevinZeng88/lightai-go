@@ -39,9 +39,8 @@ capabilities_json:
     embedding: /v1/embeddings
     models: /v1/models
 default_entrypoint:
-  - python3
-  - -m
-  - sglang.launch_server
+  - sglang
+  - serve
 default_args:
   - --model-path
   - "{{model_container_path}}"

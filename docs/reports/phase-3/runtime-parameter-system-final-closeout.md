@@ -18,6 +18,8 @@
 | 5 | `c9cdc90` | runtime-param: phase 5 - param trace E2E script and evidence |
 | 6 | `076bc9f` | runtime-param: phase 6 - vendor runtime verification status coverage |
 | 7 | `b296bf4` | runtime-param: phase 7 - external help documentation for vLLM/SGLang/llama.cpp |
+| Fix | `73abf06` | docs: runtime parameter system final closeout |
+| Fix | (pending) | runtime-param: SGLang entrypoint correction sglang serve |
 
 ## 2. Per-Phase Summary
 
