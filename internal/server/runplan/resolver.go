@@ -599,7 +599,7 @@ func overridePortArg(args []string, port int) []string {
 
 // deduplicateArgs removes duplicate --flag value pairs, keeping the LAST occurrence
 // (highest priority — user parameters from Layer 4 override defaults from Layer 1).
-// Processes in reverse so later values naturally win.
+// Logs a warning when duplicates are detected.
 func deduplicateArgs(args []string) []string {
 	lastSeen := make(map[string]int) // flag -> index in result
 	var result []string
@@ -609,6 +609,12 @@ func deduplicateArgs(args []string) []string {
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				// key-value pair: flag + value
 				if idx, exists := lastSeen[arg]; exists {
+					// Duplicate detected — log warning before overwriting
+					oldVal := result[idx+1]
+					newVal := args[i+1]
+					if oldVal != newVal {
+						log.Warn("runplan.deduplicate_args_conflict", "flag", arg, "old_value", oldVal, "new_value", newVal, "note", "keeping last occurrence (highest priority layer)")
+					}
 					result[idx] = arg
 					result[idx+1] = args[i+1]
 				} else {
