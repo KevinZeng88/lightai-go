@@ -19,7 +19,8 @@
 | 6 | `076bc9f` | runtime-param: phase 6 - vendor runtime verification status coverage |
 | 7 | `b296bf4` | runtime-param: phase 7 - external help documentation for vLLM/SGLang/llama.cpp |
 | Fix | `73abf06` | docs: runtime parameter system final closeout |
-| Fix | (pending) | runtime-param: SGLang entrypoint correction sglang serve |
+| Fix | `eabdbef` | runtime-param: SGLang entrypoint correction to sglang serve |
+| Fix | `5bc614a` | runtime-param: fix equivalent command preview for multi-element entrypoint |
 
 ## 2. Per-Phase Summary
 
@@ -133,7 +134,17 @@
 
 无 P0/P1/P2 待修问题。
 
-## 7. 最终 git log
+## 7. Docker SDK Spec 与 Equivalent Command 关系
+
+| 后端 | Docker SDK | Equivalent Command | 进程 argv 等价 |
+|------|-----------|-------------------|---------------|
+| vLLM | `Entrypoint=["vllm","serve"]`, `Cmd=["--model",...]` | `--entrypoint vllm image serve --model ...` | ✓ |
+| SGLang | `Entrypoint=["sglang","serve"]`, `Cmd=["--model-path",...]` | `--entrypoint sglang image serve --model-path ...` | ✓ |
+| llama.cpp | `Entrypoint=[]`, `Cmd=["-m",...]` | `image -m ...` | ✓ |
+
+Docker SDK `Entrypoint` 数组直接映射为进程 argv 前缀，`Cmd` 数组映射为后续参数。Equivalent command 使用 `--entrypoint` 设置第一个元素，其余元素放在 image 之后。两者生成的进程 argv 等价，可复制执行。
+
+## 8. 最终 git log
 
 ```
 b296bf4 runtime-param: phase 7 - external help documentation for vLLM/SGLang/llama.cpp
