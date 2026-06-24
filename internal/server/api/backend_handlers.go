@@ -1150,7 +1150,7 @@ func (h *AgentHandler) upsertBackendVersionProjection(doc backendVersionCatalogD
 		jsonString(nilToDefault(argsSchema, []interface{}{})), jsonString(nilToDefault(healthCheck, map[string]interface{}{})),
 		defaultPort, jsonString(nilToDefault(defaultImages, map[string]interface{}{})), jsonString(nilToDefault(doc.Env, map[string]interface{}{})), isDeprecated,
 		slug, managedBy, source, catalogVersion, configHash, status, doc.Description,
-		jsonString(nilToDefault(doc.Capabilities, []interface{}{})), jsonString(nilToDefault(doc.DockerOptions, map[string]interface{}{})),
+		jsonString(nilToDefault(firstNonNil(doc.CapabilitiesJSON, doc.Capabilities), []interface{}{})), jsonString(nilToDefault(doc.DockerOptions, map[string]interface{}{})),
 		jsonString(nilToDefault(modelMount, map[string]interface{}{})), jsonString(nilToDefault(doc.VendorOptions, map[string]interface{}{})),
 		boolInt(readonly), doc.Protocol, jsonString(nilToDefault(imageCandidates, []interface{}{})), valueOrDefault(doc.DefaultHost, "0.0.0.0"),
 		jsonString(nilToDefault(doc.DefaultEndpoints, map[string]interface{}{})), jsonString(nilToDefault(argsSchema, []interface{}{})),
@@ -1192,6 +1192,7 @@ type backendVersionCatalogDoc struct {
 	DefaultModelMount     interface{} `yaml:"default_model_mount,omitempty"`
 	DefaultEndpoints      interface{} `yaml:"default_endpoints,omitempty"`
 	Capabilities          interface{} `yaml:"capabilities,omitempty"`
+	CapabilitiesJSON      interface{} `yaml:"capabilities_json,omitempty"`
 	Entrypoint            interface{} `yaml:"entrypoint,omitempty"`
 	DefaultEntrypoint     interface{} `yaml:"default_entrypoint,omitempty"`
 	DefaultCommand        interface{} `yaml:"default_command,omitempty"`
@@ -1232,6 +1233,15 @@ func intFromAny(v interface{}, def int) int {
 	return def
 }
 
+func firstNonNil(vals ...interface{}) interface{} {
+	for _, v := range vals {
+		if v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
 func nilToDefault(v interface{}, def interface{}) interface{} {
 	if v == nil {
 		return def
@@ -1251,7 +1261,7 @@ func isEmptyJSON(v interface{}) bool {
 		return true
 	}
 	raw := strings.TrimSpace(rawJSONString(v, ""))
-	return raw == "" || raw == "{}" || raw == "[]"
+	return raw == "" || raw == "{}" || raw == "[]" || raw == "null"
 }
 
 func firstStringFromAny(v interface{}) string {

@@ -203,13 +203,6 @@
             <p v-if="selected.probe_results_json.level4.version_probed">{{ selected.probe_results_json.level4.version_string }}</p>
             <p v-else>{{ $t('nodeRuntimeProbe.notProbed') }}: {{ selected.probe_results_json.level4.probe_error || $t('nodeRuntimeProbe.notProbed') }}</p>
           </el-collapse-item>
-          <el-collapse-item :title="$t('nodeRuntimeProbe.backendMatch')" name="level3" v-if="selected.probe_results_json.level3">
-            <p>{{ selected.probe_results_json.level3.match_detail || $t('nodeRuntimeProbe.notChecked') }}</p>
-          </el-collapse-item>
-          <el-collapse-item :title="$t('nodeRuntimeProbe.versionProbe')" name="level4" v-if="selected.probe_results_json.level4">
-            <p v-if="selected.probe_results_json.level4.version_probed">{{ selected.probe_results_json.level4.version_string }}</p>
-            <p v-else>{{ $t('nodeRuntimeProbe.notProbed') }}: {{ selected.probe_results_json.level4.probe_error || $t('nodeRuntimeProbe.notProbed') }}</p>
-          </el-collapse-item>
         </el-collapse>
         <!-- Diagnostic notices -->
         <el-alert v-if="isShellWrapper(selected.probe_results_json?.level2?.entrypoint)" type="info" :title="$t('nodeRuntimeProbe.shellWrapper')" show-icon :closable="false" style="margin-top:8px" />
@@ -241,7 +234,10 @@
         <el-form-item :label="$t('runtimes.devices')"><el-input v-model="editDevicesText" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.volumeLines')" /></el-form-item>
         <el-form-item :label="$t('runtimes.groupAdd')"><el-input v-model="editGroupAddText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.lineSeparated')" /></el-form-item>
         <el-form-item :label="$t('runtimes.securityOpt')"><el-input v-model="editSecurityOptText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.lineSeparated')" /></el-form-item>
-        <el-form-item :label="$t('runtimes.privileged')"><el-switch v-model="editPrivileged" /></el-form-item>
+        <el-form-item :label="$t('runtimes.privileged')">
+          <el-switch v-model="editPrivileged" />
+          <span style="margin-left:8px;font-size:12px;color:var(--el-color-danger)">Docker --privileged {{ $t('runtimes.privilegedRisk') }}</span>
+        </el-form-item>
         <el-form-item :label="$t('runtimes.ipcMode')"><el-input v-model="editIpcMode" /></el-form-item>
         <el-form-item :label="$t('runtimes.shmSize')"><el-input v-model="editShmSize" /></el-form-item>
         <el-form-item :label="$t('runtimes.ulimits')"><el-input v-model="editUlimitsText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.keyValueLines')" /></el-form-item>
@@ -250,7 +246,7 @@
           <HealthCheckEditor v-model="editHealthModel" />
         </el-form-item>
         <h4>{{ $t('runtimes.structuredParameters') }}</h4>
-        <RuntimeParameterEditor v-model="editParameterModel" />
+        <RuntimeParameterEditor v-model="editParameterModel" :backend-schema="editBackendSchema" />
         <el-collapse>
           <el-collapse-item :title="$t('runnerConfigs.advancedJson')">
             <el-form-item :label="$t('runnerConfigs.snapshotJson')"><el-input v-model="editSnapshotText" type="textarea" :rows="8" /></el-form-item>
@@ -289,6 +285,7 @@ const editDevicesText = ref(''); const editGroupAddText = ref(''); const editSec
 const editPrivileged = ref(false); const editIpcMode = ref(''); const editShmSize = ref(''); const editUlimitsText = ref(''); const editHealthText = ref('{}')
 const editHealthModel = ref<Record<string, unknown>>({})
 const editParameterModel = ref({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
+const editBackendSchema = ref<any[]>([])
 
 // Wizard
 const wizardVisible = ref(false); const step = ref(0)
@@ -563,6 +560,25 @@ function showEdit(row: any) {
   editHealthText.value = summary.health || '{}'
   try { editHealthModel.value = JSON.parse(summary.health || '{}') } catch { editHealthModel.value = {} }
   editVisible.value = true
+  // Load backend schema for dynamic args rendering
+  loadEditBackendSchema(row)
+}
+
+async function loadEditBackendSchema(row: any) {
+  editBackendSchema.value = []
+  try {
+    const brId = row.backend_runtime_id
+    if (!brId) return
+    const br = await apiClient.get(`/backend-runtimes/${brId}`)
+    if (br?.backend_id) {
+      const { listBackendVersions } = await import('@/api/backends')
+      const versions = await listBackendVersions(br.backend_id)
+      const version = versions.find((v: any) => v.id === br.backend_version_id)
+      if (version?.default_args_schema_json) {
+        editBackendSchema.value = Array.isArray(version.default_args_schema_json) ? version.default_args_schema_json : []
+      }
+    }
+  } catch { editBackendSchema.value = [] }
 }
 
 async function doEdit() {

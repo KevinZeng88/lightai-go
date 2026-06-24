@@ -258,9 +258,9 @@ func workflowCreateDeployment(t *testing.T, app *workflowTestApp, fixture workfl
 			"node_id":         fixture.NodeID,
 			"accelerator_ids": []interface{}{fixture.GPUID},
 		},
-		"service_json":            fixture.Service,
-		"parameter_values_json":   fixture.Parameters,
-		"env_overrides_json":      fixture.EnvOverride,
+		"service_json":          fixture.Service,
+		"parameter_values_json": fixture.Parameters,
+		"env_overrides_json":    fixture.EnvOverride,
 	}, http.StatusCreated)
 	var deployment map[string]interface{}
 	resp.Decode(t, &deployment)

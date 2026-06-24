@@ -45,7 +45,7 @@ log "root=$root_id path=$root_path"
 rel="${MODEL#$root_path/}"
 scan="$(api POST "/api/v1/nodes/$node_id/model-paths/scan" "{\"root_id\":\"$root_id\",\"root\":\"$root_path\",\"relative_path\":\"$rel\",\"path_type\":\"directory\"}")"
 log "scan: $(echo "$scan" | json_get discovered_name 2>/dev/null || echo '?')"
-artifact="$(api POST /api/v1/model-artifacts "{\"name\":\"$PREFIX-$RUN_ID-model\",\"display_name\":\"$PREFIX model\",\"path\":\"$MODEL\",\"format\":\"huggingface\",\"task_type\":\"chat\"}")"
+artifact="$(api POST /api/v1/model-artifacts "{\"name\":\"$PREFIX-$RUN_ID-model\",\"display_name\":\"$PREFIX model\",\"path\":\"$MODEL\",\"format\":\"gguf\",\"task_type\":\"chat\"}")"
 artifact_id="$(echo "$artifact" | json_get id)"; [ -n "$artifact_id" ] || fail "artifact create failed"
 api POST "/api/v1/model-artifacts/$artifact_id/locations" "{\"node_id\":\"$node_id\",\"root_id\":\"$root_id\",\"relative_path\":\"$rel\",\"path_type\":\"file\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" >/dev/null
 log "artifact=$artifact_id"

@@ -72,9 +72,14 @@
           <el-form-item :label="$t('artifacts.taskType')"><el-input :model-value="form.task_type || '-'" disabled /></el-form-item>
         </template>
 
-        <!-- Model Parameter Defaults -->
+        <!-- Model Serving Parameter Defaults (model-specific hints, NOT Docker runtime params) -->
         <el-divider content-position="left">{{ $t('artifacts.parameterDefaults') }}</el-divider>
-        <RuntimeParameterEditor v-model="parameterEditorModel" />
+        <el-alert type="info" :closable="false" style="margin-bottom:8px">
+          {{ $t('artifacts.parameterDefaultsHint') }}
+        </el-alert>
+        <el-form-item :label="$t('artifacts.servingParams')">
+          <el-input v-model="parameterDefaultsText" type="textarea" :rows="4" placeholder="--max-model-len 4096&#10;--served-model-name my-model&#10;--gpu-memory-utilization 0.9" />
+        </el-form-item>
       </el-form>
       <template #footer><el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doSave" :loading="saving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
@@ -346,7 +351,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { useNodeLabels } from '@/composables/useNodeLabels'
 import RemoteFileBrowser from '@/components/RemoteFileBrowser.vue'
-import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 import { capabilityLabel, inferModelCapabilities, recommendedTestMode, testModeLabel } from '@/utils/modelCapabilities.js'
 const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
@@ -378,10 +382,7 @@ const editCapabilities = ref<string[]>([])
 const editDefaultTestMode = ref('auto')
 const editTaskType = ref('chat')
 const parameterDefaults = ref<any[]>([])
-const parameterEditorModel = computed({
-  get: () => ({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: parameterDefaults.value }),
-  set: (val: any) => { if (val.parameter_values_json) parameterDefaults.value = val.parameter_values_json },
-})
+const parameterDefaultsText = ref('')
 const TASK_TYPE_OPTIONS = [
   { value: 'chat', labelKey: 'artifacts.task_chat' },
   { value: 'completion', labelKey: 'artifacts.task_completion' },
@@ -531,20 +532,38 @@ async function refresh() {
 }
 async function loadNodesLocal() { loadNodes() }
 
-function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; editCapabilities.value = []; editDefaultTestMode.value = 'auto'; editTaskType.value = 'chat'; dialogVisible.value = true }
-function showEdit(row: any) { editingId = row.id; Object.assign(form.value, row); editCapabilities.value = Array.isArray(row.capabilities) ? [...row.capabilities] : []; editDefaultTestMode.value = row.default_test_mode || 'auto'; editTaskType.value = row.task_type || 'chat'; parameterDefaults.value = Array.isArray(row.parameter_defaults) ? [...row.parameter_defaults] : []; dialogVisible.value = true }
+function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; editCapabilities.value = []; editDefaultTestMode.value = 'auto'; editTaskType.value = 'chat'; parameterDefaultsText.value = ''; dialogVisible.value = true }
+function showEdit(row: any) {
+  editingId = row.id; Object.assign(form.value, row)
+  editCapabilities.value = Array.isArray(row.capabilities) ? [...row.capabilities] : []
+  editDefaultTestMode.value = row.default_test_mode || 'auto'
+  editTaskType.value = row.task_type || 'chat'
+  // Convert parameter_defaults array to text lines
+  const pd = Array.isArray(row.parameter_defaults) ? row.parameter_defaults : []
+  parameterDefaultsText.value = pd.map((p: any) => {
+    const cliName = p.cli_name || p.key || ''
+    const val = p.value != null ? String(p.value) : ''
+    return val ? `${cliName} ${val}` : cliName
+  }).filter(Boolean).join('\n')
+  dialogVisible.value = true
+}
 
 async function doSave() {
   saving.value = true
   try {
     if (!form.value.display_name) form.value.display_name = form.value.name
     const payload: any = { ...form.value }
-    // Include capabilities, default test mode, and task type (Phase C).
     payload.capabilities = editCapabilities.value
     payload.default_test_mode = editDefaultTestMode.value
     payload.task_type = editTaskType.value
-    // Include parameter defaults (structured array)
-    payload.parameter_defaults = parameterDefaults.value
+    // Convert text lines to structured parameter_defaults array
+    const lines = parameterDefaultsText.value.split('\n').map((l: string) => l.trim()).filter(Boolean)
+    payload.parameter_defaults = lines.map((line: string) => {
+      const parts = line.split(/\s+/)
+      const cliName = parts[0] || ''
+      const value = parts.slice(1).join(' ')
+      return { key: cliName.replace(/^-+/, ''), cli_name: cliName, value, type: 'string', enabled: true }
+    })
     if (editingId) await apiClient.patch(`/api/v1/model-artifacts/${editingId}`, payload)
     else await apiClient.post('/api/v1/model-artifacts', payload)
     ElMessage.success(t('artifacts.saved')); dialogVisible.value = false; await refresh()

@@ -966,14 +966,14 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	json.Unmarshal([]byte(nbrParamSchemaJSON), &nbrParamSchema)
 	json.Unmarshal([]byte(nbrParamValuesJSON), &nbrParamValues)
 	nbrSnapshot := &runplan.NBRSnapshotInfo{
-		ArgsOverride:       argsOverride,
-		DefaultEnv:         rtEnvMap,
-		EntrypointOverride: rtEntryOverride,
-		Docker:             dockerSpec,
-		ModelMount:         modelMount,
+		ArgsOverride:        argsOverride,
+		DefaultEnv:          rtEnvMap,
+		EntrypointOverride:  rtEntryOverride,
+		Docker:              dockerSpec,
+		ModelMount:          modelMount,
 		HealthCheckOverride: rtHCOverridePtr(rtHC),
-		ParameterSchema:    nbrParamSchema,
-		ParameterValues:    nbrParamValues,
+		ParameterSchema:     nbrParamSchema,
+		ParameterValues:     nbrParamValues,
 	}
 
 	// Call the real RunPlan resolver with snapshot-based RuntimeInfo.

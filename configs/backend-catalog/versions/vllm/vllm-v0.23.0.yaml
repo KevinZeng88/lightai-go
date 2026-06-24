@@ -26,6 +26,17 @@ capabilities:
   - completions
   - embeddings
   - openai_compatible
+capabilities_json:
+  supported_formats: [huggingface, safetensors]
+  supported_tasks: [chat, completion, embedding]
+  supported_capabilities: [chat, completion, embedding, vision]
+  model_path_modes: [directory]
+  serving_protocols: [openai_compatible]
+  test_endpoints:
+    chat: /v1/chat/completions
+    completion: /v1/completions
+    embedding: /v1/embeddings
+    models: /v1/models
 default_entrypoint:
   - vllm
   - serve
@@ -44,6 +55,8 @@ default_args_schema:
     optional: true
   - name: --tensor-parallel-size
     optional: true
+  - name: --pipeline-parallel-size
+    optional: true
   - name: --max-model-len
     optional: true
   - name: --gpu-memory-utilization
@@ -52,9 +65,21 @@ default_args_schema:
     optional: true
   - name: --max-num-batched-tokens
     optional: true
+  - name: --kv-cache-dtype
+    optional: true
+  - name: --dtype
+    optional: true
+  - name: --swap-space
+    optional: true
+  - name: --cpu-offload-gb
+    optional: true
   - name: --enforce-eager
     optional: true
+  - name: --safetensors-load-strategy
+    optional: true
   - name: --trust-remote-code
+    optional: true
+  - name: --download-dir
     optional: true
 health_check:
   type: http
@@ -80,6 +105,32 @@ vendor_options:
     max_num_batched_tokens:
       arg: "--max-num-batched-tokens"
       type: int
+    pipeline_parallel_size:
+      arg: "--pipeline-parallel-size"
+      type: int
+    kv_cache_dtype:
+      arg: "--kv-cache-dtype"
+      type: enum
+      values: ["auto", "fp8", "fp8_e5m2", "fp8_e4m3"]
+    dtype:
+      arg: "--dtype"
+      type: enum
+      values: ["auto", "half", "float16", "bfloat16", "float32"]
+    swap_space:
+      arg: "--swap-space"
+      type: float
+      min: 0
+      max: 128
+      default: 4
+    cpu_offload_gb:
+      arg: "--cpu-offload-gb"
+      type: float
+      min: 0
+      default: 0
+    safetensors_load_strategy:
+      arg: "--safetensors-load-strategy"
+      type: enum
+      values: ["auto", "np", "pt", "tf", "flax", "torch"]
 official_reference_note:
   - vLLM official Docker docs: vllm/vllm-openai runs OpenAI-compatible server.
   - vLLM online serving docs: supports /v1/completions, /v1/chat/completions, /v1/embeddings.

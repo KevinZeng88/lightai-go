@@ -280,11 +280,12 @@
             <template #title>
               {{ preflightErrorText(e) }}
             </template>
-            <template v-if="e.context" #default>
-              <div style="font-size:12px;color:var(--el-color-info);margin-top:4px">
-                <span v-if="e.context.node_id">node: {{ e.context.node_id }}</span>
-                <span v-if="e.context.artifact_id"> | artifact: {{ e.context.artifact_id }}</span>
-                <span v-if="e.context.runtime_id"> | runtime: {{ e.context.runtime_id }}</span>
+            <template #default>
+              <div v-if="e.code" style="font-size:11px;color:var(--el-text-color-placeholder);margin-top:2px">
+                code: {{ e.code }}
+              </div>
+              <div v-if="preflightErrorContext(e)" style="font-size:12px;color:var(--el-color-info);margin-top:4px">
+                {{ preflightErrorContext(e) }}
               </div>
             </template>
           </el-alert>
@@ -651,12 +652,25 @@ function preflightErrorText(e: any): string {
       backend_version_mismatch: 'preflight.reason.backendVersionMismatch',
       docker_image_missing: 'preflight.reason.dockerImageMissing',
       runtime_disabled: 'preflight.reason.runtimeDisabled',
+      format_mismatch: 'preflight.reason.formatMismatch',
+      path_mode_mismatch: 'preflight.reason.pathModeMismatch',
+      architecture_blocked: 'preflight.reason.architectureBlocked',
+      task_mismatch: 'preflight.reason.taskMismatch',
+      not_deployable: 'preflight.reason.notDeployable',
+      backend_capability_missing: 'preflight.reason.backendCapabilityMissing',
+      context_length_exceeded: 'preflight.reason.contextLengthExceeded',
     }
     const i18nKey = codeMap[e.code]
-    if (i18nKey) return t(i18nKey)
-    return `[${e.code}] ${e.message || ''}`
+    const msg = e.message || ''
+    if (i18nKey) return `${t(i18nKey)}${msg ? ': ' + msg : ''}`
+    return `[${e.code}] ${msg}`
   }
   return typeof e === 'string' ? e : (e.message || JSON.stringify(e))
+}
+
+function preflightErrorContext(e: any): string {
+  if (!e?.context || typeof e.context !== 'object') return ''
+  return Object.entries(e.context).map(([k, v]) => `${k}=${v}`).join(' | ')
 }
 
 async function onBackendSelected() {

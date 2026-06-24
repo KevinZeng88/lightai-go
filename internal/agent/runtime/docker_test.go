@@ -363,7 +363,7 @@ func TestDockerRuntimeDriverLogs(t *testing.T) {
 	fake.AppendLogs(c.ID, "model loading...\n")
 	fake.AppendLogs(c.ID, "model ready\n")
 
-	logs, err := driver.Logs(ctx, spec.InstanceID, LogOptions{Tail: 10})
+	logs, err := driver.Logs(ctx, c.ID, spec.InstanceID, LogOptions{Tail: 10})
 	if err != nil {
 		t.Fatalf("Logs failed: %v", err)
 	}
@@ -815,7 +815,7 @@ func TestRealDockerRuntimeDriver(t *testing.T) {
 
 	// --- Step 4: Logs ---
 	t.Log("fetching logs...")
-	logs, err := driver.Logs(ctx, instanceID, LogOptions{Tail: 10})
+	logs, err := driver.Logs(ctx, inst.ContainerID, instanceID, LogOptions{Tail: 10})
 	if err != nil {
 		t.Fatalf("Logs failed: %v", err)
 	}

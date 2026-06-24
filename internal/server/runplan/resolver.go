@@ -171,8 +171,8 @@ type DeploymentInfo struct {
 	Name               string
 	Parameters         map[string]interface{}
 	EnvOverrides       map[string]string
-	ParameterValues    []ParameterValue  // structured parameter overrides
-	DisabledParameters []ParameterValue  // disabled tombstones
+	ParameterValues    []ParameterValue // structured parameter overrides
+	DisabledParameters []ParameterValue // disabled tombstones
 	Placement          PlacementInfo
 	Service            ServiceInfo
 }
@@ -423,8 +423,15 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 				errors = append(errors, fmt.Errorf("parameter %q is enabled but has empty value; provide a value or disable the parameter", cliName))
 				continue
 			}
+			// Substitute template variables (e.g. {{MODEL_CONTAINER_PATH}}) in parameter values.
+			valStr := fmt.Sprintf("%v", pv.Value)
+			resolved, err := substituteVars(valStr, vars)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("parameter %q: %w", cliName, err))
+				continue
+			}
 			args = append(args, cliName)
-			args = append(args, fmt.Sprintf("%v", pv.Value))
+			args = append(args, resolved)
 		}
 	}
 
@@ -1094,21 +1101,21 @@ func defaultVisibleEnvKey(vendor string) string {
 
 func computeInputHash(in ResolveInput) string {
 	data, _ := json.Marshal(map[string]interface{}{
-		"backend":         in.Backend.Name,
-		"version":         in.BackendVersion.Version,
-		"runtime":         in.BackendRuntime.ID,
-		"artifact":        in.Artifact.Path,
-		"deployment":      in.Deployment.ID,
-		"host_port":       in.Deployment.Service.HostPort,
-		"container_port":  in.Deployment.Service.ContainerPort,
-		"app_port":        in.Deployment.Service.AppPort,
-		"parameters":      in.Deployment.Parameters,
-		"env_overrides":   in.Deployment.EnvOverrides,
-		"accelerator_ids":         in.Deployment.Placement.AcceleratorIds,
-		"node_id":                 in.Deployment.Placement.NodeID,
-		"assigned_gpus":           in.AssignedGPUs,
-		"node_runtime_override":   in.NodeRuntimeOverride != nil,
-		"process_start_config":    in.ProcessStartConfig != nil,
+		"backend":               in.Backend.Name,
+		"version":               in.BackendVersion.Version,
+		"runtime":               in.BackendRuntime.ID,
+		"artifact":              in.Artifact.Path,
+		"deployment":            in.Deployment.ID,
+		"host_port":             in.Deployment.Service.HostPort,
+		"container_port":        in.Deployment.Service.ContainerPort,
+		"app_port":              in.Deployment.Service.AppPort,
+		"parameters":            in.Deployment.Parameters,
+		"env_overrides":         in.Deployment.EnvOverrides,
+		"accelerator_ids":       in.Deployment.Placement.AcceleratorIds,
+		"node_id":               in.Deployment.Placement.NodeID,
+		"assigned_gpus":         in.AssignedGPUs,
+		"node_runtime_override": in.NodeRuntimeOverride != nil,
+		"process_start_config":  in.ProcessStartConfig != nil,
 	})
 	h := sha256.Sum256(data)
 	return fmt.Sprintf("sha256:%x", h[:8])
@@ -1146,4 +1153,3 @@ func minInt(a, b int) int {
 	}
 	return b
 }
-

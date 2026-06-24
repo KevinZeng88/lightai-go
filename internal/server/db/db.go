@@ -1637,18 +1637,18 @@ func (db *DB) migrateV27() error {
 
 // migrateV28 adds structured parameter schema columns for runtime parameter editing.
 func (db *DB) migrateV28() error {
-addColumn := func(table, column, def string) {
+	addColumn := func(table, column, def string) {
 		if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s TEXT NOT NULL DEFAULT '%s'", table, column, def)); err != nil {
 			log.Warn("db.migrateV28 add column warning", "error", err, "table", table, "column", column)
 		}
 	}
-addColumn("backend_runtimes", "parameter_schema_json", "[]")
-addColumn("backend_runtimes", "parameter_values_json", "[]")
-addColumn("node_backend_runtimes", "parameter_schema_json", "[]")
-addColumn("node_backend_runtimes", "parameter_values_json", "[]")
-addColumn("model_deployments", "parameter_values_json", "[]")
-addColumn("model_deployments", "disabled_parameters_json", "[]")
-addColumn("model_artifacts", "parameter_defaults_json", "[]")
+	addColumn("backend_runtimes", "parameter_schema_json", "[]")
+	addColumn("backend_runtimes", "parameter_values_json", "[]")
+	addColumn("node_backend_runtimes", "parameter_schema_json", "[]")
+	addColumn("node_backend_runtimes", "parameter_values_json", "[]")
+	addColumn("model_deployments", "parameter_values_json", "[]")
+	addColumn("model_deployments", "disabled_parameters_json", "[]")
+	addColumn("model_artifacts", "parameter_defaults_json", "[]")
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_version (version, description) VALUES (28, 'V28: structured parameter schema columns for runtime parameter editing')`); err != nil {
 		return err
 	}

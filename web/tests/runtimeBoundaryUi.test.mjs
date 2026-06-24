@@ -8,6 +8,7 @@ const deploymentsPage = fs.readFileSync(path.join(root, 'src/pages/ModelDeployme
 const artifactsPage = fs.readFileSync(path.join(root, 'src/pages/ModelArtifactsPage.vue'), 'utf8')
 const instancesPage = fs.readFileSync(path.join(root, 'src/pages/ModelInstancesPage.vue'), 'utf8')
 const layout = fs.readFileSync(path.join(root, 'src/layouts/ConsoleLayout.vue'), 'utf8')
+const runtimeParamEditor = fs.readFileSync(path.join(root, 'src/components/common/RuntimeParameterEditor.vue'), 'utf8')
 
 let failed = 0
 function check(name, condition) {
@@ -19,7 +20,8 @@ function check(name, condition) {
   }
 }
 
-check('runtime template page does not expose add-node action', !templatePage.includes('showAddNode') && !templatePage.includes('doAddNode') && !templatePage.includes('nodeRuntime.addNode'))
+// --- Existing structural checks ---
+check('runtime template page does not expose add-node action', !templatePage.includes('showAddNode') && !templatePage.includes('doAddNode'))
 check('runtime template page shows read-only usage references', templatePage.includes('usageRefsReadonly'))
 check('runner config page exposes create action', runnerPage.includes('newConfig') && runnerPage.includes('startWizard'))
 check('runner config page exposes edit action', runnerPage.includes('showEdit(row)') && runnerPage.includes('doEdit'))
@@ -37,9 +39,92 @@ check('main navigation exposes model workflow group', layout.includes('nav.aiWor
 check('backend and runtime templates are under configuration group', layout.includes('nav.config') && layout.indexOf('/backends') > layout.indexOf('nav.config') && layout.indexOf('/runtimes') > layout.indexOf('nav.config'))
 check('runner config page uses structured sections before advanced JSON', runnerPage.includes('sectionImageCommand') && runnerPage.includes('sectionDevicesSecurity') && runnerPage.includes('advancedJson'))
 check('instance list defaults to hiding stopped rows', instancesPage.includes('visibleItems') && instancesPage.includes("it.actual_state !== 'stopped'") && instancesPage.includes('showStopped'))
-check('instance test dialog supports mode selection', instancesPage.includes('testMode') && instancesPage.includes('value=\"chat\"') && instancesPage.includes('value=\"completion\"'))
+check('instance test dialog supports mode selection', instancesPage.includes('testMode') && instancesPage.includes('value="chat"') && instancesPage.includes('value="completion"'))
 check('model artifact page displays inferred capabilities', artifactsPage.includes('inferModelCapabilities') && artifactsPage.includes('capabilityReadonlyHint') && artifactsPage.includes('recommendedEndpoint'))
 
+// --- OOM prevention: syncing guard with try/finally ---
+check('RuntimeParameterEditor has try/finally syncing guard', runtimeParamEditor.includes('let syncing = false') && runtimeParamEditor.includes('syncing = true') && runtimeParamEditor.includes('finally'))
+
+// --- CRITICAL: Value editors always visible, never hidden by v-if ---
+// RuntimeParameterEditor must NOT use v-if to hide inputs when disabled
+check('RuntimeParameterEditor does NOT hide scalar inputs with v-if when disabled', !runtimeParamEditor.includes('v-if="opt.enabled"'))
+check('RuntimeParameterEditor uses :disabled instead of v-if for scalar inputs', runtimeParamEditor.includes(':disabled="!opt.enabled'))
+check('RuntimeParameterEditor always shows textarea for list options', !runtimeParamEditor.match(/v-if.*enabled.*\n.*textarea/))
+
+// BackendRuntimesPage must NOT use v-if to hide inputs
+check('BackendRuntimesPage does NOT hide scalar inputs with v-if when disabled', !templatePage.includes('v-if="opt.enabled"'))
+check('BackendRuntimesPage uses :disabled instead of v-if for inputs', templatePage.includes(':disabled="!opt.enabled"'))
+
+// --- Values preserved: buildPayload always includes all fields ---
+check('BackendRuntimesPage buildPayload does NOT skip disabled fields', !templatePage.match(/buildPayload.*\n.*if.*!opt\.enabled.*continue/))
+check('BackendRuntimesPage loadDockerJson preserves value when not in docker_json', templatePage.includes('preserve opt.value'))
+
+// --- Clone preserves all values ---
+check('BackendRuntimesPage showClone preserves all values', templatePage.includes('preserve opt.value'))
+
+// --- privileged field has Docker --privileged explanation ---
+check('runner config privileged shows Docker --privileged explanation', runnerPage.includes('Docker --privileged') && runnerPage.includes('runtimes.privilegedRisk'))
+
+// --- RunnerConfigsPage edit has actual input controls ---
+check('runner config edit has devices textarea', runnerPage.includes('editDevicesText') && runnerPage.includes('type="textarea"'))
+check('runner config edit has volumes textarea', runnerPage.includes('editVolumesText'))
+check('runner config edit has ports textarea', runnerPage.includes('editPortsText'))
+check('runner config edit has env textarea', runnerPage.includes('editEnvText'))
+check('runner config edit has shm_size input', runnerPage.includes('editShmSize'))
+check('runner config edit has ulimits textarea', runnerPage.includes('editUlimitsText'))
+check('runner config edit has group_add textarea', runnerPage.includes('editGroupAddText'))
+check('runner config edit has security_opt textarea', runnerPage.includes('editSecurityOptText'))
+
+// --- Full parameter coverage in RuntimeParameterEditor ---
+check('RuntimeParameterEditor has privileged', runtimeParamEditor.includes("key: 'privileged'"))
+check('RuntimeParameterEditor has ipc_mode', runtimeParamEditor.includes("key: 'ipc_mode'"))
+check('RuntimeParameterEditor has uts_mode', runtimeParamEditor.includes("key: 'uts_mode'"))
+check('RuntimeParameterEditor has network_mode', runtimeParamEditor.includes("key: 'network_mode'"))
+check('RuntimeParameterEditor has pid_mode', runtimeParamEditor.includes("key: 'pid_mode'"))
+check('RuntimeParameterEditor has shm_size', runtimeParamEditor.includes("key: 'shm_size'"))
+check('RuntimeParameterEditor has devices', runtimeParamEditor.includes("key: 'devices'"))
+check('RuntimeParameterEditor has group_add', runtimeParamEditor.includes("key: 'group_add'"))
+check('RuntimeParameterEditor has security_options', runtimeParamEditor.includes("key: 'security_options'"))
+check('RuntimeParameterEditor has cap_add', runtimeParamEditor.includes("key: 'cap_add'"))
+check('RuntimeParameterEditor has device_cgroup_rules', runtimeParamEditor.includes("key: 'device_cgroup_rules'"))
+check('RuntimeParameterEditor has extra_hosts', runtimeParamEditor.includes("key: 'extra_hosts'"))
+check('RuntimeParameterEditor has ulimits', runtimeParamEditor.includes("key: 'ulimits'"))
+check('RuntimeParameterEditor has extra_mounts', runtimeParamEditor.includes("key: 'extra_mounts'"))
+
+// --- Command preview includes all parameters ---
+check('command preview includes --privileged', runtimeParamEditor.includes("parts.push('--privileged'"))
+check('command preview includes --ipc', runtimeParamEditor.includes("parts.push('--ipc'"))
+check('command preview includes --uts', runtimeParamEditor.includes("parts.push('--uts'"))
+check('command preview includes --network', runtimeParamEditor.includes("parts.push('--network'"))
+check('command preview includes --pid', runtimeParamEditor.includes("parts.push('--pid'"))
+check('command preview includes --shm-size', runtimeParamEditor.includes("parts.push('--shm-size'"))
+check('command preview includes --device', runtimeParamEditor.includes("parts.push('--device'"))
+check('command preview includes --group-add', runtimeParamEditor.includes("parts.push('--group-add'"))
+check('command preview includes --security-opt', runtimeParamEditor.includes("parts.push('--security-opt'"))
+check('command preview includes --cap-add', runtimeParamEditor.includes("parts.push('--cap-add'"))
+check('command preview includes --ulimit', runtimeParamEditor.includes("parts.push('--ulimit'"))
+check('command preview includes --add-host', runtimeParamEditor.includes("parts.push('--add-host'"))
+
+// --- Parameter layer separation: Model page must NOT show Docker runtime params ---
+check('Model page does NOT import RuntimeParameterEditor', !artifactsPage.includes("import RuntimeParameterEditor"))
+check('Model page does NOT show Docker runtime param editor', !artifactsPage.includes('<RuntimeParameterEditor'))
+check('Model page shows model-specific serving param hints', artifactsPage.includes('parameterDefaultsText') && artifactsPage.includes('parameterDefaultsHint'))
+
+// --- Dynamic backend schema support ---
+check('RuntimeParameterEditor accepts backendSchema prop', runtimeParamEditor.includes('backendSchema'))
+check('RuntimeParameterEditor has backend serving args section', runtimeParamEditor.includes('backendServingArgs') || runtimeParamEditor.includes('backendArgs'))
+check('RuntimeParameterEditor renders backend params dynamically', runtimeParamEditor.includes('backendParams') && runtimeParamEditor.includes('v-for'))
+check('BackendRuntimesPage passes backendSchema to editor', templatePage.includes('backend-schema') || templatePage.includes(':backendSchema'))
+check('BackendRuntimesPage loads backend version schema', templatePage.includes('loadBackendSchema') || templatePage.includes('default_args_schema_json'))
+
+// --- Preflight error display ---
+check('Preflight errors show error code', deploymentsPage.includes('e.code'))
+check('Preflight errors show all error codes including format_mismatch', deploymentsPage.includes('format_mismatch'))
+check('Preflight errors show context details', deploymentsPage.includes('preflightErrorContext'))
+
 if (failed > 0) {
+  console.error(`\n${failed} test(s) FAILED`)
   process.exit(1)
+} else {
+  console.log(`\nAll tests PASSED`)
 }

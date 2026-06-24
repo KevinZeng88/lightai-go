@@ -1182,21 +1182,16 @@ func processLogsTask(ctx context.Context, task register.AgentTask, result *regis
 
 	driver := agentruntime.NewDockerRuntimeDriver(realCli)
 
-	// Use container_id or container_name to locate; fall back to instance-derived name.
-	targetID := payload.ContainerID
-	if targetID == "" {
-		targetID = payload.ContainerName
-	}
-	if targetID == "" {
-		targetID = payload.InstanceID
-	}
+	// Use container_id (Docker hex ID) as primary, instanceID for fallback name derivation.
+	containerID := payload.ContainerID
+	instanceID := payload.InstanceID
 
-	logs, err := driver.Logs(ctx, targetID, agentruntime.LogOptions{Tail: payload.Tail, Since: payload.Since})
+	logs, err := driver.Logs(ctx, containerID, instanceID, agentruntime.LogOptions{Tail: payload.Tail, Since: payload.Since})
 	if err != nil {
 		log.Error("logs task failed",
 			"task_id", task.ID,
 			"instance_id", payload.InstanceID,
-			"target_id", targetID,
+			"container_id", containerID,
 			"error", err,
 		)
 		result.Success = false

@@ -394,15 +394,22 @@ func (d *DockerRuntimeDriver) Inspect(ctx context.Context, instanceID string) (*
 }
 
 // Logs returns log output from the instance's container.
-// The instanceID parameter can be an instance UUID (from which the container
-// name is derived) or a direct container ID/name.
-func (d *DockerRuntimeDriver) Logs(ctx context.Context, instanceID string, opts LogOptions) (*RuntimeLogs, error) {
-	// Try the given ID directly first (Docker supports container IDs and names).
-	// Fall back to the derived container name from instance ID.
-	target := instanceID
-	if _, err := d.client.ContainerInspect(ctx, target); err != nil {
-		// Try derived name.
+// containerID is the Docker hex ID (primary lookup).
+// instanceID is the LightAI instance UUID (used for fallback name derivation).
+// If containerID is empty, instanceID is used to derive the container name.
+func (d *DockerRuntimeDriver) Logs(ctx context.Context, containerID string, instanceID string, opts LogOptions) (*RuntimeLogs, error) {
+	target := containerID
+	if target == "" {
 		target = containerNameFromInstance(instanceID)
+	} else {
+		// Verify the container exists; if not, fall back to instance-derived name.
+		if _, err := d.client.ContainerInspect(ctx, target); err != nil {
+			if instanceID != "" {
+				target = containerNameFromInstance(instanceID)
+			} else {
+				return nil, fmt.Errorf("logs: container %s not found and no instance ID for fallback: %w", containerID, err)
+			}
+		}
 	}
 
 	stdout, stderr, err := d.client.ContainerLogs(ctx, target, LogFetchOptions{
@@ -415,9 +422,6 @@ func (d *DockerRuntimeDriver) Logs(ctx context.Context, instanceID string, opts 
 		return nil, fmt.Errorf("logs: %w", err)
 	}
 
-	// For the real Docker client, the multiplexed stream has been decoded
-	// into separate stdout and stderr strings. The fake client also returns
-	// separated output (stdout only for now).
 	return &RuntimeLogs{
 		Stdout: stdout,
 		Stderr: stderr,

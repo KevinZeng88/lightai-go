@@ -49,10 +49,10 @@ func makeTestInput() ResolveInput {
 			ArgsOverride: []string{
 				"{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}",
 				"--served-model-name", "{{served_model_name}}", // BV default_args, frozen at NBR creation
-				"--enforce-eager", // BV default_backend_params, frozen at NBR creation
+				"--enforce-eager",     // BV default_backend_params, frozen at NBR creation
 				"--trust-remote-code", // BR args_override
 			},
-			DefaultEnv:   map[string]string{"GLOBAL_ENV": "1", "RUNTIME_VAR": "1", "CUDA_VISIBLE_DEVICES": "0", "VLLM_USE_MODELSCOPE": "true"},
+			DefaultEnv:         map[string]string{"GLOBAL_ENV": "1", "RUNTIME_VAR": "1", "CUDA_VISIBLE_DEVICES": "0", "VLLM_USE_MODELSCOPE": "true"},
 			EntrypointOverride: []string{"vllm", "serve"},
 			Docker: DockerSpecInfo{
 				Privileged: true, IPCMode: "host", ShmSize: "10g",
@@ -1061,7 +1061,7 @@ func TestBuildEnvFiltersNonScalarValues(t *testing.T) {
 		BackendVersion: &VersionInfo{
 			Env: map[string]string{
 				"CUDA_VISIBLE_DEVICES": "0",
-				"VLLM_USE_MODELSCOPE": "false",
+				"VLLM_USE_MODELSCOPE":  "false",
 			},
 		},
 		BackendRuntime: &RuntimeInfo{
@@ -1094,8 +1094,8 @@ func TestBuildEnvSkipsEmptyValues(t *testing.T) {
 		},
 		BackendVersion: &VersionInfo{
 			Env: map[string]string{
-				"VALID_KEY":   "valid_value",
-				"EMPTY_KEY":   "",
+				"VALID_KEY": "valid_value",
+				"EMPTY_KEY": "",
 			},
 		},
 		BackendRuntime: &RuntimeInfo{

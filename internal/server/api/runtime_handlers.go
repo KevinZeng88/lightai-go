@@ -778,15 +778,26 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		// This freezes the runtime configuration so future template edits do not
 		// silently change the behavior of existing NodeBackendRuntime records.
 		snapshotJSON := h.buildRuntimeConfigSnapshot(rt, runtimeID)
-		// Deep copy parameter schema and values from BackendRuntime
-		// Default to empty arrays if not set on the BR
+		// Deep copy parameter schema and values from BackendRuntime.
+		// If BR has no parameter_schema_json, fall back to BackendVersion's default_args_schema_json.
 		paramSchemaJSON := jsonString(rt["parameter_schema_json"])
+		if paramSchemaJSON == "null" || paramSchemaJSON == "" || paramSchemaJSON == "[]" {
+			// Try BackendVersion's default_args_schema_json
+			bvID := strVal(rt, "backend_version_id", "")
+			if bvID != "" {
+				var bvSchema string
+				if err := h.DB.QueryRow(`SELECT COALESCE(default_args_schema_json,'[]') FROM backend_versions WHERE id=?`, bvID).Scan(&bvSchema); err == nil && bvSchema != "" && bvSchema != "null" && bvSchema != "[]" {
+					paramSchemaJSON = bvSchema
+				}
+			}
+		}
 		if paramSchemaJSON == "null" || paramSchemaJSON == "" {
 			paramSchemaJSON = "[]"
 		}
 		paramValuesJSON := jsonString(rt["parameter_values_json"])
-		if paramValuesJSON == "null" || paramValuesJSON == "" {
-			paramValuesJSON = "[]"
+		if paramValuesJSON == "null" || paramValuesJSON == "" || paramValuesJSON == "[]" {
+			// If no parameter values set, initialize from schema defaults for required params.
+			paramValuesJSON = h.buildDefaultParamValuesFromSchema(paramSchemaJSON)
 		}
 		_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
 			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, parameter_schema_json, parameter_values_json, tenant_id, created_at, updated_at)
@@ -855,6 +866,23 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 // buildRuntimeConfigSnapshot captures a frozen config snapshot from a BackendRuntime.
 // This is called only at NodeBackendRuntime creation time (not on check/validate).
 func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID string) string {
+	// Read raw default_env_json directly from DB to avoid redaction in snapshot.
+	// The snapshot is an internal frozen config, not an API response.
+	var rawDefEnv string
+	h.DB.QueryRow(`SELECT COALESCE(default_env_json,'{}') FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&rawDefEnv)
+
+	// Merge BackendVersion's default_args into args_override if BR has no args.
+	argsOverride := rt["args_override_json"]
+	if isEmptyJSON(argsOverride) {
+		bvID := strVal(rt, "backend_version_id", "")
+		if bvID != "" {
+			var bvArgs string
+			if err := h.DB.QueryRow(`SELECT COALESCE(default_args_json,'[]') FROM backend_versions WHERE id=?`, bvID).Scan(&bvArgs); err == nil && bvArgs != "" && bvArgs != "null" && bvArgs != "[]" {
+				argsOverride = json.RawMessage(bvArgs)
+			}
+		}
+	}
+
 	snapshot := map[string]interface{}{
 		"source_runtime_id":          runtimeID,
 		"source_runtime_name":        strVal(rt, "name", ""),
@@ -866,8 +894,8 @@ func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, run
 		"image_name":                 strVal(rt, "image_name", ""),
 		"image_pull_policy":          strVal(rt, "image_pull_policy", "if_not_present"),
 		"entrypoint_override_json":   rt["entrypoint_override_json"],
-		"args_override_json":         rt["args_override_json"],
-		"default_env_json":           rt["default_env_json"],
+		"args_override_json":         argsOverride,
+		"default_env_json":           json.RawMessage(rawDefEnv),
 		"docker_json":                rt["docker_json"],
 		"model_mount_json":           rt["model_mount_json"],
 		"health_check_override_json": rt["health_check_override_json"],
@@ -876,6 +904,45 @@ func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, run
 		"parameter_values_json":      rt["parameter_values_json"],
 	}
 	return jsonString(snapshot)
+}
+
+// buildDefaultParamValuesFromSchema creates default parameter_values_json from a
+// parameter schema. For required parameters with a default/template value, it
+// creates an enabled entry. For optional parameters, it creates a disabled entry
+// with the default value preserved.
+func (h *AgentHandler) buildDefaultParamValuesFromSchema(schemaJSON string) string {
+	var schema []struct {
+		Name     string `json:"name"`
+		Alias    string `json:"alias"`
+		Required bool   `json:"required"`
+		Optional bool   `json:"optional"`
+		Default  string `json:"default"`
+		Value    string `json:"value"`
+	}
+	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil || len(schema) == 0 {
+		return "[]"
+	}
+	var values []map[string]interface{}
+	for _, def := range schema {
+		cliName := def.Name
+		val := def.Default
+		if val == "" {
+			val = def.Value
+		}
+		entry := map[string]interface{}{
+			"key":      strings.TrimLeft(def.Name, "-"),
+			"cli_name": cliName,
+			"name":     def.Name,
+			"enabled":  def.Required && val != "",
+			"value":    val,
+			"required": def.Required,
+		}
+		if def.Alias != "" {
+			entry["alias"] = def.Alias
+		}
+		values = append(values, entry)
+	}
+	return jsonString(values)
 }
 
 func (h *AgentHandler) evaluateNodeBackendRuntime(nodeID, vendor, imageRef string, imagePresent, dockerAvailable bool) (string, string) {
@@ -1072,10 +1139,10 @@ func getVersionProbeConfig(rt map[string]interface{}) map[string]interface{} {
 }
 
 func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, source_backend_id, source_backend_version_id, source_version_revision, version_snapshot_json, created_at, updated_at FROM backend_runtimes WHERE id = ?`, id)
-	var rid, name, dn, bid, bvid, stn, vendor, rt, img, ipp, eoj, aoj, defEnv, dj, mmj, hcoj, tid, sourceBID, sourceBVID, sourceRevision, versionSnapshot, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, source_backend_id, source_backend_version_id, source_version_revision, version_snapshot_json, parameter_schema_json, parameter_values_json, created_at, updated_at FROM backend_runtimes WHERE id = ?`, id)
+	var rid, name, dn, bid, bvid, stn, vendor, rt, img, ipp, eoj, aoj, defEnv, dj, mmj, hcoj, tid, sourceBID, sourceBVID, sourceRevision, versionSnapshot, paramSchema, paramValues, ca, ua string
 	var isB, isE int
-	if err := row.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &img, &ipp, &eoj, &aoj, &defEnv, &dj, &mmj, &hcoj, &isB, &isE, &tid, &sourceBID, &sourceBVID, &sourceRevision, &versionSnapshot, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &img, &ipp, &eoj, &aoj, &defEnv, &dj, &mmj, &hcoj, &isB, &isE, &tid, &sourceBID, &sourceBVID, &sourceRevision, &versionSnapshot, &paramSchema, &paramValues, &ca, &ua); err != nil {
 		return nil
 	}
 	return map[string]interface{}{
@@ -1088,6 +1155,7 @@ func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {
 		"is_builtin": isB == 1, "is_editable": isE == 1, "tenant_id": tid,
 		"source_backend_id": sourceBID, "source_backend_version_id": sourceBVID,
 		"source_version_revision": sourceRevision, "version_snapshot_json": json.RawMessage(versionSnapshot),
+		"parameter_schema_json": json.RawMessage(paramSchema), "parameter_values_json": json.RawMessage(paramValues),
 		"created_at": ca, "updated_at": ua,
 	}
 }

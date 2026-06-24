@@ -29,7 +29,7 @@ type RuntimeDriver interface {
 	Inspect(ctx context.Context, instanceID string) (*RuntimeInstanceStatus, error)
 
 	// Logs returns recent log output for an instance.
-	Logs(ctx context.Context, instanceID string, opts LogOptions) (*RuntimeLogs, error)
+	Logs(ctx context.Context, containerID string, instanceID string, opts LogOptions) (*RuntimeLogs, error)
 }
 
 // ==========================================================================

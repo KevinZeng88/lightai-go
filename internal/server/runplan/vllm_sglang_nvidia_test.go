@@ -441,7 +441,7 @@ func TestGetParamMatchesCLIFormatNames(t *testing.T) {
 			ParameterValues: []ParameterValue{
 				{Key: "max_model_len", CliName: "--max-model-len", Type: "int", Enabled: true, Value: 16384.0},
 			},
-			Service:    ServiceInfo{HostPort: 8004},
+			Service: ServiceInfo{HostPort: 8004},
 		},
 		InstanceID: "inst", Node: &NodeInfo{ID: "n", IP: "127.0.0.1"},
 		AssignedGPUs: []GPUInfo{{Index: 0, Vendor: "nvidia"}},

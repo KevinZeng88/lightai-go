@@ -27,6 +27,17 @@ capabilities:
   - completions
   - embeddings
   - openai_compatible
+capabilities_json:
+  supported_formats: [huggingface, safetensors]
+  supported_tasks: [chat, completion, embedding]
+  supported_capabilities: [chat, completion, embedding]
+  model_path_modes: [directory]
+  serving_protocols: [openai_compatible]
+  test_endpoints:
+    chat: /v1/chat/completions
+    completion: /v1/completions
+    embedding: /v1/embeddings
+    models: /v1/models
 default_entrypoint:
   - python3
   - -m
@@ -71,6 +82,7 @@ health_check:
   path: /v1/models
   success_status:
     - 200
+  startup_timeout_seconds: 120
 vendor_options:
   resource_controls:
     gpu_memory_fraction:
