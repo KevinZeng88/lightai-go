@@ -1,0 +1,1 @@
+docker run -d --name lightai-e913f967-f19 --ipc host --shm-size 32gb --gpus "device=0" -v /home/kzeng/models/Qwen3-0.6B-Instruct-2512:/models/Qwen3-0.6B-Instruct-2512:ro -e CUDA_VISIBLE_DEVICES=0 -p 8098:30000/tcp --entrypoint python3 -m sglang.launch_server lmsysorg/sglang:latest --model-path /models/Qwen3-0.6B-Instruct-2512 --host 0.0.0.0 --port 30000
