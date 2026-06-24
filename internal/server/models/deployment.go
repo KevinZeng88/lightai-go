@@ -12,7 +12,6 @@ type ModelDeployment struct {
 	Replicas                   int    `json:"replicas"`
 	PlacementJSON              string `json:"placement_json"`
 	ServiceJSON                string `json:"service_json"`
-	ParametersJSON             string `json:"parameters_json"`
 	EnvOverridesJSON           string `json:"env_overrides_json"`
 	ConfigSnapshotJSON         string `json:"config_snapshot_json"`
 	SourceBackendRuntimeID     string `json:"source_backend_runtime_id"`

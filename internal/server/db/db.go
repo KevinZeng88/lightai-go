@@ -863,7 +863,6 @@ func (db *DB) migrateV10() error {
 		replicas INTEGER NOT NULL DEFAULT 1,
 		placement_json TEXT NOT NULL DEFAULT '{}',
 		service_json TEXT NOT NULL DEFAULT '{}',
-		parameters_json TEXT NOT NULL DEFAULT '{}',
 		env_overrides_json TEXT NOT NULL DEFAULT '{}',
 		desired_state TEXT NOT NULL DEFAULT 'stopped',
 		status TEXT NOT NULL DEFAULT 'stopped',

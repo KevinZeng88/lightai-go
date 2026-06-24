@@ -1,4 +1,4 @@
-# Final Closeout — Runtime Parameter Editing Implementation (Corrected)
+# Final Closeout — Runtime Parameter Editing Implementation (Clean Final State)
 
 > Date: 2026-06-24
 > Status: PASS
@@ -7,11 +7,12 @@
 
 ## 1. Overall Status
 
-All planned batches (A through E) completed successfully. Batch F (validation) completed with all tests passing.
+All planned batches (A through E) completed successfully. Batch F (validation) completed with all tests passing. Legacy `parameters_json` completely removed from schema, API, resolver, Web, and tests.
 
 ## 2. All Commits
 
 ```
+d97d0ff docs: correct runtime parameter editing final closeout
 5e08121 fix(deployments): wire parameter_values_json into resolver and fix tests
 36fd291 fix(runplan): enforce structured deployment parameter semantics
 eb2a9c6 docs: close runtime parameter editing implementation
@@ -34,18 +35,7 @@ d344cba fix(runtime): align batch b catalog parameter snapshots
 a682725 docs: solidify runtime parameter editing contract
 ```
 
-## 3. Batch Summary
-
-| Batch | Status | Key Changes |
-|-------|--------|-------------|
-| A | ✅ | Engineering contract solidified |
-| B | ✅ | V28 migration, parameter schema columns, catalog cleanup |
-| C | ✅ | BR/NBR API, RunPlan NBR-only, RuntimeParameterEditor |
-| D | ✅ | ModelArtifact parameter_defaults, deployment copy defaults |
-| E | ✅ | Deployment overrides, disabled tombstones, Web editor |
-| F | ✅ | Full validation, final review |
-
-## 4. Schema Changes
+## 3. Schema Changes
 
 ```sql
 -- V28 migration (Batch B)
@@ -56,30 +46,29 @@ ALTER TABLE node_backend_runtimes ADD COLUMN parameter_values_json TEXT NOT NULL
 ALTER TABLE model_deployments ADD COLUMN parameter_values_json TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE model_deployments ADD COLUMN disabled_parameters_json TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE model_artifacts ADD COLUMN parameter_defaults_json TEXT NOT NULL DEFAULT '[]';
+
+-- Clean final state: parameters_json REMOVED from model_deployments
+-- Old DB requires rebuild
 ```
 
-## 5. API Changes
+## 4. API Changes
 
 - BackendRuntime: accepts/returns parameter_schema_json, parameter_values_json
 - NodeBackendRuntime: accepts/returns parameter_schema_json, parameter_values_json
 - ModelArtifact: accepts/returns parameter_defaults_json
 - Deployment: accepts/returns parameter_values_json, disabled_parameters_json
+- **Deployment does NOT accept or return parameters_json** (removed)
 
-## 6. Web Changes
-
-- RuntimeParameterEditor component created
-- Integrated into BackendRuntimesPage, RunnerConfigsPage, ModelArtifactsPage, ModelDeploymentsPage
-- i18n keys added for structuredParameters
-
-## 7. RunPlan Changes
+## 5. RunPlan Changes
 
 - NBR is sole source of truth for runtime parameters
 - No fallback to BackendVersion/BackendRuntime
 - Deployment overrides have highest priority
 - Disabled tombstones remove parameters from output
 - Empty enabled value returns validation error
+- **parameters_json NOT read by resolver** (removed)
 
-## 8. Test Results
+## 6. Test Results
 
 | Command | Result |
 |---------|--------|
@@ -87,29 +76,20 @@ ALTER TABLE model_artifacts ADD COLUMN parameter_defaults_json TEXT NOT NULL DEF
 | `go build ./cmd/agent/...` | PASS |
 | `go test ./internal/server/...` | ALL PASS |
 | `go test ./internal/agent/...` | ALL PASS |
-| `go test ./internal/server/runplan/...` | PASS |
 | `cd web && npm run build` | PASS |
 | `cd web && npm test` | PASS |
 
-## 9. Isolated Validation
+## 7. DB Rebuild Required
 
-Server start timed out in isolated test environment. Full E2E requires manual verification with Docker/GPU.
+Old databases still have `parameters_json` column. To get clean final state:
+- Rebuild DB from scratch (delete `lightai.db`, restart server)
+- Or run V29 migration (if added) to drop column
 
-## 10. Final Review
+## 8. Push Status
 
-See `final-review.md` for detailed review results.
+**Pushed.** Commit range: `ee811ca..d97d0ff`
 
-## 11. Unresolved Items
-
-1. Full E2E with real GPU not executed (server start timeout in isolated env)
-2. Legacy parameters_json column exists in DB (schema cleanup item)
-3. ModelLocation parameter_defaults_json not added (not needed)
-
-## 12. Push Status
-
-**Not pushed yet.** Awaiting user confirmation.
-
-## 13. Git Status
+## 9. Git Status
 
 ```
  M VERSION

@@ -27,8 +27,8 @@ func insertUIPersistenceDeployment(t *testing.T, h *AgentHandler, id, artifactID
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := h.DB.Exec(`INSERT INTO model_deployments
-		(id,name,display_name,model_artifact_id,backend_runtime_id,replicas,placement_json,service_json,parameters_json,env_overrides_json,desired_state,status,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,1,'{"node_id":"node-a","accelerator_ids":[]}','{"host_port":8005}','{}','{}','stopped','saved','',?,?)`,
+		(id,name,display_name,model_artifact_id,backend_runtime_id,replicas,placement_json,service_json,env_overrides_json,desired_state,status,tenant_id,created_at,updated_at)
+		VALUES (?,?,?,?,?,1,'{"node_id":"node-a","accelerator_ids":[]}','{"host_port":8005}','{}','stopped','saved','',?,?)`,
 		id, id, id, artifactID, runtimeID, now, now); err != nil {
 		t.Fatalf("insert deployment: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestDeploymentSaveOnlyAndPatchEditableFields(t *testing.T) {
 	}
 
 	pw := httptest.NewRecorder()
-	h.HandlePatchDeployment(pw, newReq("PATCH", "/x", `{"display_name":"Dep Display","placement_json":{"node_id":"node-b","accelerator_ids":["gpu-b"]},"service_json":{"host_port":8006,"container_port":8081},"parameters_json":{"served_model_name":"served-b"}}`, adminSession(), map[string]string{"id": got["id"].(string)}))
+	h.HandlePatchDeployment(pw, newReq("PATCH", "/x", `{"display_name":"Dep Display","placement_json":{"node_id":"node-b","accelerator_ids":["gpu-b"]},"service_json":{"host_port":8006,"container_port":8081},"parameter_values_json":[{"key":"served_model_name","cli_name":"--served-model-name","type":"string","enabled":true,"value":"served-b"}]}`, adminSession(), map[string]string{"id": got["id"].(string)}))
 	if pw.Code != http.StatusOK {
 		t.Fatalf("patch deployment code=%d body=%s", pw.Code, pw.Body.String())
 	}

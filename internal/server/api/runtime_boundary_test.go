@@ -571,9 +571,9 @@ func runtimeBoundaryInsertDeployment(t *testing.T, db *db.DB, depID string) {
 	db.Exec(`INSERT OR IGNORE INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, tenant_id, created_at, updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`, "art-"+depID, "test-model", "Test", "local_path", "/tmp", "huggingface", "chat", "", now, now)
 	_, err := db.Exec(`INSERT INTO model_deployments
-		(id, name, display_name, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, parameters_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		depID, "test-"+depID, "Test", "art-"+depID, "rt-"+depID, 1, "{}", "{}", "{}", "{}", "running", "running", "", now, now)
+		(id, name, display_name, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		depID, "test-"+depID, "Test", "art-"+depID, "rt-"+depID, 1, "{}", "{}", "{}", "running", "running", "", now, now)
 	if err != nil {
 		t.Fatalf("insert deployment: %v", err)
 	}
