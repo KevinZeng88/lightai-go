@@ -1,4 +1,4 @@
-# Final Review — Runtime Parameter Editing Implementation
+# Final Review — Runtime Parameter Editing Implementation (Corrected)
 
 > Date: 2026-06-24
 > Status: PASS
@@ -11,6 +11,7 @@
 - RunPlan resolver reads ONLY from NBRConfigSnapshot
 - No fallback to BackendVersion/BackendRuntime
 - Missing NBR snapshot returns explicit error
+- Required parameters validated against NBR schema
 - Verified by code inspection and tests
 
 ### Copy-on-Create ✅
@@ -30,19 +31,40 @@
 
 ## 2. Env/Args Pollution ✅
 
-### Empty values filtered
-- buildEnv skips empty string values
-- buildArgs skips nil/empty values
+### Empty values rejected
+- Enabled parameter with empty value returns validation error
+- No silent skip for enabled empty values
+- Disabled parameters excluded from output
 - No `-e KEY=` or `--flag ""` in output
 
 ### Capability metadata separated
 - capabilities_json on backend_versions (metadata only)
 - env_json cleaned of capability metadata in seed data
-- SGLang/llama.cpp env_json cleaned in Batch B correction
 
 ---
 
-## 3. ModelArtifact / ModelLocation Boundary ✅
+## 3. Legacy parameters_json
+
+### Current status:
+- `parameters_json` column still exists in DB (schema cleanup item)
+- RunPlan resolver does NOT read from `parameters_json`
+- Deployment creation still accepts `parameters_json` for backward API compatibility
+- But `parameter_values_json` is the new structured parameter source
+- `parameters_json` is NOT a supported runtime path — only `parameter_values_json` is used
+
+---
+
+## 4. Empty Enabled Value Semantics
+
+### Current behavior:
+- Enabled parameter with empty value → validation error
+- Disabled parameter → excluded from output
+- Absent parameter → keep upstream value
+- This is the correct semantic: empty enabled value is an error, not a skip
+
+---
+
+## 5. ModelArtifact / ModelLocation Boundary ✅
 
 ### ModelArtifact stores:
 - parameter_defaults_json (model-side defaults)
@@ -50,57 +72,30 @@
 - discovered metadata
 - Does NOT store: Docker image, entrypoint, ports, devices, privileged
 
-### ModelLocation stores:
-- discovered_metadata_json (scan results)
-- Does NOT store: container config
-
 ---
 
-## 4. Deployment Override ✅
+## 6. Deployment Override ✅
 
 ### Merge order:
 1. NBR parameter values (Layer 2)
 2. Deployment parameter_values overrides (Layer 3) — highest priority
-3. Deployment parameters_json (Layer 4, legacy)
-4. Disabled tombstones remove args/env
+3. Disabled tombstones remove args/env
 
 ### Semantics:
 - absent = keep upstream value
 - override = replace upstream value
 - disabled = remove from output
-- empty enabled value = skip
+- empty enabled value = validation error
 
 ---
 
-## 5. Web UI / i18n ✅
+## 7. Web UI / i18n ✅
 
 ### RuntimeParameterEditor integrated into:
 - BackendRuntimesPage (edit dialog)
 - RunnerConfigsPage (edit dialog)
 - ModelArtifactsPage (edit dialog)
 - ModelDeploymentsPage (edit dialog)
-
-### i18n:
-- structuredParameters key added to runtimes and deployments namespaces
-- No key leakage detected
-
----
-
-## 6. API Permission / Tenant Scope
-
-### Not affected:
-- Deployment parameter fields are part of existing deployment CRUD
-- Tenant scope checks already exist on deployment endpoints
-- No new permission model introduced
-
----
-
-## 7. Migration / Seed
-
-### V28 migration:
-- Adds 7 new columns (all DEFAULT '[]')
-- Backward compatible (old data preserved as empty arrays)
-- Seed data cleaned (capability metadata removed from env_json)
 
 ---
 
@@ -113,7 +108,7 @@
 
 ### API tests:
 - All existing tests pass
-- Deployment tests updated for new fields
+- Deployment tests updated for parameter_values_json
 
 ### Frontend tests:
 - Build passes
@@ -123,7 +118,6 @@
 
 ## 9. Unresolved Items
 
-1. **Full E2E with real GPU**: Not executed (requires Docker + GPU + models)
-2. **ModelLocation parameter_defaults_json**: Not added (not needed — model defaults on ModelArtifact)
-3. **Legacy parameters_json**: Still supported for backward compatibility; future cleanup needed
-4. **RuntimeParameterEditor in RunnerConfigsPage NBR edit**: Component integrated but existing edit dialog also works
+1. **Full E2E with real GPU**: Server start timed out in isolated test environment; requires manual verification
+2. **Legacy parameters_json**: Column exists in DB but not used by resolver; schema cleanup item
+3. **ModelLocation parameter_defaults_json**: Not added (not needed — model defaults on ModelArtifact)

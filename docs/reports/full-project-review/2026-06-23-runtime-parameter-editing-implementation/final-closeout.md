@@ -1,4 +1,4 @@
-# Final Closeout — Runtime Parameter Editing Implementation
+# Final Closeout — Runtime Parameter Editing Implementation (Corrected)
 
 > Date: 2026-06-24
 > Status: PASS
@@ -12,6 +12,9 @@ All planned batches (A through E) completed successfully. Batch F (validation) c
 ## 2. All Commits
 
 ```
+5e08121 fix(deployments): wire parameter_values_json into resolver and fix tests
+36fd291 fix(runplan): enforce structured deployment parameter semantics
+eb2a9c6 docs: close runtime parameter editing implementation
 3cd0664 docs: close runtime parameter editing batch e
 8f95109 feat(web): add deployment parameter override editor
 1322df9 feat(deployments): add parameter overrides and disabled tombstones
@@ -74,6 +77,7 @@ ALTER TABLE model_artifacts ADD COLUMN parameter_defaults_json TEXT NOT NULL DEF
 - No fallback to BackendVersion/BackendRuntime
 - Deployment overrides have highest priority
 - Disabled tombstones remove parameters from output
+- Empty enabled value returns validation error
 
 ## 8. Test Results
 
@@ -89,7 +93,7 @@ ALTER TABLE model_artifacts ADD COLUMN parameter_defaults_json TEXT NOT NULL DEF
 
 ## 9. Isolated Validation
 
-Not executed — requires Docker + GPU + models. Deferred to manual E2E.
+Server start timed out in isolated test environment. Full E2E requires manual verification with Docker/GPU.
 
 ## 10. Final Review
 
@@ -97,13 +101,13 @@ See `final-review.md` for detailed review results.
 
 ## 11. Unresolved Items
 
-1. Full E2E with real GPU not executed
-2. Legacy parameters_json still supported (future cleanup needed)
+1. Full E2E with real GPU not executed (server start timeout in isolated env)
+2. Legacy parameters_json column exists in DB (schema cleanup item)
 3. ModelLocation parameter_defaults_json not added (not needed)
 
 ## 12. Push Status
 
-**Pushed.** Commit range: `cc6fb18..3cd0664`
+**Not pushed yet.** Awaiting user confirmation.
 
 ## 13. Git Status
 
