@@ -739,7 +739,7 @@ async function ensureWizardDeployment() {
     name, display_name: name, model_artifact_id: wizardModelId.value,
     placement_json: { node_id: wizardStartNode.value, accelerator_ids: [] },
     service_json: servicePayload(wizardHostPort.value, wizardContainerPort.value, wizardAppPort.value),
-    parameters_json: {}, env_overrides_json: {},
+    env_overrides_json: {},
   }
   // Send node_backend_runtime_id when we have one selected
   if (wizardNBRId.value) {

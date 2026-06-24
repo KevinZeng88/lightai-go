@@ -2007,7 +2007,7 @@ func (h *AgentHandler) HandleDeploymentTemplateSyncPreview(w http.ResponseWriter
 	diffs := computeTemplateSyncDiffs(
 		strVal(deploy, "config_snapshot_json", "{}"),
 		currentTemplateSnapshot,
-		strVal(deploy, "parameters_json", "{}"),
+		"", // parameters_json removed; deploy params now in parameter_values_json
 		strVal(deploy, "service_json", "{}"),
 		strVal(deploy, "env_overrides_json", "{}"),
 	)
@@ -2076,7 +2076,7 @@ func (h *AgentHandler) HandleDeploymentTemplateSyncApply(w http.ResponseWriter, 
 		diffs = computeTemplateSyncDiffs(oldSnapshot, newSnapshot, "{}", "{}", "{}")
 	} else {
 		diffs = computeTemplateSyncDiffs(oldSnapshot, newSnapshot,
-			strVal(deploy, "parameters_json", "{}"),
+			"", // parameters_json removed
 			strVal(deploy, "service_json", "{}"),
 			strVal(deploy, "env_overrides_json", "{}"))
 	}
