@@ -1,0 +1,43 @@
+# SGLang v0.5.13.post1 Parameter Help (zh-CN)
+
+- name: --model-path
+  title: 模型路径
+  summary: 容器内模型目录路径。由平台根据 ModelLocation 自动设置。
+  official_default: 无（必填）
+  lightai_recommendation: 不要手动修改。
+  risk: 路径错误将导致模型加载失败。
+
+- name: --host
+  title: 监听地址
+  summary: SGLang 服务监听地址。
+  official_default: "0.0.0.0"
+  lightai_recommendation: 保持默认。
+  risk: 设为 127.0.0.1 将导致容器外无法访问。
+
+- name: --port
+  title: 容器端口
+  summary: SGLang 服务端口。默认 30000。
+  official_default: "30000"
+  lightai_recommendation: 保持默认。
+  risk: 修改后需同步端口映射。
+
+- name: --mem-fraction-static
+  title: 静态内存比例
+  summary: SGLang 用于权重和 KV cache 的 GPU 显存比例。
+  official_default: "0.833"
+  lightai_recommendation: OOM 时可降低到 0.7-0.8。
+  risk: 设置过高导致 OOM；过低限制并发。
+
+- name: --context-length
+  title: 上下文长度
+  summary: 限制最大上下文长度。
+  official_default: 由模型配置决定
+  lightai_recommendation: 显存不足时可限制。
+  risk: 设置过小限制长上下文能力。
+
+- name: --max-running-requests
+  title: 最大运行请求数
+  summary: 同时处理的最大请求数。
+  official_default: 由 SGLang 自动推导
+  lightai_recommendation: 受限 GPU 时可降低。
+  risk: 设置过低限制并发。

@@ -1,0 +1,43 @@
+# llama.cpp b9700 Parameter Help (zh-CN)
+
+- name: -m
+  title: 模型路径
+  summary: GGUF 模型文件路径。由平台根据 ModelLocation 自动设置。
+  official_default: 无（必填）
+  lightai_recommendation: 不要手动修改。
+  risk: 路径错误将导致模型加载失败。
+
+- name: --host
+  title: 监听地址
+  summary: llama-server 监听地址。
+  official_default: "0.0.0.0"
+  lightai_recommendation: 保持默认。
+  risk: 设为 127.0.0.1 将导致容器外无法访问。
+
+- name: --port
+  title: 容器端口
+  summary: llama-server 端口。
+  official_default: "8080"
+  lightai_recommendation: 保持默认。
+  risk: 修改后需同步端口映射。
+
+- name: --ctx-size
+  title: 上下文大小
+  summary: 模型上下文窗口大小。
+  official_default: 由模型 GGUF 元数据决定
+  lightai_recommendation: 根据显存和需求调整。
+  risk: 设置过大导致显存不足。
+
+- name: --n-gpu-layers
+  title: GPU 层数
+  summary: 卸载到 GPU 的模型层数。-1 表示全部。
+  official_default: "0"（仅 CPU）
+  lightai_recommendation: 使用 -1 或 all 启用 GPU 加速。
+  risk: 设置过高导致 GPU 显存不足。
+
+- name: --batch-size
+  title: 批处理大小
+  summary: prompt 处理的批大小。
+  official_default: "2048"
+  lightai_recommendation: 保持默认，除非需要优化。
+  risk: 设置过大增加显存占用。

@@ -1,0 +1,66 @@
+# vLLM v0.23.0 Parameter Help (zh-CN)
+# Each entry: name, title, summary, official_default, lightai_recommendation, risk, source
+
+- name: --model
+  title: 模型路径
+  summary: 容器内模型文件/目录路径。由平台根据 ModelLocation 自动设置。
+  official_default: 无（必填）
+  lightai_recommendation: 不要手动修改，由平台自动管理。
+  risk: 路径错误将导致模型加载失败。
+  source: https://docs.vllm.ai/en/stable/configuration/engine_args/
+
+- name: --host
+  title: 监听地址
+  summary: vLLM 服务监听的网络地址。容器内通常使用 0.0.0.0。
+  official_default: "0.0.0.0"
+  lightai_recommendation: 保持默认 0.0.0.0，除非需要限制访问。
+  risk: 设为 127.0.0.1 将导致容器外无法访问。
+  source: https://docs.vllm.ai/en/stable/configuration/engine_args/
+
+- name: --port
+  title: 容器端口
+  summary: vLLM 服务监听的端口号。注意：这是容器内部端口，不是宿主机映射端口。
+  official_default: "8000"
+  lightai_recommendation: 保持默认 8000，除非端口冲突。
+  risk: 修改后需要同步更新宿主机端口映射。
+  source: https://docs.vllm.ai/en/stable/configuration/engine_args/
+
+- name: --served-model-name
+  title: 服务模型名
+  summary: 通过 API 暴露的模型名称。客户端使用此名称请求推理。
+  official_default: 模型目录名
+  lightai_recommendation: 使用简洁名称，避免中文和特殊字符。
+  risk: 修改后客户端需要更新请求中的模型名。
+  source: https://docs.vllm.ai/en/stable/configuration/engine_args/
+
+- name: --gpu-memory-utilization
+  title: GPU 显存利用率
+  summary: vLLM 可使用的 GPU 显存比例。0.9 表示使用 90% 显存。
+  official_default: "0.9"
+  lightai_recommendation: 单实例建议 0.85-0.92；多实例建议降低。
+  risk: 设置过高可能导致 OOM；设置过低可能降低吞吐。
+  source: https://docs.vllm.ai/en/stable/configuration/optimization/
+
+- name: --max-model-len
+  title: 最大模型长度
+  summary: 模型支持的最大上下文长度。限制此值可减少显存占用。
+  official_default: 由模型配置决定
+  lightai_recommendation: 小显存或多实例时建议限制。
+  risk: 设置过小会限制长上下文能力。
+  source: https://docs.vllm.ai/en/stable/configuration/engine_args/
+
+- name: --max-num-seqs
+  title: 最大并发序列数
+  summary: 同时处理的最大请求数量。
+  official_default: 由 vLLM 自动推导
+  lightai_recommendation: 受限 GPU 时可适当降低。
+  risk: 设置过低会限制并发吞吐。
+  source: https://docs.vllm.ai/en/stable/configuration/engine_args/
+
+- name: --tensor-parallel-size
+  title: 张量并行数
+  summary: 用于张量并行的 GPU 数量。
+  official_default: "1"
+  lightai_recommendation: 必须与 GPU lease 数量匹配。
+  risk: 设置错误将导致启动失败。
+  source: https://docs.vllm.ai/en/stable/configuration/engine_args/
