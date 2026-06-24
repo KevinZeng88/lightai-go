@@ -210,12 +210,25 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 	}
 
 	// Copy model parameter defaults from artifact into deployment parameter_values_json
-	var modelParamDefaults string
-	if artifactID != "" {
-		h.DB.QueryRow(`SELECT COALESCE(parameter_defaults_json,'[]') FROM model_artifacts WHERE id = ?`, artifactID).Scan(&modelParamDefaults)
+	// If user provides parameter_values_json, use it; otherwise copy from artifact
+	var paramValuesJSON string
+	if pv, ok := req["parameter_values_json"]; ok {
+		paramValuesJSON = jsonString(pv)
+	} else {
+		if artifactID != "" {
+			h.DB.QueryRow(`SELECT COALESCE(parameter_defaults_json,'[]') FROM model_artifacts WHERE id = ?`, artifactID).Scan(&paramValuesJSON)
+		}
+		if paramValuesJSON == "" || paramValuesJSON == "null" {
+			paramValuesJSON = "[]"
+		}
 	}
-	if modelParamDefaults == "" || modelParamDefaults == "null" {
-		modelParamDefaults = "[]"
+
+	// Copy disabled_parameters_json from request or default to empty
+	var disabledParamsJSON string
+	if dp, ok := req["disabled_parameters_json"]; ok {
+		disabledParamsJSON = jsonString(dp)
+	} else {
+		disabledParamsJSON = "[]"
 	}
 
 	id := uuid.NewString()
@@ -229,8 +242,8 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		artifactID, backendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(req["parameters_json"]), jsonString(req["env_overrides_json"]),
-		modelParamDefaults,
-		"[]", // disabled_parameters_json starts empty
+		paramValuesJSON,
+		disabledParamsJSON,
 		configSnapshot,
 		nodeBackendRuntimeID,
 		"stopped", "saved", tid, now, now,
@@ -496,6 +509,8 @@ type preflightResult struct {
 	}
 	params             map[string]interface{}
 	envOverrides       map[string]string
+	parameterValues    []runplan.ParameterValue
+	disabledParameters []runplan.ParameterValue
 	rtVendor           string
 	rtImage            string
 	rtDockerJSON       string
@@ -740,6 +755,8 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	json.Unmarshal(rawJSONBytes(deploy["service_json"]), &pf.service)
 	json.Unmarshal(rawJSONBytes(deploy["parameters_json"]), &pf.params)
 	json.Unmarshal(rawJSONBytes(deploy["env_overrides_json"]), &pf.envOverrides)
+	json.Unmarshal(rawJSONBytes(deploy["parameter_values_json"]), &pf.parameterValues)
+	json.Unmarshal(rawJSONBytes(deploy["disabled_parameters_json"]), &pf.disabledParameters)
 
 	// Inject service ports into parameters so mapParametersToArgs uses the
 	// user's app_port instead of the ParameterDef hardcoded default (e.g. --port 8000).
@@ -969,7 +986,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount, HealthCheckOverride: rtHCOverridePtr(rtHC)},
 		NodeRuntimeOverride: nbrOverride,
 		Artifact:            &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
-		Deployment: &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, Service: runplan.ServiceInfo{
+		Deployment: &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, ParameterValues: pf.parameterValues, DisabledParameters: pf.disabledParameters, Service: runplan.ServiceInfo{
 			HostPort:      pf.service.HostPort,
 			ContainerPort: pf.service.ContainerPort,
 			AppPort:       pf.service.AppPort,
