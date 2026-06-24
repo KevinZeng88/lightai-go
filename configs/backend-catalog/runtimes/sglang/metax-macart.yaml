@@ -83,3 +83,5 @@ high_risk_flags:
   host_ipc: true
   unconfined_seccomp: true
   unconfined_apparmor: true
+verification:
+  status: requires_hardware_validation

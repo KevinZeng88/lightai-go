@@ -44,3 +44,5 @@ health_check:
   path: /v1/models
   success_status:
     - 200
+verification:
+  status: verified
