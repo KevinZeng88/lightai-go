@@ -42,19 +42,17 @@ capabilities_json:
 default_args:
   - -m
   - "{{model_container_path}}"
-  - --host
-  - 0.0.0.0
-  - --port
-  - "{{container_port}}"
 default_args_schema:
   - name: -m
     alias: --model
     required: true
     value: "{{MODEL_CONTAINER_PATH}}"
   - name: --host
+    required: true
     default: "0.0.0.0"
   - name: --port
-    default: "8080"
+    required: true
+    value: "{{container_port}}"
   - name: --ctx-size
     alias: -c
     optional: true

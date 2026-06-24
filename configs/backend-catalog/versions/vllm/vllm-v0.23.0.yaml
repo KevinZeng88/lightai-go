@@ -48,9 +48,11 @@ default_args_schema:
     required: true
     value: "{{MODEL_CONTAINER_PATH}}"
   - name: --host
+    required: true
     default: "0.0.0.0"
   - name: --port
-    default: "8000"
+    required: true
+    value: "{{container_port}}"
   - name: --served-model-name
     optional: true
   - name: --tensor-parallel-size

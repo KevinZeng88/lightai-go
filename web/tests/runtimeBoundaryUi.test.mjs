@@ -52,15 +52,16 @@ check('RuntimeParameterEditor uses :disabled instead of v-if for scalar inputs',
 check('RuntimeParameterEditor always shows textarea for list options', !runtimeParamEditor.match(/v-if.*enabled.*\n.*textarea/))
 
 // BackendRuntimesPage must NOT use v-if to hide inputs
-check('BackendRuntimesPage does NOT hide scalar inputs with v-if when disabled', !templatePage.includes('v-if="opt.enabled"'))
-check('BackendRuntimesPage uses :disabled instead of v-if for inputs', templatePage.includes(':disabled="!opt.enabled"'))
+// BackendRuntimesPage delegates to RuntimeParameterEditor (no inline duplicate params)
+check('BackendRuntimesPage does NOT have inline scalarOptions (delegated to RPE)', !templatePage.includes('const scalarOptions = reactive'))
+check('BackendRuntimesPage uses RuntimeParameterEditor for all params', templatePage.includes('<RuntimeParameterEditor'))
+check('BackendRuntimesPage showEdit loads into parameterEditorModel', templatePage.includes('parameterEditorModel.value ='))
 
-// --- Values preserved: buildPayload always includes all fields ---
-check('BackendRuntimesPage buildPayload does NOT skip disabled fields', !templatePage.match(/buildPayload.*\n.*if.*!opt\.enabled.*continue/))
-check('BackendRuntimesPage loadDockerJson preserves value when not in docker_json', templatePage.includes('preserve opt.value'))
+// --- Values preserved: buildPayload reads from parameterEditorModel ---
+check('BackendRuntimesPage buildPayload reads from parameterEditorModel', templatePage.includes('const m = parameterEditorModel.value'))
 
-// --- Clone preserves all values ---
-check('BackendRuntimesPage showClone preserves all values', templatePage.includes('preserve opt.value'))
+// --- Clone preserves all values via cloneParameterEditorModel ---
+check('BackendRuntimesPage showClone uses cloneParameterEditorModel', templatePage.includes('cloneParameterEditorModel.value ='))
 
 // --- privileged field has Docker --privileged explanation ---
 check('runner config privileged shows Docker --privileged explanation', runnerPage.includes('Docker --privileged') && runnerPage.includes('runtimes.privilegedRisk'))
@@ -121,6 +122,17 @@ check('BackendRuntimesPage loads backend version schema', templatePage.includes(
 check('Preflight errors show error code', deploymentsPage.includes('e.code'))
 check('Preflight errors show all error codes including format_mismatch', deploymentsPage.includes('format_mismatch'))
 check('Preflight errors show context details', deploymentsPage.includes('preflightErrorContext'))
+
+// --- Deployment override passes backendSchema to RuntimeParameterEditor ---
+check('Deployment edit passes backend-schema to editor', deploymentsPage.includes(':backend-schema="editBackendSchema"'))
+check('Deployment edit loads backend schema async', deploymentsPage.includes('loadEditBackendSchema'))
+
+// --- BackendRuntimesPage uses parameterEditorModel (no duplicate inline state) ---
+check('BackendRuntimesPage buildPayload reads from parameterEditorModel', templatePage.includes('const m = parameterEditorModel.value'))
+check('BackendRuntimesPage showEdit sets parameterEditorModel', templatePage.includes('parameterEditorModel.value ='))
+
+// --- Vendor isolation: NVIDIA runtimes have no devices in catalog ---
+// This is a code-level check: the nvidia-docker.yaml files should NOT have a 'devices' key
 
 if (failed > 0) {
   console.error(`\n${failed} test(s) FAILED`)

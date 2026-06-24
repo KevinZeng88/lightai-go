@@ -45,18 +45,16 @@ default_entrypoint:
 default_args:
   - --model-path
   - "{{model_container_path}}"
-  - --host
-  - 0.0.0.0
-  - --port
-  - "{{container_port}}"
 default_args_schema:
   - name: --model-path
     required: true
     value: "{{MODEL_CONTAINER_PATH}}"
   - name: --host
+    required: true
     default: "0.0.0.0"
   - name: --port
-    default: "30000"
+    required: true
+    value: "{{container_port}}"
   - name: --tp
     optional: true
   - name: --tensor-parallel-size

@@ -69,41 +69,11 @@
           <el-form-item :label="$t('runtimes.image')"><el-input v-model="editForm.image_name" /></el-form-item>
           <el-form-item :label="$t('runtimes.vendor')"><el-input v-model="editForm.vendor" /></el-form-item>
         </div>
-        <h3>{{ $t('runtimes.highRiskOptions') }}</h3>
-        <div class="option-grid">
-          <div v-for="opt in scalarOptions" :key="opt.key" class="option-block">
-            <el-checkbox :model-value="opt.enabled" @update:model-value="opt.enabled = $event === true">{{ $t(opt.label) }}</el-checkbox>
-            <el-input v-model="opt.value" :disabled="!opt.enabled" size="small" class="param-input" :placeholder="opt.placeholder || ''" />
-            <div v-if="opt.warning" class="risk-text">{{ $t(opt.warning) }}</div>
-          </div>
-        </div>
-        <h3>{{ $t('runtimes.listOptions') }}</h3>
-        <div class="textarea-grid">
-          <div v-for="opt in listOptions" :key="opt.key" class="textarea-block">
-            <el-checkbox :model-value="opt.enabled" @update:model-value="opt.enabled = $event === true">{{ $t(opt.label) }}</el-checkbox>
-            <el-input v-model="opt.value" :disabled="!opt.enabled" type="textarea" :rows="3" :placeholder="opt.placeholder || ''" />
-          </div>
-        </div>
-        <h3>{{ $t('runtimes.customOptions') }}</h3>
-        <div class="textarea-grid">
-          <div class="textarea-block">
-            <el-checkbox :model-value="customArgs.enabled" @update:model-value="customArgs.enabled = $event === true">{{ $t('runtimes.customArgs') }}</el-checkbox>
-            <el-input v-model="customArgs.value" :disabled="!customArgs.enabled" type="textarea" :rows="3" placeholder="--flag value (one per line)" />
-          </div>
-          <div class="textarea-block">
-            <el-checkbox :model-value="customEnv.enabled" @update:model-value="customEnv.enabled = $event === true">{{ $t('runtimes.customEnv') }}</el-checkbox>
-            <el-input v-model="customEnv.value" :disabled="!customEnv.enabled" type="textarea" :rows="3" placeholder="KEY=VALUE (one per line)" />
-          </div>
-          <div class="textarea-block">
-            <el-checkbox :model-value="customDocker.enabled" @update:model-value="customDocker.enabled = $event === true">{{ $t('runtimes.customDockerOptions') }}</el-checkbox>
-            <el-input v-model="customDocker.value" :disabled="!customDocker.enabled" type="textarea" :rows="3" placeholder="--docker-option value" />
-          </div>
-        </div>
       </el-form>
-      <el-divider /><h3>{{ $t('runtimes.commandPreview') }}</h3><pre class="preview">{{ commandPreview }}</pre>
       <el-divider />
       <h3>{{ $t('runtimes.structuredParameters') }}</h3>
       <RuntimeParameterEditor v-model="parameterEditorModel" :backend-schema="backendSchema" :readonly="!!(selected && !selected.is_editable)" />
+      <el-divider /><h3>{{ $t('runtimes.commandPreview') }}</h3><pre class="preview">{{ commandPreview }}</pre>
       <template #footer><el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doEdit" :loading="editing" :disabled="selected && !selected.is_editable">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
 
@@ -124,37 +94,10 @@
         <el-form-item :label="$t('runtimes.vendor')">
           <el-input v-model="cloneForm.vendor" />
         </el-form-item>
-        <h3>{{ $t('runtimes.highRiskOptions') }}</h3>
-        <div class="option-grid">
-          <div v-for="opt in cloneScalarOptions" :key="opt.key" class="option-block">
-            <el-checkbox :model-value="opt.enabled" @update:model-value="opt.enabled = $event === true">{{ $t(opt.label) }}</el-checkbox>
-            <el-input v-model="opt.value" :disabled="!opt.enabled" size="small" class="param-input" :placeholder="opt.placeholder || ''" />
-            <div v-if="opt.warning" class="risk-text">{{ $t(opt.warning) }}</div>
-          </div>
-        </div>
-        <h3>{{ $t('runtimes.listOptions') }}</h3>
-        <div class="textarea-grid">
-          <div v-for="opt in cloneListOptions" :key="opt.key" class="textarea-block">
-            <el-checkbox :model-value="opt.enabled" @update:model-value="opt.enabled = $event === true">{{ $t(opt.label) }}</el-checkbox>
-            <el-input v-model="opt.value" :disabled="!opt.enabled" type="textarea" :rows="3" :placeholder="opt.placeholder || ''" />
-          </div>
-        </div>
-        <h3>{{ $t('runtimes.customOptions') }}</h3>
-        <div class="textarea-grid">
-          <div class="textarea-block">
-            <el-checkbox :model-value="cloneCustomArgs.enabled" @update:model-value="cloneCustomArgs.enabled = $event === true">{{ $t('runtimes.customArgs') }}</el-checkbox>
-            <el-input v-model="cloneCustomArgs.value" :disabled="!cloneCustomArgs.enabled" type="textarea" :rows="3" placeholder="--flag value (one per line)" />
-          </div>
-          <div class="textarea-block">
-            <el-checkbox :model-value="cloneCustomEnv.enabled" @update:model-value="cloneCustomEnv.enabled = $event === true">{{ $t('runtimes.customEnv') }}</el-checkbox>
-            <el-input v-model="cloneCustomEnv.value" :disabled="!cloneCustomEnv.enabled" type="textarea" :rows="3" placeholder="KEY=VALUE (one per line)" />
-          </div>
-          <div class="textarea-block">
-            <el-checkbox :model-value="cloneCustomDocker.enabled" @update:model-value="cloneCustomDocker.enabled = $event === true">{{ $t('runtimes.customDockerOptions') }}</el-checkbox>
-            <el-input v-model="cloneCustomDocker.value" :disabled="!cloneCustomDocker.enabled" type="textarea" :rows="3" placeholder="--docker-option value" />
-          </div>
-        </div>
       </el-form>
+      <el-divider />
+      <h3>{{ $t('runtimes.structuredParameters') }}</h3>
+      <RuntimeParameterEditor v-model="cloneParameterEditorModel" :backend-schema="backendSchema" />
       <el-divider /><h3>{{ $t('runtimes.commandPreview') }}</h3><pre class="preview">{{ cloneCommandPreview }}</pre>
       <template #footer><el-button @click="cloneVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doCloneSave" :loading="cloneSaving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
@@ -238,48 +181,17 @@ const createVisible = ref(false); const editVisible = ref(false); const detailVi
 const createForm = ref({ template_name: 'vllm-nvidia-docker', name: '', vendor: 'nvidia', image_name: '', backend_id: '', backend_version_id: '', display_name: '' })
 const editForm = reactive({ display_name: '', image_name: '', vendor: '' }); let editingId = ''
 
-const scalarOptions = reactive([
-  { key: 'privileged', label: 'runtimes.privileged', warning: 'runtimes.privilegedRisk', enabled: false, value: 'true', placeholder: 'true/false' },
-  { key: 'ipc_mode', label: 'runtimes.ipcMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'host' },
-  { key: 'uts_mode', label: 'runtimes.utsMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'host' },
-  { key: 'network_mode', label: 'runtimes.networkMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'bridge/host/none' },
-  { key: 'pid_mode', label: 'runtimes.pidMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'host' },
-  { key: 'shm_size', label: 'runtimes.shmSize', warning: 'runtimes.resourceRisk', enabled: false, value: '16gb', placeholder: '16gb' },
-])
-const listOptions = reactive([
-  { key: 'devices', label: 'runtimes.devices', enabled: false, value: '', placeholder: '/dev/dri:/dev/dri' },
-  { key: 'optional_devices', label: 'runtimes.optionalDevices', enabled: false, value: '', placeholder: '/dev/infiniband:/dev/infiniband' },
-  { key: 'group_add', label: 'runtimes.groupAdd', enabled: false, value: '', placeholder: 'video\nrender' },
-  { key: 'security_options', label: 'runtimes.securityOpt', enabled: false, value: '', placeholder: 'seccomp=unconfined' },
-  { key: 'cap_add', label: 'runtimes.capAdd', enabled: false, value: '', placeholder: 'SYS_ADMIN\nIPC_LOCK' },
-  { key: 'device_cgroup_rules', label: 'runtimes.deviceCgroupRules', enabled: false, value: '', placeholder: 'c 195:* rmw' },
-  { key: 'extra_hosts', label: 'runtimes.extraHosts', enabled: false, value: '', placeholder: 'host.docker.internal:host-gateway' },
-  { key: 'ulimits', label: 'runtimes.ulimits', enabled: false, value: '', placeholder: 'memlock=-1' },
-  { key: 'env', label: 'runtimes.env', enabled: false, value: '', placeholder: 'KEY=VALUE' },
-  { key: 'extra_mounts', label: 'runtimes.extraMounts', enabled: false, value: '', placeholder: '/host/path:/container/path:ro' },
-])
-const customArgs = reactive({ enabled: false, value: '' }); const customEnv = reactive({ enabled: false, value: '' }); const customDocker = reactive({ enabled: false, value: '' })
+// Unified parameter model — single source of truth for edit dialog
+// RuntimeParameterEditor manages all Docker args, backend serve args, env, and custom args
+const parameterEditorModel = ref<any>({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
+// Clone dialog has its own parameter model
+const cloneParameterEditorModel = ref<any>({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
 const parameterValues = ref<any[]>([]); const parameterSchema = ref<any[]>([])
 const backendSchema = ref<any[]>([])
 
 // Clone-to-user state
 const cloneVisible = ref(false); const cloneSaving = ref(false); const cloneSource = ref<BackendRuntime | null>(null)
 const cloneForm = reactive({ name: '', display_name: '', image_name: '', vendor: '' })
-const cloneScalarOptions = reactive([
-  { key: 'privileged', label: 'runtimes.privileged', warning: 'runtimes.privilegedRisk', enabled: false, value: 'true', placeholder: 'true/false' },
-  { key: 'ipc_mode', label: 'runtimes.ipcMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'host' },
-  { key: 'uts_mode', label: 'runtimes.utsMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'host' },
-  { key: 'network_mode', label: 'runtimes.networkMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'bridge/host/none' },
-  { key: 'shm_size', label: 'runtimes.shmSize', warning: 'runtimes.resourceRisk', enabled: false, value: '16gb', placeholder: '16gb' },
-])
-const cloneListOptions = reactive([
-  { key: 'devices', label: 'runtimes.devices', enabled: false, value: '', placeholder: '/dev/dri:/dev/dri' },
-  { key: 'group_add', label: 'runtimes.groupAdd', enabled: false, value: '', placeholder: 'video' },
-  { key: 'security_options', label: 'runtimes.securityOpt', enabled: false, value: '', placeholder: 'seccomp=unconfined' },
-  { key: 'ulimits', label: 'runtimes.ulimits', enabled: false, value: '', placeholder: 'memlock=-1' },
-  { key: 'env', label: 'runtimes.env', enabled: false, value: '', placeholder: 'KEY=VALUE' },
-])
-const cloneCustomArgs = reactive({ enabled: false, value: '' }); const cloneCustomEnv = reactive({ enabled: false, value: '' }); const cloneCustomDocker = reactive({ enabled: false, value: '' })
 
 // Node runtime management state
 const nodeRuntimes = ref<any[]>([]); const nrLoading = ref(false)
@@ -325,9 +237,16 @@ async function doCreate() { creating.value = true; try { if (!createForm.value.d
 function showEdit(row: BackendRuntime) {
   selected.value = row; editingId = row.id
   editForm.display_name = row.display_name; editForm.image_name = row.image_name; editForm.vendor = row.vendor
-  loadDockerJson(row)
+  // Load all parameters into the unified model — single source of truth
+  parameterEditorModel.value = {
+    docker_json: row.docker_json || {},
+    args_override_json: Array.isArray(row.args_override_json) ? row.args_override_json : [],
+    default_env_json: typeof row.default_env_json === 'object' && row.default_env_json !== null ? row.default_env_json : {},
+    parameter_values_json: Array.isArray(row.parameter_values_json) ? row.parameter_values_json : [],
+  }
+  parameterValues.value = Array.isArray(row.parameter_values_json) ? [...row.parameter_values_json] : []
+  parameterSchema.value = Array.isArray(row.parameter_schema_json) ? [...row.parameter_schema_json] : []
   editVisible.value = true
-  // Load BackendVersion schema for dynamic backend args rendering
   loadBackendSchema(row.backend_version_id, row.backend_id)
 }
 async function doEdit() { editing.value = true; try { await patchRuntime(editingId, buildPayload()); ElMessage.success(t('runtimes.saved')); editVisible.value = false; await refresh() } catch (e: any) { ElMessage.error(e?.message || t('common.requestFailed')) } editing.value = false }
@@ -353,61 +272,37 @@ function showClone(row: BackendRuntime) {
   cloneForm.display_name = `${row.display_name || row.name}${suffix}`
   cloneForm.image_name = row.image_name
   cloneForm.vendor = row.vendor
-  // Load docker config into clone options — preserve ALL values, not just enabled
-  const docker = row.docker_json || {}
-  for (const opt of cloneScalarOptions) {
-    const v = docker[opt.key]
-    if (v !== undefined && v !== null) {
-      opt.enabled = v !== '' && v !== false
-      opt.value = typeof v === 'boolean' ? String(v) : String(v)
-    } else {
-      opt.enabled = false
-      // preserve opt.value
-    }
+  // Load ALL parameters into clone model — preserves enabled/value for copy
+  cloneParameterEditorModel.value = {
+    docker_json: row.docker_json || {},
+    args_override_json: Array.isArray(row.args_override_json) ? row.args_override_json : [],
+    default_env_json: typeof row.default_env_json === 'object' && row.default_env_json !== null ? row.default_env_json : {},
+    parameter_values_json: Array.isArray(row.parameter_values_json) ? row.parameter_values_json : [],
   }
-  for (const opt of cloneListOptions) {
-    const v = docker[opt.key]
-    if (v !== undefined && v !== null) {
-      opt.enabled = Array.isArray(v) ? v.length > 0 : !!v
-      opt.value = Array.isArray(v) ? v.map(formatListValue).join('\n') : String(v || '')
-    } else {
-      opt.enabled = false
-      // preserve opt.value
-    }
-  }
-  cloneCustomArgs.enabled = Array.isArray(row.args_override_json) && row.args_override_json.length > 0
-  cloneCustomArgs.value = Array.isArray(row.args_override_json) ? row.args_override_json.join('\n') : ''
-  cloneCustomEnv.enabled = typeof row.default_env_json === 'object' && row.default_env_json !== null && Object.keys(row.default_env_json).length > 0
-  cloneCustomEnv.value = typeof row.default_env_json === 'object' && row.default_env_json !== null ? Object.entries(row.default_env_json).map(([k, v]) => `${k}=${v}`).join('\n') : ''
   cloneVisible.value = true
+  loadBackendSchema(row.backend_version_id, row.backend_id)
 }
 function buildClonePayload() {
-  const docker: Record<string, any> = {}
-  for (const opt of cloneScalarOptions) {
-    if (opt.key === 'privileged') { docker[opt.key] = opt.value === 'true' }
-    else if (opt.value !== '') { docker[opt.key] = opt.value }
+  const m = cloneParameterEditorModel.value
+  return {
+    name: cloneForm.name, display_name: cloneForm.display_name, image_name: cloneForm.image_name, vendor: cloneForm.vendor,
+    docker_json: m.docker_json || {},
+    args_override_json: m.args_override_json || [],
+    default_env_json: m.default_env_json || {},
+    parameter_values_json: m.parameter_values_json || [],
+    entrypoint_override_json: cloneSource.value?.entrypoint_override_json,
   }
-  for (const opt of cloneListOptions) {
-    const lines = parseLines(opt.value)
-    if (lines.length > 0) {
-      if (opt.key === 'devices') docker[opt.key] = lines.map(parseMapping)
-      else if (opt.key === 'ulimits') docker[opt.key] = Object.fromEntries(lines.map(parseKeyValue))
-      else if (opt.key === 'env') (docker as any).default_env = Object.fromEntries(lines.map(parseKeyValue))
-      else docker[opt.key] = lines
-    }
-  }
-  return { name: cloneForm.name, display_name: cloneForm.display_name, image_name: cloneForm.image_name, vendor: cloneForm.vendor, docker_json: docker, args_override_json: parseLines(cloneCustomArgs.value), default_env_json: Object.fromEntries(parseLines(cloneCustomEnv.value).map(parseKeyValue)), entrypoint_override_json: cloneSource.value?.entrypoint_override_json }
 }
 const cloneCommandPreview = computed(() => {
   if (!cloneSource.value) return ''
-  const payload = buildClonePayload(); const docker = payload.docker_json; const parts = ['docker', 'run', '-d']
+  const payload = buildClonePayload(); const docker: Record<string, any> = payload.docker_json || {}; const parts = ['docker', 'run', '-d']
   if (docker.privileged) parts.push('--privileged')
-  for (const key of ['ipc_mode', 'uts_mode', 'network_mode', 'shm_size']) { if (docker[key]) parts.push(`--${key.replace('_mode','').replace('_','-')}`, String(docker[key])) }
-  for (const d of docker.devices || []) parts.push('--device', `${d.host_path}:${d.container_path}`)
-  for (const g of docker.group_add || []) parts.push('--group-add', g)
-  for (const s of docker.security_options || []) parts.push('--security-opt', s)
+  for (const key of ['ipc_mode', 'uts_mode', 'network_mode', 'pid_mode', 'shm_size']) { if (docker[key]) parts.push(`--${key.replace('_mode','').replace('_','-')}`, String(docker[key])) }
+  for (const d of (Array.isArray(docker.devices) ? docker.devices : [])) parts.push('--device', typeof d === 'string' ? d : `${d.host_path}:${d.container_path || d.host_path}`)
+  for (const g of (Array.isArray(docker.group_add) ? docker.group_add : [])) parts.push('--group-add', g)
+  for (const s of (Array.isArray(docker.security_options) ? docker.security_options : [])) parts.push('--security-opt', s)
   for (const [k, v] of Object.entries(docker.ulimits || {})) parts.push('--ulimit', `${k}=${v}`)
-  for (const [k, v] of Object.entries((docker as any).default_env || {})) parts.push('-e', `${k}=${v}`)
+  for (const [k, v] of Object.entries(docker.default_env || {})) parts.push('-e', `${k}=${v}`)
   parts.push(payload.image_name || '<image>'); parts.push(...(payload.args_override_json || []))
   return parts.join(' ')
 })
@@ -471,85 +366,29 @@ const detailRawJSON = computed(() => {
 async function showDetail(row: BackendRuntime) { selected.value = row; await loadNodeRuntimes(row.id); detailVisible.value = true }
 async function loadNodeRuntimes(runtimeID: string) { nrLoading.value = true; try { const all: any[] = []; for (const n of nodeItems.value) { try { const nrs = await apiClient.get(`/nodes/${n.id}/backend-runtimes`); if (Array.isArray(nrs)) for (const nr of nrs) { if (nr.backend_runtime_id === runtimeID) all.push(nr) } } catch {} }; nodeRuntimes.value = all } catch { nodeRuntimes.value = [] }; nrLoading.value = false }
 
-// Wizard
-// Ported from original (loadDockerJson, buildPayload, commandPreview, parseLines, etc.)
-function loadDockerJson(row: BackendRuntime) {
-  const docker = row.docker_json || {}
-  for (const opt of scalarOptions) {
-    const v = docker[opt.key]
-    if (v !== undefined && v !== null) {
-      opt.enabled = v !== '' && v !== false
-      opt.value = typeof v === 'boolean' ? String(v) : String(v)
-    } else {
-      opt.enabled = false
-      // preserve opt.value — do NOT clear
-    }
-  }
-  for (const opt of listOptions) {
-    const v = docker[opt.key]
-    if (v !== undefined && v !== null) {
-      opt.enabled = Array.isArray(v) ? v.length > 0 : !!v
-      opt.value = Array.isArray(v) ? v.map(formatListValue).join('\n') : (typeof v === 'object' ? JSON.stringify(v) : String(v || ''))
-    } else {
-      opt.enabled = false
-      // preserve opt.value — do NOT clear
-    }
-  }
-  customArgs.enabled = Array.isArray(row.args_override_json) && row.args_override_json.length > 0
-  customArgs.value = Array.isArray(row.args_override_json) ? row.args_override_json.join('\n') : ''
-  customEnv.enabled = typeof row.default_env_json === 'object' && row.default_env_json !== null && Object.keys(row.default_env_json).length > 0
-  customEnv.value = typeof row.default_env_json === 'object' && row.default_env_json !== null ? Object.entries(row.default_env_json).map(([k, v]) => `${k}=${v}`).join('\n') : ''
-  // Load structured parameter values
-  parameterValues.value = Array.isArray(row.parameter_values_json) ? [...row.parameter_values_json] : []
-  parameterSchema.value = Array.isArray(row.parameter_schema_json) ? [...row.parameter_schema_json] : []
-}
-const parameterEditorModel = computed({
-  get: () => {
-    const docker: Record<string, any> = {}
-    for (const opt of scalarOptions) {
-      if (opt.key === 'privileged') { docker[opt.key] = opt.value === 'true' }
-      else if (opt.value !== '') { docker[opt.key] = opt.value }
-    }
-    for (const opt of listOptions) {
-      const lines = parseLines(opt.value)
-      if (lines.length > 0) docker[opt.key] = lines
-    }
-    return {
-      docker_json: docker,
-      args_override_json: parseLines(customArgs.value),
-      default_env_json: Object.fromEntries(parseLines(customEnv.value).map(parseKeyValue)),
-      parameter_values_json: parameterValues.value,
-    }
-  },
-  set: (val: any) => {
-    if (val.parameter_values_json) parameterValues.value = val.parameter_values_json
-  },
-})
 function buildPayload() {
-  const docker: Record<string, any> = {}
-  for (const opt of scalarOptions) {
-    if (opt.key === 'privileged') { docker[opt.key] = opt.value === 'true' }
-    else if (opt.value !== '') { docker[opt.key] = opt.value }
+  const m = parameterEditorModel.value
+  return {
+    display_name: editForm.display_name,
+    image_name: editForm.image_name,
+    vendor: editForm.vendor,
+    docker_json: m.docker_json || {},
+    args_override_json: m.args_override_json || [],
+    default_env_json: m.default_env_json || {},
+    parameter_values_json: m.parameter_values_json || parameterValues.value,
+    parameter_schema_json: parameterSchema.value,
   }
-  for (const opt of listOptions) {
-    const lines = parseLines(opt.value)
-    if (opt.key === 'devices' || opt.key === 'optional_devices' || opt.key === 'extra_mounts') { if (lines.length > 0) docker[opt.key] = lines.map(parseMapping) }
-    else if (opt.key === 'ulimits') { if (lines.length > 0) docker[opt.key] = Object.fromEntries(lines.map(parseKeyValue)) }
-    else if (opt.key === 'env') { (docker as any).default_env = Object.fromEntries(lines.map(parseKeyValue)) }
-    else { if (lines.length > 0) docker[opt.key] = lines }
-  }
-  return { display_name: editForm.display_name, image_name: editForm.image_name, vendor: editForm.vendor, docker_json: docker, args_override_json: parseLines(customArgs.value), default_env_json: Object.fromEntries(parseLines(customEnv.value).map(parseKeyValue)), parameter_values_json: parameterValues.value, parameter_schema_json: parameterSchema.value }
 }
 const commandPreview = computed(() => {
-  const payload = buildPayload(); const docker = payload.docker_json; const parts = ['docker', 'run', '-d']
+  const payload = buildPayload(); const docker: Record<string, any> = payload.docker_json || {}; const parts = ['docker', 'run', '-d']
   if (docker.privileged) parts.push('--privileged')
   for (const key of ['ipc_mode', 'uts_mode', 'network_mode', 'pid_mode', 'shm_size']) { if (docker[key]) parts.push(`--${key.replace('_mode','').replace('_','-')}`, String(docker[key])) }
-  for (const d of docker.devices || []) parts.push('--device', `${d.host_path}:${d.container_path}`)
-  for (const g of docker.group_add || []) parts.push('--group-add', g)
-  for (const s of docker.security_options || []) parts.push('--security-opt', s)
+  for (const d of (Array.isArray(docker.devices) ? docker.devices : [])) parts.push('--device', typeof d === 'string' ? d : `${d.host_path}:${d.container_path || d.host_path}`)
+  for (const g of (Array.isArray(docker.group_add) ? docker.group_add : [])) parts.push('--group-add', g)
+  for (const s of (Array.isArray(docker.security_options) ? docker.security_options : [])) parts.push('--security-opt', s)
   for (const [k, v] of Object.entries(docker.ulimits || {})) parts.push('--ulimit', `${k}=${v}`)
-  for (const [k, v] of Object.entries((docker as any).default_env || {})) parts.push('-e', `${k}=${v}`)
-  parts.push(payload.image_name || '<image>'); parts.push(...payload.args_override_json)
+  for (const [k, v] of Object.entries(docker.default_env || {})) parts.push('-e', `${k}=${v}`)
+  parts.push(payload.image_name || '<image>'); parts.push(...(payload.args_override_json || []))
   return parts.join(' ')
 })
 function parseLines(value: string) { return Array.from(new Set(value.split('\n').map(v => v.trim()).filter(Boolean))) }

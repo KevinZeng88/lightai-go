@@ -164,7 +164,7 @@ const scalarOptions = reactive<ParamOption[]>([
 ])
 
 const listOptions = reactive<ParamOption[]>([
-  { key: 'devices', label: 'runtimes.devices', enabled: false, value: '', placeholder: '/dev/dri:/dev/dri\n/dev/mxcd:/dev/mxcd', hint: 'Docker --device' },
+  { key: 'devices', label: 'runtimes.devices', enabled: false, value: '', placeholder: '/dev/fuse:/dev/fuse', hint: 'Docker --device (host:container[:perms])' },
   { key: 'optional_devices', label: 'runtimes.optionalDevices', enabled: false, value: '', placeholder: '/dev/infiniband:/dev/infiniband', hint: 'Optional devices, failure tolerated' },
   { key: 'group_add', label: 'runtimes.groupAdd', enabled: false, value: '', placeholder: 'video\nrender', hint: 'Docker --group-add' },
   { key: 'security_options', label: 'runtimes.securityOpt', enabled: false, value: '', placeholder: 'seccomp=unconfined\napparmor=unconfined', hint: 'Docker --security-opt' },

@@ -152,7 +152,7 @@
           <el-input v-model="editForm.env_overrides_text" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.keyValueLines')" />
         </el-form-item>
         <el-divider>{{ $t('deployments.structuredParameters') }}</el-divider>
-        <RuntimeParameterEditor v-model="editParameterModel" />
+        <RuntimeParameterEditor v-model="editParameterModel" :backend-schema="editBackendSchema" />
       </el-form>
       <template #footer>
         <div style="display:flex;justify-content:space-between;width:100%">
@@ -342,6 +342,7 @@ const editVisible = ref(false); const selectedEditRow = ref<any>(null)
 const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_id: '', host_port: 8000, container_port: 0, app_port: 0, original_name: '', source_template_name: '', source_backend_runtime_id: '', copied_at: '', env_overrides_text: '' })
 const editParameterValues = ref<any[]>([])
 const editDisabledParameters = ref<any[]>([])
+const editBackendSchema = ref<any[]>([])
 const editParameterModel = computed({
   get: () => ({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: editParameterValues.value }),
   set: (val: any) => { if (val.parameter_values_json) editParameterValues.value = val.parameter_values_json },
@@ -617,6 +618,25 @@ function showEdit(row: any) {
   editParameterValues.value = Array.isArray(row.parameter_values_json) ? [...row.parameter_values_json] : []
   editDisabledParameters.value = Array.isArray(row.disabled_parameters_json) ? [...row.disabled_parameters_json] : []
   editVisible.value = true
+  // Load backend schema for RuntimeParameterEditor dynamic rendering
+  loadEditBackendSchema(row)
+}
+
+async function loadEditBackendSchema(row: any) {
+  editBackendSchema.value = []
+  try {
+    const brId = row.source_backend_runtime_id || row.backend_runtime_id
+    if (!brId) return
+    const br = await apiClient.get(`/backend-runtimes/${brId}`)
+    if (br?.backend_id) {
+      const { listBackendVersions } = await import('@/api/backends')
+      const versions = await listBackendVersions(br.backend_id)
+      const version = versions.find((v: any) => v.id === br.backend_version_id)
+      if (version?.default_args_schema_json) {
+        editBackendSchema.value = Array.isArray(version.default_args_schema_json) ? version.default_args_schema_json : []
+      }
+    }
+  } catch { editBackendSchema.value = [] }
 }
 
 async function doEdit() {

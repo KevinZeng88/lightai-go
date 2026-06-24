@@ -925,9 +925,11 @@ func (h *AgentHandler) buildDefaultParamValuesFromSchema(schemaJSON string) stri
 	var values []map[string]interface{}
 	for _, def := range schema {
 		cliName := def.Name
-		val := def.Default
+		// Value (template) takes precedence over Default (static).
+		// e.g. value="{{container_port}}" should be used, not default="8000".
+		val := def.Value
 		if val == "" {
-			val = def.Value
+			val = def.Default
 		}
 		entry := map[string]interface{}{
 			"key":      strings.TrimLeft(def.Name, "-"),
