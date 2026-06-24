@@ -45,43 +45,79 @@ default_command:
   - "{{model_container_path}}"
 default_args_schema:
   - name: --model
+    group: startup
+    label: Model Path
     required: true
     value: "{{MODEL_CONTAINER_PATH}}"
   - name: --host
+    group: startup
+    label: Listen Host
     required: true
     default: "0.0.0.0"
   - name: --port
+    group: startup
+    label: Container Port
     required: true
     value: "{{container_port}}"
   - name: --served-model-name
+    group: startup
+    label: Served Model Name
     optional: true
   - name: --tensor-parallel-size
+    group: parallelism
+    label: Tensor Parallel Size
     optional: true
   - name: --pipeline-parallel-size
+    group: parallelism
+    label: Pipeline Parallel Size
     optional: true
   - name: --max-model-len
+    group: performance
+    label: Max Model Length
     optional: true
   - name: --gpu-memory-utilization
+    group: performance
+    label: GPU Memory Utilization
     optional: true
   - name: --max-num-seqs
+    group: performance
+    label: Max Concurrent Sequences
     optional: true
   - name: --max-num-batched-tokens
+    group: performance
+    label: Max Batched Tokens
     optional: true
   - name: --kv-cache-dtype
+    group: performance
+    label: KV Cache Data Type
     optional: true
   - name: --dtype
+    group: performance
+    label: Model Data Type
     optional: true
   - name: --swap-space
+    group: performance
+    label: Swap Space (GB)
     optional: true
   - name: --cpu-offload-gb
+    group: performance
+    label: CPU Offload (GB)
     optional: true
   - name: --enforce-eager
+    group: performance
+    label: Enforce Eager Mode
     optional: true
   - name: --safetensors-load-strategy
+    group: performance
+    label: Safetensors Load Strategy
     optional: true
   - name: --trust-remote-code
+    group: security
+    label: Trust Remote Code
     optional: true
   - name: --download-dir
+    group: advanced
+    label: Download Directory
     optional: true
 health_check:
   type: http

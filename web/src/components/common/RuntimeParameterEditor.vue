@@ -40,26 +40,29 @@
         </div>
       </el-collapse-item>
 
-      <!-- Backend Serving Args (dynamic from BackendVersion schema) -->
+      <!-- Backend Serving Args (dynamic from BackendVersion schema, grouped) -->
       <el-collapse-item v-if="backendParams.length > 0" :title="t('runtimes.backendServingArgs')" name="backendArgs">
         <el-alert type="info" :closable="false" style="margin-bottom:8px">
           {{ t('runtimes.backendArgsHint') }}
         </el-alert>
-        <div v-for="param in backendParams" :key="param.key" class="param-row">
-          <div class="param-header">
-            <el-checkbox v-model:checked="param.enabled" :disabled="readonly || param.required">
-              {{ param.cli_name }}
-              <el-tag v-if="param.required" size="small" type="danger" style="margin-left:4px">required</el-tag>
-            </el-checkbox>
+        <div v-for="[group, params] in groupedBackendParams" :key="group" class="param-group">
+          <h4 class="param-group-title">{{ group }}</h4>
+          <div v-for="param in params" :key="param.key" class="param-row">
+            <div class="param-header">
+              <el-checkbox v-model:checked="param.enabled" :disabled="readonly || param.required">
+                {{ param.label || param.cli_name }}
+                <el-tag v-if="param.required" size="small" type="danger" style="margin-left:4px">required</el-tag>
+              </el-checkbox>
+            </div>
+            <el-input
+              v-model="param.value"
+              :disabled="!param.enabled || readonly"
+              size="small"
+              class="param-input"
+              :placeholder="param.default || param.type || ''"
+            />
+            <span class="param-hint">{{ param.name }}{{ param.alias ? ' / ' + param.alias : '' }}</span>
           </div>
-          <el-input
-            v-model="param.value"
-            :disabled="!param.enabled || readonly"
-            size="small"
-            class="param-input"
-            :placeholder="param.default || param.type || ''"
-          />
-          <span class="param-hint">{{ param.name }}{{ param.alias ? ' / ' + param.alias : '' }}</span>
         </div>
       </el-collapse-item>
 
@@ -114,6 +117,8 @@ const { t } = useI18n()
 interface BackendParamDef {
   name: string
   alias?: string
+  label?: string
+  group?: string
   required?: boolean
   optional?: boolean
   default?: string
@@ -184,6 +189,8 @@ interface BackendParam {
   name: string
   alias: string
   cli_name: string
+  label: string
+  group: string
   required: boolean
   enabled: boolean
   value: string
@@ -192,6 +199,17 @@ interface BackendParam {
 }
 
 const backendParams = reactive<BackendParam[]>([])
+
+// Group backend params by group field
+const groupedBackendParams = computed(() => {
+  const groups = new Map<string, BackendParam[]>()
+  for (const p of backendParams) {
+    const g = p.group || 'other'
+    if (!groups.has(g)) groups.set(g, [])
+    groups.get(g)!.push(p)
+  }
+  return groups
+})
 
 function syncBackendParamsFromSchema() {
   const schema = props.backendSchema || []
@@ -212,6 +230,8 @@ function syncBackendParamsFromSchema() {
       name: def.name || key,
       alias: def.alias || '',
       cli_name: cliName,
+      label: def.label || cliName,
+      group: def.group || 'other',
       required: !!def.required,
       // Required params are always enabled — cannot be disabled
       enabled: def.required ? true : (existing ? !!existing.enabled : false),
@@ -404,6 +424,22 @@ function formatListItem(v: any): string {
 <style scoped>
 .runtime-parameter-editor {
   width: 100%;
+}
+.param-group {
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.param-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+.param-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+  margin: 0 0 8px 0;
+  text-transform: capitalize;
 }
 .param-row {
   margin-bottom: 12px;

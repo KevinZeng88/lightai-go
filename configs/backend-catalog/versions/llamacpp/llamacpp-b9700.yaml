@@ -45,39 +45,67 @@ default_args:
 default_args_schema:
   - name: -m
     alias: --model
+    group: startup
+    label: Model Path
     required: true
     value: "{{MODEL_CONTAINER_PATH}}"
   - name: --host
+    group: startup
+    label: Listen Host
     required: true
     default: "0.0.0.0"
   - name: --port
+    group: startup
+    label: Container Port
     required: true
     value: "{{container_port}}"
   - name: --ctx-size
     alias: -c
+    group: performance
+    label: Context Size
     optional: true
   - name: --n-gpu-layers
     alias: -ngl
+    group: performance
+    label: GPU Layers
     optional: true
   - name: --threads
     alias: -t
+    group: performance
+    label: CPU Threads
     optional: true
   - name: --threads-batch
     alias: -tb
+    group: performance
+    label: Batch Threads
     optional: true
   - name: --batch-size
+    group: performance
+    label: Batch Size
     optional: true
   - name: --ubatch-size
+    group: performance
+    label: Micro Batch Size
     optional: true
   - name: --cache-type-k
+    group: performance
+    label: KV Cache Type K
     optional: true
   - name: --cache-type-v
+    group: performance
+    label: KV Cache Type V
     optional: true
   - name: --split-mode
+    group: parallelism
+    label: Split Mode
     optional: true
   - name: --main-gpu
+    group: parallelism
+    label: Main GPU
     optional: true
   - name: --tensor-split
+    group: parallelism
+    label: Tensor Split
     optional: true
 health_check:
   type: http

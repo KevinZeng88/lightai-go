@@ -47,33 +47,59 @@ default_args:
   - "{{model_container_path}}"
 default_args_schema:
   - name: --model-path
+    group: startup
+    label: Model Path
     required: true
     value: "{{MODEL_CONTAINER_PATH}}"
   - name: --host
+    group: startup
+    label: Listen Host
     required: true
     default: "0.0.0.0"
   - name: --port
+    group: startup
+    label: Container Port
     required: true
     value: "{{container_port}}"
   - name: --tp
+    group: parallelism
+    label: Tensor Parallel Size
     optional: true
   - name: --tensor-parallel-size
+    group: parallelism
+    label: Tensor Parallel Size (alias)
     optional: true
   - name: --dp
+    group: parallelism
+    label: Data Parallel Size
     optional: true
   - name: --enable-metrics
+    group: observability
+    label: Enable Metrics
     optional: true
   - name: --log-level
+    group: observability
+    label: Log Level
     optional: true
   - name: --served-model-name
+    group: startup
+    label: Served Model Name
     optional: true
   - name: --mem-fraction-static
+    group: performance
+    label: Static Memory Fraction
     optional: true
   - name: --context-length
+    group: performance
+    label: Context Length
     optional: true
   - name: --max-running-requests
+    group: performance
+    label: Max Running Requests
     optional: true
   - name: --disable-cuda-graph
+    group: performance
+    label: Disable CUDA Graph
     optional: true
 health_check:
   type: http
