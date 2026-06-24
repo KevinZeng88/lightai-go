@@ -68,12 +68,17 @@ func EquivalentCommandPreview(plan *ResolvedRunPlan) string {
 		parts = append(parts, a)
 	}
 	// Entrypoint must come before the image name (Docker CLI requirement).
+	// --entrypoint expects a single executable; remaining entrypoint elements
+	// become part of the command after the image.
 	if len(plan.Entrypoint) > 0 {
-		parts = append(parts, "--entrypoint", strings.Join(plan.Entrypoint, " "))
+		parts = append(parts, "--entrypoint", plan.Entrypoint[0])
 	}
 	// Image
 	parts = append(parts, plan.Image)
-	// Container command/args come after the image.
+	// Remaining entrypoint elements + container command/args come after the image.
+	if len(plan.Entrypoint) > 1 {
+		parts = append(parts, plan.Entrypoint[1:]...)
+	}
 	parts = append(parts, plan.Args...)
 
 	return strings.Join(parts, " ")
