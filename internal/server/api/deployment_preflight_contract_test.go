@@ -138,6 +138,55 @@ func TestContractPreflightRejectsModelLocationMissing(t *testing.T) {
 	}
 }
 
+func TestDryRunAppliesProbeProcessStartConfig(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	nodeID := "node-pf-ps"
+	runtimeID := "br-pf-ps"
+	artifactID := "art-pf-ps"
+	nbrID := nodeID + ":" + runtimeID
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-pf-ps',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
+	insertRuntime(t, db, runtimeID, "SGLang", "")
+	insertNodeBackendRuntime(t, db, nbrID, runtimeID, nodeID, "lmsysorg/sglang:latest", "ready", "ok", 1, 1, "")
+	probeResults := `{"process_start_detection":{"status":"candidate_found","selected_profile_id":"sglang.python_module_launcher","entrypoint_mode":"image_default","command_prefix":["python3","-m","sglang.launch_server"],"confidence":"high","warnings":[]}}`
+	if _, err := db.Exec(`UPDATE node_backend_runtimes SET probe_results_json = ? WHERE id = ?`, probeResults, nbrID); err != nil {
+		t.Fatalf("set probe results: %v", err)
+	}
+	insertUIPersistenceArtifact(t, h, artifactID)
+	snapshotInsertModelLocation(t, db, "ml-pf-ps", artifactID, nodeID)
+
+	cw := httptest.NewRecorder()
+	h.HandleCreateDeployment(cw, newReq("POST", "/x",
+		`{"name":"dep-pf-ps","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nbrID+`","service_json":{"host_port":9000}}`,
+		adminSession(), nil))
+	if cw.Code != http.StatusCreated {
+		t.Fatalf("create deployment code=%d body=%s", cw.Code, cw.Body.String())
+	}
+	var created map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &created)
+	depID, _ := created["id"].(string)
+	if depID == "" {
+		t.Fatalf("deployment id missing: %s", cw.Body.String())
+	}
+
+	dw := httptest.NewRecorder()
+	h.HandleDeploymentDryRun(dw, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": depID}))
+	if dw.Code != http.StatusOK {
+		t.Fatalf("dry-run code=%d body=%s", dw.Code, dw.Body.String())
+	}
+	var dryRun map[string]interface{}
+	json.Unmarshal(dw.Body.Bytes(), &dryRun)
+	preview, _ := dryRun["command_preview"].(string)
+	if !strings.Contains(preview, "python3 -m sglang.launch_server") {
+		t.Fatalf("dry-run missing probe-derived SGLang launcher:\n%s", preview)
+	}
+	if !strings.Contains(preview, "--model") {
+		t.Fatalf("dry-run missing model argument:\n%s", preview)
+	}
+}
+
 // TestContractPreflightRejectsReplicasUnsupported verifies replicas>1 is rejected.
 func TestContractPreflightRejectsReplicasUnsupported(t *testing.T) {
 	db := setupTestDB(t)

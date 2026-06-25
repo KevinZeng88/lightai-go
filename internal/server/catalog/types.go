@@ -82,30 +82,30 @@ type BackendDoc struct {
 }
 
 type VersionDoc struct {
-	ID                string           `yaml:"id"`
-	BackendID         string           `yaml:"backend_id"`
-	Slug              string           `yaml:"slug"`
-	Version           string           `yaml:"version"`
-	ManagedBy         string           `yaml:"managed_by"`
-	Source            string           `yaml:"source"`
-	Readonly          bool             `yaml:"readonly"`
-	Protocol          string           `yaml:"protocol"`
-	ImageCandidates   []string         `yaml:"image_candidates"`
-	DefaultPort       int              `yaml:"default_port"`
-	DefaultHost       string           `yaml:"default_host"`
-	DefaultModelMount map[string]any   `yaml:"default_model_mount"`
-	DefaultEndpoints  map[string]any   `yaml:"default_endpoints"`
-	Capabilities      []string         `yaml:"capabilities"`
-	CapabilitiesJSON  any              `yaml:"capabilities_json"`
-	DefaultEntrypoint []string         `yaml:"default_entrypoint"`
-	DefaultCommand    []string         `yaml:"default_command"`
-	DefaultArgs       []string         `yaml:"default_args"`
-	DefaultArgsSchema []map[string]any `yaml:"default_args_schema"`
-	HealthCheck       map[string]any   `yaml:"health_check"`
-	VendorOptions     map[string]any   `yaml:"vendor_options"`
-	OfficialReference []any            `yaml:"official_reference_note"`
-	SourcePath        string           `yaml:"-"`
-	SourceHash        string           `yaml:"-"`
+	ID                 string           `yaml:"id"`
+	BackendID          string           `yaml:"backend_id"`
+	Slug               string           `yaml:"slug"`
+	Version            string           `yaml:"version"`
+	ManagedBy          string           `yaml:"managed_by"`
+	Source             string           `yaml:"source"`
+	Readonly           bool             `yaml:"readonly"`
+	Protocol           string           `yaml:"protocol"`
+	ImageCandidates    []string         `yaml:"image_candidates"`
+	DefaultPort        int              `yaml:"default_port"`
+	DefaultHost        string           `yaml:"default_host"`
+	DefaultModelMount  map[string]any   `yaml:"default_model_mount"`
+	DefaultEndpoints   map[string]any   `yaml:"default_endpoints"`
+	Capabilities       []string         `yaml:"capabilities"`
+	CapabilitiesDetail any              `yaml:"capabilities_detail"`
+	DefaultEntrypoint  []string         `yaml:"default_entrypoint"`
+	DefaultCommand     []string         `yaml:"default_command"`
+	DefaultArgs        []string         `yaml:"default_args"`
+	DefaultArgsSchema  []map[string]any `yaml:"default_args_schema"`
+	HealthCheck        map[string]any   `yaml:"health_check"`
+	VendorOptions      map[string]any   `yaml:"vendor_options"`
+	OfficialReference  []any            `yaml:"official_reference_note"`
+	SourcePath         string           `yaml:"-"`
+	SourceHash         string           `yaml:"-"`
 }
 
 type RuntimeDoc struct {

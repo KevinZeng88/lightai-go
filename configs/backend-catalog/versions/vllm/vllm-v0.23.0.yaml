@@ -26,7 +26,7 @@ capabilities:
   - completions
   - embeddings
   - openai_compatible
-capabilities_json:
+capabilities_detail:
   supported_formats: [huggingface, safetensors]
   supported_tasks: [chat, completion, embedding]
   supported_capabilities: [chat, completion, embedding, vision]

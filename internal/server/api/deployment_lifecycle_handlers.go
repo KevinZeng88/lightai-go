@@ -792,8 +792,8 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 
 	// Validate NodeBackendRuntime readiness. Runtime configuration comes from
 	// the deployment's frozen ConfigSet, not from the live NBR row.
-	var nodeRuntimeStatus string
-	h.DB.QueryRow(`SELECT status, backend_runtime_id, node_id, COALESCE(config_set_json,'{}') FROM node_backend_runtimes WHERE id = ?`, pf.nodeRuntimeID).Scan(&nodeRuntimeStatus, &pf.runtimeID, &pf.placement.NodeID, &pf.nbrConfigSet)
+	var nodeRuntimeStatus, nbrProbeResults string
+	h.DB.QueryRow(`SELECT status, backend_runtime_id, node_id, COALESCE(config_set_json,'{}'), COALESCE(probe_results_json,'{}') FROM node_backend_runtimes WHERE id = ?`, pf.nodeRuntimeID).Scan(&nodeRuntimeStatus, &pf.runtimeID, &pf.placement.NodeID, &pf.nbrConfigSet, &nbrProbeResults)
 	if !isNBRDeployable(nodeRuntimeStatus) {
 		reason := nbrDisabledReason(nodeRuntimeStatus, "")
 		if nodeRuntimeStatus == "" {
@@ -802,6 +802,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		pf.addErr("node_backend_runtime_not_ready", reason, map[string]interface{}{"node_runtime_id": pf.nodeRuntimeID, "nbr_status": nodeRuntimeStatus, "node_id": pf.placement.NodeID, "runtime_id": pf.runtimeID})
 		return pf
 	}
+	pf.processStartConfig = processStartConfigFromProbe(nbrProbeResults)
 
 	// Validate ModelLocation.
 	var verificationStatus, matchStatus string
@@ -984,6 +985,36 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	}
 
 	return pf
+}
+
+func processStartConfigFromProbe(raw string) *runplan.ProcessStartConfig {
+	if strings.TrimSpace(raw) == "" || strings.TrimSpace(raw) == "{}" {
+		return nil
+	}
+	var probe map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
+		return nil
+	}
+	psd, _ := probe["process_start_detection"].(map[string]interface{})
+	if psd == nil || strings.TrimSpace(fmt.Sprint(psd["status"])) != "candidate_found" {
+		return nil
+	}
+	entrypointMode := strings.TrimSpace(fmt.Sprint(psd["entrypoint_mode"]))
+	commandPrefix := toStringSlice(psd["command_prefix"])
+	entrypoint := toStringSlice(psd["entrypoint"])
+	if entrypointMode == "" && len(commandPrefix) == 0 && len(entrypoint) == 0 {
+		return nil
+	}
+	return &runplan.ProcessStartConfig{
+		EntrypointMode: entrypointMode,
+		Entrypoint:     entrypoint,
+		CommandPrefix:  commandPrefix,
+		ShellMode:      boolVal(psd, "shell_mode", false),
+		ProfileID:      strings.TrimSpace(fmt.Sprint(psd["selected_profile_id"])),
+		Source:         "probe_results",
+		Confidence:     strings.TrimSpace(fmt.Sprint(psd["confidence"])),
+		Warnings:       toStringSlice(psd["warnings"]),
+	}
 }
 
 // planRunplanDockerSpec extracts a DockerSpecInfo from a ResolvedRunPlan for lint.

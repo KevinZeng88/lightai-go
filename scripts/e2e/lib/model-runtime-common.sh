@@ -24,6 +24,35 @@ fail()  { log "FAIL: $*"; return 1; }
 abort() { log "FATAL: $*"; exit 1; }
 now_ms(){ date +%s%3N; }
 
+e2e_model_root_path() {
+  dirname "$MODEL_PATH"
+}
+
+e2e_model_relative_path() {
+  local root_path="$1"
+  if [[ "$MODEL_PATH" == "$root_path" ]]; then
+    printf '.\n'
+  else
+    printf '%s\n' "${MODEL_PATH#$root_path/}"
+  fi
+}
+
+e2e_model_path_type() {
+  if [[ "$MODEL_PATH" == *.gguf ]]; then
+    printf 'file\n'
+  else
+    printf 'directory\n'
+  fi
+}
+
+e2e_model_format() {
+  if [[ "$MODEL_PATH" == *.gguf ]]; then
+    printf 'gguf\n'
+  else
+    printf 'huggingface\n'
+  fi
+}
+
 json_get() {
   python3 -c "
 import json,sys
@@ -98,7 +127,7 @@ e2e_query_gpu() {
 }
 
 e2e_add_model_root() {
-  local root_path; root_path="$(dirname "$MODEL_PATH")"
+  local root_path; root_path="$(e2e_model_root_path)"
   set +e
   local root_resp; root_resp="$(api_ok POST "/api/v1/nodes/$NODE_ID/model-roots" "{\"path\":\"$root_path\"}" 2>/dev/null)"
   local root_rc=$?
@@ -122,10 +151,12 @@ for item in data if isinstance(data, list) else []:
 }
 
 e2e_scan_model() {
-  local root_path; root_path="$(dirname "$MODEL_PATH")"
-  local rel_path; rel_path="${MODEL_PATH#$root_path/}"
-  local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/model-paths/scan" \
-    "{\"root_id\":\"$ROOT_ID\",\"root\":\"$root_path\",\"relative_path\":\"$rel_path\",\"path_type\":\"directory\"}")"
+  local root_path; root_path="$(e2e_model_root_path)"
+  local rel_path; rel_path="$(e2e_model_relative_path "$root_path")"
+  local path_type; path_type="$(e2e_model_path_type)"
+  local r
+  r="$(api_ok POST "/api/v1/nodes/$NODE_ID/model-paths/scan" \
+    "{\"root_id\":\"$ROOT_ID\",\"root\":\"$root_path\",\"relative_path\":\"$rel_path\",\"path_type\":\"$path_type\"}")" || { fail "model scan failed"; return 1; }
   local fmt; fmt="$(echo "$r" | json_get format 2>/dev/null || echo 'unknown')"
   local name; name="$(echo "$r" | json_get discovered_name 2>/dev/null || echo 'unknown')"
   log "scan model fmt=$fmt name=$name rel=$rel_path"
@@ -133,21 +164,25 @@ e2e_scan_model() {
 
 e2e_create_artifact() {
   local name; name="e2e-${BACKEND_NAME}-${E2E_RUN_ID}-model"
-  local root_path; root_path="$(dirname "$MODEL_PATH")"
-  local rel_path; rel_path="${MODEL_PATH#$root_path/}"
-  local r; r="$(api_ok POST /api/v1/model-artifacts \
-    "{\"name\":\"$name\",\"display_name\":\"$name\",\"path\":\"$MODEL_PATH\",\"format\":\"huggingface\",\"task_type\":\"chat\"}")"
+  local root_path; root_path="$(e2e_model_root_path)"
+  local rel_path; rel_path="$(e2e_model_relative_path "$root_path")"
+  local path_type; path_type="$(e2e_model_path_type)"
+  local format; format="$(e2e_model_format)"
+  local r
+  r="$(api_ok POST /api/v1/model-artifacts \
+    "{\"name\":\"$name\",\"display_name\":\"$name\",\"path\":\"$MODEL_PATH\",\"format\":\"$format\",\"task_type\":\"chat\"}")" || { fail "create artifact failed"; return 1; }
   ARTIFACT_ID="$(echo "$r" | json_get id)"
   [ -n "$ARTIFACT_ID" ] || { fail "create artifact failed"; return 1; }
   # Create model location linking node + root + relative_path
   api_ok POST "/api/v1/model-artifacts/$ARTIFACT_ID/locations" \
-    "{\"node_id\":\"$NODE_ID\",\"root_id\":\"$ROOT_ID\",\"relative_path\":\"$rel_path\",\"path_type\":\"directory\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" > /dev/null 2>&1 || true
+    "{\"node_id\":\"$NODE_ID\",\"root_id\":\"$ROOT_ID\",\"relative_path\":\"$rel_path\",\"path_type\":\"$path_type\",\"verification_status\":\"verified\",\"match_status\":\"exact_match\"}" > /dev/null 2>&1 || true
   log "artifact_id=$ARTIFACT_ID rel=$rel_path"
 }
 
 e2e_enable_nbr() {
-  local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/enable" \
-    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\"}")"
+  local r
+  r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/enable" \
+    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\"}")" || { fail "enable NBR failed"; return 1; }
   api_body PATCH "/api/v1/nodes/$NODE_ID/backend-runtimes/$NODE_ID:$BACKEND_RUNTIME_ID" "{\"image_ref\":\"$IMAGE_REF\"}" >/dev/null 2>&1 || true
   log "nbr enabled status=$(echo "$r" | json_get status 2>/dev/null || echo '?')"
 }
@@ -156,7 +191,8 @@ e2e_check_nbr() {
   log "stage=check_nbr start"
   local nbr_id="$NODE_ID:$BACKEND_RUNTIME_ID"
   # Use check-request (Web UI path) — authoritative Docker image inspect + probe pipeline.
-  local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr_id/check-request" '{}')"
+  local r
+  r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/$nbr_id/check-request" '{}')" || { fail "NBR check-request failed"; return 1; }
   local st; st="$(echo "$r" | json_get status 2>/dev/null || echo '?')"
   local dep; dep="$(echo "$r" | json_get deployable 2>/dev/null || echo '?')"
   local warnings; warnings="$(echo "$r" | python3 -c 'import json,sys; d=json.load(sys.stdin); w=d.get("warnings"); print("none" if w is None else (", ".join(w) if w else "none"))' 2>/dev/null || echo '?')"
@@ -190,7 +226,9 @@ e2e_create_deployment() {
   mkdir -p "$ARTIFACT_DIR"
   printf '%s\n' "$payload" > "$ARTIFACT_DIR/deployment-request-payload.json"
   validate_json_payload "$ARTIFACT_DIR/deployment-request-payload.json" || { fail "deployment payload is invalid JSON"; return 1; }
-  DEPLOYMENT_ID="$(api_ok POST /api/v1/deployments "$payload" | json_get id)"
+  local deployment_resp
+  deployment_resp="$(api_ok POST /api/v1/deployments "$payload")" || { fail "create deployment failed"; return 1; }
+  DEPLOYMENT_ID="$(echo "$deployment_resp" | json_get id)"
   [ -n "$DEPLOYMENT_ID" ] || { fail "create deployment failed"; return 1; }
   log "deployment_id=$DEPLOYMENT_ID"
 }
@@ -225,8 +263,9 @@ PY
 }
 
 e2e_preflight() {
-  local r; r="$(api_body POST /api/v1/deployments/preflight \
-    "{\"model_artifact_id\":\"$ARTIFACT_ID\",\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"host_port\":$HOST_PORT}")"
+  local r
+  r="$(api_body POST /api/v1/deployments/preflight \
+    "{\"model_artifact_id\":\"$ARTIFACT_ID\",\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"host_port\":$HOST_PORT}")" || { fail "preflight request failed"; return 1; }
   log "candidate_nodes=$(echo "$r" | json_get candidate_nodes)"
   mkdir -p "$ARTIFACT_DIR"
   echo "$r" > "$ARTIFACT_DIR/preflight.json"
@@ -234,7 +273,8 @@ e2e_preflight() {
 
 e2e_start_deployment() {
   log "stage=start_deployment start"
-  local r; r="$(api_ok POST "/api/v1/deployments/$DEPLOYMENT_ID/start")"
+  local r
+  r="$(api_ok POST "/api/v1/deployments/$DEPLOYMENT_ID/start")" || { fail "start failed"; return 1; }
   INSTANCE_ID="$(echo "$r" | json_get instance_id)"
   [ -n "$INSTANCE_ID" ] || { fail "start failed"; return 1; }
   log "instance_id=$INSTANCE_ID"
@@ -269,10 +309,35 @@ e2e_wait_health() {
 }
 
 e2e_instance_test() {
-  local r; r="$(api_body POST "/api/v1/model-instances/$INSTANCE_ID/test" \
-    '{"mode":"chat","max_tokens":16}' 2>/dev/null || echo '{}')"
-  echo "$r" > "$ARTIFACT_DIR/instance-test.json"
-  log "instance_test: $(echo "$r" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status","?"),d.get("duration_ms","?"))' 2>/dev/null || echo 'parse_error')"
+  local r summary
+  for i in $(seq 1 10); do
+    r="$(api_body POST "/api/v1/model-instances/$INSTANCE_ID/test" \
+      '{"mode":"chat","max_tokens":16}' 2>/dev/null || echo '{}')"
+    echo "$r" > "$ARTIFACT_DIR/instance-test.json"
+    if echo "$r" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+if d.get("ok") is not True:
+    raise SystemExit(1)
+if not d.get("response_preview") and not d.get("raw_response"):
+    raise SystemExit(1)
+' 2>/dev/null; then
+      summary="$(echo "$r" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+ok=d.get("ok")
+lat=d.get("latency_ms", d.get("duration_ms", "?"))
+preview=d.get("response_preview", "")
+print(f"ok={ok} latency_ms={lat} preview={preview[:80]}")' 2>/dev/null || echo 'parse_error')"
+      log "instance_test: $summary"
+      return 0
+    fi
+    sleep 3
+  done
+  summary="$(echo "$r" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print(d.get("error", d.get("status", "not_ok")))' 2>/dev/null || echo 'parse_error')"
+  log "instance_test: $summary"
+  fail "instance test did not return ok=true"
+  return 1
 }
 
 e2e_docker_logs() {
@@ -318,11 +383,11 @@ e2e_run_default() {
   e2e_check_nbr        || return 1
   e2e_create_deployment || return 1
   e2e_preflight        || return 1
-  e2e_start_deployment || return 1
-  e2e_wait_health      || return 1
-  e2e_instance_test    || return 1
-  e2e_docker_logs      || return 1
-  e2e_stop_deployment  || return 1
+  e2e_start_deployment || { e2e_cleanup; return 1; }
+  e2e_wait_health      || { e2e_stop_deployment; e2e_cleanup; return 1; }
+  e2e_instance_test    || { e2e_stop_deployment; e2e_cleanup; return 1; }
+  e2e_docker_logs      || { e2e_stop_deployment; e2e_cleanup; return 1; }
+  e2e_stop_deployment  || { e2e_cleanup; return 1; }
   e2e_cleanup          || return 1
   e2e_save_artifacts
   return 0

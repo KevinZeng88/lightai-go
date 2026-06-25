@@ -28,7 +28,7 @@ capabilities:
   - embeddings
   - openai_compatible
   - web_ui
-capabilities_json:
+capabilities_detail:
   supported_formats: [gguf]
   supported_tasks: [chat, completion, embedding]
   supported_capabilities: [chat, completion, embedding]

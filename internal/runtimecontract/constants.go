@@ -8,7 +8,7 @@
 // Canonical source chain:
 //
 //	runtimecontract constants  →  compile-time truth (this package)
-//	DB backend_versions.capabilities_json  →  runtime truth (preflight reads this)
+//	DB backend_versions.config_set_json  →  runtime truth (preflight reads this)
 //	configs/backend-catalog/  →  human-readable catalog (must match DB)
 //	GET /api/enums/model-capabilities  →  frontend source (reads from these constants)
 package runtimecontract

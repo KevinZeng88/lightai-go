@@ -73,4 +73,4 @@ type HealthCheck struct {
 // DeviceBinding was removed (2026-06-25) as dead code.
 // GPU/vendor binding is handled directly in agent/runtime/docker.go buildCreateOptions()
 // via spec.Vendor string check, without needing this intermediate abstraction.
-// See: docs/reports/repairs/runtime-architecture-parameter-2026-06-25/evidence/wp-f-architecture-items/decisions.md
+// See: docs/design/catalog-configset-and-runtime-snapshot.md

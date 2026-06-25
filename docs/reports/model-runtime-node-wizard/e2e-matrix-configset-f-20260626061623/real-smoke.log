@@ -1,0 +1,114 @@
+[06:16:23] [smoke] start vLLM
+[06:16:23] [vllm] ===== vLLM default params =====
+[06:16:23] [vllm] stage=login start
+[06:16:23] [vllm] stage=login done
+[06:16:23] [vllm] node_id=node-70894186-093c-403d-87d1-08f17a690521
+[06:16:23] [vllm] gpu_id=ae092a1a-f9b5-467d-8a76-5702fd9db852
+[06:16:23] [vllm] root_id=0f40cdc4-52ed-4902-be69-7a11a5404cb7 root=/home/kzeng/models
+[06:16:23] [vllm] scan model fmt= name= rel=Qwen3-0.6B-Instruct-2512
+[06:16:23] [vllm] artifact_id=5837b516-f077-4ebe-8cdc-fbe1df4ad176 rel=Qwen3-0.6B-Instruct-2512
+[06:16:23] [vllm] nbr enabled status=needs_check
+[06:16:23] [vllm] stage=check_nbr start
+[06:16:24] [vllm] nbr check status=ready deployable=True warnings=none
+[06:16:24] [vllm] deployment_id=ded5c0dc-0de0-48aa-b6ac-a1f375698190
+[06:16:24] [vllm] candidate_nodes=[{'node_id': 'node-70894186-093c-403d-87d1-08f17a690521', 'status': 'ready'}]
+[06:16:24] [vllm] stage=start_deployment start
+[06:16:24] [vllm] instance_id=11f40d61-f3a7-43e2-9b23-83d176536113
+[06:16:24] [vllm] stage=health_check start
+[06:17:47] [vllm] /v1/models PASS cid=0ae5659e4941 state=running
+[06:17:47] [vllm] stage=health_check done duration_ms=83405
+[06:18:12] [vllm] instance_test: ok=True latency_ms=16 preview=pong
+[06:18:14] [vllm] logs_api: ok
+[06:18:14] [vllm] stage=stop start
+[06:18:21] [vllm] stage=stop done
+[06:18:21] [vllm] stage=cleanup start
+[06:18:21] [vllm] stage=cleanup done
+[06:18:21] [vllm] artifacts saved to docs/reports/model-runtime-node-wizard/e2e-matrix-configset-f-20260626061623/vllm
+[06:18:21] [vllm] ===== vLLM modified params =====
+[06:18:21] [vllm-modified] stage=login start
+[06:18:21] [vllm-modified] stage=login done
+[06:18:21] [vllm-modified] node_id=node-70894186-093c-403d-87d1-08f17a690521
+[06:18:21] [vllm-modified] gpu_id=ae092a1a-f9b5-467d-8a76-5702fd9db852
+[06:18:21] [vllm-modified] root_id=32eb2d94-1d9f-4342-b5c8-ead2376b334a root=/home/kzeng/models
+[06:18:21] [vllm-modified] scan model fmt= name= rel=Qwen3-0.6B-Instruct-2512
+[06:18:21] [vllm-modified] artifact_id=79c9ede4-b6f2-4249-adc2-e51eecd6ebcf rel=Qwen3-0.6B-Instruct-2512
+[06:18:22] [vllm-modified] nbr enabled status=needs_check
+[06:18:22] [vllm-modified] stage=check_nbr start
+[06:18:22] [vllm-modified] nbr check status=ready deployable=True warnings=none
+[06:18:22] [vllm-modified] deployment_id=eae553b3-dd84-4eda-89ee-b6a2787ebb17
+[06:18:22] [vllm-modified] candidate_nodes=[{'node_id': 'node-70894186-093c-403d-87d1-08f17a690521', 'status': 'ready'}]
+[06:18:22] [vllm-modified] stage=start_deployment start
+[06:18:22] [vllm-modified] instance_id=57679ec1-c81c-4a1c-8948-9247a690d701
+[06:18:22] [vllm-modified] stage=health_check start
+[06:19:46] [vllm-modified] /v1/models PASS cid=15557909f105 state=running
+[06:19:46] [vllm-modified] stage=health_check done duration_ms=84096
+[06:20:10] [vllm-modified] instance_test: ok=True latency_ms=109 preview=pong
+[06:20:10] [vllm-modified] logs_api: ok
+[06:20:10] [vllm-modified] stage=stop start
+[06:20:18] [vllm-modified] stage=stop done
+[06:20:18] [vllm-modified] stage=cleanup start
+[06:20:18] [vllm-modified] stage=cleanup done
+[06:20:18] [vllm-modified] artifacts saved to docs/reports/model-runtime-node-wizard/e2e-matrix-configset-f-20260626061623/vllm-modified
+
+vLLM default: PASS
+vLLM modified params: PASS
+[06:20:18] [smoke] pass vLLM
+[06:20:18] [smoke] start SGLang
+[06:20:18] [sglang] ===== SGLang ConfigSet E2E =====
+[06:20:18] [sglang] stage=login start
+[06:20:19] [sglang] stage=login done
+[06:20:19] [sglang] node_id=node-70894186-093c-403d-87d1-08f17a690521
+[06:20:19] [sglang] gpu_id=ae092a1a-f9b5-467d-8a76-5702fd9db852
+[06:20:19] [sglang] root_id=7cf2e2f6-d7f3-4441-9bf6-e8e8d22053c3 root=/home/kzeng/models
+[06:20:19] [sglang] scan model fmt= name= rel=Qwen3-0.6B-Instruct-2512
+[06:20:19] [sglang] artifact_id=c2fb549d-c872-426c-ab48-6f5a37a5716c rel=Qwen3-0.6B-Instruct-2512
+[06:20:19] [sglang] nbr enabled status=needs_check
+[06:20:19] [sglang] stage=check_nbr start
+[06:20:19] [sglang] nbr check status=ready deployable=True warnings=none
+[06:20:19] [sglang] deployment_id=e2eececa-b9ab-4c07-8073-edf0eaceccb4
+[06:20:19] [sglang] candidate_nodes=[{'node_id': 'node-70894186-093c-403d-87d1-08f17a690521', 'status': 'ready'}]
+[06:20:19] [sglang] stage=start_deployment start
+[06:20:19] [sglang] instance_id=c8244ba1-12c3-4a54-8925-26f092ec2c57
+[06:20:19] [sglang] stage=health_check start
+[06:21:13] [sglang] /v1/models PASS cid=52de3c03bfc2 state=running
+[06:21:13] [sglang] stage=health_check done duration_ms=53967
+[06:21:17] [sglang] instance_test: ok=True latency_ms=3787 preview=pong
+[06:21:18] [sglang] logs_api: ok
+[06:21:18] [sglang] stage=stop start
+[06:21:30] [sglang] stage=stop done
+[06:21:30] [sglang] stage=cleanup start
+[06:21:30] [sglang] stage=cleanup done
+[06:21:30] [sglang] artifacts saved to docs/reports/model-runtime-node-wizard/e2e-matrix-configset-f-20260626061623/sglang
+[06:21:30] [smoke] pass SGLang
+[06:21:30] [smoke] start llama.cpp
+[06:21:30] [llamacpp] ===== llama.cpp ConfigSet E2E =====
+[06:21:30] [llamacpp] stage=login start
+[06:21:30] [llamacpp] stage=login done
+[06:21:30] [llamacpp] node_id=node-70894186-093c-403d-87d1-08f17a690521
+[06:21:30] [llamacpp] gpu_id=ae092a1a-f9b5-467d-8a76-5702fd9db852
+[06:21:30] [llamacpp] root_id=79f77314-2d52-4713-9a71-66062930ffc2 root=/home/kzeng/models/Qwen3.5-9B-Q4
+[06:21:30] [llamacpp] scan model fmt= name= rel=Qwen3.5-9B-Q4_K_M.gguf
+[06:21:30] [llamacpp] artifact_id=52d79ca5-eb97-4cd3-b952-efecbe14e895 rel=Qwen3.5-9B-Q4_K_M.gguf
+[06:21:30] [llamacpp] nbr enabled status=needs_check
+[06:21:30] [llamacpp] stage=check_nbr start
+[06:21:30] [llamacpp] nbr check status=ready deployable=True warnings=none
+[06:21:30] [llamacpp] deployment_id=b061aa8a-c4fe-41a0-9550-d22cb1e82a0a
+[06:21:31] [llamacpp] candidate_nodes=[{'node_id': 'node-70894186-093c-403d-87d1-08f17a690521', 'status': 'ready'}]
+[06:21:31] [llamacpp] stage=start_deployment start
+[06:21:31] [llamacpp] instance_id=7fa94695-862e-42d6-bdd5-858cf46043a1
+[06:21:31] [llamacpp] stage=health_check start
+[06:21:35] [llamacpp] /v1/models PASS cid=dddff242878c state=running
+[06:21:35] [llamacpp] stage=health_check done duration_ms=4129
+[06:21:44] [llamacpp] instance_test: ok=True latency_ms=3173 preview=[reasoning] Thinking Process:
+
+1.  **
+[06:21:45] [llamacpp] logs_api: ok
+[06:21:45] [llamacpp] stage=stop start
+[06:21:50] [llamacpp] stage=stop done
+[06:21:50] [llamacpp] stage=cleanup start
+[06:21:50] [llamacpp] stage=cleanup done
+[06:21:50] [llamacpp] artifacts saved to docs/reports/model-runtime-node-wizard/e2e-matrix-configset-f-20260626061623/llamacpp
+[06:21:50] [smoke] pass llama.cpp
+
+ConfigSet real smoke PASS
+Artifacts: docs/reports/model-runtime-node-wizard/e2e-matrix-configset-f-20260626061623

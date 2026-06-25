@@ -556,7 +556,7 @@ func boolFromAny(v any) bool {
 }
 
 func normalizedCapabilities(backend BackendDoc, version VersionDoc) any {
-	switch caps := version.CapabilitiesJSON.(type) {
+	switch caps := version.CapabilitiesDetail.(type) {
 	case map[string]any:
 		if len(caps) > 0 {
 			return caps

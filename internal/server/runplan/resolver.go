@@ -854,7 +854,7 @@ func buildEnv(in ResolveInput, vars map[string]string) (map[string]string, []str
 		addEnv(envName, fmt.Sprintf("%v", pv.Value))
 	}
 
-	// Layer 4: NodeRuntimeOverride.env_json (always applied)
+	// Layer 4: node runtime override environment (always applied)
 	if in.NodeRuntimeOverride != nil {
 		for k, v := range in.NodeRuntimeOverride.Env {
 			resolved, err := substituteVars(v, vars)

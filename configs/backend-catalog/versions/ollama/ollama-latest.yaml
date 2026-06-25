@@ -11,5 +11,5 @@ default_images:
   cpu: ollama/ollama:latest
 # Ollama uses ollama_managed path mode (not directory/file) — models are referenced
 # by name/tag, not filesystem path. Serving protocol is native ollama (not openai-compatible).
-# Canonical capabilities are in DB backend_versions.capabilities_json (V27 repair).
-capabilities_json: '{"supported_formats":["ollama"],"supported_tasks":["chat","completion"],"supported_capabilities":["chat","completion"],"model_path_modes":["ollama_managed"],"serving_protocols":["ollama"],"test_endpoints":{"chat":"/api/chat","completion":"/api/generate"}}'
+# Canonical capabilities are in the version catalog capabilities_detail block.
+capabilities_detail: '{"supported_formats":["ollama"],"supported_tasks":["chat","completion"],"supported_capabilities":["chat","completion"],"model_path_modes":["ollama_managed"],"serving_protocols":["ollama"],"test_endpoints":{"chat":"/api/chat","completion":"/api/generate"}}'
