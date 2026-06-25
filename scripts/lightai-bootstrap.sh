@@ -358,16 +358,14 @@ curl_server_get() {
 
 curl_server_post() {
   local path="$1" body="$2" output_file="${3:-/dev/null}"
-  local csrf_header=""
+  local xh=()
   if [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]]; then
-    local csrf_val
-    csrf_val=$(tr -d '\n' < "$CSRF_FILE")
-    csrf_header="-H X-CSRF-Token: $csrf_val"
+    xh=(-H "X-CSRF-Token: $(tr -d '\n' < "$CSRF_FILE")")
   fi
   curl -sS -o "$output_file" -w '%{http_code}' -X POST "$FINAL_BASE_URL$path" \
     -H "Origin: $FINAL_BASE_URL" -H "Content-Type: application/json" \
     -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
-    $csrf_header -d "$body" 2>/dev/null || echo "000"
+    "${xh[@]}" -d "$body" 2>/dev/null || echo "000"
 }
 
 read_credentials_file_password() {
@@ -753,16 +751,14 @@ curl_api_get() {
 
 curl_api_post() {
   local path="$1" body="$2" output_file="${3:-/dev/stdout}"
-  local csrf_header=""
+  local xh=()
   if [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]]; then
-    local csrf_val
-    csrf_val=$(tr -d '\n' < "$CSRF_FILE")
-    csrf_header="-H X-CSRF-Token: $csrf_val"
+    xh=(-H "X-CSRF-Token: $(tr -d '\n' < "$CSRF_FILE")")
   fi
   curl -sS -X POST "$FINAL_BASE_URL$path" \
     -H "Origin: $FINAL_BASE_URL" -H "Content-Type: application/json" \
     -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
-    $csrf_header -d "$body" -o "$output_file" -w '%{http_code}' 2>/dev/null || echo "000"
+    "${xh[@]}" -d "$body" -o "$output_file" -w '%{http_code}' 2>/dev/null || echo "000"
 }
 
 # ── Auth prerequisite ────────────────────────────────────────────────
