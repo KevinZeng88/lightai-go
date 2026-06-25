@@ -51,3 +51,4 @@ run/*.pid
 # E2E test artifacts
 /run/e2e/
 run/
+__pycache__/
