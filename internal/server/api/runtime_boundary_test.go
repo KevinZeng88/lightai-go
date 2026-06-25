@@ -100,7 +100,7 @@ func TestNodeBackendRuntimeCopiesTemplateSnapshotAndTemplateEditDoesNotChangeIt(
 	insertRuntime(t, db, "rt-snap", "Runtime Snap", "")
 
 	w := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(w, newReq("POST", "/x", `{"backend_runtime_id":"rt-snap","image_ref":"img:test","image_present":true,"docker_available":true}`, adminSession(), map[string]string{"id": "node-a"}))
+	h.HandleEnableNodeBackendRuntime(w, newReq("POST", "/x", `{"backend_runtime_id":"rt-snap","image_ref":"img:test"}}`, adminSession(), map[string]string{"id": "node-a"}))
 	if w.Code != 200 {
 		t.Fatalf("enable code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -138,8 +138,8 @@ func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 
 	// 1. Create NodeBackendRuntime via enable (snapshot captured from BackendRuntime).
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"rt-check","image_ref":"img:orig","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-check","image_ref":"img:orig"}}`,
 		adminSession(), map[string]string{"id": "node-check"}))
 	if ew.Code != 200 {
 		t.Fatalf("enable code=%d body=%s", ew.Code, ew.Body.String())
@@ -165,8 +165,8 @@ func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 
 	// 4. Run check/validate on NodeBackendRuntime.
 	cw := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(cw, newReq("POST", "/x",
-		`{"backend_runtime_id":"rt-check","image_ref":"img:orig","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(cw, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-check","image_ref":"img:orig"}}`,
 		adminSession(), map[string]string{"id": "node-check"}))
 	if cw.Code != 200 {
 		t.Fatalf("check code=%d body=%s", cw.Code, cw.Body.String())
@@ -225,8 +225,8 @@ func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
 
 	// 1. Create NBR with image_ref = "img-a:tag".
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"rt-imgref","image_ref":"img-a:tag","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-imgref","image_ref":"img-a:tag"}}`,
 		adminSession(), map[string]string{"id": "node-imgref"}))
 	if ew.Code != 200 {
 		t.Fatalf("enable code=%d body=%s", ew.Code, ew.Body.String())
@@ -245,8 +245,8 @@ func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
 	//    providing a different image in the check form or BackendRuntime having a
 	//    different image_name).
 	cw := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(cw, newReq("POST", "/x",
-		`{"backend_runtime_id":"rt-imgref","image_ref":"img-b:tag","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(cw, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-imgref","image_ref":"img-b:tag"}}`,
 		adminSession(), map[string]string{"id": "node-imgref"}))
 	if cw.Code != 200 {
 		t.Fatalf("check code=%d body=%s", cw.Code, cw.Body.String())
@@ -653,7 +653,7 @@ func TestPreflightDeploymentFailsWhenNBRNotReady(t *testing.T) {
 	// Enable NBR via UI path (checkOnly=false) — status will be needs_check.
 	ew := httptest.NewRecorder()
 	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR not-ready","image_ref":"img:test","image_present":true,"docker_available":true}`,
+		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR not-ready","image_ref":"img:test"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -698,7 +698,7 @@ func TestDeploymentCreateRejectsNonReadyNBR(t *testing.T) {
 	// Enable NBR via UI path — status becomes needs_check.
 	ew := httptest.NewRecorder()
 	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR rej","image_ref":"img:rej","image_present":true,"docker_available":true}`,
+		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR rej","image_ref":"img:rej"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1118,8 +1118,8 @@ func TestCheckRequestEndpointPathValuesCorrect(t *testing.T) {
 
 	// Enable NBR via agent check so it's ready.
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:cr","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:cr"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1216,8 +1216,8 @@ func TestCheckRequestImageExistsSuccess(t *testing.T) {
 	// Enable NBR
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1290,8 +1290,8 @@ func TestCheckRequestImageMissing(t *testing.T) {
 	// Enable NBR
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"not-exist:missing","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"not-exist:missing"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1335,8 +1335,8 @@ func TestCheckRequestAgentUnreachable(t *testing.T) {
 	// Enable NBR
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1411,8 +1411,8 @@ func TestCheckRequestProbeResultsStored(t *testing.T) {
 
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1514,8 +1514,8 @@ func TestCheckRequestAllBackendImageFormats(t *testing.T) {
 
 			nbrID := nodeID + ":" + runtimeID
 			ew := httptest.NewRecorder()
-			h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-				`{"backend_runtime_id":"`+runtimeID+`","image_ref":"`+tc.imageRef+`","image_present":true,"docker_available":true}`,
+			h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+				`{"backend_runtime_id":"`+runtimeID+`","image_ref":"`+tc.imageRef+`"}}`,
 				adminSession(), map[string]string{"id": nodeID}))
 			if ew.Code != 200 {
 				t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1560,8 +1560,8 @@ func TestCheckRequestEvidenceMissing(t *testing.T) {
 
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1614,8 +1614,8 @@ func TestCheckRequestStatusNotMissingImage(t *testing.T) {
 
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1692,8 +1692,8 @@ func TestCheckRequestListMissesInspectFound(t *testing.T) {
 
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"hidden-image:latest","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"hidden-image:latest"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1756,8 +1756,8 @@ func TestCheckRequestInspectNotFound(t *testing.T) {
 
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"not-exist:missing","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"not-exist:missing"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1818,8 +1818,8 @@ func TestCheckRequestInspectErrorNotNotFound(t *testing.T) {
 
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"some:image"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1861,8 +1861,8 @@ func TestProbeEndpointPathValuesCorrect(t *testing.T) {
 	// Enable NBR
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:test","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:test"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1937,8 +1937,8 @@ func TestCheckRequestBackwardCompatible(t *testing.T) {
 	// Enable NBR
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:bc","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:bc"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -1984,8 +1984,8 @@ func TestGetProbeReturnsEmptyWhenNeverProbed(t *testing.T) {
 	// Enable NBR but do NOT probe
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:gp","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:gp"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -2053,8 +2053,8 @@ func TestGetProbeReturnsSnapshotAfterProbe(t *testing.T) {
 	// Enable NBR
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:gp-snap","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"img:gp-snap"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
@@ -2133,8 +2133,8 @@ func TestPostProbeMissingImageOnlyFromInspectNotFound(t *testing.T) {
 	// Enable NBR
 	nbrID := nodeID + ":" + runtimeID
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","image_ref":"vllm/vllm-openai:latest"}}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())

@@ -41,12 +41,14 @@ func TestWorkflowDeploymentRunPlanPreservesNBRSnapshot(t *testing.T) {
 	app.Client.JSON(t, http.MethodPatch, "/api/v1/nodes/"+fixture.NodeID+"/backend-runtimes/"+fixture.NBRID, map[string]interface{}{
 		"image_ref": "workflow/live-mutation:latest",
 	}, http.StatusOK)
-	app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+fixture.NodeID+"/backend-runtimes/check", map[string]interface{}{
+	app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+fixture.NodeID+"/backend-runtimes/enable", map[string]interface{}{
 		"backend_runtime_id": fixture.RuntimeID,
 		"image_ref":          "workflow/live-check-mutation:latest",
 		"image_present":      true,
 		"docker_available":   true,
 	}, http.StatusOK)
+	// R-001: enable sets needs_check; update to ready for deployment test
+	app.DB.Exec(`UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id=?`, fixture.NBRID)
 
 	afterDryRun := workflowDeploymentDryRun(t, app, deploymentID)
 	workflowAssertDryRunRunPlanFields(t, afterDryRun, fixture, "workflow/frozen-freeze:latest")
@@ -115,7 +117,7 @@ func newWorkflowDeploymentFixture(t *testing.T, app *workflowTestApp, suffix str
 	locationID := workflowStringField(t, location, "id")
 
 	nbrImage := "workflow/frozen-" + suffix + ":latest"
-	checkResp := app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+nodeID+"/backend-runtimes/check", map[string]interface{}{
+	checkResp := app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+nodeID+"/backend-runtimes/enable", map[string]interface{}{
 		"backend_runtime_id": runtimeID,
 		"display_name":       "Workflow deployment NBR " + suffix,
 		"image_ref":          nbrImage,
@@ -132,6 +134,9 @@ func newWorkflowDeploymentFixture(t *testing.T, app *workflowTestApp, suffix str
 		t.Fatalf("NBR status=%#v want needs_check response=%#v", nbr["status"], nbr)
 	}
 	nbrID := workflowStringField(t, nbr, "id")
+	// R-001: Set NBR to ready via DB (deployment tests require ready NBR).
+	// enable sets needs_check; DB-update bypasses the deprecated /check path.
+	app.DB.Exec(`UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id=?`, nbrID)
 
 	t.Cleanup(func() {
 		_, _ = app.DB.Exec(`DELETE FROM model_deployments WHERE source_node_backend_runtime_id = ?`, nbrID)

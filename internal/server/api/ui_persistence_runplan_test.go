@@ -121,14 +121,10 @@ func TestDeploymentSaveOnlyAndPatchEditableFields(t *testing.T) {
 		VALUES ('gpu-save','node-save','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-save")
 	insertRuntime(t, database, "rt-save", "Runtime Save", "")
-	// Create ready NBR
-	nbrW := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
-		`{"backend_runtime_id":"rt-save","image_ref":"img:test","image_present":true,"docker_available":true}`,
-		adminSession(), map[string]string{"id": "node-save"}))
-	if nbrW.Code != 200 {
-		t.Fatalf("nbr enable code=%d", nbrW.Code)
-	}
+	// R-001: enable sets needs_check; set ready via DB for deployment tests
+	h.HandleEnableNodeBackendRuntime(httptest.NewRecorder(), newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-save","image_ref":"img:test"}`, adminSession(), map[string]string{"id": "node-save"}))
+	database.Exec(`UPDATE node_backend_runtimes SET status='ready',image_present=1,docker_available=1 WHERE id='node-save:rt-save'`)
 
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-save","model_artifact_id":"art-save","node_backend_runtime_id":"node-save:rt-save","service_json":{"host_port":8005,"container_port":8080},"parameters_json":{"served_model_name":"served-a"}}`, adminSession(), nil))
@@ -171,7 +167,7 @@ func TestNodeBackendRuntimeDisplayNamePersistence(t *testing.T) {
 	insertRuntime(t, database, "rt-nbr-name", "Runtime NBR Name", "")
 
 	w := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(w, newReq("POST", "/x", `{"backend_runtime_id":"rt-nbr-name","display_name":"Runtime NBR Name - Custom Node","image_ref":"img:test","image_present":true,"docker_available":true}`, adminSession(), map[string]string{"id": "node-nbr-name"}))
+	h.HandleEnableNodeBackendRuntime(w, newReq("POST", "/x", `{"backend_runtime_id":"rt-nbr-name","display_name":"Runtime NBR Name - Custom Node","image_ref":"img:test"}}`, adminSession(), map[string]string{"id": "node-nbr-name"}))
 	if w.Code != http.StatusOK {
 		t.Fatalf("enable code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -300,12 +296,14 @@ func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
 	insertRuntime(t, database, "rt-snap", "llama.cpp NVIDIA CUDA Runtime", "")
 	// Create ready NBR
 	nbrW := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
-		`{"backend_runtime_id":"rt-snap","image_ref":"img:test","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(nbrW, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-snap","image_ref":"img:test"}}`,
 		adminSession(), map[string]string{"id": "node-snap"}))
 	if nbrW.Code != 200 {
 		t.Fatalf("nbr enable code=%d", nbrW.Code)
 	}
+	// R-001: enable sets needs_check; update to ready for deployment test
+	database.Exec("UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id='node-snap:rt-snap'")
 
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-snap","model_artifact_id":"art-snap","node_backend_runtime_id":"node-snap:rt-snap","service_json":{"host_port":8005,"container_port":8080}}`, adminSession(), nil))
@@ -357,12 +355,14 @@ func TestDeploymentPatchPortsAndDisplayName(t *testing.T) {
 	insertRuntime(t, database, "rt-edit", "Runtime Edit", "")
 	// Create ready NBR
 	nbrW := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
-		`{"backend_runtime_id":"rt-edit","image_ref":"img:test","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(nbrW, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-edit","image_ref":"img:test"}`,
 		adminSession(), map[string]string{"id": "node-edit"}))
 	if nbrW.Code != 200 {
 		t.Fatalf("nbr enable code=%d", nbrW.Code)
 	}
+	// R-001: enable sets needs_check; update to ready for deployment test
+	database.Exec(`UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id='node-edit:rt-edit'`)
 
 	w := httptest.NewRecorder()
 	h.HandleCreateDeployment(w, newReq("POST", "/x", `{"name":"dep-edit","model_artifact_id":"art-edit","node_backend_runtime_id":"node-edit:rt-edit","service_json":{"host_port":8005,"container_port":8080},"parameters_json":{}}`, adminSession(), nil))
@@ -469,7 +469,8 @@ func snapshotSetupFullChain(t *testing.T, h *AgentHandler, suffix string) (strin
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
 	}
 	nbrID := nodeID + ":" + runtimeID
-	db.Exec(`UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id=?`, nbrID)
+	// R-001: enable sets needs_check; update to ready for deployment tests
+	db.Exec("UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id='"+nbrID+"'")
 
 	insertUIPersistenceArtifact(t, h, artifactID)
 	snapshotInsertModelLocation(t, db, "ml-"+suffix, artifactID, nodeID)
@@ -776,12 +777,14 @@ func TestDeploymentListReturnsAfterRun(t *testing.T) {
 	insertRuntime(t, database, "rt-list-run", "Runtime List Run", "")
 	// Create ready NBR
 	nbrW := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(nbrW, newReq("POST", "/x",
-		`{"backend_runtime_id":"rt-list-run","image_ref":"img:test","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(nbrW, newReq("POST", "/x",
+		`{"backend_runtime_id":"rt-list-run","image_ref":"img:test"}`,
 		adminSession(), map[string]string{"id": "node-lr"}))
 	if nbrW.Code != 200 {
 		t.Fatalf("nbr enable code=%d", nbrW.Code)
 	}
+	// R-001: enable sets needs_check; update to ready for deployment test
+	database.Exec(`UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id='node-lr:rt-list-run'`)
 
 	// Create a deployment
 	w := httptest.NewRecorder()
