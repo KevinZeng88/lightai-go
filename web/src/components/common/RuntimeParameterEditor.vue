@@ -53,6 +53,19 @@
                 {{ param.label || param.cli_name }}
                 <el-tag v-if="param.required" size="small" type="danger" style="margin-left:4px">required</el-tag>
               </el-checkbox>
+              <el-popover v-if="getHelpEntry(param.name)" trigger="hover" :width="280" placement="right">
+                <template #reference>
+                  <span class="help-icon" style="margin-left:4px;cursor:pointer;color:var(--el-color-primary);font-size:12px">?</span>
+                </template>
+                <div style="font-size:13px">
+                  <p><strong>{{ getHelpEntry(param.name).title }}</strong></p>
+                  <p style="margin-top:4px">{{ getHelpEntry(param.name).summary }}</p>
+                  <el-divider style="margin:8px 0" />
+                  <p style="color:var(--el-text-color-secondary)">{{ t('runtimes.helpDefault') }}: {{ getHelpEntry(param.name).official_default }}</p>
+                  <p style="color:var(--el-color-success)">{{ t('runtimes.helpRecommendation') }}: {{ getHelpEntry(param.name).lightai_recommendation }}</p>
+                  <el-alert v-if="getHelpEntry(param.name).risk" :title="getHelpEntry(param.name).risk" type="warning" :closable="false" style="margin-top:8px" />
+                </div>
+              </el-popover>
             </div>
             <el-input
               v-model="param.value"
@@ -137,12 +150,16 @@ interface Props {
   backendSchema?: BackendParamDef[]
   readonly?: boolean
   vendor?: string
+  helpBackend?: string
+  helpVersion?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   readonly: false,
   vendor: 'nvidia',
   backendSchema: () => [],
+  helpBackend: '',
+  helpVersion: '',
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -406,6 +423,30 @@ watch(() => props.modelValue, (newVal) => {
 
 // Watch backendSchema changes
 watch(() => props.backendSchema, () => { syncBackendParamsFromSchema() }, { deep: false })
+
+// Help data loading
+const helpData = ref<Record<string, any>>({})
+watch(() => [props.helpBackend, props.helpVersion], async () => {
+  helpData.value = {}
+  if (!props.helpBackend || !props.helpVersion) return
+  try {
+    const { apiClient } = await import('@/api/client')
+    const entries = await apiClient.get(`/backend-help?backend=${encodeURIComponent(props.helpBackend)}&version=${encodeURIComponent(props.helpVersion)}&lang=zh-CN`)
+    if (Array.isArray(entries)) {
+      const map: Record<string, any> = {}
+      for (const e of entries) map[e.name] = e
+      helpData.value = map
+    }
+  } catch {
+    // Graceful fallback: no help available
+    helpData.value = {}
+  }
+}, { immediate: true })
+
+// Help icon helper
+function getHelpEntry(name: string): any {
+  return helpData.value[name] || null
+}
 
 // Helpers
 function parseLines(value: string): string[] {

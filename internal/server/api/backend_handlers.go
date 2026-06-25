@@ -1398,3 +1398,33 @@ func redactRawJSON(raw string) json.RawMessage {
 	b, _ := json.Marshal(redacted)
 	return json.RawMessage(b)
 }
+
+// HandleGetBackendHelp returns parameter help documentation for a backend version.
+// Query params: backend (required), version (required), lang (optional, default zh-CN)
+// Reads from configs/backend-catalog/help/{backend}/{version}.{lang}.yaml
+func HandleGetBackendHelp(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	backend := q.Get("backend")
+	version := q.Get("version")
+	lang := q.Get("lang")
+	if lang == "" {
+		lang = "zh-CN"
+	}
+	if backend == "" || version == "" {
+		writeError(w, http.StatusBadRequest, "backend and version query parameters are required")
+		return
+	}
+	helpPath := fmt.Sprintf("configs/backend-catalog/help/%s/%s.%s.yaml", backend, version, lang)
+	data, err := os.ReadFile(helpPath)
+	if err != nil {
+		// Return empty array if help file does not exist (graceful fallback)
+		writeJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+	var entries []map[string]interface{}
+	if err := yaml.Unmarshal(data, &entries); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse help file: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
+}

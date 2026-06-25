@@ -72,7 +72,7 @@
       </el-form>
       <el-divider />
       <h3>{{ $t('runtimes.structuredParameters') }}</h3>
-      <RuntimeParameterEditor v-model="parameterEditorModel" :backend-schema="backendSchema" :readonly="!!(selected && !selected.is_editable)" />
+      <RuntimeParameterEditor v-model="parameterEditorModel" :backend-schema="backendSchema" :readonly="!!(selected && !selected.is_editable)" :help-backend="helpBackend" :help-version="helpVersion" />
       <el-divider /><h3>{{ $t('runtimes.commandPreview') }}</h3><pre class="preview">{{ commandPreview }}</pre>
       <template #footer><el-button @click="editVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doEdit" :loading="editing" :disabled="selected && !selected.is_editable">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
@@ -97,7 +97,7 @@
       </el-form>
       <el-divider />
       <h3>{{ $t('runtimes.structuredParameters') }}</h3>
-      <RuntimeParameterEditor v-model="cloneParameterEditorModel" :backend-schema="backendSchema" />
+      <RuntimeParameterEditor v-model="cloneParameterEditorModel" :backend-schema="backendSchema" :help-backend="helpBackend" :help-version="helpVersion" />
       <el-divider /><h3>{{ $t('runtimes.commandPreview') }}</h3><pre class="preview">{{ cloneCommandPreview }}</pre>
       <template #footer><el-button @click="cloneVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doCloneSave" :loading="cloneSaving">{{ $t('common.save') }}</el-button></template>
     </el-dialog>
@@ -188,6 +188,8 @@ const parameterEditorModel = ref<any>({ docker_json: {}, args_override_json: [],
 const cloneParameterEditorModel = ref<any>({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
 const parameterValues = ref<any[]>([]); const parameterSchema = ref<any[]>([])
 const backendSchema = ref<any[]>([])
+const helpBackend = ref('')
+const helpVersion = ref('')
 
 // Clone-to-user state
 const cloneVisible = ref(false); const cloneSaving = ref(false); const cloneSource = ref<BackendRuntime | null>(null)
@@ -253,12 +255,18 @@ async function doEdit() { editing.value = true; try { await patchRuntime(editing
 
 async function loadBackendSchema(versionId: string, backendId: string) {
   backendSchema.value = []
+  helpBackend.value = ''
+  helpVersion.value = ''
   if (!backendId) return
   try {
     const versions = await listBackendVersions(backendId)
     const version = versions.find((v: any) => v.id === versionId)
     if (version?.default_args_schema_json) {
       backendSchema.value = Array.isArray(version.default_args_schema_json) ? version.default_args_schema_json : []
+    }
+    if (version) {
+      helpBackend.value = backendId
+      helpVersion.value = (version as any).name || version.version || version.id || ''
     }
   } catch { backendSchema.value = [] }
 }

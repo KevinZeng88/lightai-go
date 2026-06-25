@@ -138,6 +138,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("POST /api/v1/backend-versions/{version_id}/clone", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCloneBackendVersion)))
 	mux.Handle("DELETE /api/v1/backend-versions/{version_id}", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteBackendVersion)))
 	mux.Handle("POST /api/v1/backend-catalog/reload", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleReloadBackendCatalog)))
+	// Parameter help documentation.
+	mux.Handle("GET /api/v1/backend-help", backendReadChain(http.HandlerFunc(HandleGetBackendHelp)))
 
 	// BackendRuntimeTemplate (read-only from config files).
 	mux.Handle("GET /api/v1/backend-runtime-templates", backendReadChain(http.HandlerFunc(HandleListRuntimeTemplates)))
