@@ -1753,8 +1753,40 @@ json.dump(d,open('$full_json','w'),indent=2)
 }
 
 run_export() {
-  log_info "mode: export"
-  add_error "NOT_IMPLEMENTED" "export mode not yet implemented (Batch 8)"
+  log_info "===== export mode ====="
+
+  # Ensure auth
+  if ! ensure_auth; then
+    log_error "auth failed, cannot export"
+    return 1
+  fi
+
+  local csrf_val="NONE"
+  [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]] && csrf_val=$(tr -d '\n' < "$CSRF_FILE")
+
+  # Determine output path
+  local export_path="${OUTPUT_PROFILE:-configs/bootstrap/local-kz-laptop.yaml}"
+  if [[ "$export_path" != /* ]]; then
+    export_path="$PROJECT_DIR/$export_path"
+  fi
+
+  # Backup existing
+  if [[ -f "$export_path" ]]; then
+    local bak="${export_path}.bak.$(date +%Y%m%dT%H%M%S)"
+    cp "$export_path" "$bak"
+    log_info "backed up existing profile to $bak"
+  fi
+
+  local include_rt="false"
+  [[ "${INCLUDE_RUNTIME_STATE:-false}" == "true" ]] && include_rt="true"
+
+  log_info "exporting to: $export_path (include_runtime_state=$include_rt)"
+  "$SCRIPT_DIR/lib/bootstrap-export.py" "$FINAL_BASE_URL" "$COOKIE_JAR" "$csrf_val" "$export_path" "$include_rt" 2>&1 | while IFS= read -r line; do
+    log_info "export: $line"
+  done
+
+  log_info "export complete — profile: $export_path"
+  return 0
 }
 
 # ── Main ─────────────────────────────────────────────────────────────
