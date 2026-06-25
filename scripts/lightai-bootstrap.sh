@@ -697,14 +697,398 @@ run_auth_only() {
   return 0
 }
 
+# ── Bootstrap state ──────────────────────────────────────────────────
+BOOTSTRAP_STATE_JSON="$FINAL_OUTPUT_DIR/bootstrap-state.json"
+CATALOG_JSON="$FINAL_OUTPUT_DIR/catalog.json"
+MODELS_JSON="$FINAL_OUTPUT_DIR/models.json"
+MODEL_LOCATIONS_JSON="$FINAL_OUTPUT_DIR/model-locations.json"
+
+init_bootstrap_state() {
+  cat > "$BOOTSTRAP_STATE_JSON" << 'EOF'
+{"backend_ids":{},"backend_version_ids":{},"model_artifact_ids":{},"model_location_ids":{}}
+EOF
+}
+
+update_bootstrap_state() {
+  local key="$1" subkey="$2" val="$3"
+  python3 -c "
+import json,sys
+d=json.load(open('$BOOTSTRAP_STATE_JSON'))
+d.setdefault('$key',{})['$subkey']='$val'
+json.dump(d,open('$BOOTSTRAP_STATE_JSON','w'),indent=2)
+" 2>/dev/null || true
+}
+
+# ── API helpers ──────────────────────────────────────────────────────
+curl_api_get() {
+  local path="$1" output_file="${2:-/dev/stdout}"
+  curl -sS -X GET "$FINAL_BASE_URL$path" \
+    -H "Origin: $FINAL_BASE_URL" -H "Content-Type: application/json" \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o "$output_file" -w '%{http_code}' 2>/dev/null || echo "000"
+}
+
+curl_api_post() {
+  local path="$1" body="$2" output_file="${3:-/dev/stdout}"
+  local csrf_header=""
+  [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]] && csrf_header="-H X-CSRF-Token: $(cat "$CSRF_FILE")"
+  curl -sS -X POST "$FINAL_BASE_URL$path" \
+    -H "Origin: $FINAL_BASE_URL" -H "Content-Type: application/json" \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+    $csrf_header -d "$body" -o "$output_file" -w '%{http_code}' 2>/dev/null || echo "000"
+}
+
+# ── Auth prerequisite ────────────────────────────────────────────────
+ensure_auth() {
+  # Reuse existing auth if cookie jar is valid
+  if [[ -f "$COOKIE_JAR" && -s "$COOKIE_JAR" && -f "$CSRF_FILE" && -s "$CSRF_FILE" ]]; then
+    local check_status
+    check_status=$(curl_api_get "/api/v1/auth/me" /dev/null)
+    if [[ "$check_status" == "200" ]]; then
+      log_info "auth session valid (reusing existing)"
+      return 0
+    fi
+    log_info "auth session expired, re-authenticating"
+    rm -f "$COOKIE_JAR" "$CSRF_FILE"
+    touch "$COOKIE_JAR" && chmod 0600 "$COOKIE_JAR"
+  fi
+
+  # Run auth-only logic inline
+  local server_ok="false" agent_ok="false"
+  local FINAL_PW_SOURCE="none" INITIAL_PW_SOURCE="none" RUNTIME_CRED_FILE=""
+
+  local srv_st
+  srv_st=$(curl_server_get "/healthz" 2>/dev/null || echo "000")
+  [[ "$srv_st" == "200" ]] && server_ok="true"
+
+  local agt_st
+  agt_st=$(curl -sS -o /dev/null -w '%{http_code}' "$FINAL_AGENT_URL/healthz" 2>/dev/null || echo "000")
+  [[ "$agt_st" == "200" ]] && agent_ok="true"
+
+  if [[ "$server_ok" != "true" ]]; then
+    add_error "AUTH_PREREQ_FAILED" "server unreachable, cannot authenticate"
+    return 1
+  fi
+
+  FINAL_PW_SOURCE=$(resolve_final_password) || true
+  log_info "auth prereq: final password source=$FINAL_PW_SOURCE"
+  INITIAL_PW_SOURCE="none"
+
+  if [[ "$FINAL_PW_SOURCE" != "none" ]]; then
+    local final_pw
+    final_pw=$(get_final_password_value)
+    local resp_file="$FINAL_OUTPUT_DIR/responses/login-auth-prereq.json"
+    mkdir -p "$FINAL_OUTPUT_DIR/responses"
+    local status
+    status=$(curl_server_post "/api/v1/auth/login" "{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$final_pw\"}" "$resp_file")
+    if [[ "$status" == "200" ]]; then
+      local csrf_val
+      csrf_val=$(python3 -c "import json;d=json.load(open('$resp_file'));print(d.get('csrf_token',''))" 2>/dev/null || echo "")
+      [[ -n "$csrf_val" ]] && echo "$csrf_val" > "$CSRF_FILE" && chmod 0600 "$CSRF_FILE"
+      log_info "auth prereq: logged in with final password"
+      return 0
+    fi
+    log_info "auth prereq: final password login failed (HTTP $status)"
+  fi
+
+  INITIAL_PW_SOURCE=$(resolve_initial_password) || true
+  if [[ "$INITIAL_PW_SOURCE" == "none" ]]; then
+    add_error "AUTH_PREREQ_FAILED" "no password available for authentication"
+    return 1
+  fi
+  local init_pw
+  init_pw=$(get_initial_password_value)
+  local resp_file="$FINAL_OUTPUT_DIR/responses/login-auth-prereq2.json"
+  mkdir -p "$FINAL_OUTPUT_DIR/responses"
+  local status
+  status=$(curl_server_post "/api/v1/auth/login" "{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$init_pw\"}" "$resp_file")
+  if [[ "$status" != "200" ]]; then
+    add_error "AUTH_PREREQ_FAILED" "login failed (HTTP $status)"
+    return 1
+  fi
+  local csrf_val
+  csrf_val=$(python3 -c "import json;d=json.load(open('$resp_file'));print(d.get('csrf_token',''))" 2>/dev/null || echo "")
+  [[ -n "$csrf_val" ]] && echo "$csrf_val" > "$CSRF_FILE" && chmod 0600 "$CSRF_FILE"
+  log_info "auth prereq: logged in with initial password"
+  return 0
+}
+
+get_node_id() {
+  local resp="$FINAL_OUTPUT_DIR/responses/nodes.json"
+  local status
+  status=$(curl_api_get "/api/v1/nodes" "$resp")
+  if [[ "$status" != "200" ]]; then
+    add_error "NODE_LOOKUP_FAILED" "GET /api/v1/nodes returned HTTP $status"
+    return 1
+  fi
+  python3 -c "
+import json
+data=json.load(open('$resp'))
+if isinstance(data,list): arr=data
+else: arr=data.get('data',data.get('items',[]))
+for n in arr:
+  nm=n.get('name','')
+  if nm=='$PROFILE_NODE_NAME':
+    print(n.get('id',''))
+    break
+" 2>/dev/null
+}
+
+# ── run_catalog_only ──────────────────────────────────────────────────
 run_catalog_only() {
-  log_info "mode: catalog-only"
-  add_error "NOT_IMPLEMENTED" "catalog-only mode not yet implemented (Batch 4)"
+  log_info "===== catalog-only mode ====="
+
+  if ! ensure_auth; then
+    add_error "CATALOG_AUTH_FAILED" "could not authenticate for catalog check"
+    cat > "$CATALOG_JSON" << 'EOF'
+{"status":"FAIL","required_backends":["vllm","sglang","llamacpp"],"found_backends":{},"missing_backends":["vllm","sglang","llamacpp"],"backend_ids":{},"backend_version_ids":{},"checked_at":""}
+EOF
+    return 1
+  fi
+
+  local resp="$FINAL_OUTPUT_DIR/responses/backends.json"
+  mkdir -p "$FINAL_OUTPUT_DIR/responses"
+  local status
+  status=$(curl_api_get "/api/v1/backends" "$resp")
+  if [[ "$status" != "200" ]]; then
+    add_error "CATALOG_API_FAILED" "GET /api/v1/backends returned HTTP $status"
+    cat > "$CATALOG_JSON" << 'EOF'
+{"status":"FAIL","required_backends":["vllm","sglang","llamacpp"],"found_backends":{},"missing_backends":["vllm","sglang","llamacpp"],"backend_ids":{},"backend_version_ids":{},"checked_at":""}
+EOF
+    return 1
+  fi
+
+  local required=("vllm" "sglang" "llamacpp")
+  init_bootstrap_state
+
+  python3 -c "
+import json,sys
+resp=json.load(open('$resp'))
+backends=resp if isinstance(resp,list) else resp.get('data',resp.get('items',[]))
+# Backend IDs are format: backend.{name} (e.g. backend.vllm)
+def match_backend(b, target):
+  bid=b.get('id','').lower()
+  bname=b.get('name','').lower()
+  target=target.lower()
+  # Match by id suffix (e.g. backend.vllm matches vllm)
+  if bid==target or bid.endswith('.'+target) or bid=='backend.'+target:
+    return True
+  # Match by display name
+  if b.get('display_name','').lower()==target:
+    return True
+  return False
+
+missing=[]
+found={}
+bids={}
+vids={}
+for r in '${required[*]}'.split():
+  m=None
+  for b in backends:
+    if match_backend(b, r):
+      m=b;break
+  if m:
+    bids[r]=m.get('id','')
+    found[r]=m.get('display_name',m.get('id',''))
+    # Try to get version
+    import subprocess
+    vresp_file='$FINAL_OUTPUT_DIR/responses/versions-'+r+'.json'
+    vcode=subprocess.run(['curl','-sS','-o',vresp_file,'-w','%{http_code}','-X','GET','$FINAL_BASE_URL/api/v1/backends/'+m['id']+'/versions','-H','Origin: $FINAL_BASE_URL','-H','Content-Type: application/json','-b','$COOKIE_JAR'],capture_output=True,text=True).stdout.strip()
+    if vcode=='200':
+      try:
+        vdata=json.load(open(vresp_file))
+        vlist=vdata if isinstance(vdata,list) else vdata.get('data',vdata.get('items',[]))
+        if vlist:
+          vids[r]=vlist[0].get('id','')
+          found[r]+=' ('+vlist[0].get('version','?')+')'
+      except: pass
+  else:
+    missing.append(r)
+result={'status':'PASS' if not missing else 'FAIL','required_backends':list('${required[*]}'.split()),'found_backends':found,'missing_backends':missing,'backend_ids':bids,'backend_version_ids':vids,'checked_at':'$TIMESTAMP'}
+json.dump(result,open('$CATALOG_JSON','w'),indent=2)
+print('catalog: found',len(found),'missing',len(missing))
+" 2>/dev/null
+
+  log_info "catalog.json written to $CATALOG_JSON"
+  # Update bootstrap state
+  if [[ -f "$CATALOG_JSON" ]]; then
+    for bk in vllm sglang llamacpp; do
+      local bid
+      bid=$(python3 -c "import json;d=json.load(open('$CATALOG_JSON'));print(d['backend_ids'].get('$bk',''))" 2>/dev/null || echo "")
+      [[ -n "$bid" ]] && update_bootstrap_state "backend_ids" "$bk" "$bid"
+      local vid
+      vid=$(python3 -c "import json;d=json.load(open('$CATALOG_JSON'));print(d['backend_version_ids'].get('$bk',''))" 2>/dev/null || echo "")
+      [[ -n "$vid" ]] && update_bootstrap_state "backend_version_ids" "$bk" "$vid"
+    done
+  fi
+
+  local missing_count
+  missing_count=$(python3 -c "import json;print(len(json.load(open('$CATALOG_JSON'))['missing_backends']))" 2>/dev/null || echo 3)
+  if [[ "$missing_count" -gt 0 ]]; then
+    add_error "CATALOG_BACKEND_MISSING" "$missing_count required backend(s) missing"
+    return 1
+  fi
+  return 0
 }
 
 run_models_only() {
-  log_info "mode: models-only"
-  add_error "NOT_IMPLEMENTED" "models-only mode not yet implemented (Batch 4)"
+  log_info "===== models-only mode ====="
+
+  # Run catalog-only first
+  if ! run_catalog_only; then
+    log_error "catalog check failed, cannot proceed to models"
+    return 1
+  fi
+
+  # Initialize output files
+  cat > "$MODELS_JSON" << EOF
+{"status":"PASS","models":{},"checked_at":"$TIMESTAMP"}
+EOF
+  cat > "$MODEL_LOCATIONS_JSON" << EOF
+{"status":"PASS","locations":{},"checked_at":"$TIMESTAMP"}
+EOF
+
+  # Ensure we have a node ID
+  PROFILE_NODE_NAME="$(yaml_get "$PROFILE_FILE" "node" "name" 2>/dev/null)" || true
+  PROFILE_NODE_NAME="${PROFILE_NODE_NAME:-KZ-LAPTOP}"
+  local node_id
+  node_id=$(get_node_id)
+  if [[ -z "$node_id" ]]; then
+    add_error "NODE_NOT_FOUND" "node '$PROFILE_NODE_NAME' not found in /api/v1/nodes — models-only requires a registered node"
+    python3 -c "import json;d=json.load(open('$MODELS_JSON'));d['status']='FAIL';d['error']='node $PROFILE_NODE_NAME not found';json.dump(d,open('$MODELS_JSON','w'),indent=2)" 2>/dev/null
+    python3 -c "import json;d=json.load(open('$MODEL_LOCATIONS_JSON'));d['status']='FAIL';d['error']='node $PROFILE_NODE_NAME not found';json.dump(d,open('$MODEL_LOCATIONS_JSON','w'),indent=2)" 2>/dev/null
+    return 1
+  fi
+  log_info "node found: $PROFILE_NODE_NAME (id=$node_id)"
+  update_bootstrap_state "ids" "node_id" "$node_id"
+
+  # Get model keys from profile
+  local model_keys
+  model_keys=$(yaml_get_list "$PROFILE_FILE" "models" "" 2>/dev/null || echo "")
+  if [[ -z "$model_keys" ]]; then
+    log_info "no models defined in profile"
+    cat > "$MODELS_JSON" << EOF
+{"status":"PASS","models":{},"checked_at":"$TIMESTAMP"}
+EOF
+    cat > "$MODEL_LOCATIONS_JSON" << EOF
+{"status":"PASS","locations":{},"checked_at":"$TIMESTAMP"}
+EOF
+    return 0
+  fi
+
+  # List existing artifacts for idempotency
+  local artifacts_resp="$FINAL_OUTPUT_DIR/responses/artifacts-list.json"
+  curl_api_get "/api/v1/model-artifacts" "$artifacts_resp" 2>/dev/null || true
+
+  local models_result="{}" locations_result="{}" overall_status="PASS"
+
+  while IFS= read -r model_key; do
+    [[ -z "$model_key" ]] && continue
+    log_info "processing model: $model_key"
+
+    local display_name kind path
+    display_name=$(yaml_get "$PROFILE_FILE" "models" "$model_key.display_name" 2>/dev/null || echo "$model_key")
+    kind=$(yaml_get "$PROFILE_FILE" "models" "$model_key.kind" 2>/dev/null || echo "huggingface")
+    path=$(yaml_get "$PROFILE_FILE" "models" "$model_key.path" 2>/dev/null || echo "")
+
+    # Determine format for API
+    local format="custom" task_type="chat" path_type="directory"
+    if [[ "$kind" == "gguf" ]]; then format="gguf"; task_type="completion"; path_type="file"; fi
+
+    # Check path exists
+    local path_exists="true"
+    if [[ ! -e "$path" ]]; then
+      log_error "model path not found: $path"
+      add_error "MODEL_PATH_MISSING" "model $model_key path not found: $path"
+      path_exists="false"
+      overall_status="FAIL"
+    fi
+
+    # Find existing artifact by name
+    local artifact_id=""
+    if [[ -f "$artifacts_resp" ]]; then
+      artifact_id=$(python3 -c "
+import json
+data=json.load(open('$artifacts_resp'))
+arr=data if isinstance(data,list) else data.get('data',data.get('items',[]))
+for a in arr:
+  if a.get('name','')=='$model_key' or a.get('path','')=='$path':
+    print(a.get('id',''));break
+" 2>/dev/null || echo "")
+    fi
+
+    local action="REUSE"
+    if [[ -z "$artifact_id" ]]; then
+      if [[ "$path_exists" != "true" ]]; then
+        action="FAIL"
+      else
+        # Create new artifact
+        action="CREATE"
+        local create_body="{\"name\":\"$model_key\",\"display_name\":\"$display_name\",\"path\":\"$path\",\"format\":\"$format\",\"task_type\":\"$task_type\",\"source_type\":\"local_path\",\"architecture\":\"custom\",\"quantization\":\"unknown\",\"default_context_length\":0,\"estimated_vram_bytes\":0,\"required_gpu_count\":1,\"capabilities_json\":\"[]\",\"capability_sources_json\":\"{}\",\"default_test_mode\":\"auto\",\"parameter_defaults_json\":\"[]\"}"
+        local create_resp="$FINAL_OUTPUT_DIR/responses/artifact-create-$model_key.json"
+        local create_status
+        create_status=$(curl_api_post "/api/v1/model-artifacts" "$create_body" "$create_resp")
+        if [[ "$create_status" == "201" ]]; then
+          artifact_id=$(python3 -c "import json;print(json.load(open('$create_resp')).get('id',''))" 2>/dev/null || echo "")
+          log_info "created artifact: $model_key (id=$artifact_id)"
+        else
+          log_error "failed to create artifact: $model_key (HTTP $create_status)"
+          add_error "MODEL_ARTIFACT_CREATE_FAILED" "create artifact $model_key returned HTTP $create_status"
+          action="FAIL"
+          overall_status="FAIL"
+        fi
+      fi
+    else
+      log_info "reusing existing artifact: $model_key (id=$artifact_id)"
+    fi
+
+    update_bootstrap_state "model_artifact_ids" "$model_key" "$artifact_id"
+
+    # Create model location
+    local location_id="" loc_action="REUSE"
+    if [[ "$action" != "FAIL" && -n "$artifact_id" ]]; then
+      local loc_body="{\"node_id\":\"$node_id\",\"path_type\":\"$path_type\",\"absolute_path\":\"$path\",\"size_bytes\":0,\"checksum\":\"\",\"manifest_digest\":\"\",\"match_status\":\"exact_match\",\"verification_status\":\"verified\",\"manual_override\":false}"
+      local loc_resp="$FINAL_OUTPUT_DIR/responses/location-create-$model_key.json"
+      local loc_status
+      loc_status=$(curl_api_post "/api/v1/model-artifacts/$artifact_id/locations" "$loc_body" "$loc_resp")
+      if [[ "$loc_status" == "201" ]]; then
+        location_id=$(python3 -c "import json;print(json.load(open('$loc_resp')).get('id',''))" 2>/dev/null || echo "")
+        loc_action="CREATE"
+        log_info "created location: $model_key (id=$location_id)"
+      else
+        # Location may already exist; try to find it
+        log_info "location may already exist for $model_key (HTTP $loc_status)"
+        loc_action="REUSE"
+      fi
+    fi
+
+    update_bootstrap_state "model_location_ids" "$model_key" "${location_id:-}"
+
+    python3 -c "
+import json
+mr=json.load(open('$MODELS_JSON')) if __import__('os').path.exists('$MODELS_JSON') else {}
+mr.setdefault('models',{})['$model_key']={'display_name':'$display_name','kind':'$kind','path':'$path','path_exists':$([[ "$path_exists" == "true" ]] && echo "True" || echo "False"),'artifact_id':'$artifact_id','action':'$action'}
+mr['status']='$overall_status' if mr.get('status')!='FAIL' else 'FAIL'
+mr['checked_at']='$TIMESTAMP'
+json.dump(mr,open('$MODELS_JSON','w'),indent=2)
+" 2>/dev/null
+
+    python3 -c "
+import json
+lr=json.load(open('$MODEL_LOCATIONS_JSON')) if __import__('os').path.exists('$MODEL_LOCATIONS_JSON') else {}
+lr.setdefault('locations',{})['$model_key']={'artifact_id':'$artifact_id','location_id':'${location_id:-}','path':'$path','action':'$loc_action'}
+lr['status']='$overall_status' if lr.get('status')!='FAIL' else 'FAIL'
+lr['checked_at']='$TIMESTAMP'
+json.dump(lr,open('$MODEL_LOCATIONS_JSON','w'),indent=2)
+" 2>/dev/null
+
+  done <<< "$model_keys"
+
+  log_info "models.json written (status=$overall_status)"
+  if [[ "$overall_status" == "FAIL" ]]; then
+    add_error "MODELS_FAILED" "one or more models failed to register"
+    return 1
+  fi
+  return 0
 }
 
 run_runtimes_only() {
