@@ -151,14 +151,36 @@ yaml_get() {
   fi
 }
 
+# Get a deeply nested YAML value using dot-separated path
+# e.g. yaml_get_nested profile.yaml models qwen3_small.display_name
+yaml_get_nested() {
+  local file="$1" top_key="$2" nested_path="$3"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "
+import sys,yaml
+d=yaml.safe_load(open(sys.argv[1]))
+v=d.get(sys.argv[2],{})
+for k in sys.argv[3].split('.'):
+  if isinstance(v,dict): v=v.get(k,'')
+  else: v='';break
+print(v if v is not None else '')
+" "$file" "$top_key" "$nested_path" 2>/dev/null
+  fi
+}
+
 yaml_get_list() {
   local file="$1" key="$2" subkey="$3"
   if command -v python3 >/dev/null 2>&1; then
     python3 -c "
 import sys,yaml
 d=yaml.safe_load(open(sys.argv[1]))
-v=d.get(sys.argv[2],{}).get(sys.argv[3],[]) if sys.argv[3] else d.get(sys.argv[2],[])
-if isinstance(v,list): print('\n'.join(str(x) for x in v))
+v=d.get(sys.argv[2],{})
+if sys.argv[3]:
+  v=v.get(sys.argv[3],[])
+if isinstance(v,dict):
+  print('\n'.join(v.keys()))
+elif isinstance(v,list):
+  print('\n'.join(str(x) for x in v))
 " "$file" "$key" "$subkey" 2>/dev/null
   else
     return 1
@@ -338,7 +360,9 @@ curl_server_post() {
   local path="$1" body="$2" output_file="${3:-/dev/null}"
   local csrf_header=""
   if [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]]; then
-    csrf_header="-H X-CSRF-Token: $(cat "$CSRF_FILE")"
+    local csrf_val
+    csrf_val=$(tr -d '\n' < "$CSRF_FILE")
+    csrf_header="-H X-CSRF-Token: $csrf_val"
   fi
   curl -sS -o "$output_file" -w '%{http_code}' -X POST "$FINAL_BASE_URL$path" \
     -H "Origin: $FINAL_BASE_URL" -H "Content-Type: application/json" \
@@ -621,7 +645,7 @@ run_auth_only() {
     local csrf_val
     csrf_val=$(python3 -c "import json; d=json.load(open('$resp_file')); print(d.get('csrf_token',''))" 2>/dev/null || echo "")
     if [[ -n "$csrf_val" ]]; then
-      echo "$csrf_val" > "$CSRF_FILE"
+      printf "%s" "$csrf_val" > "$CSRF_FILE"
       chmod 0600 "$CSRF_FILE"
       log_info "CSRF token saved"
     else
@@ -672,7 +696,7 @@ run_auth_only() {
         local csrf_val2
         csrf_val2=$(python3 -c "import json; d=json.load(open('$relogin_resp')); print(d.get('csrf_token',''))" 2>/dev/null || echo "")
         if [[ -n "$csrf_val2" ]]; then
-          echo "$csrf_val2" > "$CSRF_FILE"
+          printf "%s" "$csrf_val2" > "$CSRF_FILE"
           chmod 0600 "$CSRF_FILE"
         fi
         auth_method="initial_password_changed"
@@ -730,7 +754,11 @@ curl_api_get() {
 curl_api_post() {
   local path="$1" body="$2" output_file="${3:-/dev/stdout}"
   local csrf_header=""
-  [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]] && csrf_header="-H X-CSRF-Token: $(cat "$CSRF_FILE")"
+  if [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]]; then
+    local csrf_val
+    csrf_val=$(tr -d '\n' < "$CSRF_FILE")
+    csrf_header="-H X-CSRF-Token: $csrf_val"
+  fi
   curl -sS -X POST "$FINAL_BASE_URL$path" \
     -H "Origin: $FINAL_BASE_URL" -H "Content-Type: application/json" \
     -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
@@ -783,7 +811,7 @@ ensure_auth() {
     if [[ "$status" == "200" ]]; then
       local csrf_val
       csrf_val=$(python3 -c "import json;d=json.load(open('$resp_file'));print(d.get('csrf_token',''))" 2>/dev/null || echo "")
-      [[ -n "$csrf_val" ]] && echo "$csrf_val" > "$CSRF_FILE" && chmod 0600 "$CSRF_FILE"
+      [[ -n "$csrf_val" ]] && printf "%s" "$csrf_val" > "$CSRF_FILE" && chmod 0600 "$CSRF_FILE"
       log_info "auth prereq: logged in with final password"
       return 0
     fi
@@ -807,7 +835,7 @@ ensure_auth() {
   fi
   local csrf_val
   csrf_val=$(python3 -c "import json;d=json.load(open('$resp_file'));print(d.get('csrf_token',''))" 2>/dev/null || echo "")
-  [[ -n "$csrf_val" ]] && echo "$csrf_val" > "$CSRF_FILE" && chmod 0600 "$CSRF_FILE"
+  [[ -n "$csrf_val" ]] && printf "%s" "$csrf_val" > "$CSRF_FILE" && chmod 0600 "$CSRF_FILE"
   log_info "auth prereq: logged in with initial password"
   return 0
 }
@@ -826,8 +854,10 @@ data=json.load(open('$resp'))
 if isinstance(data,list): arr=data
 else: arr=data.get('data',data.get('items',[]))
 for n in arr:
-  nm=n.get('name','')
-  if nm=='$PROFILE_NODE_NAME':
+  nm=n.get('hostname','')
+  aid=n.get('agent_id','')
+  nid=n.get('id','')
+  if nm=='$PROFILE_NODE_NAME' or aid=='$PROFILE_NODE_NAME' or nid=='$PROFILE_NODE_NAME':
     print(n.get('id',''))
     break
 " 2>/dev/null
@@ -986,9 +1016,9 @@ EOF
     log_info "processing model: $model_key"
 
     local display_name kind path
-    display_name=$(yaml_get "$PROFILE_FILE" "models" "$model_key.display_name" 2>/dev/null || echo "$model_key")
-    kind=$(yaml_get "$PROFILE_FILE" "models" "$model_key.kind" 2>/dev/null || echo "huggingface")
-    path=$(yaml_get "$PROFILE_FILE" "models" "$model_key.path" 2>/dev/null || echo "")
+    display_name=$(yaml_get_nested "$PROFILE_FILE" "models" "$model_key.display_name" 2>/dev/null || echo "$model_key")
+    kind=$(yaml_get_nested "$PROFILE_FILE" "models" "$model_key.kind" 2>/dev/null || echo "huggingface")
+    path=$(yaml_get_nested "$PROFILE_FILE" "models" "$model_key.path" 2>/dev/null || echo "")
 
     # Determine format for API
     local format="custom" task_type="chat" path_type="directory"
