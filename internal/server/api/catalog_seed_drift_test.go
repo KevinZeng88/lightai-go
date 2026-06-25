@@ -7,14 +7,14 @@ import (
 	"testing"
 )
 
-// TestCatalogSeedDrift verifies that db.go seed has entries for all YAML catalog versions.
+// TestCatalogSeedDrift verifies that ConfigSet catalog loading has entries for
+// all current YAML catalog versions.
 func TestCatalogSeedDrift(t *testing.T) {
 	versionYAMLs, _ := filepath.Glob("../../configs/backend-catalog/versions/*/*.yaml")
 	if len(versionYAMLs) == 0 {
 		t.Skip("no catalog YAML files found")
 	}
 
-	// Collect YAML version IDs
 	yamlIDs := map[string]bool{}
 	for _, path := range versionYAMLs {
 		data, err := os.ReadFile(path)
@@ -30,22 +30,6 @@ func TestCatalogSeedDrift(t *testing.T) {
 		}
 	}
 
-	// Verify deprecated versions are NOT in YAML (they're historical only, in seed)
-	deprecated := map[string]bool{
-		"bver-vllm-0.8.5":      true,
-		"bver-vllm-0.10.0":     true,
-		"bver-sglang-0.4.6":    true,
-		"bver-sglang-0.5.0":    true,
-		"bver-llamacpp-b4817":  true,
-	}
-
-	for id := range deprecated {
-		if yamlIDs[id] {
-			t.Errorf("deprecated version %s found in catalog YAML but should be seed-only", id)
-		}
-	}
-
-	// Verify current versions exist in both YAML and seed
 	current := []string{
 		"vllm-v0.23.0", "sglang-v0.5.13.post1", "sglang-v0.5.12.post1",
 		"sglang-0.4.6-compatible", "llamacpp-b9700", "backend-version.ollama.latest",
@@ -57,26 +41,22 @@ func TestCatalogSeedDrift(t *testing.T) {
 	}
 }
 
-// TestCapabilitiesNotArrayFormat verifies no backend version uses array-format capabilities.
+// TestCapabilitiesNotArrayFormat verifies backend capabilities are structured
+// ConfigSet objects rather than old array-style fields.
 func TestCapabilitiesNotArrayFormat(t *testing.T) {
 	db := setupTestDB(t)
-	rows, err := db.Query(`SELECT id, capabilities_json FROM backend_versions WHERE is_deprecated=0`)
+	rows, err := db.Query(`SELECT id, config_set_json FROM backend_versions WHERE is_deprecated=0`)
 	if err != nil {
 		t.Skip("DB not available")
 		return
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, caps string
-		rows.Scan(&id, &caps)
-		if caps == "" || caps == "[]" || caps == "{}" {
-			t.Errorf("default backend version %s has empty capabilities_json (must be structured object)", id)
-		}
-		// Detect array format: starts with [
-		if strings.HasPrefix(strings.TrimSpace(caps), "[") {
-			t.Errorf("backend version %s has array-format capabilities_json: %s", id, caps[:minInt(60, len(caps))])
+		var id, configSetRaw string
+		rows.Scan(&id, &configSetRaw)
+		caps := configObject(parseConfigSet(configSetRaw), "backend.capabilities")
+		if len(caps) == 0 {
+			t.Errorf("backend version %s has empty ConfigSet backend.capabilities", id)
 		}
 	}
 }
-
-func minInt(a, b int) int { if a < b { return a }; return b }

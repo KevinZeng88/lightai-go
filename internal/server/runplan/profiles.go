@@ -26,8 +26,8 @@ type ProcessStartDetectionHints struct {
 }
 
 // ProcessStartConfig is the user-accepted authoritative Layer 3 configuration.
-// It is stored in NBR.config_snapshot_json.process_start_config and
-// frozen into Deployment.config_snapshot_json.
+// It is stored as a ConfigSet-derived process profile and frozen into
+// deployment runtime configuration.
 type ProcessStartConfig struct {
 	EntrypointMode string   `json:"entrypoint_mode"`          // "image_default" | "custom"
 	Entrypoint     []string `json:"entrypoint,omitempty"`     // only when mode=custom

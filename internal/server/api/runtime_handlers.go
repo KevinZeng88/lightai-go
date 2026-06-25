@@ -22,7 +22,7 @@ import (
 
 func (h *AgentHandler) HandleListBackendRuntimes(w http.ResponseWriter, r *http.Request) {
 	tid := tenantID(r)
-	q := `SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, created_at, updated_at FROM backend_runtimes`
+	q := `SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, config_set_json, source_metadata_json, created_at, updated_at FROM backend_runtimes`
 	var err error
 	var out []map[string]interface{}
 	if isPlatformAdmin(r) {
@@ -72,16 +72,6 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 		return
 	}
 	templateName := strVal(req, "template_name", "")
-	if templateName != "" {
-		// Read template from config file for backward compatibility with the
-		// older clone-from-template flow.
-		path := resolveTemplatePath(templateName)
-		_, err := osReadFile(path)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "template not found: "+templateName)
-			return
-		}
-	}
 
 	id := uuid.NewString()
 	_ = userID(r) // reserved for audit
@@ -111,35 +101,52 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 		return
 	}
 	vendor := strVal(req, "vendor", "custom")
-	defaultImages := jsonToStringMap(rawJSONString(version["default_images_json"], "{}"))
-	imageCandidates := jsonToStringSlice(rawJSONString(version["image_candidates_json"], "[]"))
-	imageName := strVal(req, "image_name", "")
-	if imageName == "" {
-		imageName = defaultImages[vendor]
+	versionSet := mapFromAny(version["config_set"])
+	configSet := copyConfigSet(rawJSONString(version["config_set_json"], "{}"))
+	if len(configSetItems(configSet)) == 0 && len(versionSet) > 0 {
+		configSet = versionSet
 	}
-	if imageName == "" {
-		imageName = defaultImages["default"]
+	if imageRef := strVal(req, "image_ref", ""); imageRef != "" {
+		setConfigValue(configSet, "launcher.image", imageRef, "BackendRuntime", id, "user_create")
 	}
-	if imageName == "" && len(imageCandidates) > 0 {
-		imageName = imageCandidates[0]
+	if v, ok := req["docker_options"]; ok {
+		setConfigValue(configSet, "launcher.docker_options", v, "BackendRuntime", id, "user_create")
 	}
-	versionSnapshot := backendVersionSnapshot(version)
+	if v, ok := req["env"]; ok {
+		setConfigValue(configSet, "runtime.env", v, "BackendRuntime", id, "user_create")
+	}
+	if v, ok := req["model_mount"]; ok {
+		setConfigValue(configSet, "runtime.model_mount", v, "BackendRuntime", id, "user_create")
+	}
+	if v, ok := req["health_check"]; ok {
+		setConfigValue(configSet, "runtime.health", v, "BackendRuntime", id, "user_create")
+	}
+	if v, ok := req["entrypoint"]; ok {
+		setConfigValue(configSet, "launcher.entrypoint", v, "BackendRuntime", id, "user_create")
+	}
+	if v, ok := req["command"]; ok {
+		setConfigValue(configSet, "launcher.command", v, "BackendRuntime", id, "user_create")
+	}
 	sourceRevision := strVal(version, "checksum", "")
 	if sourceRevision == "" {
 		sourceRevision = strVal(version, "updated_at", "")
 	}
-	dockerJSON := jsonField(req, "docker_json", rawJSONString(version["docker_options_json"], "{}"))
-	modelMountJSON := jsonField(req, "model_mount_json", rawJSONString(version["model_mount_json"], "{}"))
-	defaultEnvJSON := jsonField(req, "default_env_json", rawJSONString(version["env_json"], "{}"))
+	sourceMetadata := map[string]interface{}{
+		"source_type":                "backend_runtime",
+		"source_backend_id":          backendID,
+		"source_backend_version_id":  versionID,
+		"source_version_revision":    sourceRevision,
+		"source_backend_runtime_id":  "",
+		"source_template_name":       templateName,
+		"copy_semantics":             "copy_on_create",
+		"source_config_set_checksum": checksumString(rawJSONString(version["config_set_json"], "{}")),
+	}
 
 	_, err := h.DB.Exec(
-		`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, source_backend_id, source_backend_version_id, source_version_revision, version_snapshot_json, created_at, updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, slug, managed_by, source, catalog_version, checksum, status, config_set_json, source_metadata_json, created_at, updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, displayName, backendID, versionID, templateName,
-		vendor, "docker",
-		imageName, strVal(req, "image_pull_policy", "if_not_present"),
-		jsonField(req, "entrypoint_override_json", "[]"), jsonField(req, "args_override_json", "[]"), defaultEnvJSON, dockerJSON, modelMountJSON, jsonField(req, "health_check_override_json", "{}"),
-		0, 1, tid, backendID, versionID, sourceRevision, jsonString(versionSnapshot), now, now,
+		vendor, "docker", 0, 1, tid, slugify(name), "user", "user-config", "configset-v1", checksumString(configSetJSON(configSet)), "active", configSetJSON(configSet), jsonString(sourceMetadata), now, now,
 	)
 	if err != nil {
 		log.OperationFailed(ctx, "backend_runtime.create", "db_write", opStart, err,
@@ -191,23 +198,48 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
-	for _, f := range []string{"name", "display_name", "image_name", "image_pull_policy", "vendor", "default_env_json", "docker_json", "model_mount_json", "health_check_override_json", "args_override_json", "entrypoint_override_json", "parameter_schema_json", "parameter_values_json"} {
+	configSet := copyConfigSet(rawJSONString(existing["config_set_json"], "{}"))
+	for _, f := range []string{"name", "display_name", "vendor"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
-			if strings.HasSuffix(f, "_json") || f == "docker_json" {
-				args = append(args, jsonString(v))
-			} else {
-				if s, ok := v.(string); ok {
-					v = strings.TrimSpace(s)
-					if (f == "name" || f == "display_name") && v == "" {
-						writeError(w, http.StatusBadRequest, f+" is required")
-						return
-					}
+			if s, ok := v.(string); ok {
+				v = strings.TrimSpace(s)
+				if (f == "name" || f == "display_name") && v == "" {
+					writeError(w, http.StatusBadRequest, f+" is required")
+					return
 				}
-				args = append(args, v)
 			}
+			args = append(args, v)
 		}
 	}
+	if v, ok := req["image_ref"]; ok {
+		setConfigValue(configSet, "launcher.image", v, "BackendRuntime", id, "user_patch")
+	}
+	if v, ok := req["docker_options"]; ok {
+		setConfigValue(configSet, "launcher.docker_options", v, "BackendRuntime", id, "user_patch")
+	}
+	if v, ok := req["env"]; ok {
+		setConfigValue(configSet, "runtime.env", v, "BackendRuntime", id, "user_patch")
+	}
+	if v, ok := req["model_mount"]; ok {
+		setConfigValue(configSet, "runtime.model_mount", v, "BackendRuntime", id, "user_patch")
+	}
+	if v, ok := req["health_check"]; ok {
+		setConfigValue(configSet, "runtime.health", v, "BackendRuntime", id, "user_patch")
+	}
+	if v, ok := req["entrypoint"]; ok {
+		setConfigValue(configSet, "launcher.entrypoint", v, "BackendRuntime", id, "user_patch")
+	}
+	if v, ok := req["command"]; ok {
+		setConfigValue(configSet, "launcher.command", v, "BackendRuntime", id, "user_patch")
+	}
+	if _, ok := req["config_set"]; ok {
+		if incoming, ok := req["config_set"].(map[string]interface{}); ok {
+			configSet = incoming
+		}
+	}
+	sets = append(sets, "config_set_json = ?", "checksum = ?")
+	args = append(args, configSetJSON(configSet), checksumString(configSetJSON(configSet)))
 	args = append(args, id)
 	_, err := h.DB.Exec(`UPDATE backend_runtimes SET `+joinSets(sets)+` WHERE id = ?`, args...)
 	if err != nil {
@@ -252,7 +284,7 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, COALESCE(nbr.config_snapshot_json,'{}'), COALESCE(nbr.probe_results_json,'{}'), br.name, br.display_name, br.vendor
+	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, nbr.config_set_json, nbr.source_metadata_json, COALESCE(nbr.probe_results_json,'{}'), br.name, br.display_name, br.vendor
 		FROM node_backend_runtimes nbr
 		JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id
 		WHERE nbr.node_id = ?
@@ -264,9 +296,9 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var id, runtimeID, nid, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, snapshotJSON, probeResultsJSON, rtName, rtDisplay, vendor string
+		var id, runtimeID, nid, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, configSetJSONRaw, sourceMetaJSON, probeResultsJSON, rtName, rtDisplay, vendor string
 		var imagePresent, dockerAvailable int
-		if err := rows.Scan(&id, &runtimeID, &nid, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &snapshotJSON, &probeResultsJSON, &rtName, &rtDisplay, &vendor); err != nil {
+		if err := rows.Scan(&id, &runtimeID, &nid, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &configSetJSONRaw, &sourceMetaJSON, &probeResultsJSON, &rtName, &rtDisplay, &vendor); err != nil {
 			continue
 		}
 		if displayName == "" {
@@ -290,7 +322,10 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 			"deployable":           deployable,
 			"warnings":             warnings,
 			"disabled_reason":      nbrDisabledReason(status, reason),
-			"config_snapshot_json": json.RawMessage(snapshotJSON),
+			"config_set":           parseConfigSet(configSetJSONRaw),
+			"config_set_json":      json.RawMessage(configSetJSONRaw),
+			"source_metadata":      configSourceMetadata(sourceMetaJSON),
+			"source_metadata_json": json.RawMessage(sourceMetaJSON),
 			"probe_results_json":   json.RawMessage(probeResultsJSON),
 			"backend_runtime":      map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
 		})
@@ -327,35 +362,46 @@ func (h *AgentHandler) HandleListAllNodeBackendRuntimes(w http.ResponseWriter, r
 			}
 		}
 		nbrRows, err := h.DB.Query(
-			`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, COALESCE(nbr.config_snapshot_json,'{}'), COALESCE(nbr.probe_results_json,'{}'), br.name, br.display_name, br.vendor
+			`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, nbr.config_set_json, nbr.source_metadata_json, COALESCE(nbr.probe_results_json,'{}'), br.name, br.display_name, br.vendor
 			 FROM node_backend_runtimes nbr JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id WHERE nbr.node_id = ? ORDER BY br.name`, nid)
 		if err != nil {
 			continue
 		}
 		for nbrRows.Next() {
-			var id, runtimeID, nid2, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid2, ca, ua, snapshotJSON, probeResultsJSON, rtName, rtDisplay, vendor string
+			var id, runtimeID, nid2, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid2, ca, ua, configSetJSONRaw, sourceMetaJSON, probeResultsJSON, rtName, rtDisplay, vendor string
 			var imagePresent, dockerAvailable int
-			if err := nbrRows.Scan(&id, &runtimeID, &nid2, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid2, &ca, &ua, &snapshotJSON, &probeResultsJSON, &rtName, &rtDisplay, &vendor); err != nil {
+			if err := nbrRows.Scan(&id, &runtimeID, &nid2, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid2, &ca, &ua, &configSetJSONRaw, &sourceMetaJSON, &probeResultsJSON, &rtName, &rtDisplay, &vendor); err != nil {
 				continue
 			}
-			if displayName == "" { displayName = rtDisplay; if displayName == "" { displayName = rtName } }
+			if displayName == "" {
+				displayName = rtDisplay
+				if displayName == "" {
+					displayName = rtName
+				}
+			}
 			deployable := isNBRDeployable(status)
 			warnings := extractProbeWarnings(probeResultsJSON, status)
-			if tid != "" && tid2 != "" && tid != tid2 { continue }
+			if tid != "" && tid2 != "" && tid != tid2 {
+				continue
+			}
 			out = append(out, map[string]interface{}{
 				"id": id, "backend_runtime_id": runtimeID, "node_id": nid2, "name": displayName, "display_name": displayName,
 				"runner_type": runner, "image_ref": imageRef, "image_present": imagePresent == 1, "docker_available": dockerAvailable == 1,
 				"status": status, "status_reason": reason, "last_checked_at": checked,
 				"deployable": deployable, "warnings": warnings,
 				"disabled_reason": nbrDisabledReason(status, reason),
-				"config_snapshot_json": json.RawMessage(snapshotJSON), "probe_results_json": json.RawMessage(probeResultsJSON),
-				"backend_runtime": map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
-				"tenant_id": tid2, "created_at": ca, "updated_at": ua,
+				"config_set":      parseConfigSet(configSetJSONRaw), "config_set_json": json.RawMessage(configSetJSONRaw),
+				"source_metadata": configSourceMetadata(sourceMetaJSON), "source_metadata_json": json.RawMessage(sourceMetaJSON),
+				"probe_results_json": json.RawMessage(probeResultsJSON),
+				"backend_runtime":    map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
+				"tenant_id":          tid2, "created_at": ca, "updated_at": ua,
 			})
 		}
 		nbrRows.Close()
 	}
-	if out == nil { out = []map[string]interface{}{} }
+	if out == nil {
+		out = []map[string]interface{}{}
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -412,7 +458,7 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 		return
 	}
 	if nbrImageRef == "" {
-		nbrImageRef = strVal(rt, "image_name", "")
+		nbrImageRef = strVal(rt, "image_ref", "")
 	}
 	vendor := strVal(rt, "vendor", "")
 
@@ -786,7 +832,7 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		return
 	}
 	vendor := strVal(rt, "vendor", "")
-	imageRef := strVal(req, "image_ref", strVal(rt, "image_name", ""))
+	imageRef := strVal(req, "image_ref", strVal(rt, "image_ref", ""))
 	displayName := strings.TrimSpace(strVal(req, "display_name", ""))
 	if displayName == "" {
 		displayName = strVal(rt, "display_name", "")
@@ -828,58 +874,40 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 	now := time.Now().Format(time.RFC3339)
 
 	// Check whether a NodeBackendRuntime already exists for this (node, runtime) pair.
-	var existingID, existingSnapshot string
-	row := h.DB.QueryRow(`SELECT id, COALESCE(config_snapshot_json,'{}') FROM node_backend_runtimes WHERE node_id=? AND backend_runtime_id=?`, nodeID, runtimeID)
-	_ = row.Scan(&existingID, &existingSnapshot)
+	var existingID string
+	row := h.DB.QueryRow(`SELECT id FROM node_backend_runtimes WHERE node_id=? AND backend_runtime_id=?`, nodeID, runtimeID)
+	_ = row.Scan(&existingID)
 	exists := existingID != ""
-	hasSnapshot := exists && existingSnapshot != "{}" && existingSnapshot != ""
 
 	if !exists {
 		// First time: create a new NodeBackendRuntime.
-		// Capture a frozen config snapshot from the BackendRuntime template.
-		// This freezes the runtime configuration so future template edits do not
-		// silently change the behavior of existing NodeBackendRuntime records.
-		snapshotJSON := h.buildRuntimeConfigSnapshot(rt, runtimeID)
-		// Deep copy parameter schema and values from BackendRuntime.
-		// If BR has no parameter_schema_json, fall back to BackendVersion's default_args_schema_json.
-		paramSchemaJSON := jsonString(rt["parameter_schema_json"])
-		if paramSchemaJSON == "null" || paramSchemaJSON == "" || paramSchemaJSON == "[]" {
-			// Try BackendVersion's default_args_schema_json
-			bvID := strVal(rt, "backend_version_id", "")
-			if bvID != "" {
-				var bvSchema string
-				if err := h.DB.QueryRow(`SELECT COALESCE(default_args_schema_json,'[]') FROM backend_versions WHERE id=?`, bvID).Scan(&bvSchema); err == nil && bvSchema != "" && bvSchema != "null" && bvSchema != "[]" {
-					paramSchemaJSON = bvSchema
-				}
-			}
-		}
-		if paramSchemaJSON == "null" || paramSchemaJSON == "" {
-			paramSchemaJSON = "[]"
-		}
-		paramValuesJSON := jsonString(rt["parameter_values_json"])
-		if paramValuesJSON == "null" || paramValuesJSON == "" || paramValuesJSON == "[]" {
-			// If no parameter values set, initialize from schema defaults for required params.
-			paramValuesJSON = h.buildDefaultParamValuesFromSchema(paramSchemaJSON)
+		// Capture a frozen ConfigSet from the BackendRuntime template and apply
+		// node/runtime explicit choices into the ConfigSet authority.
+		configSetJSONRaw := h.buildRuntimeConfigSnapshot(rt, runtimeID, imageRef)
+		sourceMetadata := map[string]interface{}{
+			"source_type":               "node_backend_runtime",
+			"source_backend_runtime_id": runtimeID,
+			"source_runtime_name":       strVal(rt, "name", ""),
+			"source_runtime_revision":   strVal(rt, "updated_at", ""),
+			"copy_semantics":            "copy_on_create",
 		}
 		_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
-			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_snapshot_json, source_runtime_name, source_runtime_revision, parameter_schema_json, parameter_values_json, tenant_id, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_set_json, source_metadata_json, tenant_id, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			id, runtimeID, nodeID, displayName, "docker", imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
 			strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
-			status, reason, now, snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""),
-			paramSchemaJSON, paramValuesJSON, tid, now, now)
+			status, reason, now, configSetJSONRaw, jsonString(sourceMetadata), tid, now, now)
 		if err != nil {
 			log.Error("node backend runtime insert failed", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-	} else if checkOnly || hasSnapshot {
+	} else {
 		// Existing record: update only check result fields.
-		// Check/validate must NOT mutate runtime configuration fields
-		// (image_ref, config_snapshot_json, source_runtime_name,
-		//  source_runtime_revision). The snapshot is frozen at creation
-		// time and remains independent. image_ref is read from the
-		// request solely for status evaluation; it is NOT persisted back.
+		// Check/validate must NOT mutate runtime configuration fields.
+		// ConfigSet and source metadata are frozen at creation time and remain
+		// independent. image_ref is read from the request solely for status
+		// evaluation; it is NOT persisted back.
 		_, err := h.DB.Exec(`UPDATE node_backend_runtimes SET
 			image_present=?, docker_available=?,
 			driver_version=?, toolkit_version=?, device_check_json=?,
@@ -895,27 +923,6 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-	} else {
-		// Legacy case: existing record with no snapshot — rebuild from template.
-		// This path only triggers for records created before the snapshot feature.
-		snapshotJSON := h.buildRuntimeConfigSnapshot(rt, runtimeID)
-		_, err := h.DB.Exec(`UPDATE node_backend_runtimes SET
-			image_ref=?, image_present=?, docker_available=?,
-			driver_version=?, toolkit_version=?, device_check_json=?,
-			status=?, status_reason=?, last_checked_at=?,
-			config_snapshot_json=?, source_runtime_name=?, source_runtime_revision=?,
-			updated_at=?
-			WHERE id=?`,
-			imageRef, boolInt(imagePresent), boolInt(dockerAvailable),
-			strVal(req, "driver_version", ""), strVal(req, "toolkit_version", ""), jsonString(map[string]interface{}{"vendor": vendor}),
-			status, reason, now,
-			snapshotJSON, strVal(rt, "name", ""), strVal(rt, "updated_at", ""),
-			now, existingID)
-		if err != nil {
-			log.Error("node backend runtime legacy update failed", "error", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"id": id, "backend_runtime_id": runtimeID, "node_id": nodeID, "name": displayName, "display_name": displayName,
@@ -925,88 +932,14 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 	})
 }
 
-// buildRuntimeConfigSnapshot captures a frozen config snapshot from a BackendRuntime.
+// buildRuntimeConfigSnapshot captures a frozen ConfigSet from a BackendRuntime.
 // This is called only at NodeBackendRuntime creation time (not on check/validate).
-func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID string) string {
-	// Read raw default_env_json directly from DB to avoid redaction in snapshot.
-	// The snapshot is an internal frozen config, not an API response.
-	var rawDefEnv string
-	h.DB.QueryRow(`SELECT COALESCE(default_env_json,'{}') FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&rawDefEnv)
-
-	// Merge BackendVersion's default_args into args_override if BR has no args.
-	argsOverride := rt["args_override_json"]
-	if isEmptyJSON(argsOverride) {
-		bvID := strVal(rt, "backend_version_id", "")
-		if bvID != "" {
-			var bvArgs string
-			if err := h.DB.QueryRow(`SELECT COALESCE(default_args_json,'[]') FROM backend_versions WHERE id=?`, bvID).Scan(&bvArgs); err == nil && bvArgs != "" && bvArgs != "null" && bvArgs != "[]" {
-				argsOverride = json.RawMessage(bvArgs)
-			}
-		}
+func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID, imageRef string) string {
+	set := copyConfigSet(rawJSONString(rt["config_set_json"], "{}"))
+	if imageRef != "" {
+		setConfigValue(set, "launcher.image", imageRef, "NodeBackendRuntime", runtimeID, "explicit_node_runtime_image")
 	}
-
-	snapshot := map[string]interface{}{
-		"source_runtime_id":          runtimeID,
-		"source_runtime_name":        strVal(rt, "name", ""),
-		"source_runtime_revision":    strVal(rt, "updated_at", ""),
-		"backend_id":                 strVal(rt, "backend_id", ""),
-		"backend_version_id":         strVal(rt, "backend_version_id", ""),
-		"vendor":                     strVal(rt, "vendor", ""),
-		"runtime_type":               strVal(rt, "runtime_type", "docker"),
-		"image_name":                 strVal(rt, "image_name", ""),
-		"image_pull_policy":          strVal(rt, "image_pull_policy", "if_not_present"),
-		"entrypoint_override_json":   rt["entrypoint_override_json"],
-		"args_override_json":         argsOverride,
-		"default_env_json":           json.RawMessage(rawDefEnv),
-		"docker_json":                rt["docker_json"],
-		"model_mount_json":           rt["model_mount_json"],
-		"health_check_override_json": rt["health_check_override_json"],
-		"version_snapshot_json":      rt["version_snapshot_json"],
-		"parameter_schema_json":      rt["parameter_schema_json"],
-		"parameter_values_json":      rt["parameter_values_json"],
-	}
-	return jsonString(snapshot)
-}
-
-// buildDefaultParamValuesFromSchema creates default parameter_values_json from a
-// parameter schema. For required parameters with a default/template value, it
-// creates an enabled entry. For optional parameters, it creates a disabled entry
-// with the default value preserved.
-func (h *AgentHandler) buildDefaultParamValuesFromSchema(schemaJSON string) string {
-	var schema []struct {
-		Name     string `json:"name"`
-		Alias    string `json:"alias"`
-		Required bool   `json:"required"`
-		Optional bool   `json:"optional"`
-		Default  string `json:"default"`
-		Value    string `json:"value"`
-	}
-	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil || len(schema) == 0 {
-		return "[]"
-	}
-	var values []map[string]interface{}
-	for _, def := range schema {
-		cliName := def.Name
-		// Value (template) takes precedence over Default (static).
-		// e.g. value="{{container_port}}" should be used, not default="8000".
-		val := def.Value
-		if val == "" {
-			val = def.Default
-		}
-		entry := map[string]interface{}{
-			"key":      strings.TrimLeft(def.Name, "-"),
-			"cli_name": cliName,
-			"name":     def.Name,
-			"enabled":  def.Required && val != "",
-			"value":    val,
-			"required": def.Required,
-		}
-		if def.Alias != "" {
-			entry["alias"] = def.Alias
-		}
-		values = append(values, entry)
-	}
-	return jsonString(values)
+	return configSetJSON(set)
 }
 
 func (h *AgentHandler) evaluateNodeBackendRuntime(nodeID, vendor, imageRef string, imagePresent, dockerAvailable bool) (string, string) {
@@ -1149,7 +1082,7 @@ func matchBackendType(backendID, vendor string, repoTags []string, labels map[st
 	}
 	// patterns maps backend family names to common image name variants.
 	// This is for user input normalization only — NOT a backend capability source.
-	// Canonical capability data is in backend_versions.capabilities_json.
+	// Canonical capability data is in BackendVersion ConfigSet.
 	patterns := map[string][]string{
 		"vllm":     {"vllm", "vllm-openai"},
 		"sglang":   {"sglang", "lmsysorg/sglang"},
@@ -1203,24 +1136,30 @@ func getVersionProbeConfig(rt map[string]interface{}) map[string]interface{} {
 }
 
 func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, source_backend_id, source_backend_version_id, source_version_revision, version_snapshot_json, parameter_schema_json, parameter_values_json, created_at, updated_at FROM backend_runtimes WHERE id = ?`, id)
-	var rid, name, dn, bid, bvid, stn, vendor, rt, img, ipp, eoj, aoj, defEnv, dj, mmj, hcoj, tid, sourceBID, sourceBVID, sourceRevision, versionSnapshot, paramSchema, paramValues, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, config_set_json, source_metadata_json, created_at, updated_at FROM backend_runtimes WHERE id = ?`, id)
+	var rid, name, dn, bid, bvid, stn, vendor, rt, tid, configSetRaw, sourceMetaRaw, ca, ua string
 	var isB, isE int
-	if err := row.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &img, &ipp, &eoj, &aoj, &defEnv, &dj, &mmj, &hcoj, &isB, &isE, &tid, &sourceBID, &sourceBVID, &sourceRevision, &versionSnapshot, &paramSchema, &paramValues, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &isB, &isE, &tid, &configSetRaw, &sourceMetaRaw, &ca, &ua); err != nil {
 		return nil
 	}
+	configSet := parseConfigSet(configSetRaw)
+	sourceMeta := configSourceMetadata(sourceMetaRaw)
 	return map[string]interface{}{
 		"id": rid, "name": name, "display_name": dn, "backend_id": bid, "backend_version_id": bvid,
 		"source_template_name": stn, "vendor": vendor, "runtime_type": rt,
-		"image_name": img, "image_pull_policy": ipp,
-		"entrypoint_override_json": json.RawMessage(eoj), "args_override_json": json.RawMessage(aoj),
-		"default_env_json": redactRawJSON(defEnv), "docker_json": json.RawMessage(dj),
-		"model_mount_json": json.RawMessage(mmj), "health_check_override_json": json.RawMessage(hcoj),
 		"is_builtin": isB == 1, "is_editable": isE == 1, "tenant_id": tid,
-		"source_backend_id": sourceBID, "source_backend_version_id": sourceBVID,
-		"source_version_revision": sourceRevision, "version_snapshot_json": json.RawMessage(versionSnapshot),
-		"parameter_schema_json": json.RawMessage(paramSchema), "parameter_values_json": json.RawMessage(paramValues),
-		"created_at": ca, "updated_at": ua,
+		"image_ref":            configString(configSet, "launcher.image", ""),
+		"entrypoint":           configStringSlice(configSet, "launcher.entrypoint"),
+		"command":              configStringSlice(configSet, "launcher.command"),
+		"env":                  redactEnvMap(configObject(configSet, "runtime.env")),
+		"docker_options":       configObject(configSet, "launcher.docker_options"),
+		"model_mount":          configObject(configSet, "runtime.model_mount"),
+		"health_check":         configObject(configSet, "runtime.health"),
+		"config_set":           configSet,
+		"config_set_json":      json.RawMessage(configSetRaw),
+		"source_metadata":      sourceMeta,
+		"source_metadata_json": json.RawMessage(sourceMetaRaw),
+		"created_at":           ca, "updated_at": ua,
 	}
 }
 
@@ -1232,57 +1171,34 @@ func (h *AgentHandler) queryBackendRuntimes(query string, args ...interface{}) (
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var rid, name, dn, bid, bvid, stn, vendor, rt, img, ipp, eoj, aoj, defEnv, dj, mmj, hcoj, tid, ca, ua string
+		var rid, name, dn, bid, bvid, stn, vendor, rt, tid, configSetRaw, sourceMetaRaw, ca, ua string
 		var isB, isE int
-		if err := rows.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &img, &ipp, &eoj, &aoj, &defEnv, &dj, &mmj, &hcoj, &isB, &isE, &tid, &ca, &ua); err != nil {
+		if err := rows.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &isB, &isE, &tid, &configSetRaw, &sourceMetaRaw, &ca, &ua); err != nil {
 			continue
 		}
+		configSet := parseConfigSet(configSetRaw)
 		out = append(out, map[string]interface{}{
 			"id": rid, "name": name, "display_name": dn, "backend_id": bid, "backend_version_id": bvid,
 			"source_template_name": stn, "vendor": vendor, "runtime_type": rt,
-			"image_name": img, "image_pull_policy": ipp,
-			"entrypoint_override_json": json.RawMessage(eoj), "args_override_json": json.RawMessage(aoj),
-			"default_env_json": redactRawJSON(defEnv), "docker_json": json.RawMessage(dj),
-			"model_mount_json": json.RawMessage(mmj), "health_check_override_json": json.RawMessage(hcoj),
 			"is_builtin": isB == 1, "is_editable": isE == 1, "tenant_id": tid,
-			"created_at": ca, "updated_at": ua,
+			"image_ref":            configString(configSet, "launcher.image", ""),
+			"entrypoint":           configStringSlice(configSet, "launcher.entrypoint"),
+			"command":              configStringSlice(configSet, "launcher.command"),
+			"env":                  redactEnvMap(configObject(configSet, "runtime.env")),
+			"docker_options":       configObject(configSet, "launcher.docker_options"),
+			"model_mount":          configObject(configSet, "runtime.model_mount"),
+			"health_check":         configObject(configSet, "runtime.health"),
+			"config_set":           configSet,
+			"config_set_json":      json.RawMessage(configSetRaw),
+			"source_metadata":      configSourceMetadata(sourceMetaRaw),
+			"source_metadata_json": json.RawMessage(sourceMetaRaw),
+			"created_at":           ca, "updated_at": ua,
 		})
 	}
 	if out == nil {
 		out = []map[string]interface{}{}
 	}
 	return out, nil
-}
-
-func backendVersionSnapshot(version map[string]interface{}) map[string]interface{} {
-	return map[string]interface{}{
-		"id":                          strVal(version, "id", ""),
-		"backend_id":                  strVal(version, "backend_id", ""),
-		"version":                     strVal(version, "version", ""),
-		"display_name":                strVal(version, "display_name", ""),
-		"default_entrypoint_json":     version["default_entrypoint_json"],
-		"default_args_json":           version["default_args_json"],
-		"default_backend_params_json": version["default_backend_params_json"],
-		"parameter_defs_json":         version["parameter_defs_json"],
-		"health_check_json":           version["health_check_json"],
-		"default_container_port":      intVal(version, "default_container_port", 8000),
-		"default_images_json":         version["default_images_json"],
-		"image_candidates_json":       version["image_candidates_json"],
-		"protocol":                    strVal(version, "protocol", ""),
-		"default_host":                strVal(version, "default_host", "0.0.0.0"),
-		"default_endpoints_json":      version["default_endpoints_json"],
-		"default_args_schema_json":    version["default_args_schema_json"],
-		"default_env_schema_json":     version["default_env_schema_json"],
-		"default_health_check_json":   version["default_health_check_json"],
-		"official_reference_json":     version["official_reference_json"],
-		"revision":                    strVal(version, "revision", ""),
-		"env_json":                    version["env_json"],
-		"capabilities_json":           version["capabilities_json"],
-		"docker_options_json":         version["docker_options_json"],
-		"model_mount_json":            version["model_mount_json"],
-		"vendor_options_json":         version["vendor_options_json"],
-		"source_revision":             strVal(version, "checksum", strVal(version, "updated_at", "")),
-	}
 }
 
 func jsonToStringMap(raw string) map[string]string {

@@ -91,7 +91,7 @@ func CheckCompatibility(model ModelDescriptor, backend BackendDescriptor) Compat
 	return CompatResult{true, "ok", ""}
 }
 
-// ParseBackendCapabilities unmarshals the capabilities_json string into BackendDescriptor.
+// ParseBackendCapabilities unmarshals ConfigSet backend capability data into BackendDescriptor.
 func ParseBackendCapabilities(capabilitiesJSON string) (BackendDescriptor, error) {
 	var caps struct {
 		SupportedFormats      []string               `json:"supported_formats"`

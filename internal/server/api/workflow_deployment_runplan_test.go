@@ -180,12 +180,12 @@ func workflowDeploymentRuntimePatchPayload(suffix string) map[string]interface{}
 	return map[string]interface{}{
 		"name":         "workflow-deployment-runtime-" + suffix,
 		"display_name": "Workflow Deployment Runtime " + suffix,
-		"image_name":   "workflow/runtime-template-" + suffix + ":latest",
-		"default_env_json": map[string]interface{}{
+		"image_ref":    "workflow/runtime-template-" + suffix + ":latest",
+		"env": map[string]interface{}{
 			"LIGHTAI_RUNTIME_WORKFLOW": suffix,
 			"VLLM_LOGGING_LEVEL":       "INFO",
 		},
-		"docker_json": map[string]interface{}{
+		"docker_options": map[string]interface{}{
 			"devices": []interface{}{
 				map[string]interface{}{"host_path": "/dev/nvidia0", "container_path": "/dev/nvidia0", "permissions": "rwm"},
 			},
@@ -197,15 +197,15 @@ func workflowDeploymentRuntimePatchPayload(suffix string) map[string]interface{}
 				"memlock": "-1",
 			},
 		},
-		"args_override_json": []interface{}{"--host", "0.0.0.0", "--port", "8000"},
-		"entrypoint_override_json": []interface{}{
+		"command": []interface{}{"--host", "0.0.0.0", "--port", "8000"},
+		"entrypoint": []interface{}{
 			"python3", "-m", "vllm.entrypoints.openai.api_server",
 		},
-		"model_mount_json": map[string]interface{}{
+		"model_mount": map[string]interface{}{
 			"container_path": "/models",
 			"readonly":       true,
 		},
-		"health_check_override_json": map[string]interface{}{
+		"health_check": map[string]interface{}{
 			"path":                    "/v1/models",
 			"expected_status":         float64(200),
 			"startup_timeout_seconds": float64(120),
@@ -265,9 +265,11 @@ func workflowCreateDeployment(t *testing.T, app *workflowTestApp, fixture workfl
 			"node_id":         fixture.NodeID,
 			"accelerator_ids": []interface{}{fixture.GPUID},
 		},
-		"service_json":          fixture.Service,
-		"parameter_values_json": fixture.Parameters,
-		"env_overrides_json":    fixture.EnvOverride,
+		"service_json": fixture.Service,
+		"config_overrides": map[string]interface{}{
+			"parameter_values": fixture.Parameters,
+			"env":              fixture.EnvOverride,
+		},
 	}, http.StatusCreated)
 	var deployment map[string]interface{}
 	resp.Decode(t, &deployment)
@@ -366,28 +368,33 @@ func workflowAssertDryRunRunPlanFields(t *testing.T, dryRun map[string]interface
 
 func workflowAssertDeploymentSnapshot(t *testing.T, deployment map[string]interface{}, fixture workflowDeploymentFixture) {
 	t.Helper()
-	snapshot := workflowMapField(t, deployment, "config_snapshot_json")
-	if snapshot["nbr_image_ref"] == nil || snapshot["nbr_image_ref"] != "workflow/frozen-"+strings.TrimPrefix(workflowStringField(t, deployment, "name"), "workflow-deployment-")+":latest" {
-		t.Fatalf("deployment snapshot missing frozen NBR image_ref: %#v", snapshot)
+	configSet := workflowMapField(t, deployment, "config_set")
+	items := workflowMapField(t, configSet, "items")
+	launcherImage := workflowMapField(t, items, "launcher.image")
+	if launcherImage["value"] == nil || launcherImage["value"] != "workflow/frozen-"+strings.TrimPrefix(workflowStringField(t, deployment, "name"), "workflow-deployment-")+":latest" {
+		t.Fatalf("deployment config set missing frozen launcher.image: %#v", configSet)
 	}
 	if deployment["source_node_backend_runtime_id"] != fixture.NBRID {
 		t.Fatalf("deployment source_node_backend_runtime_id=%#v want %#v deployment=%#v", deployment["source_node_backend_runtime_id"], fixture.NBRID, deployment)
 	}
-	docker := workflowMapField(t, snapshot, "docker_json")
+	dockerItem := workflowMapField(t, items, "launcher.docker_options")
+	docker := workflowMapField(t, dockerItem, "value")
 	if _, ok := docker["devices"].([]interface{}); !ok {
 		t.Fatalf("deployment snapshot docker devices missing: %#v", docker)
 	}
 	if docker["ipc_mode"] != "host" || docker["shm_size"] != "16g" {
 		t.Fatalf("deployment snapshot docker fields missing: %#v", docker)
 	}
-	env := workflowMapField(t, snapshot, "default_env_json")
+	envItem := workflowMapField(t, items, "runtime.env")
+	env := workflowMapField(t, envItem, "value")
 	if env["LIGHTAI_RUNTIME_WORKFLOW"] == nil {
 		t.Fatalf("deployment snapshot env missing workflow key: %#v", env)
 	}
-	workflowMapField(t, snapshot, "health_check_override_json")
-	workflowMapField(t, snapshot, "model_mount_json")
-	if _, ok := snapshot["args_override_json"].([]interface{}); !ok {
-		t.Fatalf("deployment snapshot args_override_json missing or wrong type: %#v", snapshot)
+	workflowMapField(t, items, "runtime.health")
+	workflowMapField(t, items, "runtime.model_mount")
+	commandItem := workflowMapField(t, items, "launcher.command")
+	if _, ok := commandItem["value"].([]interface{}); !ok {
+		t.Fatalf("deployment config set launcher.command missing or wrong type: %#v", commandItem)
 	}
 }
 
@@ -408,8 +415,8 @@ func workflowAssertDeploymentListDetailConsistent(t *testing.T, app *workflowTes
 		"replicas",
 		"placement_json",
 		"service_json",
-		"env_overrides_json",
-		"config_snapshot_json",
+		"config_overrides_json",
+		"config_set_json",
 		"source_node_backend_runtime_id",
 		"desired_state",
 		"status",

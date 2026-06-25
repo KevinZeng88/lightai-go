@@ -39,23 +39,44 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 	if newDisplayName == "" {
 		newDisplayName = newName
 	}
-	// Accept overrides from request body for key config fields.
-	imageName := strVal(req, "image_name", strVal(original, "image_name", ""))
+	configSet := copyConfigSet(rawJSONString(original["config_set_json"], "{}"))
+	if v := strVal(req, "image_ref", ""); v != "" {
+		setConfigValue(configSet, "launcher.image", v, "BackendRuntime", newID, "clone_override")
+	}
+	if v, ok := req["docker_options"]; ok {
+		setConfigValue(configSet, "launcher.docker_options", v, "BackendRuntime", newID, "clone_override")
+	}
+	if v, ok := req["env"]; ok {
+		setConfigValue(configSet, "runtime.env", v, "BackendRuntime", newID, "clone_override")
+	}
+	if v, ok := req["model_mount"]; ok {
+		setConfigValue(configSet, "runtime.model_mount", v, "BackendRuntime", newID, "clone_override")
+	}
+	if v, ok := req["health_check"]; ok {
+		setConfigValue(configSet, "runtime.health", v, "BackendRuntime", newID, "clone_override")
+	}
+	if v, ok := req["entrypoint"]; ok {
+		setConfigValue(configSet, "launcher.entrypoint", v, "BackendRuntime", newID, "clone_override")
+	}
+	if v, ok := req["command"]; ok {
+		setConfigValue(configSet, "launcher.command", v, "BackendRuntime", newID, "clone_override")
+	}
+	if incoming, ok := req["config_set"].(map[string]interface{}); ok {
+		configSet = incoming
+	}
 	vendor := strVal(req, "vendor", strVal(original, "vendor", ""))
-	dockerJSON := jsonFieldRaw(req, "docker_json", original["docker_json"])
-	argsOverride := jsonFieldRaw(req, "args_override_json", original["args_override_json"])
-	defaultEnv := jsonFieldRaw(req, "default_env_json", original["default_env_json"])
-	entryOverride := jsonFieldRaw(req, "entrypoint_override_json", original["entrypoint_override_json"])
-	_, err := h.DB.Exec(`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, image_name, image_pull_policy, entrypoint_override_json, args_override_json, default_env_json, docker_json, model_mount_json, health_check_override_json, is_builtin, is_editable, tenant_id, slug, managed_by, source, status, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, 'docker', ?, 'if_not_present', ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, 'user', 'clone', 'active', ?, ?)`,
+	sourceMetadata := map[string]interface{}{
+		"source_type":               "backend_runtime_clone",
+		"source_backend_runtime_id": originalID,
+		"source_runtime_name":       strVal(original, "name", ""),
+		"source_runtime_revision":   strVal(original, "updated_at", ""),
+		"copy_semantics":            "copy_on_create",
+	}
+	_, err := h.DB.Exec(`INSERT INTO backend_runtimes (id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, slug, managed_by, source, catalog_version, checksum, status, config_set_json, source_metadata_json, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'docker', 0, 1, ?, ?, 'user', 'clone', 'configset-v1', ?, 'active', ?, ?, ?, ?)`,
 		newID, newName, newDisplayName,
 		strVal(original, "backend_id", ""), strVal(original, "backend_version_id", ""),
-		sourceName, vendor, imageName,
-		jsonString(entryOverride), jsonString(argsOverride),
-		jsonString(defaultEnv), jsonString(dockerJSON),
-		jsonString(original["model_mount_json"]),
-		jsonString(original["health_check_override_json"]),
-		tid, strVal(original, "slug", ""), now, now)
+		sourceName, vendor, tid, slugify(newName), checksumString(configSetJSON(configSet)), configSetJSON(configSet), jsonString(sourceMetadata), now, now)
 	if err != nil {
 		log.OperationFailed(ctx, "backend_runtime.clone", "db_write", opStart, err, "original_id", originalID)
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -69,14 +90,6 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 
 	log.OperationCompleted(ctx, "backend_runtime.clone", opStart, "id", newID, "original_id", originalID, "tenant_id", tid)
 	writeJSON(w, http.StatusCreated, h.getBackendRuntimeJSON(newID))
-}
-
-// jsonFieldRaw returns the request value if present, otherwise the fallback value.
-func jsonFieldRaw(req map[string]interface{}, key string, fallback interface{}) interface{} {
-	if v, ok := req[key]; ok && v != nil {
-		return v
-	}
-	return fallback
 }
 
 func (h *AgentHandler) uniqueRuntimeName(tenantID, base string) string {
@@ -137,14 +150,27 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 			needsRecheck = true
 		}
 	}
-	for _, f := range []string{"config_snapshot_json", "device_check_json", "parameter_schema_json", "parameter_values_json"} {
-		if v, ok := req[f]; ok {
-			sets = append(sets, f+" = ?")
-			args = append(args, jsonString(v))
-			if f == "config_snapshot_json" {
-				needsRecheck = true
-			}
-		}
+	if v, ok := req["config_set"]; ok {
+		sets = append(sets, "config_set_json = ?")
+		args = append(args, jsonString(v))
+		needsRecheck = true
+	}
+	if v, ok := req["config_set_json"]; ok {
+		sets = append(sets, "config_set_json = ?")
+		args = append(args, jsonString(v))
+		needsRecheck = true
+	}
+	if v, ok := req["source_metadata"]; ok {
+		sets = append(sets, "source_metadata_json = ?")
+		args = append(args, jsonString(v))
+	}
+	if v, ok := req["source_metadata_json"]; ok {
+		sets = append(sets, "source_metadata_json = ?")
+		args = append(args, jsonString(v))
+	}
+	if v, ok := req["device_check_json"]; ok {
+		sets = append(sets, "device_check_json = ?")
+		args = append(args, jsonString(v))
 	}
 	if v, ok := req["docker_available"]; ok {
 		if b, ok := v.(bool); ok {

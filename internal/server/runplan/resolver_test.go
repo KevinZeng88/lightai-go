@@ -175,7 +175,7 @@ func TestResolveServicePortSemantics(t *testing.T) {
 }
 
 func TestResolveImagePriority(t *testing.T) {
-	// Priority 1: NodeRuntimeOverride.image_name
+	// Priority 1: NodeRuntimeOverride explicit image.
 	in := makeTestInput()
 	in.NodeRuntimeOverride = &NodeOverrideInfo{ImageName: "node-image:latest"}
 	plan, _, _ := Resolve(in)
@@ -183,7 +183,7 @@ func TestResolveImagePriority(t *testing.T) {
 		t.Errorf("expected node-image:latest, got %s", plan.Image)
 	}
 
-	// Priority 2: BackendRuntime.image_name
+	// Priority 2: BackendRuntime ConfigSet launcher.image.
 	in2 := makeTestInput()
 	plan2, _, _ := Resolve(in2)
 	if plan2.Image != "vllm/vllm-openai:v0.8.5-custom" {

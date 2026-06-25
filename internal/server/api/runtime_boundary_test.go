@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -38,7 +37,7 @@ func TestCreateBackendRuntimeCopiesBackendVersionSnapshot(t *testing.T) {
 
 	vw := httptest.NewRecorder()
 	h.HandleCreateBackendVersion(vw, newReq("POST", "/x",
-		`{"id":"backend-version.user.snapshot","version":"snapshot-v1","display_name":"Snapshot V1","default_images_json":{"nvidia":"snapshot:v1"},"default_args_json":["serve"]}`,
+		`{"id":"backend-version.user.snapshot","version":"snapshot-v1","display_name":"Snapshot V1","image_ref":"snapshot:v1","command":["serve"]}`,
 		adminSession(), map[string]string{"id": "backend.vllm"}))
 	if vw.Code != 201 {
 		t.Fatalf("create version code=%d body=%s", vw.Code, vw.Body.String())
@@ -55,37 +54,33 @@ func TestCreateBackendRuntimeCopiesBackendVersionSnapshot(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &rt); err != nil {
 		t.Fatalf("decode runtime: %v", err)
 	}
-	if rt["source_backend_id"] != "backend.vllm" {
-		t.Fatalf("source_backend_id=%v", rt["source_backend_id"])
+	if rt["backend_id"] != "backend.vllm" {
+		t.Fatalf("backend_id=%v", rt["backend_id"])
 	}
-	if rt["source_backend_version_id"] != "backend-version.user.snapshot" {
-		t.Fatalf("source_backend_version_id=%v", rt["source_backend_version_id"])
+	if rt["backend_version_id"] != "backend-version.user.snapshot" {
+		t.Fatalf("backend_version_id=%v", rt["backend_version_id"])
 	}
-	if rt["source_version_revision"] == "" {
-		t.Fatalf("source_version_revision is empty")
+	if rt["image_ref"] != "snapshot:v1" {
+		t.Fatalf("image_ref=%v", rt["image_ref"])
 	}
-	if rt["image_name"] != "snapshot:v1" {
-		t.Fatalf("image_name=%v", rt["image_name"])
-	}
-	snap := rt["version_snapshot_json"]
-	raw, _ := json.Marshal(snap)
-	if !strings.Contains(string(raw), "default_args_json") || !strings.Contains(string(raw), "snapshot:v1") {
-		t.Fatalf("version snapshot did not include version defaults: %s", string(raw))
+	raw, _ := json.Marshal(rt["config_set"])
+	if !strings.Contains(string(raw), "serve") || !strings.Contains(string(raw), "snapshot:v1") {
+		t.Fatalf("config set did not include version defaults: %s", string(raw))
 	}
 
 	pw := httptest.NewRecorder()
-	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"default_images_json":{"nvidia":"changed:v2"},"default_args_json":["changed"]}`, adminSession(), map[string]string{"version_id": "backend-version.user.snapshot"}))
+	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"image_ref":"changed:v2","command":["changed"]}`, adminSession(), map[string]string{"version_id": "backend-version.user.snapshot"}))
 	if pw.Code != 200 {
 		t.Fatalf("patch version code=%d body=%s", pw.Code, pw.Body.String())
 	}
 
 	got := h.getBackendRuntimeJSON(rt["id"].(string))
-	if got["image_name"] != "snapshot:v1" {
-		t.Fatalf("runtime image changed after BackendVersion edit: %v", got["image_name"])
+	if got["image_ref"] != "snapshot:v1" {
+		t.Fatalf("runtime image changed after BackendVersion edit: %v", got["image_ref"])
 	}
-	raw, _ = json.Marshal(got["version_snapshot_json"])
+	raw, _ = json.Marshal(got["config_set"])
 	if strings.Contains(string(raw), "changed:v2") {
-		t.Fatalf("runtime version snapshot changed after BackendVersion edit: %s", string(raw))
+		t.Fatalf("runtime config set changed after BackendVersion edit: %s", string(raw))
 	}
 }
 
@@ -105,24 +100,24 @@ func TestNodeBackendRuntimeCopiesTemplateSnapshotAndTemplateEditDoesNotChangeIt(
 		t.Fatalf("enable code=%d body=%s", w.Code, w.Body.String())
 	}
 	var before string
-	if err := db.QueryRow(`SELECT config_snapshot_json FROM node_backend_runtimes WHERE id='node-a:rt-snap'`).Scan(&before); err != nil {
-		t.Fatalf("read snapshot: %v", err)
+	if err := db.QueryRow(`SELECT config_set_json FROM node_backend_runtimes WHERE id='node-a:rt-snap'`).Scan(&before); err != nil {
+		t.Fatalf("read config set: %v", err)
 	}
 	if !strings.Contains(before, "img:test") {
-		t.Fatalf("snapshot missing original image: %s", before)
+		t.Fatalf("config set missing original image: %s", before)
 	}
 
 	patch := httptest.NewRecorder()
-	h.HandlePatchBackendRuntime(patch, newReq("PATCH", "/x", `{"image_name":"changed:v2","docker_json":{"ipc_mode":"none"}}`, adminSession(), map[string]string{"id": "rt-snap"}))
+	h.HandlePatchBackendRuntime(patch, newReq("PATCH", "/x", `{"image_ref":"changed:v2","docker_options":{"ipc_mode":"none"}}`, adminSession(), map[string]string{"id": "rt-snap"}))
 	if patch.Code != 200 {
 		t.Fatalf("patch runtime code=%d body=%s", patch.Code, patch.Body.String())
 	}
 	var after string
-	if err := db.QueryRow(`SELECT config_snapshot_json FROM node_backend_runtimes WHERE id='node-a:rt-snap'`).Scan(&after); err != nil {
-		t.Fatalf("read snapshot after: %v", err)
+	if err := db.QueryRow(`SELECT config_set_json FROM node_backend_runtimes WHERE id='node-a:rt-snap'`).Scan(&after); err != nil {
+		t.Fatalf("read config set after: %v", err)
 	}
 	if before != after {
-		t.Fatalf("node runtime snapshot changed after template edit\nbefore=%s\nafter=%s", before, after)
+		t.Fatalf("node runtime config set changed after template edit\nbefore=%s\nafter=%s", before, after)
 	}
 }
 
@@ -145,19 +140,19 @@ func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 		t.Fatalf("enable code=%d body=%s", ew.Code, ew.Body.String())
 	}
 
-	// 2. Record original snapshot + source tracking fields.
-	var origSnapshot, origSourceName, origSourceRevision string
-	if err := db.QueryRow(`SELECT COALESCE(config_snapshot_json,'{}'), COALESCE(source_runtime_name,''), COALESCE(source_runtime_revision,'') FROM node_backend_runtimes WHERE id='node-check:rt-check'`).Scan(&origSnapshot, &origSourceName, &origSourceRevision); err != nil {
+	// 2. Record original ConfigSet + source tracking metadata.
+	var origConfigSet, origSourceMetadata string
+	if err := db.QueryRow(`SELECT COALESCE(config_set_json,'{}'), COALESCE(source_metadata_json,'{}') FROM node_backend_runtimes WHERE id='node-check:rt-check'`).Scan(&origConfigSet, &origSourceMetadata); err != nil {
 		t.Fatalf("read nbr: %v", err)
 	}
-	if !strings.Contains(origSnapshot, "img:test") {
-		t.Fatalf("snapshot missing template image: %s", origSnapshot)
+	if !strings.Contains(origConfigSet, "img:orig") {
+		t.Fatalf("config set missing NBR image: %s", origConfigSet)
 	}
 
 	// 3. Modify BackendRuntime template — change image, args, env, docker, health_check.
 	pw := httptest.NewRecorder()
 	h.HandlePatchBackendRuntime(pw, newReq("PATCH", "/x",
-		`{"image_name":"changed:v3","args_override_json":["--changed"],"default_env_json":{"CHANGED":"1"},"docker_json":{"ipc_mode":"none"},"health_check_override_json":{"type":"http","path":"/healthz"}}`,
+		`{"image_ref":"changed:v3","command":["--changed"],"env":{"CHANGED":"1"},"docker_options":{"ipc_mode":"none"},"health_check":{"type":"http","path":"/healthz"}}`,
 		adminSession(), map[string]string{"id": "rt-check"}))
 	if pw.Code != 200 {
 		t.Fatalf("patch runtime code=%d body=%s", pw.Code, pw.Body.String())
@@ -172,30 +167,27 @@ func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 		t.Fatalf("check code=%d body=%s", cw.Code, cw.Body.String())
 	}
 
-	// 5. Assert config_snapshot_json did NOT change (check must not refresh from template).
-	var afterSnapshot, afterSourceName, afterSourceRevision string
-	if err := db.QueryRow(`SELECT COALESCE(config_snapshot_json,'{}'), COALESCE(source_runtime_name,''), COALESCE(source_runtime_revision,'') FROM node_backend_runtimes WHERE id='node-check:rt-check'`).Scan(&afterSnapshot, &afterSourceName, &afterSourceRevision); err != nil {
+	// 5. Assert config_set_json did NOT change (check must not refresh from template).
+	var afterConfigSet, afterSourceMetadata string
+	if err := db.QueryRow(`SELECT COALESCE(config_set_json,'{}'), COALESCE(source_metadata_json,'{}') FROM node_backend_runtimes WHERE id='node-check:rt-check'`).Scan(&afterConfigSet, &afterSourceMetadata); err != nil {
 		t.Fatalf("read nbr after check: %v", err)
 	}
-	if origSnapshot != afterSnapshot {
-		t.Fatalf("config_snapshot_json changed after check\nbefore=%s\nafter=%s", origSnapshot, afterSnapshot)
+	if origConfigSet != afterConfigSet {
+		t.Fatalf("config_set_json changed after check\nbefore=%s\nafter=%s", origConfigSet, afterConfigSet)
 	}
-	if afterSnapshot == "" || afterSnapshot == "{}" {
-		t.Fatalf("snapshot is empty after check: %s", afterSnapshot)
+	if afterConfigSet == "" || afterConfigSet == "{}" {
+		t.Fatalf("config set is empty after check: %s", afterConfigSet)
 	}
-	if strings.Contains(afterSnapshot, "changed:v3") {
-		t.Fatalf("snapshot was refreshed from modified template (contains changed:v3): %s", afterSnapshot)
+	if strings.Contains(afterConfigSet, "changed:v3") {
+		t.Fatalf("config set was refreshed from modified template (contains changed:v3): %s", afterConfigSet)
 	}
-	if strings.Contains(afterSnapshot, "--changed") {
-		t.Fatalf("snapshot was refreshed from modified template (contains --changed): %s", afterSnapshot)
+	if strings.Contains(afterConfigSet, "--changed") {
+		t.Fatalf("config set was refreshed from modified template (contains --changed): %s", afterConfigSet)
 	}
 
-	// 6. Assert source_runtime_name and source_runtime_revision were NOT overwritten.
-	if origSourceName != afterSourceName {
-		t.Fatalf("source_runtime_name changed after check: %q -> %q", origSourceName, afterSourceName)
-	}
-	if origSourceRevision != afterSourceRevision {
-		t.Fatalf("source_runtime_revision changed after check: %q -> %q", origSourceRevision, afterSourceRevision)
+	// 6. Assert source_metadata_json was NOT overwritten.
+	if origSourceMetadata != afterSourceMetadata {
+		t.Fatalf("source_metadata_json changed after check: %q -> %q", origSourceMetadata, afterSourceMetadata)
 	}
 
 	// 7. Assert check-related fields WERE updated.
@@ -205,7 +197,7 @@ func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 	}
 	if status != "needs_check" {
 		// R-001: /check now runs as enable (checkOnly=false), forcing needs_check
-		
+
 		t.Fatalf("status=%s, want needs_check (R-001: session callers cannot set ready)", status)
 	}
 	if lastChecked == "" {
@@ -232,9 +224,9 @@ func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
 		t.Fatalf("enable code=%d body=%s", ew.Code, ew.Body.String())
 	}
 
-	// 2. Record original image_ref, snapshot, source fields.
-	var origImageRef, origSnapshot, origSourceName, origSourceRevision string
-	if err := db.QueryRow(`SELECT COALESCE(image_ref,''), COALESCE(config_snapshot_json,'{}'), COALESCE(source_runtime_name,''), COALESCE(source_runtime_revision,'') FROM node_backend_runtimes WHERE id='node-imgref:rt-imgref'`).Scan(&origImageRef, &origSnapshot, &origSourceName, &origSourceRevision); err != nil {
+	// 2. Record original image_ref, ConfigSet, source metadata.
+	var origImageRef, origConfigSet, origSourceMetadata string
+	if err := db.QueryRow(`SELECT COALESCE(image_ref,''), COALESCE(config_set_json,'{}'), COALESCE(source_metadata_json,'{}') FROM node_backend_runtimes WHERE id='node-imgref:rt-imgref'`).Scan(&origImageRef, &origConfigSet, &origSourceMetadata); err != nil {
 		t.Fatalf("read nbr: %v", err)
 	}
 	if origImageRef != "img-a:tag" {
@@ -243,7 +235,7 @@ func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
 
 	// 3. Execute check with a different image_ref in the request (simulating user
 	//    providing a different image in the check form or BackendRuntime having a
-	//    different image_name).
+	//    different launcher.image).
 	cw := httptest.NewRecorder()
 	h.HandleEnableNodeBackendRuntime(cw, newReq("POST", "/x",
 		`{"backend_runtime_id":"rt-imgref","image_ref":"img-b:tag"}}`,
@@ -253,21 +245,18 @@ func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
 	}
 
 	// 4. Assert image_ref was NOT mutated by check.
-	var afterImageRef, afterSnapshot, afterSourceName, afterSourceRevision string
-	if err := db.QueryRow(`SELECT COALESCE(image_ref,''), COALESCE(config_snapshot_json,'{}'), COALESCE(source_runtime_name,''), COALESCE(source_runtime_revision,'') FROM node_backend_runtimes WHERE id='node-imgref:rt-imgref'`).Scan(&afterImageRef, &afterSnapshot, &afterSourceName, &afterSourceRevision); err != nil {
+	var afterImageRef, afterConfigSet, afterSourceMetadata string
+	if err := db.QueryRow(`SELECT COALESCE(image_ref,''), COALESCE(config_set_json,'{}'), COALESCE(source_metadata_json,'{}') FROM node_backend_runtimes WHERE id='node-imgref:rt-imgref'`).Scan(&afterImageRef, &afterConfigSet, &afterSourceMetadata); err != nil {
 		t.Fatalf("read nbr after check: %v", err)
 	}
 	if afterImageRef != origImageRef {
 		t.Fatalf("image_ref mutated by check: %q -> %q", origImageRef, afterImageRef)
 	}
-	if afterSnapshot != origSnapshot {
-		t.Fatalf("config_snapshot_json changed after check: was=%s now=%s", origSnapshot, afterSnapshot)
+	if afterConfigSet != origConfigSet {
+		t.Fatalf("config_set_json changed after check: was=%s now=%s", origConfigSet, afterConfigSet)
 	}
-	if afterSourceName != origSourceName {
-		t.Fatalf("source_runtime_name changed after check: %q -> %q", origSourceName, afterSourceName)
-	}
-	if afterSourceRevision != origSourceRevision {
-		t.Fatalf("source_runtime_revision changed after check: %q -> %q", origSourceRevision, afterSourceRevision)
+	if afterSourceMetadata != origSourceMetadata {
+		t.Fatalf("source_metadata_json changed after check: %q -> %q", origSourceMetadata, afterSourceMetadata)
 	}
 
 	// 5. Assert check result fields WERE updated.
@@ -277,7 +266,7 @@ func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
 	}
 	if status != "needs_check" {
 		// R-001: /check now runs as enable (checkOnly=false), forcing needs_check
-		
+
 		t.Fatalf("status=%s, want needs_check (R-001: session callers cannot set ready)", status)
 	}
 	if lastChecked == "" {
@@ -290,25 +279,27 @@ func TestPatchNodeBackendRuntimeSnapshotFieldsNeedRecheck(t *testing.T) {
 	h := NewAgentHandler(db, nil)
 	runtimeBoundaryInsertOnlineNode(t, db, "node-b")
 	insertRuntime(t, db, "rt-edit", "Runtime Edit", "")
-	if _, err := db.Exec(`INSERT INTO node_backend_runtimes
-		(id, backend_runtime_id, node_id, runner_type, image_ref, image_present, docker_available, config_snapshot_json, status, status_reason, tenant_id, created_at, updated_at)
-		VALUES ('node-b:rt-edit','rt-edit','node-b','docker','img:v1',1,1,'{}','ready','ok','',datetime('now'),datetime('now'))`); err != nil {
-		t.Fatalf("insert nbr: %v", err)
+	insertNodeBackendRuntime(t, db, "node-b:rt-edit", "rt-edit", "node-b", "img:v1", "ready", "ok", 1, 1, "")
+	var setRaw string
+	if err := db.QueryRow(`SELECT config_set_json FROM node_backend_runtimes WHERE id='node-b:rt-edit'`).Scan(&setRaw); err != nil {
+		t.Fatalf("read nbr config set: %v", err)
 	}
+	set := copyConfigSet(setRaw)
+	setConfigValue(set, "backend.extra_args", []interface{}{"--new"}, "NodeBackendRuntime", "node-b:rt-edit", "test_patch")
 	w := httptest.NewRecorder()
-	h.HandlePatchNodeBackendRuntime(w, newReq("PATCH", "/x", `{"config_snapshot_json":{"args_override_json":["--new"]}}`, adminSession(), map[string]string{"nbr_id": "node-b:rt-edit"}))
+	h.HandlePatchNodeBackendRuntime(w, newReq("PATCH", "/x", jsonString(map[string]interface{}{"config_set": set}), adminSession(), map[string]string{"nbr_id": "node-b:rt-edit"}))
 	if w.Code != 200 {
 		t.Fatalf("patch code=%d body=%s", w.Code, w.Body.String())
 	}
 	var status, snap string
-	if err := db.QueryRow(`SELECT status, config_snapshot_json FROM node_backend_runtimes WHERE id='node-b:rt-edit'`).Scan(&status, &snap); err != nil {
+	if err := db.QueryRow(`SELECT status, config_set_json FROM node_backend_runtimes WHERE id='node-b:rt-edit'`).Scan(&status, &snap); err != nil {
 		t.Fatalf("read nbr: %v", err)
 	}
 	if status != "needs_check" {
 		t.Fatalf("status=%s, want needs_check", status)
 	}
 	if !strings.Contains(snap, "--new") {
-		t.Fatalf("snapshot not updated: %s", snap)
+		t.Fatalf("config set not updated: %s", snap)
 	}
 }
 
@@ -320,7 +311,7 @@ func TestBackendVersionCreatePatchAndReloadUserCatalog(t *testing.T) {
 
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	body := `{"version":"user-v1","display_name":"User V1","default_images_json":{"nvidia":"user:v1"},"default_args_json":["serve"],"capabilities_json":{"formats":["huggingface"]},"docker_options_json":{"ipc_mode":"host"},"model_mount_json":{"container_path":"/models","readonly":true},"description":"custom"}`
+	body := `{"version":"user-v1","display_name":"User V1","image_ref":"user:v1","command":["serve"],"model_mount":{"container_path":"/models","readonly":true},"description":"custom"}`
 	w := httptest.NewRecorder()
 	h.HandleCreateBackendVersion(w, newReq("POST", "/x", body, adminSession(), map[string]string{"id": "backend.vllm"}))
 	if w.Code != 201 {
@@ -334,41 +325,25 @@ func TestBackendVersionCreatePatchAndReloadUserCatalog(t *testing.T) {
 	if created["readonly"] != false {
 		t.Fatalf("readonly=%v, want false", created["readonly"])
 	}
-	if _, err := os.Stat(filepath.Join(backendCatalogUserVersionsDir, "vllm", "user-v1.yaml")); err != nil {
-		t.Fatalf("user catalog file missing: %v", err)
-	}
-
 	pw := httptest.NewRecorder()
-	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"display_name":"User V1 patched","default_images_json":{"nvidia":"user:v2"}}`, adminSession(), map[string]string{"version_id": created["id"].(string)}))
+	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"display_name":"User V1 patched","image_ref":"user:v2"}`, adminSession(), map[string]string{"version_id": created["id"].(string)}))
 	if pw.Code != 200 {
 		t.Fatalf("patch version code=%d body=%s", pw.Code, pw.Body.String())
 	}
 
-	rw := httptest.NewRecorder()
-	h.HandleReloadBackendCatalog(rw, newReq("POST", "/x", "", adminSession(), nil))
-	if rw.Code != 200 {
-		t.Fatalf("reload code=%d body=%s", rw.Code, rw.Body.String())
-	}
-	var img string
-	if err := db.QueryRow(`SELECT default_images_json FROM backend_versions WHERE id=?`, created["id"]).Scan(&img); err != nil {
+	var configSetRaw string
+	if err := db.QueryRow(`SELECT config_set_json FROM backend_versions WHERE id=?`, created["id"]).Scan(&configSetRaw); err != nil {
 		t.Fatalf("read version: %v", err)
 	}
-	if !strings.Contains(img, "user:v2") {
-		t.Fatalf("patched version not persisted/reloaded: %s", img)
+	if !strings.Contains(configSetRaw, "user:v2") {
+		t.Fatalf("patched version not persisted in config set: %s", configSetRaw)
 	}
-	fileData, err := os.ReadFile(filepath.Join(backendCatalogUserVersionsDir, "vllm", "user-v1.yaml"))
-	if err != nil {
-		t.Fatalf("read user catalog file: %v", err)
-	}
-	if !strings.Contains(string(fileData), "user:v2") {
-		t.Fatalf("patched user catalog file missing new image: %s", string(fileData))
-	}
-	var loadedFrom, configHash string
-	if err := db.QueryRow(`SELECT loaded_from, config_hash FROM backend_versions WHERE id=?`, created["id"]).Scan(&loadedFrom, &configHash); err != nil {
+	var checksum string
+	if err := db.QueryRow(`SELECT checksum FROM backend_versions WHERE id=?`, created["id"]).Scan(&checksum); err != nil {
 		t.Fatalf("read projection metadata: %v", err)
 	}
-	if loadedFrom == "" || configHash == "" {
-		t.Fatalf("projection metadata missing loaded_from=%q config_hash=%q", loadedFrom, configHash)
+	if checksum == "" {
+		t.Fatalf("projection checksum missing")
 	}
 }
 
@@ -397,70 +372,13 @@ func TestSystemBackendVersionReadOnlyAndCloneable(t *testing.T) {
 	if cloned["managed_by"] != "user" || cloned["readonly"] != false {
 		t.Fatalf("clone mutability = managed_by:%v readonly:%v", cloned["managed_by"], cloned["readonly"])
 	}
-	loadedFrom, _ := cloned["loaded_from"].(string)
-	if loadedFrom == "" {
-		t.Fatalf("clone did not reload from user catalog file: %#v", cloned)
-	}
-	if _, err := os.Stat(loadedFrom); err != nil {
-		t.Fatalf("clone catalog file missing: %v", err)
+	sourceMeta := mapFromAny(cloned["source_metadata"])
+	if sourceMeta["source_type"] != "api" {
+		t.Fatalf("clone source metadata missing api source: %#v", cloned)
 	}
 }
 
 func TestBackendCatalogReloadLoadsSystemAndUserFilesWithoutMutatingRuntimeSnapshots(t *testing.T) {
-	dir := t.TempDir()
-	systemDir := filepath.Join(dir, "system")
-	userDir := filepath.Join(dir, "user")
-	if err := os.MkdirAll(filepath.Join(systemDir, "vllm"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(userDir, "vllm"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	systemFile := filepath.Join(systemDir, "vllm", "sys.yaml")
-	userFile := filepath.Join(userDir, "vllm", "user.yaml")
-	if err := os.WriteFile(systemFile, []byte(`id: test-system-v1
-backend_id: backend.vllm
-version: sys-v1
-source: system
-readonly: true
-protocol: openai-compatible
-image_candidates:
-  - sys:v1
-default_port: 8000
-default_host: 0.0.0.0
-default_model_mount:
-  container_path: /models
-  readonly: true
-default_endpoints:
-  models: /v1/models
-capabilities:
-  - models
-health_check:
-  type: http
-  path: /v1/models
-`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(userFile, []byte(`id: test-user-v1
-backend_id: backend.vllm
-version: user-file-v1
-source: user
-readonly: false
-image_candidates:
-  - user:file-v1
-default_port: 8001
-`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	origSystemDir := backendCatalogSystemVersionsDir
-	origUserDir := backendCatalogUserVersionsDir
-	backendCatalogSystemVersionsDir = systemDir
-	backendCatalogUserVersionsDir = userDir
-	defer func() {
-		backendCatalogSystemVersionsDir = origSystemDir
-		backendCatalogUserVersionsDir = origUserDir
-	}()
-
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
 	rw := httptest.NewRecorder()
@@ -468,24 +386,14 @@ default_port: 8001
 	if rw.Code != 200 {
 		t.Fatalf("reload code=%d body=%s", rw.Code, rw.Body.String())
 	}
-	var sysReadonly int
-	if err := db.QueryRow(`SELECT readonly FROM backend_versions WHERE id='test-system-v1'`).Scan(&sysReadonly); err != nil {
-		t.Fatalf("system catalog not loaded: %v", err)
-	}
-	if sysReadonly != 1 {
-		t.Fatalf("system readonly=%d, want 1", sysReadonly)
-	}
-	var userReadonly int
-	if err := db.QueryRow(`SELECT readonly FROM backend_versions WHERE id='test-user-v1'`).Scan(&userReadonly); err != nil {
-		t.Fatalf("user catalog not loaded: %v", err)
-	}
-	if userReadonly != 0 {
-		t.Fatalf("user readonly=%d, want 0", userReadonly)
+	var versionCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM backend_versions WHERE managed_by='system'`).Scan(&versionCount); err != nil || versionCount == 0 {
+		t.Fatalf("system catalog not loaded: count=%d err=%v", versionCount, err)
 	}
 
 	w := httptest.NewRecorder()
 	h.HandleCreateBackendRuntimeFromTemplate(w, newReq("POST", "/x",
-		`{"backend_id":"backend.vllm","backend_version_id":"test-user-v1","name":"reload-snapshot-rt","display_name":"Reload Snapshot RT"}`,
+		`{"backend_id":"backend.vllm","backend_version_id":"vllm-v0.23.0","name":"reload-snapshot-rt","display_name":"Reload Snapshot RT"}`,
 		adminSession(), nil))
 	if w.Code != 201 {
 		t.Fatalf("create runtime code=%d body=%s", w.Code, w.Body.String())
@@ -494,39 +402,28 @@ default_port: 8001
 	if err := json.Unmarshal(w.Body.Bytes(), &rt); err != nil {
 		t.Fatalf("decode runtime: %v", err)
 	}
-	if err := os.WriteFile(userFile, []byte(`id: test-user-v1
-backend_id: backend.vllm
-version: user-file-v1
-source: user
-readonly: false
-image_candidates:
-  - user:file-v2
-default_port: 8001
-`), 0644); err != nil {
-		t.Fatal(err)
-	}
+	beforeRaw, _ := json.Marshal(rt["config_set"])
 	h.HandleReloadBackendCatalog(httptest.NewRecorder(), newReq("POST", "/x", "", adminSession(), nil))
 	got := h.getBackendRuntimeJSON(rt["id"].(string))
-	raw, _ := json.Marshal(got["version_snapshot_json"])
-	if strings.Contains(string(raw), "user:file-v2") {
-		t.Fatalf("reload mutated BackendRuntime snapshot: %s", string(raw))
+	afterRaw, _ := json.Marshal(got["config_set"])
+	if string(beforeRaw) != string(afterRaw) {
+		t.Fatalf("reload mutated BackendRuntime config set\nbefore=%s\nafter=%s", string(beforeRaw), string(afterRaw))
 	}
 }
 
 func TestBackendVersionCatalogIsSoftwareOnly(t *testing.T) {
 	db := setupTestDB(t)
-	rows, err := db.Query(`SELECT id, default_images_json, image_candidates_json, capabilities_json, docker_options_json, model_mount_json, vendor_options_json FROM backend_versions WHERE managed_by='system' AND status != 'deprecated'`)
+	rows, err := db.Query(`SELECT id, config_set_json FROM backend_versions WHERE managed_by='system' AND status != 'deprecated'`)
 	if err != nil {
 		t.Fatalf("query versions: %v", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id string
-		fields := make([]string, 6)
-		if err := rows.Scan(&id, &fields[0], &fields[1], &fields[2], &fields[3], &fields[4], &fields[5]); err != nil {
+		var id, configSet string
+		if err := rows.Scan(&id, &configSet); err != nil {
 			t.Fatalf("scan: %v", err)
 		}
-		joined := strings.ToLower(strings.Join(fields, "\n"))
+		joined := strings.ToLower(configSet)
 		for _, forbidden := range []string{"node_id", "image_present", "needs_check", "ready", "cuda_visible_devices", "--gpus", "/dev/dri", "/dev/mxcd", "/dev/infiniband", "/usr/local/ascend", "host_path"} {
 			if strings.Contains(joined, forbidden) {
 				t.Fatalf("system BackendVersion %s contains hardware/node field %q in %s", id, forbidden, joined)
@@ -540,11 +437,7 @@ func TestBackendRuntimeListShowsTemplatesWithNodeAggregatesOnly(t *testing.T) {
 	h := NewAgentHandler(db, nil)
 	runtimeBoundaryInsertOnlineNode(t, db, "node-list")
 	insertRuntime(t, db, "rt-list", "Runtime List", "")
-	if _, err := db.Exec(`INSERT INTO node_backend_runtimes
-		(id, backend_runtime_id, node_id, runner_type, image_ref, image_present, docker_available, config_snapshot_json, status, status_reason, tenant_id, created_at, updated_at)
-		VALUES ('node-list:rt-list','rt-list','node-list','docker','img:v1',1,1,'{}','ready','ok','',datetime('now'),datetime('now'))`); err != nil {
-		t.Fatalf("insert nbr: %v", err)
-	}
+	insertNodeBackendRuntime(t, db, "node-list:rt-list", "rt-list", "node-list", "img:v1", "ready", "ok", 1, 1, "")
 	w := httptest.NewRecorder()
 	h.HandleListBackendRuntimes(w, newReq("GET", "/x", "", adminSession(), nil))
 	if w.Code != 200 {
@@ -571,13 +464,18 @@ func TestBackendRuntimeListShowsTemplatesWithNodeAggregatesOnly(t *testing.T) {
 func runtimeBoundaryInsertDeployment(t *testing.T, db *db.DB, depID string) {
 	t.Helper()
 	now := time.Now().Format(time.RFC3339)
-	insertRuntime(t, db, "rt-"+depID, "Runtime "+depID, "")
+	runtimeID := "rt-" + depID
+	insertRuntime(t, db, runtimeID, "Runtime "+depID, "")
+	var configSetRaw, sourceMetaRaw string
+	if err := db.QueryRow(`SELECT config_set_json, source_metadata_json FROM backend_runtimes WHERE id=?`, runtimeID).Scan(&configSetRaw, &sourceMetaRaw); err != nil {
+		t.Fatalf("read runtime config set: %v", err)
+	}
 	db.Exec(`INSERT OR IGNORE INTO model_artifacts (id, name, display_name, source_type, path, format, task_type, tenant_id, created_at, updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`, "art-"+depID, "test-model", "Test", "local_path", "/tmp", "huggingface", "chat", "", now, now)
 	_, err := db.Exec(`INSERT INTO model_deployments
-		(id, name, display_name, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, env_overrides_json, desired_state, status, tenant_id, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		depID, "test-"+depID, "Test", "art-"+depID, "rt-"+depID, 1, "{}", "{}", "{}", "running", "running", "", now, now)
+		(id, name, display_name, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, config_overrides_json, config_set_json, source_metadata_json, desired_state, status, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		depID, "test-"+depID, "Test", "art-"+depID, runtimeID, 1, "{}", "{}", "{}", configSetRaw, sourceMetaRaw, "running", "running", "", now, now)
 	if err != nil {
 		t.Fatalf("insert deployment: %v", err)
 	}
@@ -1059,25 +957,33 @@ func TestDeploymentStartUsesNBRNotBackendRuntime(t *testing.T) {
 		t.Fatalf("source_node_backend_runtime_id=%v want %s", dep["source_node_backend_runtime_id"], nbrID)
 	}
 
-	// Verify config_snapshot_json includes NBR config.
-	snapRaw := dep["config_snapshot_json"]
-	var snapStr string
-	switch v := snapRaw.(type) {
+	// Verify config_set includes frozen NBR config.
+	configSetRaw := dep["config_set"]
+	var configSetStr string
+	switch v := configSetRaw.(type) {
 	case string:
-		snapStr = v
+		configSetStr = v
 	case map[string]interface{}:
 		raw, _ := json.Marshal(v)
-		snapStr = string(raw)
+		configSetStr = string(raw)
 	}
-	if snapStr == "" || snapStr == "{}" {
-		t.Fatal("config_snapshot_json is empty")
+	if configSetStr == "" || configSetStr == "{}" {
+		t.Fatal("config_set is empty")
 	}
-	if !strings.Contains(snapStr, "nbr_image_ref") {
-		t.Fatalf("deployment snapshot missing nbr_image_ref: %s", snapStr)
+	if !strings.Contains(configSetStr, "launcher.image") {
+		t.Fatalf("deployment config set missing launcher.image: %s", configSetStr)
 	}
 
 	// Now modify the BackendRuntime template — should NOT affect the deployment.
-	db.Exec(`UPDATE backend_runtimes SET image_name = 'modified:v99' WHERE id = ?`, runtimeID)
+	var runtimeSetRaw string
+	if err := db.QueryRow(`SELECT config_set_json FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&runtimeSetRaw); err != nil {
+		t.Fatalf("read runtime config set: %v", err)
+	}
+	runtimeSet := copyConfigSet(runtimeSetRaw)
+	setConfigValue(runtimeSet, "launcher.image", "modified:v99", "BackendRuntime", runtimeID, "test_mutation")
+	if _, err := db.Exec(`UPDATE backend_runtimes SET config_set_json = ? WHERE id = ?`, configSetJSON(runtimeSet), runtimeID); err != nil {
+		t.Fatalf("update runtime config set: %v", err)
+	}
 
 	// Dry-run should still use the frozen snapshot, not the modified template.
 	dw := httptest.NewRecorder()
@@ -1089,13 +995,13 @@ func TestDeploymentStartUsesNBRNotBackendRuntime(t *testing.T) {
 	}
 
 	// Verify the template modification was applied to the DB but NOT the deployment.
-	var templateImage string
-	db.QueryRow(`SELECT image_name FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&templateImage)
+	db.QueryRow(`SELECT config_set_json FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&runtimeSetRaw)
+	templateImage := configString(parseConfigSet(runtimeSetRaw), "launcher.image", "")
 	if templateImage != "modified:v99" {
-		t.Fatalf("template modification not persisted: image_name=%q", templateImage)
+		t.Fatalf("template modification not persisted: launcher.image=%q", templateImage)
 	}
-	if strings.Contains(snapStr, "modified:v99") {
-		t.Fatalf("deployment snapshot picked up live template change: %s", snapStr)
+	if strings.Contains(configSetStr, "modified:v99") {
+		t.Fatalf("deployment config set picked up live template change: %s", configSetStr)
 	}
 }
 

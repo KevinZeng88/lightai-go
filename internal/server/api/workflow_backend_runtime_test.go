@@ -44,7 +44,7 @@ func TestWorkflowBackendRuntimeCRUDChain(t *testing.T) {
 	patchResp.Decode(t, &patched)
 	workflowAssertBackendRuntimePatchApplied(t, patched, patch)
 	workflowAssertBackendRuntimeJSONTypes(t, patched)
-	workflowAssertSameScalarFields(t, detail, patched, "backend_id", "backend_version_id", "vendor", "runtime_type", "image_pull_policy")
+	workflowAssertSameScalarFields(t, detail, patched, "backend_id", "backend_version_id", "vendor", "runtime_type")
 
 	afterPatchDetail := workflowGetBackendRuntime(t, app, userID, http.StatusOK)
 	workflowAssertBackendRuntimePatchApplied(t, afterPatchDetail, patch)
@@ -79,27 +79,26 @@ func TestWorkflowBackendRuntimePatchPreservesFields(t *testing.T) {
 		"backend_version_id",
 		"vendor",
 		"runtime_type",
-		"image_pull_policy",
-		"default_env_json",
-		"docker_json",
-		"model_mount_json",
-		"health_check_override_json",
-		"args_override_json",
-		"entrypoint_override_json",
-		"version_snapshot_json",
+		"env",
+		"docker_options",
+		"model_mount",
+		"health_check",
+		"command",
+		"entrypoint",
+		"config_set",
 	)
 
 	secondPatch := map[string]interface{}{
 		"display_name": "Workflow Preserve Runtime Renamed",
-		"image_name":   "lightai/workflow-preserve-renamed:latest",
+		"image_ref":    "lightai/workflow-preserve-renamed:latest",
 	}
 	secondResp := app.Client.JSON(t, http.MethodPatch, "/api/v1/backend-runtimes/"+userID, secondPatch, http.StatusOK)
 	var second map[string]interface{}
 	secondResp.Decode(t, &second)
-	if second["display_name"] != secondPatch["display_name"] || second["image_name"] != secondPatch["image_name"] {
+	if second["display_name"] != secondPatch["display_name"] || second["image_ref"] != secondPatch["image_ref"] {
 		t.Fatalf("second patch not applied: patch=%#v response=%#v", secondPatch, second)
 	}
-	workflowAssertFieldsPreserved(t, preservedFields, second, "display_name", "image_name")
+	workflowAssertFieldsPreserved(t, preservedFields, second, "display_name", "image_ref", "config_set")
 	workflowAssertBackendRuntimeJSONTypes(t, second)
 	workflowAssertBackendRuntimeListDetailConsistent(t, app, second)
 
@@ -224,12 +223,12 @@ func workflowBackendRuntimePatchPayload(suffix string) map[string]interface{} {
 	return map[string]interface{}{
 		"name":         "workflow-" + suffix + "-runtime-user",
 		"display_name": "Workflow " + suffix + " Runtime User",
-		"image_name":   "lightai/workflow-" + suffix + ":latest",
-		"default_env_json": map[string]interface{}{
+		"image_ref":    "lightai/workflow-" + suffix + ":latest",
+		"env": map[string]interface{}{
 			"LIGHTAI_WORKFLOW_MODE": suffix,
 			"VLLM_LOGGING_LEVEL":    "INFO",
 		},
-		"docker_json": map[string]interface{}{
+		"docker_options": map[string]interface{}{
 			"ports": []interface{}{
 				map[string]interface{}{"container_port": float64(8000), "host_port": float64(18080), "protocol": "tcp"},
 			},
@@ -245,15 +244,15 @@ func workflowBackendRuntimePatchPayload(suffix string) map[string]interface{} {
 			"shm_size":     "16g",
 			"security_opt": []interface{}{"label=disable"},
 		},
-		"args_override_json": []interface{}{"--host", "0.0.0.0", "--port", "8000"},
-		"entrypoint_override_json": []interface{}{
+		"command": []interface{}{"--host", "0.0.0.0", "--port", "8000"},
+		"entrypoint": []interface{}{
 			"python3", "-m", "vllm.entrypoints.openai.api_server",
 		},
-		"model_mount_json": map[string]interface{}{
+		"model_mount": map[string]interface{}{
 			"container_path": "/models",
 			"read_only":      true,
 		},
-		"health_check_override_json": map[string]interface{}{
+		"health_check": map[string]interface{}{
 			"path":             "/v1/models",
 			"interval_seconds": float64(5),
 			"timeout_seconds":  float64(2),
@@ -263,12 +262,12 @@ func workflowBackendRuntimePatchPayload(suffix string) map[string]interface{} {
 
 func workflowAssertBackendRuntimePatchApplied(t *testing.T, runtime map[string]interface{}, patch map[string]interface{}) {
 	t.Helper()
-	for _, field := range []string{"name", "display_name", "image_name"} {
+	for _, field := range []string{"name", "display_name", "image_ref"} {
 		if runtime[field] != patch[field] {
 			t.Fatalf("%s=%#v want %#v in %#v", field, runtime[field], patch[field], runtime)
 		}
 	}
-	for _, field := range []string{"default_env_json", "docker_json", "model_mount_json", "health_check_override_json", "args_override_json", "entrypoint_override_json"} {
+	for _, field := range []string{"env", "docker_options", "model_mount", "health_check", "command", "entrypoint"} {
 		if !reflect.DeepEqual(runtime[field], patch[field]) {
 			t.Fatalf("%s changed or not preserved:\n got=%#v\nwant=%#v\nruntime=%#v", field, runtime[field], patch[field], runtime)
 		}
@@ -277,10 +276,10 @@ func workflowAssertBackendRuntimePatchApplied(t *testing.T, runtime map[string]i
 
 func workflowAssertBackendRuntimeJSONTypes(t *testing.T, runtime map[string]interface{}) {
 	t.Helper()
-	for _, field := range []string{"default_env_json", "docker_json", "model_mount_json", "health_check_override_json", "version_snapshot_json"} {
+	for _, field := range []string{"env", "docker_options", "model_mount", "health_check", "config_set", "source_metadata"} {
 		workflowMapField(t, runtime, field)
 	}
-	for _, field := range []string{"args_override_json", "entrypoint_override_json"} {
+	for _, field := range []string{"command", "entrypoint"} {
 		value, ok := runtime[field].([]interface{})
 		if !ok {
 			t.Fatalf("field %q missing or not array in %#v", field, runtime)
@@ -289,20 +288,20 @@ func workflowAssertBackendRuntimeJSONTypes(t *testing.T, runtime map[string]inte
 			t.Fatalf("field %q is nil array in %#v", field, runtime)
 		}
 	}
-	dockerJSON := workflowMapField(t, runtime, "docker_json")
+	dockerJSON := workflowMapField(t, runtime, "docker_options")
 	for _, field := range []string{"ports", "volumes", "devices", "extra_args", "security_opt"} {
 		if _, ok := dockerJSON[field].([]interface{}); !ok {
-			t.Fatalf("docker_json.%s missing or not array in %#v", field, dockerJSON)
+			t.Fatalf("docker_options.%s missing or not array in %#v", field, dockerJSON)
 		}
 	}
 	if _, ok := dockerJSON["privileged"].(bool); !ok {
-		t.Fatalf("docker_json.privileged missing or not bool in %#v", dockerJSON)
+		t.Fatalf("docker_options.privileged missing or not bool in %#v", dockerJSON)
 	}
 	if _, ok := dockerJSON["ipc_mode"].(string); !ok {
-		t.Fatalf("docker_json.ipc_mode missing or not string in %#v", dockerJSON)
+		t.Fatalf("docker_options.ipc_mode missing or not string in %#v", dockerJSON)
 	}
 	if _, ok := dockerJSON["shm_size"].(string); !ok {
-		t.Fatalf("docker_json.shm_size missing or not string in %#v", dockerJSON)
+		t.Fatalf("docker_options.shm_size missing or not string in %#v", dockerJSON)
 	}
 }
 
@@ -322,14 +321,13 @@ func workflowAssertBackendRuntimeListDetailConsistent(t *testing.T, app *workflo
 		"backend_version_id",
 		"vendor",
 		"runtime_type",
-		"image_name",
-		"image_pull_policy",
-		"default_env_json",
-		"docker_json",
-		"model_mount_json",
-		"health_check_override_json",
-		"args_override_json",
-		"entrypoint_override_json",
+		"image_ref",
+		"env",
+		"docker_options",
+		"model_mount",
+		"health_check",
+		"command",
+		"entrypoint",
 		"is_builtin",
 		"is_editable",
 		"tenant_id",
@@ -350,14 +348,13 @@ func workflowAssertSystemRuntimeUnchanged(t *testing.T, before, after map[string
 		"backend_version_id",
 		"vendor",
 		"runtime_type",
-		"image_name",
-		"image_pull_policy",
-		"default_env_json",
-		"docker_json",
-		"model_mount_json",
-		"health_check_override_json",
-		"args_override_json",
-		"entrypoint_override_json",
+		"image_ref",
+		"env",
+		"docker_options",
+		"model_mount",
+		"health_check",
+		"command",
+		"entrypoint",
 		"is_builtin",
 		"is_editable",
 		"tenant_id",

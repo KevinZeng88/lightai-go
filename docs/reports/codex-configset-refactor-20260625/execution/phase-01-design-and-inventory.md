@@ -4,7 +4,7 @@
 
 Checkpoint A: design document + inventory + old-structure deletion list.
 
-This phase does not modify business code, API code, UI code, schema, scripts, or runtime behavior. It establishes the ConfigSet design baseline and records the deletion inventory for later checkpoints.
+This phase does not modify business code, API code, UI code, schema, scripts, or runtime behavior. It establishes the ConfigSet design baseline and records the deletion inventory for Checkpoints B-E.
 
 ## 2. Actual Changed Files
 
@@ -22,7 +22,7 @@ This phase does not modify business code, API code, UI code, schema, scripts, or
 
 None deleted in Checkpoint A. This checkpoint records the deletion list only.
 
-Old structures to delete/replace in later checkpoints:
+Old structures to delete/replace in Checkpoints B-E:
 
 - `capabilities_json`
 - `parameter_schema_json`
@@ -84,8 +84,8 @@ No build/test suite was required for this documentation/inventory-only checkpoin
 
 | Issue | Blocker? | Notes |
 | --- | --- | --- |
-| Old structures remain in code/docs/scripts/configs. | No | Expected. They are deletion targets for later checkpoints. |
-| Backend-name hardcode candidates require classification. | No | Some occurrences are valid catalog/docs/tests; forbidden business logic must be removed later. |
+| Old structures remain in code/docs/scripts/configs. | No | Expected. They are deletion targets for Checkpoints B-E. |
+| Backend-name hardcode candidates require classification. | No | Some occurrences are valid catalog/docs/tests; forbidden business logic must be removed by the relevant checkpoint. |
 | Worktree has unrelated pre-existing modified/untracked files. | No | Explicit path staging is required. |
 
 ## 8. Next Phase

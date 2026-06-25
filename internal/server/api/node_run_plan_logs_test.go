@@ -27,8 +27,12 @@ func insertRunPlanLogsFixture(t *testing.T, status string) (*AgentHandler, strin
 	if err != nil {
 		t.Fatalf("insert artifact: %v", err)
 	}
-	_, err = database.Exec(`INSERT INTO model_deployments (id, name, model_artifact_id, backend_runtime_id, tenant_id, created_at, updated_at)
-		VALUES ('deploy-logs','deploy-logs','artifact-logs','runtime.vllm.nvidia-docker',?,?,?)`, tid, now, now)
+	var configSetRaw, sourceMetaRaw string
+	if err := database.QueryRow(`SELECT config_set_json, source_metadata_json FROM backend_runtimes WHERE id='runtime.vllm.nvidia-docker'`).Scan(&configSetRaw, &sourceMetaRaw); err != nil {
+		t.Fatalf("read runtime config: %v", err)
+	}
+	_, err = database.Exec(`INSERT INTO model_deployments (id, name, model_artifact_id, backend_runtime_id, config_overrides_json, config_set_json, source_metadata_json, tenant_id, created_at, updated_at)
+		VALUES ('deploy-logs','deploy-logs','artifact-logs','runtime.vllm.nvidia-docker','{}',?,?,?, ?, ?)`, configSetRaw, sourceMetaRaw, tid, now, now)
 	if err != nil {
 		t.Fatalf("insert deployment: %v", err)
 	}

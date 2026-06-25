@@ -1,0 +1,197 @@
+schema_version: 1
+items:
+  - code: launcher.kind
+    category: launcher
+    kind: launcher_option
+    type: string
+    value: docker
+    default_value: docker
+    enabled: true
+    render:
+      target: docker
+      style: metadata
+    order: 10
+    support_level: verified
+  - code: launcher.image
+    category: launcher
+    kind: launcher_option
+    type: string
+    value: ""
+    default_value: ""
+    enabled: true
+    render:
+      target: docker
+      style: image
+    order: 20
+    support_level: verified
+  - code: launcher.entrypoint
+    category: launcher
+    kind: cli_args
+    type: array
+    value: []
+    default_value: []
+    enabled: true
+    render:
+      target: docker
+      style: entrypoint
+    order: 30
+    support_level: verified
+  - code: launcher.command
+    category: launcher
+    kind: cli_args
+    type: array
+    value: []
+    default_value: []
+    enabled: true
+    render:
+      target: cli
+      style: raw_list
+    order: 40
+    support_level: verified
+  - code: launcher.ports
+    category: launcher
+    kind: port
+    type: array
+    value: []
+    default_value: []
+    enabled: true
+    render:
+      target: docker
+      style: ports
+    order: 50
+    support_level: verified
+  - code: launcher.volumes
+    category: launcher
+    kind: volume
+    type: array
+    value: []
+    default_value: []
+    enabled: true
+    render:
+      target: docker
+      style: volumes
+    order: 60
+    support_level: verified
+  - code: launcher.devices
+    category: launcher
+    kind: device
+    type: array
+    value: []
+    default_value: []
+    enabled: true
+    render:
+      target: docker
+      style: devices
+    order: 70
+    support_level: verified
+  - code: launcher.docker_options
+    category: launcher
+    kind: launcher_option
+    type: object
+    value: {}
+    default_value: {}
+    enabled: true
+    render:
+      target: docker
+      style: options
+    order: 80
+    support_level: verified
+  - code: runtime.env
+    category: runtime_env
+    kind: env
+    type: object
+    value: {}
+    default_value: {}
+    enabled: true
+    render:
+      target: env
+      style: map
+    order: 100
+    support_level: verified
+  - code: runtime.model_mount
+    category: runtime_env
+    kind: volume
+    type: object
+    value: {}
+    default_value: {}
+    enabled: true
+    render:
+      target: docker
+      style: model_mount
+    order: 110
+    support_level: verified
+  - code: runtime.health
+    category: runtime_env
+    kind: health_check
+    type: object
+    value: {}
+    default_value: {}
+    enabled: true
+    render:
+      target: health
+      style: http
+    order: 120
+    support_level: verified
+  - code: runtime.extra_env
+    category: runtime_env
+    kind: env_lines
+    type: lines
+    value: ""
+    default_value: ""
+    enabled: true
+    render:
+      target: env
+      style: raw_lines
+    order: 190
+    support_level: documented
+  - code: backend.common.host
+    category: model_runtime
+    kind: cli_arg
+    type: string
+    value: 0.0.0.0
+    default_value: 0.0.0.0
+    enabled: true
+    render:
+      target: cli
+      flag: --host
+      style: flag_space_value
+    order: 210
+    support_level: verified
+  - code: backend.common.port
+    category: model_runtime
+    kind: cli_arg
+    type: integer
+    value: 8000
+    default_value: 8000
+    enabled: true
+    render:
+      target: cli
+      flag: --port
+      style: flag_space_value
+    order: 220
+    support_level: verified
+  - code: backend.common.served_model_name
+    category: model_runtime
+    kind: cli_arg
+    type: string
+    value: ""
+    default_value: ""
+    enabled: false
+    render:
+      target: cli
+      flag: --served-model-name
+      style: flag_space_value
+    order: 230
+    support_level: verified
+  - code: backend.extra_args
+    category: model_runtime
+    kind: cli_args
+    type: lines
+    value: ""
+    default_value: ""
+    enabled: true
+    render:
+      target: cli
+      style: raw_lines
+    order: 900
+    support_level: documented

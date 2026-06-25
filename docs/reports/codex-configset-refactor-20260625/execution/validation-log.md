@@ -16,7 +16,7 @@ All commands were run from `/home/kzeng/projects/ai-platform-study/lightai-go`.
 | `diff -u docs/reports/codex-configset-refactor-20260625/02-configset-configitem-design.md docs/design/catalog-configset-and-runtime-snapshot.md` | PASS | No diff. Design document is synchronized with the handoff design. |
 | `wc -l ...02-configset-configitem-design.md ...catalog-configset-and-runtime-snapshot.md` | PASS | Both files have 581 lines. |
 | `rg -l <old-structure-patterns> ... \| wc -l` | PASS | 328 files contain old fields/routes/smoke phrases targeted by the refactor. |
-| `rg -l <backend-name-patterns> ... \| wc -l` | PASS | 589 files contain backend-name related terms; these require classification in later checkpoints. |
+| `rg -l <backend-name-patterns> ... \| wc -l` | PASS | 589 files contain backend-name related terms; these are classified by checkpoint-specific static gates. |
 | `rg -n "seedBuiltInBackends|seedTargetBackendCatalog|repairBackendCapabilitiesV27" internal/server/db internal --glob '*.go'` | PASS | Found calls/definitions in `internal/server/db/db.go`: lines 209, 214, 986, 1220, 1229, 1230, 1352, 1597, 1599, 1611, 1613. |
 | `rg -n <old-field-patterns> internal/server/db internal/server/api internal/server/runplan web/src scripts configs/backend-catalog docs/api` | PASS with truncation | Confirmed old fields remain in db/api/runplan/web/scripts/catalog/OpenAPI; output truncated after 220 lines. |
 | `git diff --stat` | PASS | Only tracked diff before Checkpoint A reports was pre-existing `web/package*.json` changes: 2 files, 56 insertions, 7 deletions. |
@@ -30,6 +30,13 @@ All commands were run from `/home/kzeng/projects/ai-platform-study/lightai-go`.
 | `rg -n "seedBuiltInBackends|seedTargetBackendCatalog|repairBackendCapabilitiesV27|normalizeLegacyBackendCatalogIDs" internal/server/db internal/server \|\| true` | PASS | Current worktree active code has no old catalog seed/repair/normalize functions. |
 | `rg -n "ALTER TABLE .* ADD COLUMN|Backfill|backfill|repair|normalizeLegacy|compat|legacy" internal/server/db internal/server \|\| true` | ATTENTION | No active old authority-field ADD COLUMN chain was found in `internal/server/db`. Output still includes clean-schema legacy-DB rejection text in `db.go` and unrelated existing compatibility references in other modules/tests; these remain implementation-phase cleanup/classification targets. |
 | `git diff --check -- <documentation files>` | PASS | No whitespace errors in the documentation-only migration-stack correction. |
+| `go test ./internal/server/api -count=1` | PASS | API package passes after ConfigSet clean schema, catalog loader, NBR/deployment copy-on-create, and stale test fixture updates. |
+| `go test ./internal/server/api ./internal/server/runplan -count=1` | PASS | API and RunPlan packages pass after ConfigSet-derived runtime data and RunPlan JSON tag cleanup. |
+| `go test ./internal/server/catalog ./internal/server/db -count=1` | PASS | Config registry/catalog loader tests pass; DB package builds with fresh-schema initializer. |
+| `go build ./cmd/server/... && go build ./cmd/agent/...` | PASS | Server and Agent binaries build. |
+| `go test ./...` | PASS | All Go packages pass under the fresh ConfigSet schema. |
+| `rg -n "config_snapshot_json|parameter_schema_json|parameter_values_json|image_name|docker_json|default_env_json|capabilities_json|capability_sources_json|parameter_defaults_json|default_args_json|parameter_defs_json|default_backend_params_json|default_images_json|image_candidates_json|docker_options_json|model_mount_json|seedBuiltInBackends|seedTargetBackendCatalog|repairBackendCapabilitiesV27|normalizeLegacyBackendCatalogIDs|migrateV[0-9]+" internal/server/api internal/server/runplan internal/server/db` | PASS | No exact old authority field, old catalog seed/repair, or `migrateVx` hits remain in active API/RunPlan/DB scope. |
+| `git diff --check` | PASS | No whitespace errors in current tracked diff. |
 
 ## Old Field Hit Counts
 
@@ -63,3 +70,5 @@ All commands were run from `/home/kzeng/projects/ai-platform-study/lightai-go`.
 ## Validation Result
 
 PASS for Checkpoint A documentation/inventory scope before commit.
+
+PASS for combined Checkpoint B/C clean-state implementation scope before commit. The implementation uses a fresh DB schema, ConfigSet catalog loader, and ConfigSet copy-on-create paths without active V1->V28 migration replay or old authority-field fallback in API/RunPlan/DB.

@@ -21,21 +21,21 @@ type ResolveInput struct {
 	InstanceID          string
 	Node                *NodeInfo
 	AssignedGPUs        []GPUInfo
-	ProcessStartConfig  *ProcessStartConfig // nil if none (legacy behavior)
+	ProcessStartConfig  *ProcessStartConfig // nil when no explicit process profile is configured.
 	NBRConfigSnapshot   *NBRSnapshotInfo    // nil if not available from NBR
 }
 
 // NBRSnapshotInfo holds the frozen config snapshot from NodeBackendRuntime.
 // When present, the resolver reads from this instead of BackendVersion/BackendRuntime.
 type NBRSnapshotInfo struct {
-	ArgsOverride        []string          `json:"args_override_json"`
-	DefaultEnv          map[string]string `json:"default_env_json"`
-	EntrypointOverride  []string          `json:"entrypoint_override_json"`
-	Docker              DockerSpecInfo    `json:"docker_json"`
-	ModelMount          ModelMountInfo    `json:"model_mount_json"`
-	HealthCheckOverride *HealthCheckInput `json:"health_check_override_json"`
-	ParameterSchema     []ParameterDef    `json:"parameter_schema_json"`
-	ParameterValues     []ParameterValue  `json:"parameter_values_json"`
+	ArgsOverride        []string          `json:"command"`
+	DefaultEnv          map[string]string `json:"env"`
+	EntrypointOverride  []string          `json:"entrypoint"`
+	Docker              DockerSpecInfo    `json:"docker_options"`
+	ModelMount          ModelMountInfo    `json:"model_mount"`
+	HealthCheckOverride *HealthCheckInput `json:"health_check"`
+	ParameterSchema     []ParameterDef    `json:"parameter_defs"`
+	ParameterValues     []ParameterValue  `json:"parameter_values"`
 }
 
 // ParameterValue holds a structured parameter value with metadata.
@@ -122,7 +122,7 @@ type RuntimeInfo struct {
 }
 
 // DockerSpecInfo holds Docker runtime configuration.
-// All fields come from docker_json in the catalog, NBR, or user config.
+// All fields come from ConfigSet launcher/runtime items.
 // No field has an implicit code default — defaults are in the catalog seed or YAML.
 type DockerSpecInfo struct {
 	Privileged       bool              `json:"privileged"`
@@ -224,13 +224,13 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	image, imgWarns := resolveImage(in)
 	warnings = append(warnings, imgWarns...)
 	if image == "" {
-		errors = append(errors, fmt.Errorf("no image available: configure NodeRuntimeOverride.image_name, BackendRuntime.image_name, or BackendVersion.default_images[%s]", in.BackendRuntime.Vendor))
+		errors = append(errors, fmt.Errorf("no image available: configure launcher.image in the runtime ConfigSet for vendor %s", in.BackendRuntime.Vendor))
 		return nil, errors, warnings
 	}
 
 	// 4. Resolve entrypoint.
-	// Phase 3: process_start_config takes priority over legacy mechanism.
-	// Missing process_start_config → legacy behavior (BR override > BV default).
+	// A process_start_config profile takes priority over default entrypoint and
+	// command settings.
 	entrypoint := in.BackendVersion.DefaultEntrypoint
 	if len(in.BackendRuntime.EntrypointOverride) > 0 {
 		entrypoint = in.BackendRuntime.EntrypointOverride
@@ -244,7 +244,7 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 				entrypoint = in.ProcessStartConfig.Entrypoint
 			}
 		}
-		// Unknown modes fall through to whatever was resolved above (legacy).
+		// Unknown modes fall through to the resolved ConfigSet command.
 	}
 
 	// 5. Build final args.
@@ -365,12 +365,12 @@ func mapKeys(m map[string]string) []string {
 func resolveImage(in ResolveInput) (string, []string) {
 	var warnings []string
 
-	// 1. NodeRuntimeOverride.image_name
+	// 1. NodeRuntimeOverride explicit image
 	if in.NodeRuntimeOverride != nil && in.NodeRuntimeOverride.ImageName != "" {
 		return in.NodeRuntimeOverride.ImageName, warnings
 	}
 
-	// 2. BackendRuntime.image_name
+	// 2. BackendRuntime ConfigSet launcher.image
 	if in.BackendRuntime.ImageName != "" {
 		return in.BackendRuntime.ImageName, warnings
 	}

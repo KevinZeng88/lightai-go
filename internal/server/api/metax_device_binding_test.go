@@ -128,7 +128,7 @@ func TestNVIDIADifferentiatesFromMetaX(t *testing.T) {
 		t.Skip("no MetaX runtime template found")
 	}
 
-	// Get the docker_json from templates via the runtime detail
+	// Get the Docker options from templates via the runtime detail.
 	nvidiaDetail := app.Client.JSON(t, http.MethodGet, "/api/v1/backend-runtimes/runtime.vllm.nvidia-docker", nil, http.StatusOK)
 	var nv map[string]interface{}
 	nvidiaDetail.Decode(t, &nv)
@@ -192,24 +192,24 @@ func TestNVIDIADifferentiatesFromMetaX(t *testing.T) {
 // Helpers for extracting nested JSON fields from map responses
 func extractDockerJSON(t *testing.T, m map[string]interface{}) map[string]interface{} {
 	t.Helper()
-	raw := m["docker_json"]
+	raw := m["docker_options"]
 	switch v := raw.(type) {
 	case map[string]interface{}:
 		return v
 	default:
-		t.Fatalf("docker_json is not a map: %T", raw)
+		t.Fatalf("docker_options is not a map: %T", raw)
 		return nil
 	}
 }
 
 func extractEnvJSON(t *testing.T, m map[string]interface{}) map[string]interface{} {
 	t.Helper()
-	raw := m["default_env_json"]
+	raw := m["env"]
 	switch v := raw.(type) {
 	case map[string]interface{}:
 		return v
 	default:
-		t.Fatalf("default_env_json is not a map: %T", raw)
+		t.Fatalf("env is not a map: %T", raw)
 		return nil
 	}
 }

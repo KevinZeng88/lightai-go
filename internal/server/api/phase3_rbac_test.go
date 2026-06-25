@@ -50,11 +50,45 @@ func getVllmIDs(t *testing.T, db *db.DB) (backendID, versionID string) {
 func insertRuntime(t *testing.T, db *db.DB, id, name, tenantID string) {
 	t.Helper()
 	bid, vid := getVllmIDs(t, db)
-	_, err := db.Exec("INSERT INTO backend_runtimes (id,name,display_name,backend_id,backend_version_id,source_template_name,vendor,runtime_type,image_name,image_pull_policy,entrypoint_override_json,args_override_json,default_env_json,docker_json,model_mount_json,health_check_override_json,is_builtin,is_editable,tenant_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-		id, name, name, bid, vid, "", "nvidia", "docker", "img:test", "never",
-		"[]", "[]", "{\"HF_TOKEN\":\"secret123\",\"PUBLIC_VAR\":\"visible\",\"API_KEY\":\"abc\"}", "{\"privileged\":true}", "{}", "{}", 0, 1, tenantID, "2024-01-01", "2024-01-01")
+	var versionConfigSetRaw string
+	if err := db.QueryRow(`SELECT config_set_json FROM backend_versions WHERE id = ?`, vid).Scan(&versionConfigSetRaw); err != nil {
+		t.Fatalf("read version config set: %v", err)
+	}
+	configSet := copyConfigSet(versionConfigSetRaw)
+	setConfigValue(configSet, "launcher.kind", "docker", "BackendRuntime", id, "test_fixture")
+	setConfigValue(configSet, "launcher.image", "img:test", "BackendRuntime", id, "test_fixture")
+	setConfigValue(configSet, "launcher.docker_options", map[string]interface{}{"privileged": true}, "BackendRuntime", id, "test_fixture")
+	setConfigValue(configSet, "runtime.env", map[string]interface{}{"HF_TOKEN": "secret123", "PUBLIC_VAR": "visible", "API_KEY": "abc"}, "BackendRuntime", id, "test_fixture")
+	setConfigValue(configSet, "runtime.model_mount", map[string]interface{}{"container_path": "/models", "readonly": true}, "BackendRuntime", id, "test_fixture")
+	sourceMeta := jsonString(map[string]interface{}{"source_type": "test_fixture", "source_backend_version_id": vid})
+	_, err := db.Exec(`INSERT INTO backend_runtimes
+		(id,name,display_name,backend_id,backend_version_id,source_template_name,vendor,runtime_type,is_builtin,is_editable,tenant_id,slug,managed_by,source,catalog_version,checksum,status,config_set_json,source_metadata_json,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		id, name, name, bid, vid, "", "nvidia", "docker", 0, 1, tenantID, slugify(name), "user", "test-fixture", "test", id+"-checksum", "active", configSetJSON(configSet), sourceMeta, "2024-01-01", "2024-01-01")
 	if err != nil {
 		t.Fatalf("insert runtime: %v", err)
+	}
+}
+
+func insertNodeBackendRuntime(t *testing.T, db *db.DB, id, runtimeID, nodeID, imageRef, status, reason string, imagePresent, dockerAvailable int, tenantID string) {
+	t.Helper()
+	var configSetRaw, sourceMetaRaw string
+	if err := db.QueryRow(`SELECT config_set_json, source_metadata_json FROM backend_runtimes WHERE id = ?`, runtimeID).Scan(&configSetRaw, &sourceMetaRaw); err != nil {
+		t.Fatalf("read runtime config set: %v", err)
+	}
+	set := copyConfigSet(configSetRaw)
+	if imageRef != "" {
+		setConfigValue(set, "launcher.image", imageRef, "NodeBackendRuntime", id, "test_fixture")
+	}
+	meta := configSourceMetadata(sourceMetaRaw)
+	meta["source_type"] = "node_backend_runtime_fixture"
+	meta["source_backend_runtime_id"] = runtimeID
+	_, err := db.Exec(`INSERT INTO node_backend_runtimes
+		(id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_set_json,source_metadata_json,status,status_reason,tenant_id,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+		id, runtimeID, nodeID, "docker", imageRef, imagePresent, dockerAvailable, configSetJSON(set), jsonString(meta), status, reason, tenantID)
+	if err != nil {
+		t.Fatalf("insert nbr: %v", err)
 	}
 }
 
@@ -112,7 +146,7 @@ func TestBackendRuntimeCRUD(t *testing.T) {
 	insertRuntime(t, db, "t1", "test-rt", "")
 
 	w := httptest.NewRecorder()
-	h.HandlePatchBackendRuntime(w, newReq("PATCH", "/x", `{"image_name":"new:v2"}`, adminSession(), map[string]string{"id": "t1"}))
+	h.HandlePatchBackendRuntime(w, newReq("PATCH", "/x", `{"image_ref":"new:v2"}`, adminSession(), map[string]string{"id": "t1"}))
 	if w.Code != 200 {
 		t.Fatalf("PATCH code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -121,8 +155,8 @@ func TestBackendRuntimeCRUD(t *testing.T) {
 	h.HandleGetBackendRuntime(w2, newReq("GET", "/x", "", adminSession(), map[string]string{"id": "t1"}))
 	var rt map[string]interface{}
 	json.Unmarshal(w2.Body.Bytes(), &rt)
-	if rt["image_name"] != "new:v2" {
-		t.Errorf("image_name: %v", rt["image_name"])
+	if rt["image_ref"] != "new:v2" {
+		t.Errorf("image_ref: %v", rt["image_ref"])
 	}
 	if rt["vendor"] != "nvidia" {
 		t.Errorf("vendor cleared: %v", rt["vendor"])
@@ -172,7 +206,7 @@ func TestDefaultEnvJSONRedaction(t *testing.T) {
 	var rt map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &rt)
 
-	envRaw := rt["default_env_json"]
+	envRaw := rt["env"]
 	envBytes, _ := json.Marshal(envRaw)
 	envStr := string(envBytes)
 
@@ -200,10 +234,11 @@ func TestCreateFromTemplate(t *testing.T) {
 
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
+	bid, vid := getVllmIDs(t, db)
 
 	w := httptest.NewRecorder()
 	h.HandleCreateBackendRuntimeFromTemplate(w, newReq("POST", "/x",
-		`{"template_name":"vllm-nvidia-docker","name":"my-vllm","display_name":"My vLLM","vendor":"nvidia","backend_name":"vllm","backend_version":"0.8.5"}`,
+		`{"template_name":"vllm-nvidia-docker","name":"my-vllm","display_name":"My vLLM","vendor":"nvidia","backend_id":"`+bid+`","backend_version_id":"`+vid+`"}`,
 		adminSession(), nil))
 	if w.Code != 201 {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())

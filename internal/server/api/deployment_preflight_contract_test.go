@@ -24,8 +24,7 @@ func TestContractPreflightAcceptsReadyWithWarnings(t *testing.T) {
 	insertRuntime(t, db, brtID, "Runtime PF RWW", "")
 	// NBR with ready_with_warnings
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,1,1,'{}','ready_with_warnings','probe warnings found','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:test")
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:test", "ready_with_warnings", "probe warnings found", 1, 1, "")
 	insertUIPersistenceArtifact(t, h, artID)
 	snapshotInsertModelLocation(t, db, "ml-pf-rww", artID, nodeID)
 
@@ -59,14 +58,15 @@ func TestContractPreflightAcceptsReadyWithWarnings(t *testing.T) {
 func TestContractPreflightRejectsNeedsCheck(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	nodeID := "node-pf-nc"; brtID := "br-pf-nc"; artID := "art-pf-nc"
+	nodeID := "node-pf-nc"
+	brtID := "br-pf-nc"
+	artID := "art-pf-nc"
 	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
 	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-pf-nc',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
 	insertRuntime(t, db, brtID, "Runtime PF NC", "")
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,0,0,'{}','needs_check','not checked','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:test")
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:test", "needs_check", "not checked", 0, 0, "")
 	insertUIPersistenceArtifact(t, h, artID)
 	snapshotInsertModelLocation(t, db, "ml-pf-nc", artID, nodeID)
 
@@ -86,14 +86,15 @@ func TestContractPreflightRejectsNeedsCheck(t *testing.T) {
 func TestContractPreflightRejectsMissingImage(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	nodeID := "node-pf-mi"; brtID := "br-pf-mi"; artID := "art-pf-mi"
+	nodeID := "node-pf-mi"
+	brtID := "br-pf-mi"
+	artID := "art-pf-mi"
 	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
 	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-pf-mi',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
 	insertRuntime(t, db, brtID, "Runtime PF MI", "")
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,0,1,'{}','missing_image','image not found','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:missing")
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:missing", "missing_image", "image not found", 0, 1, "")
 	insertUIPersistenceArtifact(t, h, artID)
 	snapshotInsertModelLocation(t, db, "ml-pf-mi", artID, nodeID)
 
@@ -113,14 +114,15 @@ func TestContractPreflightRejectsMissingImage(t *testing.T) {
 func TestContractPreflightRejectsModelLocationMissing(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	nodeID := "node-pf-ml"; brtID := "br-pf-ml"; artID := "art-pf-ml"
+	nodeID := "node-pf-ml"
+	brtID := "br-pf-ml"
+	artID := "art-pf-ml"
 	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
 	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-pf-ml',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
 	insertRuntime(t, db, brtID, "Runtime PF ML", "")
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,1,1,'{}','ready','ok','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:test")
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:test", "ready", "ok", 1, 1, "")
 	insertUIPersistenceArtifact(t, h, artID)
 	// NO model location inserted
 
@@ -140,14 +142,15 @@ func TestContractPreflightRejectsModelLocationMissing(t *testing.T) {
 func TestContractPreflightRejectsReplicasUnsupported(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	nodeID := "node-pf-rep"; brtID := "br-pf-rep"; artID := "art-pf-rep"
+	nodeID := "node-pf-rep"
+	brtID := "br-pf-rep"
+	artID := "art-pf-rep"
 	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
 	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-pf-rep',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
 	insertRuntime(t, db, brtID, "Runtime PF Rep", "")
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,1,1,'{}','ready','ok','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:test")
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:test", "ready", "ok", 1, 1, "")
 	insertUIPersistenceArtifact(t, h, artID)
 	snapshotInsertModelLocation(t, db, "ml-pf-rep", artID, nodeID)
 
@@ -170,14 +173,15 @@ func TestContractPreflightRejectsReplicasUnsupported(t *testing.T) {
 func TestContractCreateRejectsReplicasUnsupported(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	nodeID := "node-cr-rep"; brtID := "br-cr-rep"; artID := "art-cr-rep"
+	nodeID := "node-cr-rep"
+	brtID := "br-cr-rep"
+	artID := "art-cr-rep"
 	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
 	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-cr-rep',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
 	insertRuntime(t, db, brtID, "Runtime CR Rep", "")
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,1,1,'{}','ready','ok','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:test")
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:test", "ready", "ok", 1, 1, "")
 	insertUIPersistenceArtifact(t, h, artID)
 	snapshotInsertModelLocation(t, db, "ml-cr-rep", artID, nodeID)
 
@@ -192,14 +196,15 @@ func TestContractCreateRejectsReplicasUnsupported(t *testing.T) {
 func TestContractPreflightRejectsInvalidPort(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	nodeID := "node-pf-port"; brtID := "br-pf-port"; artID := "art-pf-port"
+	nodeID := "node-pf-port"
+	brtID := "br-pf-port"
+	artID := "art-pf-port"
 	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
 	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-pf-port',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
 	insertRuntime(t, db, brtID, "Runtime PF Port", "")
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,1,1,'{}','ready','ok','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:test")
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:test", "ready", "ok", 1, 1, "")
 	insertUIPersistenceArtifact(t, h, artID)
 	snapshotInsertModelLocation(t, db, "ml-pf-port", artID, nodeID)
 
@@ -230,14 +235,15 @@ func TestContractPreflightBackendRuntimeIDRejected(t *testing.T) {
 func TestContractDryRunWithReadyWithWarnings(t *testing.T) {
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	nodeID := "node-dr-rww"; brtID := "br-dr-rww"; artID := "art-dr-rww"
+	nodeID := "node-dr-rww"
+	brtID := "br-dr-rww"
+	artID := "art-dr-rww"
 	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
 	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-dr-rww',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
 	insertRuntime(t, db, brtID, "Runtime DR RWW", "")
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,1,1,'{}','ready_with_warnings','warnings ok','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:test")
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:test", "ready_with_warnings", "warnings ok", 1, 1, "")
 	insertUIPersistenceArtifact(t, h, artID)
 	snapshotInsertModelLocation(t, db, "ml-dr-rww", artID, nodeID)
 
@@ -266,16 +272,18 @@ func TestContractDryRunWithReadyWithWarnings(t *testing.T) {
 func TestContractSnapshotNotMutatedByMigration(t *testing.T) {
 	db := setupTestDB(t)
 	// Verify fresh DB has no legacy snapshot mutation paths
-	nodeID := "node-snap-imm"; brtID := "br-snap-imm"; artID := "art-snap-imm"
+	nodeID := "node-snap-imm"
+	brtID := "br-snap-imm"
+	artID := "art-snap-imm"
 	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
 	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-snap-imm',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
 	insertRuntime(t, db, brtID, "Runtime Snap Imm", "")
 	nbrID := nodeID + ":" + brtID
-	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,1,1,'{"docker_json":{"shm_size":"10gb"}}','ready','ok','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:snap")
-	// Modify BackendRuntime
-	db.Exec(`UPDATE backend_runtimes SET image_name='changed:v2' WHERE id=?`, brtID)
+	insertNodeBackendRuntime(t, db, nbrID, brtID, nodeID, "img:snap", "ready", "ok", 1, 1, "")
+	db.Exec(`UPDATE node_backend_runtimes SET config_set_json = json_set(config_set_json, '$.items."launcher.docker_options".value.shm_size', '10gb') WHERE id=?`, nbrID)
+	// Modify BackendRuntime ConfigSet.
+	db.Exec(`UPDATE backend_runtimes SET config_set_json = json_set(config_set_json, '$.items."launcher.image".value', 'changed:v2') WHERE id=?`, brtID)
 	// Re-enable via enable (should NOT refresh snapshot)
 	h := NewAgentHandler(db, nil)
 	insertUIPersistenceArtifact(t, h, artID)
@@ -283,10 +291,16 @@ func TestContractSnapshotNotMutatedByMigration(t *testing.T) {
 	ew := httptest.NewRecorder()
 	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
 		`{"backend_runtime_id":"`+brtID+`","image_ref":"img:snap"}`, adminSession(), map[string]string{"id": nodeID}))
-	if ew.Code != 200 { t.Fatalf("re-enable code=%d", ew.Code) }
+	if ew.Code != 200 {
+		t.Fatalf("re-enable code=%d", ew.Code)
+	}
 	// Snapshot must NOT have changed due to BR modification
 	var snap string
-	db.QueryRow("SELECT config_snapshot_json FROM node_backend_runtimes WHERE id=?", nbrID).Scan(&snap)
-	if !strings.Contains(snap, "10gb") { t.Fatalf("snapshot was mutated after BR change") }
-	if strings.Contains(snap, "changed:v2") { t.Fatalf("snapshot picked up live BR change: %s", snap) }
+	db.QueryRow("SELECT config_set_json FROM node_backend_runtimes WHERE id=?", nbrID).Scan(&snap)
+	if !strings.Contains(snap, "10gb") {
+		t.Fatalf("config set was mutated after BR change")
+	}
+	if strings.Contains(snap, "changed:v2") {
+		t.Fatalf("config set picked up live BR change: %s", snap)
+	}
 }
