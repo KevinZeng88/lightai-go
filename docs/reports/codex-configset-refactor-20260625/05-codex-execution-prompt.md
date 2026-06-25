@@ -222,6 +222,12 @@ model_deployments
 
 清理旧字段和旧 repair/fallback。
 
+Do not add a V29-style compatibility migration that only appends config_set_json/source_metadata_json while preserving old authority columns. Rebuild/replace the schema for the fresh-DB baseline instead.
+
+Do not keep legacy columns to avoid API breakage. Fix API/UI/tests to the ConfigSet contract in the same clean-state commit range.
+
+Do not commit a checkpoint that introduces dual authority, legacy fallback, or temporary compatibility paths.
+
 ### Phase 4：copy-on-create
 
 实现：

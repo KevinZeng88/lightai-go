@@ -102,6 +102,22 @@ refactor: migrate api ui to configsets
 test: validate configset runtime smoke
 ```
 
+## 5.1 Clean-State Commit Policy
+
+Every checkpoint commit/push must preserve the clean architecture direction.
+
+Forbidden in any committed checkpoint:
+
+- additive legacy compatibility migration
+- old columns retained to protect old API reads
+- dual-read or dual-write between old fields and ConfigSet
+- legacy API fallback
+- legacy payload fallback
+- temporary compatibility helper intended to be cleaned later
+- “old fields remain for later checkpoint” as a committed implementation state
+
+If a checkpoint cannot pass build/tests without temporary compatibility, continue implementing the necessary DB/API/UI/test changes before committing. Do not push transitional compatibility architecture.
+
 ## 6. Terminal Output Format
 
 After each checkpoint, print exactly this structure:

@@ -22,6 +22,7 @@ All commands were run from `/home/kzeng/projects/ai-platform-study/lightai-go`.
 | `git diff --stat` | PASS | Only tracked diff before Checkpoint A reports was pre-existing `web/package*.json` changes: 2 files, 56 insertions, 7 deletions. |
 | `git diff --check` | PASS | No whitespace errors reported in tracked diffs. |
 | `git diff --cached --check` | FIXED | Initial staged check found one trailing whitespace in `01-current-code-findings.md`; removed it, re-staged, and reran successfully. |
+| Checkpoint B correction | FIXED_IN_WORKTREE | Rejected V29 additive compatibility migration. Rejected temporary legacy-column transition. Updated docs to require fresh-schema clean-state commits. Future checkpoints must not commit or push legacy compatibility paths. |
 
 ## Old Field Hit Counts
 

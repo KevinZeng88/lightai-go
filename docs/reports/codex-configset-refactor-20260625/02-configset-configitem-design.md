@@ -495,6 +495,16 @@ docker_options_json
 model_mount_json
 ```
 
+Implementation rule:
+
+- Fresh DB / schema rebuild is the baseline.
+- Do not implement additive migration that keeps old authority columns.
+- Do not keep old columns to protect legacy API read paths.
+- Do not dual-read or dual-write old fields and ConfigSet.
+- Do not preserve legacy fallback.
+- If old response shapes are needed for display, they must be derived from ConfigSet after the API contract is updated, not stored as DB authority and not accepted as create/update payload.
+- Each committed checkpoint must preserve this clean-state invariant.
+
 如果某些 response 短期需要旧形态，只能从 ConfigSet 投影，不得继续作为 DB 权威字段保存。
 
 ## 10. API 设计

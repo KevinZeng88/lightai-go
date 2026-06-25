@@ -156,7 +156,11 @@ docker_options_json
 model_mount_json
 ```
 
-如果完全删除字段会导致范围过大，允许阶段内使用 compatibility projection helper，但禁止作为 DB 权威字段继续保存。最终 closeout 前必须清理。
+不允许 additive compatibility migration，不允许通过 ADD COLUMN 给旧 schema 增加 config_set_json 后保留旧列过渡，不允许旧字段暂留以维持旧 API 读路径。
+
+如果删除旧字段导致 API、UI、测试或运行链路断裂，必须同步修改 API、UI、测试和运行链路，使当前提交点直接使用 clean schema。不得把“后续阶段再清理旧字段/旧 API/fallback”作为已提交状态。
+
+每个 checkpoint 的 commit/push 都必须保持方向干净：不得新增或保留 legacy compatibility path。若某个 checkpoint 无法单独形成 clean state，应扩大当前 checkpoint 范围，连续完成后续必要改造，再提交。
 
 验收：
 
