@@ -1,8 +1,16 @@
 # Runtime Parameter System — Final Closeout
 
-> Status: CLOSED
-> Date: 2026-06-25
+> Status: **REOPENED** (was: CLOSED)
+> Date: 2026-06-25 (original: 2026-06-25)
 > Branch: main
+>
+> ⚠️ **REOPENED 原因：**
+> 本 closeout 声称 CLOSED 但真实 UI 仍存在以下问题：
+> - 运行配置页面重复编辑入口 (RAP-001, RAP-002)
+> - 浏览器 OOM (RAP-003)
+> - help 文档未接入 UI (RAP-005)
+>
+> 修复计划详见：`docs/reports/repairs/runtime-architecture-parameter-2026-06-25/`
 
 ## 1. Phase 0-7 Commit List
 

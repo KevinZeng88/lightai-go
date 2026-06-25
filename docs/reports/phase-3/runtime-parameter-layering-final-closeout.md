@@ -1,8 +1,15 @@
 # Runtime Parameter Layering — Final Closeout
 
-> Status: CLOSED
-> Date: 2026-06-24
+> Status: **REOPENED** (was: CLOSED)
+> Date: 2026-06-25 (original: 2026-06-24)
 > Branch: main
+>
+> ⚠️ **REOPENED 原因：**
+> OOM fix 声称完成（syncing guard + try/finally + JSON.stringify shallow watch），但代码审查发现：
+> - syncing guard 在 Vue 3 异步 flush 下实际无效
+> - Phase 2 声称 "BackendRuntimesPage 移除重复内联参数编辑" 但 RunnerConfigsPage 仍有重复入口
+>
+> 修复计划详见：`docs/reports/repairs/runtime-architecture-parameter-2026-06-25/`
 
 ## 1. 问题背景
 
