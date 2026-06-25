@@ -374,3 +374,4 @@ for f in "$ARTIFACT_DIR"/*-preview.txt; do
   echo "  $(basename "$f")"
 done
 assert_summary
+LEGACY_CONTRACT_DO_NOT_USE_FOR_CURRENT_VALIDATION

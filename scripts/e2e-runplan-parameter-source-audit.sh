@@ -383,3 +383,4 @@ echo "Key files:"
 echo "  $(ls "$ARTIFACT_DIR"/*.txt 2>/dev/null | tr '\n' ' ')"
 echo "  $(ls "$ARTIFACT_DIR"/*.json 2>/dev/null | tr '\n' ' ')"
 assert_summary
+LEGACY_CONTRACT_DO_NOT_USE_FOR_CURRENT_VALIDATION

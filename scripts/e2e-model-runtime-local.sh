@@ -348,3 +348,4 @@ echo "Instance: $INST_STATE  Lease: $LEASE_STATUS"
 echo ""
 echo "=== E2E TEST PASSED ==="
 echo "Resources cleaned by trap handler."
+LEGACY_CONTRACT_DO_NOT_USE_FOR_CURRENT_VALIDATION

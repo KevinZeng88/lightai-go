@@ -259,3 +259,4 @@ docker rm -f "lightai-${INSTANCE_ID:0:12}" >/dev/null 2>&1 || true
 stage_done
 
 log "PASS: model runtime wizard E2E completed"
+LEGACY_CONTRACT_DO_NOT_USE_FOR_CURRENT_VALIDATION

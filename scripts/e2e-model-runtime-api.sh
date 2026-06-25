@@ -353,3 +353,4 @@ case "${1:-help}" in
   all) cmd_all 2>&1 | tee "$OUTDIR/17-api-e2e-all.txt" ;;
   *) echo "Usage: $0 {quick|api-only|llamacpp-only|vllm-only|sglang-only|full|all}" ;;
 esac
+LEGACY_CONTRACT_DO_NOT_USE_FOR_CURRENT_VALIDATION

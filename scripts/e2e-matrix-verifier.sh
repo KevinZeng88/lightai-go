@@ -204,3 +204,4 @@ echo ""
 echo "Artifacts: $ARTIFACT_DIR"
 echo "Matrix report: $ARTIFACT_DIR/matrix-results.txt"
 echo "RESULT: PASS (PASS=$PASS_COUNT SKIP=$SKIP_COUNT FAIL=0)"
+LEGACY_CONTRACT_DO_NOT_USE_FOR_CURRENT_VALIDATION
