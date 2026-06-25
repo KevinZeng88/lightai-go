@@ -123,6 +123,24 @@ SeedCatalog()
 
 不兼容旧 DB。
 
+Before implementing ConfigSet schema, audit migrateV1 through migrateV28.
+
+Classify each migrateVx as:
+
+- current schema definition to collapse into clean schema
+- legacy compatibility ADD COLUMN
+- old-data backfill
+- old catalog seed/repair
+- old ID normalize
+- obsolete table/route/API support
+- delete
+
+Final code must not initialize fresh DB by replaying V1->V28. Fresh DB must be created from a single clean current schema path.
+
+If keeping any historical migrateVx temporarily prevents build/test failure, continue DB/API/UI/test refactor before committing. Do not push a checkpoint that leaves historical compatibility migration as the active initialization path.
+
+Fresh DB clean schema is the only accepted DB baseline. Do not preserve the V1->V28 historical compatibility migration chain as the final database initialization path. Do not keep old-data backfill, repair, normalizeLegacy, seed repair, old catalog seed literals, seed-only backend versions, or dual-read/dual-write paths.
+
 目标字段：
 
 ```text

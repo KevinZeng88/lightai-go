@@ -224,6 +224,10 @@ model_deployments
 
 Do not add a V29-style compatibility migration that only appends config_set_json/source_metadata_json while preserving old authority columns. Rebuild/replace the schema for the fresh-DB baseline instead.
 
+Do not solve this by only avoiding V29. The existing V1->V28 migration chain must also be audited and removed/replaced as the final DB initialization path.
+
+Fresh DB must not be initialized by replaying historical compatibility migrations. Collapse current schema into a clean initializer and delete legacy migration/backfill/repair/normalize/seed code.
+
 Do not keep legacy columns to avoid API breakage. Fix API/UI/tests to the ConfigSet contract in the same clean-state commit range.
 
 Do not commit a checkpoint that introduces dual authority, legacy fallback, or temporary compatibility paths.

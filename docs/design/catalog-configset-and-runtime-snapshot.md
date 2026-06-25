@@ -497,11 +497,18 @@ model_mount_json
 
 Implementation rule:
 
-- Fresh DB / schema rebuild is the baseline.
+- Fresh DB clean schema is the only accepted DB baseline.
+- Do not preserve the V1->V28 historical compatibility migration chain as the final database initialization path.
 - Do not implement additive migration that keeps old authority columns.
+- Do not add V29-style additive migration.
+- Do not keep ALTER TABLE ADD COLUMN compatibility migrations for old authority fields.
 - Do not keep old columns to protect legacy API read paths.
 - Do not dual-read or dual-write old fields and ConfigSet.
 - Do not preserve legacy fallback.
+- Do not keep old-data backfill, repair, normalizeLegacy, seed repair, or dual-read/dual-write paths.
+- Useful current table definitions from old migrateVx functions must be collapsed into the clean schema initializer.
+- Legacy upgrade logic, old authority columns, old catalog seed literals, seed-only backend versions, and compatibility repair functions must be deleted.
+- schema_version may remain only as a clean-schema baseline marker. It must not imply support for upgrading historical DB versions.
 - If old response shapes are needed for display, they must be derived from ConfigSet after the API contract is updated, not stored as DB authority and not accepted as create/update payload.
 - Each committed checkpoint must preserve this clean-state invariant.
 

@@ -115,6 +115,11 @@ Forbidden in any committed checkpoint:
 - legacy payload fallback
 - temporary compatibility helper intended to be cleaned later
 - “old fields remain for later checkpoint” as a committed implementation state
+- preserving V1->V28 historical migrations as active fresh-DB initialization
+- historical ALTER TABLE ADD COLUMN chains for old authority fields
+- old-data backfill/repair/normalizeLegacy paths
+- catalog seed repair functions
+- schema_version used to imply support for old DB upgrades
 
 If a checkpoint cannot pass build/tests without temporary compatibility, continue implementing the necessary DB/API/UI/test changes before committing. Do not push transitional compatibility architecture.
 

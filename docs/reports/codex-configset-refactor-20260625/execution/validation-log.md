@@ -23,6 +23,13 @@ All commands were run from `/home/kzeng/projects/ai-platform-study/lightai-go`.
 | `git diff --check` | PASS | No whitespace errors reported in tracked diffs. |
 | `git diff --cached --check` | FIXED | Initial staged check found one trailing whitespace in `01-current-code-findings.md`; removed it, re-staged, and reran successfully. |
 | Checkpoint B correction | FIXED_IN_WORKTREE | Rejected V29 additive compatibility migration. Rejected temporary legacy-column transition. Updated docs to require fresh-schema clean-state commits. Future checkpoints must not commit or push legacy compatibility paths. |
+| Checkpoint B migration-stack correction | FIXED_IN_WORKTREE | Expanded DB cleanup scope from V29 additive migration rejection to full V1->V28 historical compatibility migration audit and clean-schema replacement. Added `db-migration-compatibility-audit.md` and static validation gates for active DB initialization. |
+| `git show HEAD:internal/server/db/db.go \| rg -n "func \\(db \\*DB\\) migrateV[0-9]+|..."` | PASS | Used the committed pre-refactor `db.go` as audit input. Confirmed historical `migrateV1` through `migrateV28`, `seedBuiltInBackends`, `seedTargetBackendCatalog`, `repairBackendCapabilitiesV27`, and `normalizeLegacyBackendCatalogIDs` existed and required classification/removal. |
+| `rg -n "Fresh DB clean schema|V1->V28|migrateV1|migration compatibility audit|Clean-State Commit Policy|schema_version may remain" ...` | PASS | Confirmed the clean-schema/V1->V28 migration-stack rules were written into design, implementation, validation, execution prompt, commit policy, and migration audit documents. |
+| `rg -n "func \\(db \\*DB\\) migrateV[0-9]+|migrateV[0-9]+\\(" internal/server/db \|\| true` | PASS | Current worktree active DB package has no `migrateVx` functions or calls. |
+| `rg -n "seedBuiltInBackends|seedTargetBackendCatalog|repairBackendCapabilitiesV27|normalizeLegacyBackendCatalogIDs" internal/server/db internal/server \|\| true` | PASS | Current worktree active code has no old catalog seed/repair/normalize functions. |
+| `rg -n "ALTER TABLE .* ADD COLUMN|Backfill|backfill|repair|normalizeLegacy|compat|legacy" internal/server/db internal/server \|\| true` | ATTENTION | No active old authority-field ADD COLUMN chain was found in `internal/server/db`. Output still includes clean-schema legacy-DB rejection text in `db.go` and unrelated existing compatibility references in other modules/tests; these remain implementation-phase cleanup/classification targets. |
+| `git diff --check -- <documentation files>` | PASS | No whitespace errors in the documentation-only migration-stack correction. |
 
 ## Old Field Hit Counts
 

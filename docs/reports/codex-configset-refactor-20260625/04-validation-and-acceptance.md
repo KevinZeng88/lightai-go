@@ -206,6 +206,31 @@ sqlite3 "$LIGHTAI_HOME/data/lightai.db" ".schema node_backend_runtimes"
 sqlite3 "$LIGHTAI_HOME/data/lightai.db" "select id, length(config_set_json), length(source_metadata_json) from backend_versions;"
 ```
 
+DB migration compatibility audit must exist:
+
+```text
+docs/reports/codex-configset-refactor-20260625/execution/db-migration-compatibility-audit.md
+```
+
+It must list migrateV1 through migrateV28 and classify each item.
+
+Static checks must prove active DB initialization does not replay historical compatibility migrations:
+
+```bash
+rg -n "func \\(db \\*DB\\) migrateV[0-9]+|migrateV[0-9]+\\(" internal/server/db
+rg -n "ALTER TABLE .* ADD COLUMN|Backfill|backfill|repair|normalizeLegacy|compat|legacy" internal/server/db internal/server
+rg -n "seedBuiltInBackends|seedTargetBackendCatalog|repairBackendCapabilitiesV27|normalizeLegacyBackendCatalogIDs" internal/server/db internal/server
+```
+
+Expected result:
+
+```text
+No active historical compatibility migration chain remains.
+No old catalog seed/repair function remains.
+No old authority field ADD COLUMN migration remains.
+Any remaining migration-related code is only clean schema baseline creation or explicitly documented test/archive code.
+```
+
 ## 7. API / UI 验证
 
 禁止 active API 出现旧权威字段：
