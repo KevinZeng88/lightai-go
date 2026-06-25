@@ -107,4 +107,3 @@ grep -E ': (PASS|FAIL)$' "$VERIFY_BASE"/*.log 2>/dev/null || true
 cat "$VERIFY_BASE/matrix-summary.md" 2>/dev/null || true
 echo "Matrix exit=$MATRIX_EXIT"
 exit $MATRIX_EXIT
-LEGACY_CONTRACT_DO_NOT_USE_FOR_CURRENT_VALIDATION

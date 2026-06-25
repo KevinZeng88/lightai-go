@@ -1,3 +1,12 @@
+# CURRENT CONTRACT: See docs/testing/current-e2e-contract.md
+# Legacy routes (/runtime-environments, /run-templates, /model-deployments, /backend-runtimes/check) are DEPRECATED.
+# Current payload: node_backend_runtime_id, parameter_values_json, /check-request.
+#
+# NOTE: This OpenAPI spec is partially updated. Authoritative contract is in docs/testing/.
+
+# Current contract uses node_backend_runtime_id, /check-request, parameter_values_json.
+# See docs/testing/current-e2e-contract.md for authoritative contract.
+
 openapi: "3.0.3"
 info:
   title: LightAI Go API
@@ -150,20 +159,8 @@ paths:
       operationId: createModelArtifact
       summary: Create model artifact
 
-  /runtime-environments:
-    get:
-      operationId: listRuntimeEnvironments
-      summary: List runtime environments
-    post:
-      operationId: createRuntimeEnvironment
-      summary: Create runtime environment
 
-  /run-templates:
-    get:
-      operationId: listRunTemplates
-      summary: List run templates
 
-  /model-deployments:
     get:
       operationId: listModelDeployments
       summary: List model deployments
