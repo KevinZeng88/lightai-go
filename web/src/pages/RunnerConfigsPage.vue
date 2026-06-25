@@ -229,18 +229,6 @@
         <h4>{{ $t('runnerConfigs.sectionVolumesPorts') }}</h4>
         <el-form-item :label="$t('runtimes.extraMounts')"><el-input v-model="editVolumesText" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.volumeLines')" /></el-form-item>
         <el-form-item :label="$t('runnerConfigs.ports')"><el-input v-model="editPortsText" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.portLines')" /></el-form-item>
-        <h4>{{ $t('runnerConfigs.sectionDevicesSecurity') }}</h4>
-        <el-alert :title="$t('runnerConfigs.highRiskWarning')" type="warning" show-icon :closable="false" style="margin-bottom:8px" />
-        <el-form-item :label="$t('runtimes.devices')"><el-input v-model="editDevicesText" type="textarea" :rows="3" :placeholder="$t('runnerConfigs.volumeLines')" /></el-form-item>
-        <el-form-item :label="$t('runtimes.groupAdd')"><el-input v-model="editGroupAddText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.lineSeparated')" /></el-form-item>
-        <el-form-item :label="$t('runtimes.securityOpt')"><el-input v-model="editSecurityOptText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.lineSeparated')" /></el-form-item>
-        <el-form-item :label="$t('runtimes.privileged')">
-          <el-switch v-model="editPrivileged" />
-          <span style="margin-left:8px;font-size:12px;color:var(--el-color-danger)">Docker --privileged {{ $t('runtimes.privilegedRisk') }}</span>
-        </el-form-item>
-        <el-form-item :label="$t('runtimes.ipcMode')"><el-input v-model="editIpcMode" /></el-form-item>
-        <el-form-item :label="$t('runtimes.shmSize')"><el-input v-model="editShmSize" /></el-form-item>
-        <el-form-item :label="$t('runtimes.ulimits')"><el-input v-model="editUlimitsText" type="textarea" :rows="2" :placeholder="$t('runnerConfigs.keyValueLines')" /></el-form-item>
         <h4>{{ $t('runnerConfigs.sectionHealthPreview') }}</h4>
         <el-form-item :label="$t('backends.healthCheck')">
           <HealthCheckEditor v-model="editHealthModel" />
@@ -281,10 +269,8 @@ const loading = ref(false); const saving = ref(false); const checking = ref(fals
 const items = ref<any[]>([]); const templates = ref<any[]>([]); const selected = ref<any>(null); const detailVisible = ref(false)
 const editVisible = ref(false); const editConfigName = ref(''); const editImageRef = ref(''); const editSnapshotText = ref('{}')
 const editArgsText = ref(''); const editEnvText = ref(''); const editVolumesText = ref(''); const editPortsText = ref('')
-const editDevicesText = ref(''); const editGroupAddText = ref(''); const editSecurityOptText = ref('')
-const editPrivileged = ref(false); const editIpcMode = ref(''); const editShmSize = ref(''); const editUlimitsText = ref(''); const editHealthText = ref('{}')
 const editHealthModel = ref<Record<string, unknown>>({})
-const editParameterModel = ref({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
+const editParameterModel = ref<{ docker_json: Record<string, any>; args_override_json: any[]; default_env_json: Record<string, any>; parameter_values_json: any[] }>({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
 const editBackendSchema = ref<any[]>([])
 
 // Wizard
@@ -548,16 +534,13 @@ function showEdit(row: any) {
   editEnvText.value = summary.envRows.map((r) => `${r.key}=${r.value}`).join('\n')
   editVolumesText.value = summary.volumeRows.map((r) => `${r.host}:${r.container}${r.readonly === t('common.yes') ? ':ro' : ''}`).join('\n')
   editPortsText.value = summary.portRows.map((r) => `${r.host}:${r.container}/${r.protocol}`).join('\n')
-  editDevicesText.value = joinList(asObject(row.config_snapshot_json || {}).docker_json?.devices || asObject(row.config_snapshot_json || {}).devices)
-  editGroupAddText.value = summary.groupAdd.split(', ').join('\n')
-  editSecurityOptText.value = summary.securityOpt.split(', ').join('\n')
-  editPrivileged.value = summary.privileged === t('common.yes')
-  editIpcMode.value = summary.ipc
-  editShmSize.value = summary.shmSize
-  editUlimitsText.value = (() => {
-    try { return Object.entries(JSON.parse(summary.ulimits || '{}')).map(([k, v]) => `${k}=${v}`).join('\n') } catch { return summary.ulimits }
-  })()
-  editHealthText.value = summary.health || '{}'
+  const snapshot = asObject(row.config_snapshot_json || {})
+  editParameterModel.value = {
+    docker_json: asObject(snapshot.docker_json),
+    args_override_json: Array.isArray(snapshot.args_override_json) ? snapshot.args_override_json : [],
+    default_env_json: typeof snapshot.default_env_json === 'object' && snapshot.default_env_json !== null ? snapshot.default_env_json : {},
+    parameter_values_json: Array.isArray(snapshot.parameter_values_json) ? snapshot.parameter_values_json : [],
+  }
   try { editHealthModel.value = JSON.parse(summary.health || '{}') } catch { editHealthModel.value = {} }
   editVisible.value = true
   // Load backend schema for dynamic args rendering
@@ -585,22 +568,18 @@ async function doEdit() {
   if (!selected.value) return
   saving.value = true
   try {
-    let snapshot: any = {}
-    try { snapshot = JSON.parse(editSnapshotText.value || '{}') } catch { ElMessage.error(t('runnerConfigs.invalidJson')); saving.value = false; return }
-    snapshot.image_name = editImageRef.value
-    snapshot.args_override_json = parseLines(editArgsText.value)
-    snapshot.default_env_json = parseKeyValueLines(editEnvText.value)
-    snapshot.extra_mounts = parseMountLines(editVolumesText.value)
-    snapshot.ports_json = parsePortLines(editPortsText.value)
-    snapshot.docker_json = asObject(snapshot.docker_json)
-    snapshot.docker_json.devices = parseMountLines(editDevicesText.value)
-    snapshot.docker_json.group_add = parseLines(editGroupAddText.value)
-    snapshot.docker_json.security_options = parseLines(editSecurityOptText.value)
-    snapshot.docker_json.privileged = editPrivileged.value
-    if (editIpcMode.value) snapshot.docker_json.ipc_mode = editIpcMode.value
-    if (editShmSize.value) snapshot.docker_json.shm_size = editShmSize.value
-    snapshot.docker_json.ulimits = parseKeyValueLines(editUlimitsText.value)
-    snapshot.health_check_override_json = editHealthModel.value
+    // Build snapshot from RuntimeParameterEditor model (single source of truth for Docker params)
+    const model = editParameterModel.value
+    const snapshot: any = {
+      image_name: editImageRef.value,
+      docker_json: asObject(model.docker_json),
+      args_override_json: Array.isArray(model.args_override_json) ? model.args_override_json : [],
+      default_env_json: typeof model.default_env_json === 'object' && model.default_env_json !== null ? model.default_env_json : {},
+      parameter_values_json: Array.isArray(model.parameter_values_json) ? model.parameter_values_json : [],
+      extra_mounts: parseMountLines(editVolumesText.value),
+      ports_json: parsePortLines(editPortsText.value),
+      health_check_override_json: editHealthModel.value,
+    }
     await apiClient.patch(`/nodes/${selected.value.node_id}/backend-runtimes/${selected.value.id}`, { display_name: editConfigName.value, image_ref: editImageRef.value, config_snapshot_json: snapshot })
     ElMessage.success(t('runnerConfigs.savedNeedsCheck'))
     editVisible.value = false

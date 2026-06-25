@@ -343,10 +343,11 @@ const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_
 const editParameterValues = ref<any[]>([])
 const editDisabledParameters = ref<any[]>([])
 const editBackendSchema = ref<any[]>([])
-const editParameterModel = computed({
-  get: () => ({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: editParameterValues.value }),
-  set: (val: any) => { if (val.parameter_values_json) editParameterValues.value = val.parameter_values_json },
-})
+const editParameterModel = ref<{ docker_json: Record<string, any>; args_override_json: string[]; default_env_json: Record<string, string>; parameter_values_json: any[] }>({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
+
+function syncEditParameterValues() {
+  editParameterValues.value = editParameterModel.value.parameter_values_json
+}
 const createForm = ref({ name: '', model_artifact_id: '', node_backend_runtime_id: '', node_id: '', accelerator_ids: '[]', host_port: 8000, container_port: 0, app_port: 0, placement_json: '{}', service_json: '{}', env_overrides_json: '{}' })
 
 // Wizard state
@@ -615,6 +616,13 @@ function showEdit(row: any) {
   const envOverrides = asObject(row.env_overrides_json)
   editForm.value.env_overrides_text = Object.entries(envOverrides).map(([k, v]) => `${k}=${v}`).join('\n')
   // Load structured parameter values and disabled tombstones
+  const snapshot = typeof row.config_snapshot_json === 'string' ? JSON.parse(row.config_snapshot_json || '{}') : (row.config_snapshot_json || {})
+  editParameterModel.value = {
+    docker_json: asObject(snapshot.docker_json),
+    args_override_json: Array.isArray(snapshot.args_override_json) ? snapshot.args_override_json : [],
+    default_env_json: typeof snapshot.default_env_json === 'object' && snapshot.default_env_json !== null ? snapshot.default_env_json : {},
+    parameter_values_json: Array.isArray(row.parameter_values_json) ? [...row.parameter_values_json] : [],
+  }
   editParameterValues.value = Array.isArray(row.parameter_values_json) ? [...row.parameter_values_json] : []
   editDisabledParameters.value = Array.isArray(row.disabled_parameters_json) ? [...row.disabled_parameters_json] : []
   editVisible.value = true
@@ -643,6 +651,8 @@ async function doEdit() {
   if (!selectedEditRow.value) return
   saving.value = true
   try {
+    // Sync parameter values from RuntimeParameterEditor model before saving
+    editParameterValues.value = editParameterModel.value.parameter_values_json
     const payload: any = {
       display_name: editForm.value.display_name,
       model_artifact_id: editForm.value.model_artifact_id,

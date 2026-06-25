@@ -63,18 +63,24 @@ check('BackendRuntimesPage buildPayload reads from parameterEditorModel', templa
 // --- Clone preserves all values via cloneParameterEditorModel ---
 check('BackendRuntimesPage showClone uses cloneParameterEditorModel', templatePage.includes('cloneParameterEditorModel.value ='))
 
-// --- privileged field has Docker --privileged explanation ---
-check('runner config privileged shows Docker --privileged explanation', runnerPage.includes('Docker --privileged') && runnerPage.includes('runtimes.privilegedRisk'))
-
-// --- RunnerConfigsPage edit has actual input controls ---
-check('runner config edit has devices textarea', runnerPage.includes('editDevicesText') && runnerPage.includes('type="textarea"'))
+// --- RunnerConfigsPage: NO legacy Docker editor (single-entry via RuntimeParameterEditor) ---
+// Docker --privileged explanation is now in RuntimeParameterEditor's risk label
+check('RuntimeParameterEditor privileged has risk warning', runtimeParamEditor.includes('runtimes.privilegedRisk') || runtimeParamEditor.includes('Docker --privileged'))
+// Negative assertions: legacy inline Docker fields must NOT exist (no duplicate entries)
+check('runner config does NOT have legacy editDevicesText', !runnerPage.includes('editDevicesText'))
+check('runner config does NOT have legacy editGroupAddText', !runnerPage.includes('editGroupAddText'))
+check('runner config does NOT have legacy editSecurityOptText', !runnerPage.includes('editSecurityOptText'))
+check('runner config does NOT have legacy editShmSize', !runnerPage.includes('editShmSize'))
+check('runner config does NOT have legacy editUlimitsText', !runnerPage.includes('editUlimitsText'))
+check('runner config does NOT have legacy editPrivileged', !runnerPage.includes('editPrivileged'))
+check('runner config does NOT have legacy editIpcMode', !runnerPage.includes('editIpcMode'))
+// Positive: RunnerConfigsPage delegates to RuntimeParameterEditor
+check('runner config uses RuntimeParameterEditor', runnerPage.includes('RuntimeParameterEditor'))
+check('runner config populates editParameterModel', runnerPage.includes('editParameterModel.value'))
+// Positive: non-Docker convenience editors still present
 check('runner config edit has volumes textarea', runnerPage.includes('editVolumesText'))
 check('runner config edit has ports textarea', runnerPage.includes('editPortsText'))
 check('runner config edit has env textarea', runnerPage.includes('editEnvText'))
-check('runner config edit has shm_size input', runnerPage.includes('editShmSize'))
-check('runner config edit has ulimits textarea', runnerPage.includes('editUlimitsText'))
-check('runner config edit has group_add textarea', runnerPage.includes('editGroupAddText'))
-check('runner config edit has security_opt textarea', runnerPage.includes('editSecurityOptText'))
 
 // --- Full parameter coverage in RuntimeParameterEditor ---
 check('RuntimeParameterEditor has privileged', runtimeParamEditor.includes("key: 'privileged'"))
