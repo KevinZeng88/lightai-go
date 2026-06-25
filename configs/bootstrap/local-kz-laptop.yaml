@@ -1,0 +1,94 @@
+# LightAI Bootstrap Profile — Local Dev Machine (KZ-LAPTOP)
+# Generated: 2026-06-25
+# This file is safe to commit (no passwords, tokens, cookies, or CSRF values).
+
+profile_name: local-kz-laptop
+
+server:
+  base_url: http://localhost:18080
+  agent_url: http://localhost:19091
+  runtime_dir: /tmp/lightai
+
+auth:
+  username: admin
+  initial_password_env: LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD
+  initial_password: ""
+  initial_password_file: ""
+  initial_password_runtime_files:
+    - auto
+  final_password_env: LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD
+  final_password_file: ""
+
+tenant:
+  name: default
+
+node:
+  name: KZ-LAPTOP
+  gpu_vendor: nvidia
+  gpu_ids:
+    - "0"
+  accelerator_ids:
+    - "0"
+
+models:
+  qwen3_small:
+    display_name: Qwen3-0.6B-Instruct-2512
+    kind: huggingface
+    path: /home/kzeng/models/Qwen3-0.6B-Instruct-2512
+
+  qwen35_gguf:
+    display_name: Qwen3.5-9B-Q4_K_M
+    kind: gguf
+    path: /home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf
+
+runtimes:
+  vllm:
+    backend: vllm
+    image: vllm/vllm-openai:latest
+    model: qwen3_small
+    container_port: 8000
+    host_port: 8004
+    parameters:
+      gpu_memory_utilization:
+        enabled: true
+        value: "0.65"
+      max_model_len:
+        enabled: true
+        value: "8192"
+
+  sglang:
+    backend: sglang
+    image: lmsysorg/sglang:latest
+    model: qwen3_small
+    container_port: 30000
+    host_port: 30000
+    parameters:
+      mem_fraction_static:
+        enabled: true
+        value: "0.65"
+      context_length:
+        enabled: true
+        value: "8192"
+
+  llamacpp:
+    backend: llamacpp
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda13
+    model: qwen35_gguf
+    container_port: 8000
+    host_port: 8002
+    parameters:
+      n_gpu_layers:
+        enabled: true
+        value: "99"
+      ctx_size:
+        enabled: true
+        value: "8192"
+
+bootstrap:
+  default_mode: dry-run
+  output_dir: /tmp/lightai/e2e/bootstrap
+  allow_real_container_start: false
+  allow_chat_completion: false
+  keep_containers_after_full: false
+  default_export_profile: configs/bootstrap/local-kz-laptop.yaml
+  include_runtime_state: false

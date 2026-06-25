@@ -1,0 +1,89 @@
+# LightAI Bootstrap Profile — Example Template
+# Copy to configs/bootstrap/site.yaml and fill in your environment details.
+# This file is safe to commit (no passwords, tokens, cookies, or CSRF values).
+#
+# Password variables:
+#   LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD — initial admin password for clean DB first start
+#   LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD  — target admin password after bootstrap changes it
+#   Set these via environment variables, NOT in this file.
+
+profile_name: site-example
+
+server:
+  # LightAI Server and Agent URLs. Adjust to your deployment.
+  base_url: http://localhost:18080
+  agent_url: http://localhost:19091
+  # Runtime directory for DB, logs, and credentials file.
+  # Development default: /tmp/lightai. Production: /opt/lightai or similar.
+  runtime_dir: /tmp/lightai
+
+auth:
+  username: admin
+  # Environment variable names for passwords — values come from the shell, not here.
+  initial_password_env: LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD
+  initial_password: ""            # hardcoded fallback (NOT recommended for production)
+  initial_password_file: ""       # path to a file containing the initial password
+  initial_password_runtime_files:
+    - auto                        # auto-discover from runtime-dir
+  final_password_env: LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD
+  final_password_file: ""         # path to a file containing the target password
+
+tenant:
+  name: default
+
+node:
+  # Name must match the agent-registered node name.
+  name: MY-NODE-NAME
+  # GPU vendor: nvidia, metax, huawei, cpu
+  gpu_vendor: nvidia
+  # GPU IDs visible to the agent.
+  gpu_ids:
+    - "0"
+  # Vendor-neutral accelerator IDs for deployment/NBR.
+  accelerator_ids:
+    - "0"
+
+models:
+  # Define your models here. Each key is a profile-internal reference name.
+  # Example entries below — replace with your actual model paths.
+  #
+  # my_hf_model:
+  #   display_name: My HuggingFace Model
+  #   kind: huggingface
+  #   path: /path/to/your/huggingface/model/directory
+  #
+  # my_gguf_model:
+  #   display_name: My GGUF Model
+  #   kind: gguf
+  #   path: /path/to/your/model.gguf
+
+runtimes:
+  # Define your runtimes here. Each key is a profile-internal reference name.
+  # backend must match the catalog backend ID: vllm, sglang, or llamacpp.
+  #
+  # my_vllm_runtime:
+  #   backend: vllm
+  #   image: vllm/vllm-openai:latest
+  #   model: my_hf_model              # references a key in models above
+  #   container_port: 8000
+  #   host_port: 8004
+  #   parameters:
+  #     gpu_memory_utilization:
+  #       enabled: true
+  #       value: "0.85"
+  #     max_model_len:
+  #       enabled: true
+  #       value: "8192"
+
+bootstrap:
+  # Default execution mode.
+  default_mode: dry-run
+  # Output directory for state files.
+  output_dir: /tmp/lightai/e2e/bootstrap
+  # Safety gates.
+  allow_real_container_start: false
+  allow_chat_completion: false
+  keep_containers_after_full: false
+  # Default export profile path.
+  default_export_profile: configs/bootstrap/site.yaml
+  include_runtime_state: false
