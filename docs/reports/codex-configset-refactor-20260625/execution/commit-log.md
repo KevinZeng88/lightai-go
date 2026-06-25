@@ -8,7 +8,7 @@
 | B/C | `dee0dd8` | `refactor: replace catalog seeds with configset snapshots` | Pushed | Clean ConfigSet registry/catalog loader, fresh DB schema, API copy-on-create, RunPlan/API test updates. |
 | D | `6935951` | `refactor: render runplans from configsets` | Pushed | ConfigSet parameter renderer styles, repeat-flag preservation, ResolvedRunPlan-to-AgentRunSpec conversion, and deployment start adapter integration. |
 | E | `a822ac3` | `refactor: migrate api ui to configsets` | Pushed | Public API/OpenAPI, Web pages/tests, and active scripts migrated to ConfigSet/current deployment contracts; stale legacy-contract scripts archived or removed from active paths. |
-| F | Pending terminal report | `test: validate configset runtime smoke` | Pending terminal report | Full validation, fresh DB schema probe, catalog old-field cleanup, and real platform-chain smoke for vLLM/SGLang/llama.cpp completed; commit pending. |
+| F | `bbe0686` | `test: validate configset runtime smoke` | Pushed | Full validation, fresh DB schema probe, catalog old-field cleanup, and real platform-chain smoke for vLLM/SGLang/llama.cpp completed and pushed. |
 
 ## Commit Policy Reminder
 

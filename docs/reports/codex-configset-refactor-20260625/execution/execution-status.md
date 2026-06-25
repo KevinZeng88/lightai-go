@@ -6,7 +6,7 @@
 | --- | --- |
 | Current checkpoint | Checkpoint F |
 | Phase report | `phase-06-final-validation-runtime-smoke.md` |
-| Status | Checkpoint F validation complete; final closeout commit pending |
+| Status | Checkpoint F complete; final validation/runtime-smoke commit pushed |
 | Branch | `main` |
 | Design document | `docs/design/catalog-configset-and-runtime-snapshot.md` |
 
@@ -19,7 +19,7 @@
 | C | DB schema rebuild + ConfigSet copy-on-create | PASS committed/pushed | Fresh schema uses ConfigSet/source metadata authority for Backend, BackendVersion, BackendRuntime, NodeBackendRuntime, Deployment, ModelArtifact capability set. API tests verify NBR/deployment copy-on-create boundaries. Commit `dee0dd8`. |
 | D | renderer + RunPlan / AgentRunSpec / DockerSpec | PASS committed/pushed | ConfigSet parameter render styles are consumed by RunPlan; repeat flags are preserved through deduplication; deployment start converts ResolvedRunPlan through the Agent runtime adapter. Commit `6935951`. |
 | E | API/UI refactor + stale documentation archive | PASS committed/pushed | Public API, OpenAPI, Web pages, Web tests, and active E2E scripts use ConfigSet/current deployment contracts. Stale legacy-contract scripts are archived or removed from active script entrypoints. Commit `a822ac3`. |
-| F | full validation + fresh DB + three runtime platform-chain smoke + final closeout | PASS in worktree; commit pending | Full Go/Web validation passed. Fresh DB schema check passed. Platform-chain runtime smoke passed for vLLM, SGLang, and llama.cpp with health, inference, logs, stop, and cleanup. Evidence: `docs/reports/model-runtime-node-wizard/e2e-matrix-configset-f-20260626061623`. |
+| F | full validation + fresh DB + three runtime platform-chain smoke + final closeout | PASS committed/pushed | Full Go/Web validation passed. Fresh DB schema check passed. Platform-chain runtime smoke passed for vLLM, SGLang, and llama.cpp with health, inference, logs, stop, and cleanup. Evidence: `docs/reports/model-runtime-node-wizard/e2e-matrix-configset-f-20260626061623`. Commit `bbe0686`. |
 
 ## Current Working Tree Notes
 
@@ -32,4 +32,4 @@
 
 ## Next Phase
 
-Commit and push Checkpoint F final validation/runtime-smoke implementation and closeout reports.
+No next checkpoint remains. ConfigSet refactor Checkpoints A through F are complete and pushed.
