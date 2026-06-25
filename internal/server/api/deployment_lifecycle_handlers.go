@@ -150,6 +150,12 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// R-012: Reject replicas > 1 until multi-instance support is implemented.
+	if intVal(req, "replicas", 1) > 1 {
+		writeError(w, http.StatusBadRequest, "multi-replica deployments are not yet supported; use replicas=1")
+		return
+	}
+
 	artifactID := strVal(req, "model_artifact_id", "")
 	nodeBackendRuntimeID := strVal(req, "node_backend_runtime_id", "")
 	if nodeBackendRuntimeID == "" {

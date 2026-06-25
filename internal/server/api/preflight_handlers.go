@@ -53,13 +53,25 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "node_backend_runtime_id not found")
 		return
 	}
-	if nbrStatus != "ready" {
+	// R-003: Use same deployability check as dry-run/start. Accepts ready + ready_with_warnings.
+	if !isNBRDeployable(nbrStatus) {
+		reason := nbrDisabledReason(nbrStatus, "")
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"can_run": false, "candidate_nodes": []interface{}{},
-			"errors":   []string{fmt.Sprintf("node backend runtime is not ready (status=%s)", nbrStatus)},
-			"warnings": []string{},
+			"can_run":           false,
+			"candidate_nodes":   []interface{}{},
+			"errors":            []map[string]interface{}{{"code": "nbr_not_deployable", "message": fmt.Sprintf("NBR status=%s: %s", nbrStatus, reason), "field": "node_backend_runtime_id", "severity": "error"}},
+			"warnings":          []map[string]interface{}{},
+			"resolved_run_plan": nil,
 		})
 		return
+	}
+	// Collect NBR warnings for ready_with_warnings case.
+	var preflightWarnings []map[string]interface{}
+	if nbrStatus == "ready_with_warnings" {
+		preflightWarnings = append(preflightWarnings, map[string]interface{}{
+			"code": "nbr_ready_with_warnings", "message": "NBR is ready with warnings — deployment may succeed but has non-blocking issues",
+			"field": "node_backend_runtime_id", "severity": "warning",
+		})
 	}
 	if req.NodeID != "" && req.NodeID != nbrNodeID {
 		writeError(w, http.StatusBadRequest, "node_id does not match node_backend_runtime_id node")
@@ -68,9 +80,16 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 	req.NodeID = nbrNodeID
 
 	tid := tenantID(r)
-	errors := []string{}
-	warnings := []string{}
-	var candidateNodes []map[string]interface{}
+	errors := []map[string]interface{}{}
+	warnings := preflightWarnings
+
+	// R-012: Reject replicas > 1 until supported.
+	if _, ok := rawBody["replicas"]; ok {
+		n := intVal(rawBody, "replicas", 1)
+		if n > 1 {
+			errors = append(errors, errEntry("replicas_unsupported", "multi-replica deployments are not yet supported", "replicas", "error"))
+		}
+	}
 
 	// Verify the NBR's node has a valid ModelLocation for the given artifact.
 	var mlID string
@@ -81,10 +100,11 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 		req.ModelArtifactID, req.NodeID).Scan(&mlID)
 	if mlID == "" {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"can_run":         false,
-			"candidate_nodes": []interface{}{},
-			"errors":          []string{"no model location found on the NBR's node for this model artifact"},
-			"warnings":        warnings,
+			"can_run":           false,
+			"candidate_nodes":   []interface{}{},
+			"errors":            []map[string]interface{}{{"code": "model_location_missing", "message": "no model location found on the NBR's node for this model artifact", "field": "model_artifact_id", "severity": "error"}},
+			"warnings":          warnings,
+			"resolved_run_plan": nil,
 		})
 		return
 	}
@@ -95,28 +115,35 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 		h.DB.QueryRow("SELECT tenant_id FROM nodes WHERE id = ?", req.NodeID).Scan(&nodeTid)
 		if nodeTid != tid && nodeTid != "" {
 			writeJSON(w, http.StatusOK, map[string]interface{}{
-				"can_run":         false,
-				"candidate_nodes": []interface{}{},
-				"errors":          []string{"tenant does not have access to the NBR's node"},
-				"warnings":        warnings,
+				"can_run":           false,
+				"candidate_nodes":   []interface{}{},
+				"errors":            []map[string]interface{}{{"code": "tenant_mismatch", "message": "tenant does not have access to the NBR's node", "field": "node_id", "severity": "error"}},
+				"warnings":          warnings,
+				"resolved_run_plan": nil,
 			})
 			return
 		}
 	}
 
-	info := map[string]interface{}{"node_id": req.NodeID, "status": "ready"}
+	info := map[string]interface{}{"node_id": req.NodeID, "status": nbrStatus}
 	var gpuCount int
 	h.DB.QueryRow("SELECT COUNT(*) FROM gpu_devices WHERE node_id = ? AND status = 'available'", req.NodeID).Scan(&gpuCount)
 	if gpuCount == 0 {
-		info["warnings"] = []string{"no available GPU"}
+		warnings = append(warnings, map[string]interface{}{"code": "no_available_gpu", "message": "no available GPU found on node", "field": "node_id", "severity": "warning"})
 	}
-	candidateNodes = append(candidateNodes, info)
+	candidateNodes := []map[string]interface{}{info}
 
 	canRun := len(errors) == 0
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"can_run":         canRun,
-		"candidate_nodes": candidateNodes,
-		"errors":          errors,
-		"warnings":        warnings,
+		"can_run":           canRun,
+		"candidate_nodes":   candidateNodes,
+		"errors":            errors,
+		"warnings":          warnings,
+		"resolved_run_plan": nil,
 	})
+}
+
+// errEntry creates a structured error entry for preflight responses.
+func errEntry(code, message, field, severity string) map[string]interface{} {
+	return map[string]interface{}{"code": code, "message": message, "field": field, "severity": severity}
 }
