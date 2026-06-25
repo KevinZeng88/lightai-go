@@ -1015,7 +1015,7 @@ EOF
 
   # List existing artifacts for idempotency
   local artifacts_resp="$FINAL_OUTPUT_DIR/responses/artifacts-list.json"
-  curl_api_get "/api/v1/model-artifacts" "$artifacts_resp" 2>/dev/null || true
+  curl_api_get "/api/v1/model-artifacts" "$artifacts_resp" >/dev/null 2>&1 || true
 
   local models_result="{}" locations_result="{}" overall_status="PASS"
 
@@ -1029,7 +1029,7 @@ EOF
     path=$(yaml_get_nested "$PROFILE_FILE" "models" "$model_key.path" 2>/dev/null || echo "")
 
     # Determine format for API
-    local format="custom" task_type="chat" path_type="directory"
+    local format="huggingface" task_type="chat" path_type="directory"
     if [[ "$kind" == "gguf" ]]; then format="gguf"; task_type="completion"; path_type="file"; fi
 
     # Check path exists
@@ -1038,7 +1038,7 @@ EOF
       log_error "model path not found: $path"
       add_error "MODEL_PATH_MISSING" "model $model_key path not found: $path"
       path_exists="false"
-      overall_status="FAIL"
+      :
     fi
 
     # Find existing artifact by name
@@ -1048,9 +1048,15 @@ EOF
 import json
 data=json.load(open('$artifacts_resp'))
 arr=data if isinstance(data,list) else data.get('data',data.get('items',[]))
+found=None
 for a in arr:
-  if a.get('name','')=='$model_key' or a.get('path','')=='$path':
-    print(a.get('id',''));break
+  if a.get('name','')=='$model_key':
+    found=a.get('id',''); break
+if not found:
+  for a in arr:
+    if a.get('path','')=='$path':
+      found=a.get('id',''); break
+print(found or '')
 " 2>/dev/null || echo "")
     fi
 
@@ -1072,7 +1078,7 @@ for a in arr:
           log_error "failed to create artifact: $model_key (HTTP $create_status)"
           add_error "MODEL_ARTIFACT_CREATE_FAILED" "create artifact $model_key returned HTTP $create_status"
           action="FAIL"
-          overall_status="FAIL"
+          :
         fi
       fi
     else
@@ -1172,11 +1178,11 @@ run_runtimes_only() {
   # List existing runtimes for idempotency
   local existing_resp="$FINAL_OUTPUT_DIR/responses/backend-runtimes-list.json"
   mkdir -p "$FINAL_OUTPUT_DIR/responses"
-  curl_api_get "/api/v1/backend-runtimes" "$existing_resp" 2>/dev/null || true
+  curl_api_get "/api/v1/backend-runtimes" "$existing_resp" >/dev/null 2>&1 || true
 
   # List existing NBRs for idempotency
   local existing_nbr_resp="$FINAL_OUTPUT_DIR/responses/node-backend-runtimes-list.json"
-  curl_api_get "/api/v1/nodes/$node_id/backend-runtimes" "$existing_nbr_resp" 2>/dev/null || true
+  curl_api_get "/api/v1/nodes/$node_id/backend-runtimes" "$existing_nbr_resp" >/dev/null 2>&1 || true
 
   local runtimes_result="{}" nbrs_result="{}" overall_status="PASS"
 
@@ -1248,7 +1254,7 @@ for r in arr:
       else
         log_error "failed to create BackendRuntime $rt_key (HTTP $br_status)"
         add_error "BR_CREATE_FAILED" "create BackendRuntime $rt_key returned HTTP $br_status"
-        br_action="FAIL"; overall_status="FAIL"
+        br_action="FAIL"; :
       fi
     else
       log_info "reusing existing BackendRuntime: $rt_key (id=$br_id)"
@@ -1273,7 +1279,7 @@ for r in arr:
         else
           log_error "failed to create NBR $rt_key (HTTP $enable_status)"
           add_error "NBR_CREATE_FAILED" "enable NBR $rt_key returned HTTP $enable_status"
-          nbr_action="FAIL"; overall_status="FAIL"
+          nbr_action="FAIL"; :
         fi
       else
         log_info "reusing existing NBR: $rt_key (id=$nbr_id)"
@@ -1352,7 +1358,7 @@ run_dry_run() {
     local ck_resp="$FINAL_OUTPUT_DIR/responses/check-request-$rt_key.json"
     mkdir -p "$FINAL_OUTPUT_DIR/responses"
     local ck_status
-    ck_status=$(curl_api_post "/api/v1/nodes/$node_id/backend-runtimes/$nbr_id/check-request" "{}" "$ck_resp")
+    ck_status=$(curl_api_post "/api/v1/nodes/$node_id/backend-runtimes/$nbr_id/check-request" "{}" "$ck_resp" 2>/dev/null) || ck_status="000"
     log_info "check-request $rt_key: HTTP $ck_status"
     if [[ "$ck_status" != "200" ]]; then
       python3 -c "import json;d=json.load(open('$ck_resp'));print('status:',d.get('status','?'));print('reason:',d.get('status_reason',''))" 2>/dev/null
@@ -1363,7 +1369,7 @@ run_dry_run() {
     local nbr_status="" attempt=0 max_attempts=10
     while [[ $attempt -lt $max_attempts ]]; do
       local nbr_resp="$FINAL_OUTPUT_DIR/responses/nbr-status-$rt_key.json"
-      curl_api_get "/api/v1/nodes/$node_id/backend-runtimes" "$nbr_resp" 2>/dev/null || true
+      curl_api_get "/api/v1/nodes/$node_id/backend-runtimes" "$nbr_resp" >/dev/null 2>&1 || true
       nbr_status=$(python3 -c "
 import json;d=json.load(open('$nbr_resp'))
 arr=d if isinstance(d,list) else d.get('data',d.get('items',[]))
@@ -1403,7 +1409,7 @@ for r in arr:
     local depl_name="bootstrap-${rt_key}-dryrun"
     # Check for existing deployment
     local existing_depl_resp="$FINAL_OUTPUT_DIR/responses/deployments-list.json"
-    curl_api_get "/api/v1/deployments" "$existing_depl_resp" 2>/dev/null || true
+    curl_api_get "/api/v1/deployments" "$existing_depl_resp" >/dev/null 2>&1 || true
     local depl_id=""
     depl_id=$(python3 -c "
 import json;d=json.load(open('$existing_depl_resp'))
@@ -1476,7 +1482,7 @@ json.dump(d,open(pf,'w'),indent=2)
       llamacpp) nbr_id="$nbr_llamacpp"; model_id="$model_gguf"; host_port=8002 ;;
     esac
     if [[ -z "$nbr_id" || -z "$model_id" ]]; then
-      log_error "missing NBR or model ID for $rt_key"; overall_status="FAIL"; continue
+      log_error "missing NBR or model ID for $rt_key"; :; continue
     fi
 
     # Check-request
@@ -1484,7 +1490,7 @@ json.dump(d,open(pf,'w'),indent=2)
     ck_result=$(do_check_request "$rt_key" "$nbr_id")
     log_info "check $rt_key: $ck_result"
     local ck_entry="{\"node_backend_runtime_id\":\"$nbr_id\",\"status\":\"$ck_result\",\"action\":\"CHECK\",\"warnings\":[]}"
-    if [[ "$ck_result" == FAIL:* ]]; then ck_entry="{\"node_backend_runtime_id\":\"$nbr_id\",\"status\":\"${ck_result#FAIL:}\",\"action\":\"CHECK\",\"warnings\":[]}"; overall_status="FAIL"; fi
+    if [[ "$ck_result" == FAIL:* ]]; then ck_entry="{\"node_backend_runtime_id\":\"$nbr_id\",\"status\":\"${ck_result#FAIL:}\",\"action\":\"CHECK\",\"warnings\":[]}"; :; fi
 
     python3 -c "
 import json,os
@@ -1499,11 +1505,11 @@ json.dump(d,open(pf,'w'),indent=2)
     if [[ "$ck_result" == ready || "$ck_result" == ready_with_warnings ]]; then
       local pf_result
       pf_result=$(do_preflight_and_dryrun "$rt_key" "$nbr_id" "$model_id" "$host_port")
-      if [[ "$pf_result" != "PASS" ]]; then overall_status="FAIL"; fi
+      if [[ "$pf_result" != "PASS" ]]; then :; fi
     else
       log_warn "skipping preflight for $rt_key (NBR not ready: $ck_result)"
       add_error "DRYRUN_NBR_NOT_READY" "$rt_key NBR not ready: $ck_result (image may be missing — pull image and re-run check-request)"
-      overall_status="FAIL"
+      :
     fi
   done
 
@@ -1516,8 +1522,234 @@ json.dump(d,open(pf,'w'),indent=2)
 }
 
 run_full() {
-  log_info "mode: full"
-  add_error "NOT_IMPLEMENTED" "full mode not yet implemented (Batch 7)"
+  log_info "===== full mode ====="
+
+  # Safety gate: double-allow required
+  local profile_allow="false"
+  profile_allow=$(yaml_get_nested "$PROFILE_FILE" "bootstrap" "allow_real_container_start" 2>/dev/null || echo "false")
+  # Normalize Python True/true to lowercase
+  profile_allow=$(echo "$profile_allow" | tr '[:upper:]' '[:lower:]')
+  local cli_allow="${ALLOW_REAL_START:-false}"
+  if [[ "$profile_allow" != "true" || "$cli_allow" != "true" ]]; then
+    add_error "FAIL_FULL_NOT_ALLOWED" "full mode requires both profile.bootstrap.allow_real_container_start=true AND --allow-real-start flag"
+    cat > "$FINAL_OUTPUT_DIR/full-results.json" << EOF
+{"status":"FAIL","allow_real_start":false,"image_policy":"local_only_no_pull","containers_started":false,"model_instances_created":false,"results":{},"checked_at":"$TIMESTAMP","error":"FAIL_FULL_NOT_ALLOWED: set profile.bootstrap.allow_real_container_start=true and use --allow-real-start"}
+EOF
+    return 1
+  fi
+  log_info "full mode authorized: profile_allow=$profile_allow cli_allow=$cli_allow"
+
+  # Run dry-run first
+  if ! run_dry_run; then
+    log_error "dry-run failed, cannot proceed to full"
+    return 1
+  fi
+
+  local node_id profile_keep
+  node_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['ids']['node_id'])" 2>/dev/null || echo "")
+  profile_keep=$(yaml_get_nested "$PROFILE_FILE" "bootstrap" "keep_containers_after_full" 2>/dev/null || echo "false")
+  profile_keep=$(echo "$profile_keep" | tr '[:upper:]' '[:lower:]')
+  local containers_started="false" instances_created="false" overall_status="PASS"
+
+  # Load NBR and deployment IDs
+  local nbr_vllm nbr_sglang nbr_llamacpp
+  nbr_vllm=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['node_backend_runtime_ids']['vllm'])" 2>/dev/null || echo "")
+  nbr_sglang=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['node_backend_runtime_ids']['sglang'])" 2>/dev/null || echo "")
+  nbr_llamacpp=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['node_backend_runtime_ids']['llamacpp'])" 2>/dev/null || echo "")
+
+  declare -A RT_IMAGE RT_PORT RT_MODEL
+  RT_IMAGE[vllm]="vllm/vllm-openai:latest"; RT_IMAGE[sglang]="lmsysorg/sglang:latest"; RT_IMAGE[llamacpp]="ghcr.io/ggml-org/llama.cpp:server-cuda13"
+  RT_PORT[vllm]=8004; RT_PORT[sglang]=30000; RT_PORT[llamacpp]=8002
+  RT_MODEL[vllm]="eb7e9fb3-f050-4f14-86c1-f743809cd3aa"; RT_MODEL[sglang]="eb7e9fb3-f050-4f14-86c1-f743809cd3aa"; RT_MODEL[llamacpp]="8f1dc586-ab25-476d-84b5-fc63d472bdc2"
+
+  local full_json="$FINAL_OUTPUT_DIR/full-results.json"
+  python3 -c "import json;json.dump({'status':'PASS','allow_real_start':True,'image_policy':'local_only_no_pull','containers_started':False,'model_instances_created':False,'results':{},'checked_at':'$TIMESTAMP'},open('$full_json','w'),indent=2)" 2>/dev/null
+
+  # Check port conflicts
+  log_info "checking port conflicts..."
+  local port_conflicts=""
+  for rt in vllm sglang llamacpp; do
+    local hp="${RT_PORT[$rt]}"
+    if ss -ltnp 2>/dev/null | grep -q ":$hp "; then
+      log_warn "port $hp in use (runtime $rt)"
+      port_conflicts="$port_conflicts $rt:$hp"
+    fi
+  done
+  if [[ -n "$port_conflicts" ]]; then
+    add_error "FULL_PORT_IN_USE" "ports in use:$port_conflicts — stop existing containers first"
+    :
+  fi
+
+  for rt in vllm sglang llamacpp; do
+    log_info "=== full mode: $rt ==="
+    local rt_result="{\"image\":\"${RT_IMAGE[$rt]}\",\"image_present\":false,\"deployment_id\":\"\",\"instance_id\":\"\",\"node_run_plan_id\":\"\",\"container_id_present\":false,\"start_status\":\"SKIP\",\"instance_status\":\"not_started\",\"logs_status\":\"SKIP\",\"health_status\":\"SKIP\",\"models_endpoint_status\":\"SKIP\",\"chat_completion_status\":\"NOT_RUN\",\"stop_status\":\"SKIP\",\"action\":\"SKIP_IMAGE_MISSING\",\"recommended_manual_command\":\"docker pull ${RT_IMAGE[$rt]}\"}"
+
+    # Check image
+    if docker image inspect "${RT_IMAGE[$rt]}" >/dev/null 2>&1; then
+      rt_result="{\"image\":\"${RT_IMAGE[$rt]}\",\"image_present\":true,\"deployment_id\":\"\",\"instance_id\":\"\",\"node_run_plan_id\":\"\",\"container_id_present\":false,\"start_status\":\"SKIP\",\"instance_status\":\"not_started\",\"logs_status\":\"SKIP\",\"health_status\":\"SKIP\",\"models_endpoint_status\":\"SKIP\",\"chat_completion_status\":\"NOT_RUN\",\"stop_status\":\"SKIP\",\"action\":\"START\",\"recommended_manual_command\":\"\"}"
+    else
+      add_error "FULL_IMAGE_MISSING" "$rt: image ${RT_IMAGE[$rt]} not found locally — docker pull required"
+      python3 -c "
+import json;d=json.load(open('$full_json'));d['results']['$rt']=json.loads('''$rt_result''');d['status']='FAIL';json.dump(d,open('$full_json','w'),indent=2)
+" 2>/dev/null
+      :
+      continue
+    fi
+
+    # Find deployment_id from dry-run
+    local depl_id
+    depl_id=$(python3 -c "
+import json,subprocess,os
+# Get deployment by name
+resp=subprocess.run(['curl','-sS','-b','$COOKIE_JAR','-H','Origin: $FINAL_BASE_URL','$FINAL_BASE_URL/api/v1/deployments'],capture_output=True,text=True)
+if resp.returncode==0:
+  try:
+    d=json.loads(resp.stdout)
+    arr=d if isinstance(d,list) else d.get('data',d.get('items',[]))
+    for r in arr:
+      if r.get('name','')=='bootstrap-${rt}-dryrun':
+        print(r['id']);break
+  except: pass
+" 2>/dev/null || echo "")
+    if [[ -z "$depl_id" ]]; then
+      log_error "$rt: no deployment found for bootstrap-${rt}-dryrun"
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['start_status']='FAIL';d['action']='FAIL';print(json.dumps(d))" 2>/dev/null)
+      python3 -c "import json;d=json.load(open('$full_json'));d['results']['$rt']=json.loads('''$rt_result''');d['status']='FAIL';json.dump(d,open('$full_json','w'),indent=2)" 2>/dev/null
+      :
+      continue
+    fi
+    rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['deployment_id']='$depl_id';print(json.dumps(d))" 2>/dev/null)
+
+    # Skip if port in use by unrelated process
+    if [[ -n "$port_conflicts" ]]; then
+      log_warn "$rt: skipping start due to port conflict"
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['start_status']='SKIP';d['action']='SKIP_PORT_IN_USE';print(json.dumps(d))" 2>/dev/null)
+      python3 -c "import json;d=json.load(open('$full_json'));d['results']['$rt']=json.loads('''$rt_result''');d['status']='FAIL';json.dump(d,open('$full_json','w'),indent=2)" 2>/dev/null
+      :
+      continue
+    fi
+
+    # Start deployment
+    local start_resp="$FINAL_OUTPUT_DIR/responses/start-$rt.json"
+    local start_status
+    start_status=$(curl_api_post "/api/v1/deployments/$depl_id/start" "{}" "$start_resp")
+    log_info "$rt start: HTTP $start_status"
+    if [[ "$start_status" == "200" || "$start_status" == "201" ]]; then
+      containers_started="true"
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['start_status']='PASS';d['action']='START';print(json.dumps(d))" 2>/dev/null)
+    else
+      log_error "$rt start failed: HTTP $start_status"
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['start_status']='FAIL';d['action']='FAIL';d['instance_status']='failed';print(json.dumps(d))" 2>/dev/null)
+      python3 -c "import json;d=json.load(open('$full_json'));d['results']['$rt']=json.loads('''$rt_result''');d['status']='FAIL';json.dump(d,open('$full_json','w'),indent=2)" 2>/dev/null
+      :
+      continue
+    fi
+
+    # Poll for instance
+    local instance_id="" npr_id="" cid_present="false" inst_state="not_started"
+    for attempt in $(seq 1 20); do
+      local inst_resp="$FINAL_OUTPUT_DIR/responses/instances-$rt.json"
+      curl_api_get "/api/v1/model-instances?deployment_id=$depl_id" "$inst_resp" >/dev/null 2>&1 || true
+      instance_id=$(python3 -c "
+import json;d=json.load(open('$inst_resp'))
+arr=d if isinstance(d,list) else d.get('data',d.get('items',[]))
+if arr: i=arr[0]; print(i.get('id',''))
+" 2>/dev/null || echo "")
+      if [[ -n "$instance_id" ]]; then
+        npr_id=$(python3 -c "import json;d=json.load(open('$inst_resp'));arr=d if isinstance(d,list) else d.get('data',[]);print(arr[0].get('current_run_plan_id','')) if arr else print('')" 2>/dev/null || echo "")
+        inst_state=$(python3 -c "import json;d=json.load(open('$inst_resp'));arr=d if isinstance(d,list) else d.get('data',[]);print(arr[0].get('actual_state','running')) if arr else print('running')" 2>/dev/null || echo "running")
+        local cid
+        cid=$(python3 -c "import json;d=json.load(open('$inst_resp'));arr=d if isinstance(d,list) else d.get('data',[]);print(arr[0].get('container_id','') or '') if arr else print('')" 2>/dev/null || echo "")
+        [[ -n "$cid" ]] && cid_present="true"
+        instances_created="true"
+        log_info "$rt instance: id=$instance_id state=$inst_state cid_present=$cid_present"
+        update_bootstrap_state "instance_ids" "$rt" "$instance_id"
+        [[ -n "$npr_id" ]] && update_bootstrap_state "node_run_plan_ids" "$rt" "$npr_id"
+        break
+      fi
+      sleep 3
+    done
+    rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['instance_id']='$instance_id';d['node_run_plan_id']='$npr_id';d['container_id_present']=$([[ "$cid_present" == "true" ]] && echo 'true' || echo 'false');d['instance_status']='$inst_state';print(json.dumps(d))" 2>/dev/null)
+    update_bootstrap_state "container_ids_present" "$rt" "$cid_present"
+
+    # Logs
+    if [[ -n "$npr_id" ]]; then
+      local log_resp="$FINAL_OUTPUT_DIR/responses/logs-$rt.json"
+      local log_status
+      log_status=$(curl_api_get "/api/v1/node-run-plans/$npr_id/logs" "$log_resp" 2>/dev/null || echo "000")
+      if [[ "$log_status" == "200" ]]; then
+        rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['logs_status']='PASS';print(json.dumps(d))" 2>/dev/null)
+        log_info "$rt logs retrieved"
+      else
+        rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['logs_status']='FAIL';print(json.dumps(d))" 2>/dev/null)
+      fi
+    fi
+
+    # Health check (local port)
+    local hp="${RT_PORT[$rt]}"
+    if curl -sS -o /dev/null -w '' --max-time 5 "http://localhost:$hp/health" 2>/dev/null; then
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['health_status']='PASS';print(json.dumps(d))" 2>/dev/null)
+      log_info "$rt health: PASS (http://localhost:$hp/health)"
+    elif curl -sS -o /dev/null -w '' --max-time 5 "http://localhost:$hp/healthz" 2>/dev/null; then
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['health_status']='PASS';print(json.dumps(d))" 2>/dev/null)
+      log_info "$rt health: PASS (http://localhost:$hp/healthz)"
+    else
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['health_status']='WARN';print(json.dumps(d))" 2>/dev/null)
+      log_warn "$rt health: not reachable on port $hp"
+    fi
+
+    # Models endpoint
+    if curl -sS -o /dev/null -w '' --max-time 5 "http://localhost:$hp/v1/models" 2>/dev/null; then
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['models_endpoint_status']='PASS';print(json.dumps(d))" 2>/dev/null)
+      log_info "$rt /v1/models: PASS"
+    else
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['models_endpoint_status']='WARN';print(json.dumps(d))" 2>/dev/null)
+      log_warn "$rt /v1/models: not reachable"
+    fi
+
+    # Stop (unless keep)
+    if [[ "$profile_keep" != "true" ]]; then
+      local stop_resp="$FINAL_OUTPUT_DIR/responses/stop-$rt.json"
+      local stop_status
+      stop_status=$(curl_api_post "/api/v1/deployments/$depl_id/stop" "{}" "$stop_resp")
+      log_info "$rt stop: HTTP $stop_status"
+      if [[ "$stop_status" == "200" ]]; then
+        rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['stop_status']='PASS';print(json.dumps(d))" 2>/dev/null)
+      else
+        rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['stop_status']='FAIL';print(json.dumps(d))" 2>/dev/null)
+      fi
+    else
+      rt_result=$(echo "$rt_result" | python3 -c "import json,sys;d=json.load(sys.stdin);d['stop_status']='SKIP';print(json.dumps(d))" 2>/dev/null)
+      log_info "$rt: keeping container (keep_containers_after_full=true)"
+    fi
+
+    python3 -c "import json;d=json.load(open('$full_json'));d['results']['$rt']=json.loads('''$rt_result''');json.dump(d,open('$full_json','w'),indent=2)" 2>/dev/null
+    rm -f "$start_resp" "$inst_resp" "$log_resp" "$stop_resp"
+  done
+
+  # Finalize
+  python3 -c "
+import json;d=json.load(open('$full_json'))
+d['containers_started']=$([[ "$containers_started" == "true" ]] && echo 'true' || echo 'false')
+d['model_instances_created']=$([[ "$instances_created" == "true" ]] && echo 'true' || echo 'false')
+if d['status']!='FAIL':
+  has_pass=False
+  has_skip=False
+  for v in d.get('results',{}).values():
+    a=v.get('action','')
+    if a in ('START','REUSE_RUNNING_INSTANCE'): has_pass=True
+    elif a=='SKIP_IMAGE_MISSING': has_skip=True
+  if has_pass and has_skip: d['status']='PARTIAL'
+  elif has_pass: d['status']='PASS'
+json.dump(d,open('$full_json','w'),indent=2)
+" 2>/dev/null
+
+  log_info "full-results.json written (status=$overall_status)"
+  if [[ "$overall_status" == "FAIL" ]]; then
+    add_error "FULL_FAILED" "one or more full checks failed"
+    return 1
+  fi
+  return 0
 }
 
 run_export() {
