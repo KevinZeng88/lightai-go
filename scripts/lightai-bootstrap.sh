@@ -315,10 +315,386 @@ check_runtime_dir() {
   fi
 }
 
+# ── Auth helpers ─────────────────────────────────────────────────────
+
+COOKIE_JAR="$FINAL_OUTPUT_DIR/.cookie-jar"
+CSRF_FILE="$FINAL_OUTPUT_DIR/.csrf-token"
+AUTH_JSON="$FINAL_OUTPUT_DIR/auth.json"
+
+# Ensure cookie jar starts fresh
+rm -f "$COOKIE_JAR" "$CSRF_FILE"
+touch "$COOKIE_JAR" && chmod 0600 "$COOKIE_JAR"
+
+CURL_OPTS=(-sS -o /dev/null -w '%{http_code}')
+
+curl_server_get() {
+  local path="$1" output_file="${2:-/dev/null}"
+  curl -sS -o "$output_file" -w '%{http_code}' -X GET "$FINAL_BASE_URL$path" \
+    -H "Origin: $FINAL_BASE_URL" -H "Content-Type: application/json" \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" 2>/dev/null || echo "000"
+}
+
+curl_server_post() {
+  local path="$1" body="$2" output_file="${3:-/dev/null}"
+  local csrf_header=""
+  if [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]]; then
+    csrf_header="-H X-CSRF-Token: $(cat "$CSRF_FILE")"
+  fi
+  curl -sS -o "$output_file" -w '%{http_code}' -X POST "$FINAL_BASE_URL$path" \
+    -H "Origin: $FINAL_BASE_URL" -H "Content-Type: application/json" \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+    $csrf_header -d "$body" 2>/dev/null || echo "000"
+}
+
+read_credentials_file_password() {
+  local path="$1"
+  if [[ ! -f "$path" ]]; then echo ""; return; fi
+  awk '/^Password:/ {print $2; exit}' "$path" 2>/dev/null || echo ""
+}
+
+find_credentials_file() {
+  # Try multiple locations relative to runtime_dir
+  local candidates=(
+    "$FINAL_RUNTIME_DIR/runtime/initial-credentials.txt"
+    "$FINAL_RUNTIME_DIR/initial-credentials.txt"
+    "$FINAL_RUNTIME_DIR/data/initial-credentials.txt"
+  )
+  for c in "${candidates[@]}"; do
+    if [[ -f "$c" ]]; then echo "$c"; return 0; fi
+  done
+  return 1
+}
+
+resolve_final_password() {
+  # 1. --admin-password
+  if [[ -n "${ADMIN_PASSWORD:-}" ]]; then
+    echo "cli:--admin-password"
+    return 0
+  fi
+  # 2. LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD
+  if [[ -n "${!FINAL_ADMIN_PASSWORD_ENV:-}" ]]; then
+    echo "env:${FINAL_ADMIN_PASSWORD_ENV}"
+    return 0
+  fi
+  # 3. profile.auth.final_password_env
+  local indirect_env
+  indirect_env="$(yaml_get "$PROFILE_FILE" "auth" "final_password_env" 2>/dev/null)" || true
+  if [[ -n "${indirect_env:-}" && -n "${!indirect_env:-}" ]]; then
+    echo "env:${indirect_env}"
+    return 0
+  fi
+  # 4. --admin-password-file
+  if [[ -n "${ADMIN_PASSWORD_FILE:-}" && -f "$ADMIN_PASSWORD_FILE" ]]; then
+    echo "file:${ADMIN_PASSWORD_FILE}"
+    return 0
+  fi
+  # 5. profile.auth.final_password_file
+  local pf_file
+  pf_file="$(yaml_get "$PROFILE_FILE" "auth" "final_password_file" 2>/dev/null)" || true
+  if [[ -n "${pf_file:-}" && -f "$pf_file" ]]; then
+    echo "file:${pf_file}"
+    return 0
+  fi
+  echo "none"
+  return 1
+}
+
+get_final_password_value() {
+  # Returns the actual password value from the resolved source
+  if [[ -n "${ADMIN_PASSWORD:-}" ]]; then echo "$ADMIN_PASSWORD"; return 0; fi
+  if [[ -n "${!FINAL_ADMIN_PASSWORD_ENV:-}" ]]; then echo "${!FINAL_ADMIN_PASSWORD_ENV}"; return 0; fi
+  local indirect_env
+  indirect_env="$(yaml_get "$PROFILE_FILE" "auth" "final_password_env" 2>/dev/null)" || true
+  if [[ -n "${indirect_env:-}" && -n "${!indirect_env:-}" ]]; then echo "${!indirect_env}"; return 0; fi
+  if [[ -n "${ADMIN_PASSWORD_FILE:-}" && -f "$ADMIN_PASSWORD_FILE" ]]; then head -1 "$ADMIN_PASSWORD_FILE"; return 0; fi
+  local pf_file
+  pf_file="$(yaml_get "$PROFILE_FILE" "auth" "final_password_file" 2>/dev/null)" || true
+  if [[ -n "${pf_file:-}" && -f "$pf_file" ]]; then head -1 "$pf_file"; return 0; fi
+  echo ""
+  return 1
+}
+
+resolve_initial_password() {
+  # 1. --initial-password
+  if [[ -n "${INITIAL_PASSWORD:-}" ]]; then
+    echo "cli:--initial-password"
+    return 0
+  fi
+  # 2. LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD
+  if [[ -n "${!FINAL_INITIAL_PASSWORD_ENV:-}" ]]; then
+    echo "env:${FINAL_INITIAL_PASSWORD_ENV}"
+    return 0
+  fi
+  # 3. profile.auth.initial_password_env
+  local indirect_env
+  indirect_env="$(yaml_get "$PROFILE_FILE" "auth" "initial_password_env" 2>/dev/null)" || true
+  if [[ -n "${indirect_env:-}" && -n "${!indirect_env:-}" ]]; then
+    echo "env:${indirect_env}"
+    return 0
+  fi
+  # 4. --initial-password-file
+  if [[ -n "${INITIAL_PASSWORD_FILE:-}" && -f "$INITIAL_PASSWORD_FILE" ]]; then
+    echo "file:${INITIAL_PASSWORD_FILE}"
+    return 0
+  fi
+  # 5. profile.auth.initial_password_file
+  local pf_file
+  pf_file="$(yaml_get "$PROFILE_FILE" "auth" "initial_password_file" 2>/dev/null)" || true
+  if [[ -n "${pf_file:-}" && -f "$pf_file" ]]; then
+    echo "file:${pf_file}"
+    return 0
+  fi
+  # 6. runtime credentials file
+  local cred_file
+  if cred_file=$(find_credentials_file 2>/dev/null) && [[ -n "$cred_file" ]]; then
+    echo "runtime:${cred_file}"
+    return 0
+  fi
+  # 7. profile.auth.initial_password
+  local pf_pw
+  pf_pw="$(yaml_get "$PROFILE_FILE" "auth" "initial_password" 2>/dev/null)" || true
+  if [[ -n "${pf_pw:-}" && "${pf_pw:-}" != '""' ]]; then
+    echo "profile:initial_password"
+    return 0
+  fi
+  echo "none"
+  return 1
+}
+
+get_initial_password_value() {
+  if [[ -n "${INITIAL_PASSWORD:-}" ]]; then echo "$INITIAL_PASSWORD"; return 0; fi
+  if [[ -n "${!FINAL_INITIAL_PASSWORD_ENV:-}" ]]; then echo "${!FINAL_INITIAL_PASSWORD_ENV}"; return 0; fi
+  local indirect_env
+  indirect_env="$(yaml_get "$PROFILE_FILE" "auth" "initial_password_env" 2>/dev/null)" || true
+  if [[ -n "${indirect_env:-}" && -n "${!indirect_env:-}" ]]; then echo "${!indirect_env}"; return 0; fi
+  if [[ -n "${INITIAL_PASSWORD_FILE:-}" && -f "$INITIAL_PASSWORD_FILE" ]]; then head -1 "$INITIAL_PASSWORD_FILE"; return 0; fi
+  local pf_file
+  pf_file="$(yaml_get "$PROFILE_FILE" "auth" "initial_password_file" 2>/dev/null)" || true
+  if [[ -n "${pf_file:-}" && -f "$pf_file" ]]; then head -1 "$pf_file"; return 0; fi
+  local cred_file
+  if cred_file=$(find_credentials_file 2>/dev/null) && [[ -n "$cred_file" ]]; then
+    read_credentials_file_password "$cred_file"
+    return 0
+  fi
+  local pf_pw
+  pf_pw="$(yaml_get "$PROFILE_FILE" "auth" "initial_password" 2>/dev/null)" || true
+  if [[ -n "${pf_pw:-}" && "${pf_pw:-}" != '""' ]]; then echo "$pf_pw"; return 0; fi
+  echo ""
+  return 1
+}
+
+write_auth_json() {
+  local status="$1" method="$2" server_ok="$3" agent_ok="$4"
+  local csrf_present="false" cookie_present="false"
+  [[ -f "$CSRF_FILE" && -s "$CSRF_FILE" ]] && csrf_present="true"
+  [[ -f "$COOKIE_JAR" && -s "$COOKIE_JAR" ]] && cookie_present="true"
+  cat > "$AUTH_JSON" << AUTH_EOF
+{
+  "login_status": "$status",
+  "username": "$PROFILE_AUTH_USERNAME",
+  "auth_method": "$method",
+  "server_reachable": $server_ok,
+  "agent_reachable": $agent_ok,
+  "token_present": false,
+  "cookie_present": $cookie_present,
+  "csrf_present": $csrf_present,
+  "password_changed": $([[ "$method" == *"changed"* ]] && echo "true" || echo "false"),
+  "must_change_password_initial": $([[ "$status" == "PASS" && "$method" == "initial_password_without_change_required" ]] && echo "false" || echo "true"),
+  "must_change_password_final": false,
+  "initial_password_source": "$INITIAL_PW_SOURCE",
+  "final_password_source": "$FINAL_PW_SOURCE",
+  "runtime_initial_credentials_file": "${RUNTIME_CRED_FILE:-}",
+  "timestamp": "$TIMESTAMP"
+}
+AUTH_EOF
+  log_info "auth.json written to $AUTH_JSON"
+}
+
 # ── Mode dispatch ────────────────────────────────────────────────────
+
 run_auth_only() {
-  log_info "mode: auth-only"
-  add_error "NOT_IMPLEMENTED" "auth-only mode not yet implemented (Batch 3)"
+  log_info "===== auth-only mode ====="
+
+  local server_ok="false" agent_ok="false"
+  local FINAL_PW_SOURCE="none" INITIAL_PW_SOURCE="none" RUNTIME_CRED_FILE=""
+
+  # Step 1: Check server health
+  log_info "checking server: $FINAL_BASE_URL"
+  local server_status
+  server_status=$(curl_server_get "/healthz" 2>/dev/null || echo "000")
+  if [[ "$server_status" == "200" ]]; then
+    server_ok="true"
+    log_info "server reachable: $FINAL_BASE_URL (HTTP $server_status)"
+  else
+    log_error "server unreachable: $FINAL_BASE_URL (HTTP $server_status)"
+    write_auth_json "FAIL" "none" "false" "false"
+    add_error "SERVER_UNREACHABLE" "server $FINAL_BASE_URL returned HTTP $server_status"
+    return 1
+  fi
+
+  # Step 2: Check agent health
+  log_info "checking agent: $FINAL_AGENT_URL"
+  local agent_status
+  agent_status=$(curl -sS -o /dev/null -w '%{http_code}' "$FINAL_AGENT_URL/healthz" 2>/dev/null || echo "000")
+  if [[ "$agent_status" == "200" ]]; then
+    agent_ok="true"
+    log_info "agent reachable: $FINAL_AGENT_URL (HTTP $agent_status)"
+  else
+    log_warn "agent unreachable: $FINAL_AGENT_URL (HTTP $agent_status)"
+    # Non-fatal: agent may not be running, continue with auth
+  fi
+
+  # Step 3: Runtime-dir check already done in main
+
+  # Step 4 & 5: Resolve passwords
+  FINAL_PW_SOURCE=$(resolve_final_password) || true
+  log_info "final password source: $FINAL_PW_SOURCE"
+
+  if [[ "$FINAL_PW_SOURCE" == "none" ]]; then
+    log_info "final password not set, will try initial password"
+  fi
+
+  # Step 6: Try login with final/admin password first
+  local login_status="" login_resp="" login_body=""
+  local auth_method="none"
+  INITIAL_PW_SOURCE="none"
+  RUNTIME_CRED_FILE=""
+
+  if [[ "$FINAL_PW_SOURCE" != "none" ]]; then
+    local final_pw
+    final_pw=$(get_final_password_value)
+    login_body="{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$final_pw\"}"
+    local resp_file="$FINAL_OUTPUT_DIR/responses/login-final.json"
+    mkdir -p "$FINAL_OUTPUT_DIR/responses"
+    login_status=$(curl_server_post "/api/v1/auth/login" "$login_body" "$resp_file")
+    log_info "login attempt with final password: HTTP $login_status"
+
+    if [[ "$login_status" == "200" ]]; then
+      local must_change
+      must_change=$(python3 -c "import json; d=json.load(open('$resp_file')); print(d.get('must_change_password','false'))" 2>/dev/null || echo "true")
+      if [[ "$must_change" == "false" ]]; then
+        auth_method="final_password"
+        log_info "login succeeded with final password (no change required)"
+      else
+        # Final password works but still requires change — edge case
+        log_warn "final password login succeeded but must_change_password=true"
+        auth_method="final_password"
+      fi
+    else
+      log_info "final password login failed (HTTP $login_status), falling back to initial password"
+    fi
+  fi
+
+  # Step 7: Fall back to initial password
+  if [[ "$auth_method" == "none" ]]; then
+    INITIAL_PW_SOURCE=$(resolve_initial_password) || true
+    log_info "initial password source: $INITIAL_PW_SOURCE"
+
+    if [[ "$INITIAL_PW_SOURCE" == "none" ]]; then
+      log_error "no initial password source available"
+      write_auth_json "FAIL" "none" "$server_ok" "$agent_ok"
+      add_error "AUTH_NO_PASSWORD" "no initial or final password available (set LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD or LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD)"
+      return 1
+    fi
+
+    # Record credentials file path if used
+    if [[ "$INITIAL_PW_SOURCE" == runtime:* ]]; then
+      RUNTIME_CRED_FILE="${INITIAL_PW_SOURCE#runtime:}"
+    fi
+
+    local init_pw
+    init_pw=$(get_initial_password_value)
+    login_body="{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$init_pw\"}"
+    local resp_file="$FINAL_OUTPUT_DIR/responses/login-initial.json"
+    mkdir -p "$FINAL_OUTPUT_DIR/responses"
+    login_status=$(curl_server_post "/api/v1/auth/login" "$login_body" "$resp_file")
+    log_info "login attempt with initial password: HTTP $login_status"
+
+    if [[ "$login_status" != "200" ]]; then
+      log_error "initial password login failed (HTTP $login_status)"
+      write_auth_json "FAIL" "none" "$server_ok" "$agent_ok"
+      add_error "AUTH_LOGIN_FAILED" "login failed with both final and initial password (HTTP $login_status)"
+      return 1
+    fi
+
+    # Extract CSRF token from successful login
+    local csrf_val
+    csrf_val=$(python3 -c "import json; d=json.load(open('$resp_file')); print(d.get('csrf_token',''))" 2>/dev/null || echo "")
+    if [[ -n "$csrf_val" ]]; then
+      echo "$csrf_val" > "$CSRF_FILE"
+      chmod 0600 "$CSRF_FILE"
+      log_info "CSRF token saved"
+    else
+      log_warn "login response missing csrf_token"
+    fi
+
+    local must_change
+    must_change=$(python3 -c "import json; d=json.load(open('$resp_file')); print(d.get('must_change_password','false'))" 2>/dev/null || echo "true")
+
+    if [[ "$must_change" == "true" ]]; then
+      # Step 8: Change password required
+      log_info "must_change_password=true, attempting password change"
+
+      if [[ "$FINAL_PW_SOURCE" == "none" ]]; then
+        log_error "must_change_password=true but no final/admin password set — cannot change"
+        write_auth_json "FAIL" "initial_password" "$server_ok" "$agent_ok"
+        add_error "FAIL_MISSING_FINAL_PASSWORD" "system requires password change but LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD is not set"
+        return 1
+      fi
+
+      local final_pw
+      final_pw=$(get_final_password_value)
+      local change_body="{\"current_password\":\"$init_pw\",\"new_password\":\"$final_pw\"}"
+      local change_resp="$FINAL_OUTPUT_DIR/responses/change-password.json"
+      local change_status
+      change_status=$(curl_server_post "/api/v1/auth/change-password" "$change_body" "$change_resp")
+      log_info "change-password: HTTP $change_status"
+
+      if [[ "$change_status" == "200" ]]; then
+        log_info "password changed successfully"
+        auth_method="initial_password_changed"
+      else
+        log_error "change-password failed (HTTP $change_status)"
+        write_auth_json "FAIL" "initial_password" "$server_ok" "$agent_ok"
+        add_error "AUTH_CHANGE_PASSWORD_FAILED" "change-password returned HTTP $change_status"
+        return 1
+      fi
+
+      # Step 9: Re-login with final password
+      rm -f "$COOKIE_JAR" "$CSRF_FILE"
+      touch "$COOKIE_JAR" && chmod 0600 "$COOKIE_JAR"
+      login_body="{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$final_pw\"}"
+      local relogin_resp="$FINAL_OUTPUT_DIR/responses/login-after-change.json"
+      login_status=$(curl_server_post "/api/v1/auth/login" "$login_body" "$relogin_resp")
+      log_info "re-login with final password: HTTP $login_status"
+
+      if [[ "$login_status" == "200" ]]; then
+        local csrf_val2
+        csrf_val2=$(python3 -c "import json; d=json.load(open('$relogin_resp')); print(d.get('csrf_token',''))" 2>/dev/null || echo "")
+        if [[ -n "$csrf_val2" ]]; then
+          echo "$csrf_val2" > "$CSRF_FILE"
+          chmod 0600 "$CSRF_FILE"
+        fi
+        auth_method="initial_password_changed"
+        log_info "re-login with final password succeeded"
+      else
+        log_error "re-login after password change failed (HTTP $login_status)"
+        write_auth_json "FAIL" "initial_password_changed" "$server_ok" "$agent_ok"
+        add_error "AUTH_RELOGIN_FAILED" "re-login after password change returned HTTP $login_status"
+        return 1
+      fi
+    else
+      # No change required
+      auth_method="initial_password_without_change_required"
+      log_info "login succeeded with initial password (no change required)"
+    fi
+  fi
+
+  # Step 11: Write auth.json
+  log_info "auth completed: method=$auth_method"
+  write_auth_json "PASS" "$auth_method" "$server_ok" "$agent_ok"
+  log_info "cookie jar: $COOKIE_JAR, csrf: $CSRF_FILE"
+  return 0
 }
 
 run_catalog_only() {
