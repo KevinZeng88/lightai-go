@@ -36,16 +36,30 @@
 1. cfg.Password (hardcoded, usually "")
 2. env: LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD  ← canonical
 3. env: LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD    ← legacy backward compat (with WARN log)
-4. auto-generate random 32-char hex
+4. existing runtime/initial-credentials.txt  ← reuse, don't regenerate
+5. auto-generate random 32-char hex + write to credentials file
 ```
 
-If auto-generated, server writes to `runtime/initial-credentials.txt` (0600, not overwritten on subsequent starts).
+Implementation: `internal/server/auth/bootstrap.go` `InitBootstrap()`.
+Steps 1-3 are env-var checks. Step 4 calls `readPasswordFromCredentialsFile()`.
+Step 5 only triggers if all previous steps yield no password.
+Credentials file is created with 0600 and NOT overwritten on subsequent restarts.
 
 ---
 
 ## 4. Bootstrap Password Resolution Priority
 
-### Initial Password (for first login on fresh server)
+### Server-Side Password Resolution (at InitBootstrap)
+
+```
+1. cfg.Password (hardcoded, usually empty)
+2. env: LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD  ← canonical
+3. env: LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD    ← legacy WARN
+4. existing runtime/initial-credentials.txt  ← reuse
+5. auto-generate + write credentials file
+```
+
+### Bootstrap Initial Password (for first login on fresh server)
 
 ```
 1. --initial-password CLI flag
@@ -53,9 +67,9 @@ If auto-generated, server writes to `runtime/initial-credentials.txt` (0600, not
 3. profile.auth.initial_password_env → env var
 4. --initial-password-file
 5. profile.auth.initial_password_file
-6. runtime/initial-credentials.txt (server-generated)
+6. runtime/initial-credentials.txt (server-generated or auto-generated on first start)
 7. profile.auth.initial_password
-8. Server default auto-generate
+8. auto-generate (fallback, creates credentials file)
 ```
 
 ### Target Password (for change-password after initial login)
@@ -93,6 +107,7 @@ auth:
 | Clean DB, INITIAL_PASSWORD set | Uses INITIAL_PASSWORD, writes credentials file | — | Uses INITIAL_PASSWORD for login |
 | Clean DB, only ADMIN_PASSWORD set | Falls back to ADMIN_PASSWORD (with WARN) | — | Uses ADMIN_PASSWORD for login |
 | Clean DB, neither set | Auto-generates, writes to runtime/initial-credentials.txt | Reads from credentials file | Reads from credentials file |
+| Server restart (DB exists, file exists) | Reads existing runtime/initial-credentials.txt (reuse, no re-generate) | Uses ADMIN_PASSWORD for login | Uses ADMIN_PASSWORD for login |
 | Existing DB (admin user exists) | No effect (INSERT OR IGNORE) | Uses ADMIN_PASSWORD for login | Uses ADMIN_PASSWORD for login |
 | must_change_password=true | — | Changes to ADMIN_PASSWORD via API | — |
 | must_change_password=true, ADMIN_PASSWORD missing | — | FAIL: missing final password | — |
