@@ -1130,8 +1130,183 @@ json.dump(lr,open('$MODEL_LOCATIONS_JSON','w'),indent=2)
 }
 
 run_runtimes_only() {
-  log_info "mode: runtimes-only"
-  add_error "NOT_IMPLEMENTED" "runtimes-only mode not yet implemented (Batch 5)"
+  log_info "===== runtimes-only mode ====="
+
+  # Step 1: Run models-only first
+  if ! run_models_only; then
+    log_error "models-only failed, cannot proceed to runtimes"
+    return 1
+  fi
+
+  local node_id
+  node_id=$(get_node_id)
+  if [[ -z "$node_id" ]]; then
+    add_error "RUNTIME_NO_NODE" "no node available for NBR creation"
+    return 1
+  fi
+
+  # Load IDs from bootstrap-state.json
+  local backend_vllm_id backend_sglang_id backend_llamacpp_id
+  local version_vllm_id version_sglang_id version_llamacpp_id
+  local model_hf_id model_gguf_id
+  backend_vllm_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['backend_ids']['vllm'])" 2>/dev/null || echo "")
+  backend_sglang_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['backend_ids']['sglang'])" 2>/dev/null || echo "")
+  backend_llamacpp_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['backend_ids']['llamacpp'])" 2>/dev/null || echo "")
+  version_vllm_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['backend_version_ids']['vllm'])" 2>/dev/null || echo "")
+  version_sglang_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['backend_version_ids']['sglang'])" 2>/dev/null || echo "")
+  version_llamacpp_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['backend_version_ids']['llamacpp'])" 2>/dev/null || echo "")
+  model_hf_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['model_artifact_ids']['qwen3_small'])" 2>/dev/null || echo "")
+  model_gguf_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['model_artifact_ids']['qwen35_gguf'])" 2>/dev/null || echo "")
+
+  log_info "backend IDs: vllm=$backend_vllm_id sglang=$backend_sglang_id llamacpp=$backend_llamacpp_id"
+  log_info "version IDs: vllm=$version_vllm_id sglang=$version_sglang_id llamacpp=$version_llamacpp_id"
+
+  # List existing runtimes for idempotency
+  local existing_resp="$FINAL_OUTPUT_DIR/responses/backend-runtimes-list.json"
+  mkdir -p "$FINAL_OUTPUT_DIR/responses"
+  curl_api_get "/api/v1/backend-runtimes" "$existing_resp" 2>/dev/null || true
+
+  # List existing NBRs for idempotency
+  local existing_nbr_resp="$FINAL_OUTPUT_DIR/responses/node-backend-runtimes-list.json"
+  curl_api_get "/api/v1/nodes/$node_id/backend-runtimes" "$existing_nbr_resp" 2>/dev/null || true
+
+  local runtimes_result="{}" nbrs_result="{}" overall_status="PASS"
+
+  # Helper: find existing runtime by name
+  find_br_id() {
+    local name="$1"
+    if [[ -f "$existing_resp" ]]; then
+      python3 -c "
+import json;d=json.load(open('$existing_resp'))
+arr=d if isinstance(d,list) else d.get('data',d.get('items',[]))
+for r in arr:
+  if r.get('name','')=='$name' or r.get('display_name','')=='$name':
+    print(r.get('id',''));break
+" 2>/dev/null
+    fi
+  }
+
+  find_nbr_id() {
+    local br_id="$1"
+    if [[ -f "$existing_nbr_resp" ]]; then
+      python3 -c "
+import json;d=json.load(open('$existing_nbr_resp'))
+arr=d if isinstance(d,list) else d.get('data',d.get('items',[]))
+for r in arr:
+  if r.get('backend_runtime_id','')=='$br_id':
+    print(r.get('id',''));break
+" 2>/dev/null
+    fi
+  }
+
+  # Define runtimes to create: name key, backend, version, image, model_key
+  declare -A RT_BACKEND RT_VERSION RT_IMAGE RT_MODEL RT_PARAMS
+  RT_BACKEND[vllm]="vllm"; RT_BACKEND[sglang]="sglang"; RT_BACKEND[llamacpp]="llamacpp"
+  for rt_key in vllm sglang llamacpp; do
+    local rt_backend="${RT_BACKEND[$rt_key]}"
+    local rt_version="" rt_image="" rt_model=""
+    case "$rt_key" in
+      vllm) rt_version="$version_vllm_id"; rt_image="vllm/vllm-openai:latest"; rt_model="$model_hf_id" ;;
+      sglang) rt_version="$version_sglang_id"; rt_image="lmsysorg/sglang:latest"; rt_model="$model_hf_id" ;;
+      llamacpp) rt_version="$version_llamacpp_id"; rt_image="ghcr.io/ggml-org/llama.cpp:server-cuda13"; rt_model="$model_gguf_id" ;;
+    esac
+
+    # Read from profile if available
+    local pf_image pf_params_json
+    pf_image=$(yaml_get_nested "$PROFILE_FILE" "runtimes" "$rt_key.image" 2>/dev/null || echo "")
+    [[ -n "$pf_image" ]] && rt_image="$pf_image"
+
+    log_info "processing runtime: $rt_key (backend=$rt_backend, image=$rt_image)"
+
+    # Find existing BR
+    local br_id
+    br_id=$(find_br_id "$rt_key")
+    local br_action="REUSE"
+    if [[ -z "$br_id" ]]; then
+      local br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_vllm_id\",\"backend_version_id\":\"$rt_version\",\"image_name\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\",\"health_check_override_json\":\"{}\",\"args_override_json\":\"[]\",\"default_env_json\":\"{}\",\"entrypoint_override_json\":\"[]\",\"image_pull_policy\":\"if_not_present\"}"
+      # Use the correct backend_id for each runtime
+      case "$rt_key" in
+        vllm) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_vllm_id\",\"backend_version_id\":\"$rt_version\",\"image_name\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\",\"health_check_override_json\":\"{}\",\"args_override_json\":\"[]\",\"default_env_json\":\"{}\",\"entrypoint_override_json\":\"[]\",\"image_pull_policy\":\"if_not_present\"}" ;;
+        sglang) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_sglang_id\",\"backend_version_id\":\"$rt_version\",\"image_name\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\",\"health_check_override_json\":\"{}\",\"args_override_json\":\"[]\",\"default_env_json\":\"{}\",\"entrypoint_override_json\":\"[]\",\"image_pull_policy\":\"if_not_present\"}" ;;
+        llamacpp) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_llamacpp_id\",\"backend_version_id\":\"$rt_version\",\"image_name\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\",\"health_check_override_json\":\"{}\",\"args_override_json\":\"[]\",\"default_env_json\":\"{}\",\"entrypoint_override_json\":\"[]\",\"image_pull_policy\":\"if_not_present\"}" ;;
+      esac
+      local br_resp="$FINAL_OUTPUT_DIR/responses/br-create-$rt_key.json"
+      local br_status
+      br_status=$(curl_api_post "/api/v1/backend-runtimes" "$br_body" "$br_resp")
+      if [[ "$br_status" == "201" ]]; then
+        br_id=$(python3 -c "import json;print(json.load(open('$br_resp')).get('id',''))" 2>/dev/null || echo "")
+        br_action="CREATE"
+        log_info "created BackendRuntime: $rt_key (id=$br_id)"
+      else
+        log_error "failed to create BackendRuntime $rt_key (HTTP $br_status)"
+        add_error "BR_CREATE_FAILED" "create BackendRuntime $rt_key returned HTTP $br_status"
+        br_action="FAIL"; overall_status="FAIL"
+      fi
+    else
+      log_info "reusing existing BackendRuntime: $rt_key (id=$br_id)"
+    fi
+
+    update_bootstrap_state "backend_runtime_ids" "$rt_key" "$br_id"
+
+    # Create/Reuse NodeBackendRuntime
+    local nbr_id="" nbr_action="REUSE" nbr_status="unknown"
+    if [[ "$br_action" != "FAIL" && -n "$br_id" ]]; then
+      nbr_id=$(find_nbr_id "$br_id")
+      if [[ -z "$nbr_id" ]]; then
+        local enable_body="{\"backend_runtime_id\":\"$br_id\",\"image_ref\":\"$rt_image\"}"
+        local enable_resp="$FINAL_OUTPUT_DIR/responses/nbr-create-$rt_key.json"
+        local enable_status
+        enable_status=$(curl_api_post "/api/v1/nodes/$node_id/backend-runtimes/enable" "$enable_body" "$enable_resp")
+        if [[ "$enable_status" == "200" ]]; then
+          nbr_id=$(python3 -c "import json;d=json.load(open('$enable_resp'));print(d.get('id',d.get('node_backend_runtime_id','')))" 2>/dev/null || echo "")
+          nbr_status=$(python3 -c "import json;d=json.load(open('$enable_resp'));print(d.get('status','unknown'))" 2>/dev/null || echo "unknown")
+          nbr_action="CREATE"
+          log_info "created NBR: $rt_key (id=$nbr_id, status=$nbr_status)"
+        else
+          log_error "failed to create NBR $rt_key (HTTP $enable_status)"
+          add_error "NBR_CREATE_FAILED" "enable NBR $rt_key returned HTTP $enable_status"
+          nbr_action="FAIL"; overall_status="FAIL"
+        fi
+      else
+        log_info "reusing existing NBR: $rt_key (id=$nbr_id)"
+        # Get NBR status
+        nbr_status=$(python3 -c "
+import json;d=json.load(open('$existing_nbr_resp'))
+arr=d if isinstance(d,list) else d.get('data',d.get('items',[]))
+for r in arr:
+  if r.get('id','')=='$nbr_id': print(r.get('status','unknown'));break
+" 2>/dev/null || echo "unknown")
+      fi
+    fi
+
+    update_bootstrap_state "node_backend_runtime_ids" "$rt_key" "${nbr_id:-}"
+
+    # Update results
+    python3 -c "
+import json,os
+# Runtimes result
+rf='$FINAL_OUTPUT_DIR/backend-runtimes.json'
+d=json.load(open(rf)) if os.path.exists(rf) else {'status':'PASS','runtimes':{},'checked_at':'$TIMESTAMP'}
+d.setdefault('runtimes',{})['$rt_key']={'backend':'$rt_backend','backend_id':'$backend_vllm_id','backend_version_id':'$rt_version','image':'$rt_image','model':'$rt_model','backend_runtime_id':'$br_id','action':'$br_action'}
+d['status']='$overall_status' if d.get('status')!='FAIL' else 'FAIL'
+json.dump(d,open(rf,'w'),indent=2)
+# NBR result
+nf='$FINAL_OUTPUT_DIR/node-backend-runtimes.json'
+d2=json.load(open(nf)) if os.path.exists(nf) else {'status':'PASS','node_id':'$node_id','node_backend_runtimes':{},'checked_at':'$TIMESTAMP'}
+d2.setdefault('node_backend_runtimes',{})['$rt_key']={'backend_runtime_id':'$br_id','node_backend_runtime_id':'${nbr_id:-}','status':'$nbr_status','action':'$nbr_action'}
+d2['status']='$overall_status' if d2.get('status')!='FAIL' else 'FAIL'
+json.dump(d2,open(nf,'w'),indent=2)
+" 2>/dev/null
+
+  done
+
+  log_info "backend-runtimes.json written (status=$overall_status)"
+  log_info "node-backend-runtimes.json written (status=$overall_status)"
+  if [[ "$overall_status" == "FAIL" ]]; then
+    add_error "RUNTIMES_FAILED" "one or more runtimes failed to configure"
+    return 1
+  fi
+  return 0
 }
 
 run_dry_run() {
