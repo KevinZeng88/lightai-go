@@ -1,0 +1,43 @@
+WP-B test:
+
+> lightai-web@0.1.0 test
+> node tests/apiClientPaths.test.mjs && node tests/formatters.test.mjs && node tests/i18nKeys.test.mjs && node tests/i18nMissingKeys.test.mjs && node tests/noHardcodedCredentials.test.mjs && node tests/runtimeBoundaryUi.test.mjs && node tests/modelCapabilities.test.mjs
+
+
+Passed: 11, Failed: 0
+PASS: All API modules use relative paths
+PASS [zh-CN null]: "-"
+PASS [zh-CN empty]: "-"
+PASS [zh-CN invalid]: "-"
+PASS [zh-CN <1s]: "<1秒前"
+PASS [zh-CN 2s]: "2秒前"
+PASS [zh-CN 30s]: "30秒前"
+PASS [zh-CN 59s]: "59秒前"
+PASS [zh-CN 1min]: "1分钟前"
+PASS [zh-CN 5min]: "5分钟前"
+PASS [zh-CN 59min]: "59分钟前"
+PASS [zh-CN 1hr]: "1小时前"
+PASS [zh-CN 23hr]: "23小时前"
+PASS [zh-CN 25hr (same year)]: "06-24 09:00:37"
+PASS [zh-CN future 2s]: "<1秒前"
+PASS [zh-CN future 10s]: "时间异常"
+PASS [en-US null]: "-"
+PASS [en-US invalid]: "-"
+PASS [en-US <1s]: "<1s ago"
+PASS [en-US 2s]: "2s ago"
+PASS [en-US 59s]: "59s ago"
+PASS [en-US 1min]: "1m ago"
+PASS [en-US 59min]: "59m ago"
+PASS [en-US 1hr]: "1h ago"
+PASS [en-US 23hr]: "23h ago"
+PASS [en-US future]: "<1s ago"
+PASS: No "刚刚" or "just now" in any output
+PASS [zh-CN cross-year]: "2025-06-25 10:00:37" (YYYY-MM-DD HH:mm:ss format)
+
+All tests PASSED
+zh-CN keys: 949
+en-US keys: 947
+Keys only in zh-CN (2):
+  runtimes.helpDefault
+  runtimes.helpRecommendation
+FAIL: i18n key mismatch

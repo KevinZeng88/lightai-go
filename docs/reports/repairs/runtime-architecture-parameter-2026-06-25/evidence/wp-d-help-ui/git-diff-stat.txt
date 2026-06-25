@@ -1,0 +1,6 @@
+ internal/server/api/backend_handlers.go            | 30 ++++++++++++++++
+ internal/server/api/router.go                      |  2 ++
+ .../components/common/RuntimeParameterEditor.vue   | 41 ++++++++++++++++++++++
+ web/src/locales/zh-CN.ts                           |  2 +-
+ web/src/pages/BackendRuntimesPage.vue              | 12 +++++--
+ 5 files changed, 84 insertions(+), 3 deletions(-)

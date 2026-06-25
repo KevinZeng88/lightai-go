@@ -1,0 +1,13 @@
+=== E2E Packaged Smoke ===
+[1/4] Building release...
+Release package and checksums are in dist/
+-rw-r--r-- 1 kzeng kzeng 436M Jun 25 10:04 /home/kzeng/projects/ai-platform-study/lightai-go/dist/lightai-go-0.1.22-linux-amd64.tar.gz
+-rw-r--r-- 1 kzeng kzeng   65 Jun 25 10:04 /home/kzeng/projects/ai-platform-study/lightai-go/dist/lightai-go-0.1.22-linux-amd64.tar.gz.sha256
+[2/4] Verifying catalog in tarball...
+  OK: 50 catalog files
+[3/4] Checking Docker image availability...
+  SKIP: No Docker image available (tarball-only verification)
+  To test with image: docker load < dist/lightai-go-*.tar.gz
+
+=== PASS: Tarball verified ===
+EXIT: 0
