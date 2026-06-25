@@ -261,3 +261,32 @@ func TestContractDryRunWithReadyWithWarnings(t *testing.T) {
 	// Dry-run should succeed with ready_with_warnings NBR
 	t.Logf("dry-run with ready_with_warnings: %s", dw.Body.String()[:200])
 }
+
+// TestContractSnapshotNotMutatedByMigration verifies R-005: snapshot is immutable.
+func TestContractSnapshotNotMutatedByMigration(t *testing.T) {
+	db := setupTestDB(t)
+	// Verify fresh DB has no legacy snapshot mutation paths
+	nodeID := "node-snap-imm"; brtID := "br-snap-imm"; artID := "art-snap-imm"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-snap-imm',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
+	insertRuntime(t, db, brtID, "Runtime Snap Imm", "")
+	nbrID := nodeID + ":" + brtID
+	db.Exec(`INSERT INTO node_backend_runtimes (id,backend_runtime_id,node_id,runner_type,image_ref,image_present,docker_available,config_snapshot_json,status,status_reason,tenant_id,created_at,updated_at)
+		VALUES (?,?,?,?,?,1,1,'{"docker_json":{"shm_size":"10gb"}}','ready','ok','',datetime('now'),datetime('now'))`, nbrID, brtID, nodeID, "docker", "img:snap")
+	// Modify BackendRuntime
+	db.Exec(`UPDATE backend_runtimes SET image_name='changed:v2' WHERE id=?`, brtID)
+	// Re-enable via enable (should NOT refresh snapshot)
+	h := NewAgentHandler(db, nil)
+	insertUIPersistenceArtifact(t, h, artID)
+	snapshotInsertModelLocation(t, db, "ml-snap-imm", artID, nodeID)
+	ew := httptest.NewRecorder()
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+brtID+`","image_ref":"img:snap"}`, adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 { t.Fatalf("re-enable code=%d", ew.Code) }
+	// Snapshot must NOT have changed due to BR modification
+	var snap string
+	db.QueryRow("SELECT config_snapshot_json FROM node_backend_runtimes WHERE id=?", nbrID).Scan(&snap)
+	if !strings.Contains(snap, "10gb") { t.Fatalf("snapshot was mutated after BR change") }
+	if strings.Contains(snap, "changed:v2") { t.Fatalf("snapshot picked up live BR change: %s", snap) }
+}
