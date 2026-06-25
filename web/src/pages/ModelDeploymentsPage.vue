@@ -132,10 +132,10 @@
             <el-option v-for="m in models" :key="m.id" :label="`${m.display_name || m.name}`" :value="m.id" />
           </el-select>
         </el-form-item>
+        <!-- R-004: Runtime selector removed from edit — NBR change requires explicit flow.
+             Display current runtime info as read-only. -->
         <el-form-item :label="$t('deployments.runtime')">
-          <el-select v-model="editForm.backend_runtime_id" filterable style="width:100%">
-            <el-option v-for="r in runtimes" :key="r.id" :label="`${r.display_name || r.name} (${r.vendor})`" :value="r.id" />
-          </el-select>
+          <el-input :model-value="currentEditRuntimeLabel" disabled style="width:100%" />
         </el-form-item>
         <el-form-item :label="$t('deployments.hostPort')">
           <el-input v-model.number="editForm.host_port" />
@@ -343,6 +343,14 @@ const editForm = ref({ display_name: '', model_artifact_id: '', backend_runtime_
 const editParameterValues = ref<any[]>([])
 const editDisabledParameters = ref<any[]>([])
 const editBackendSchema = ref<any[]>([])
+// R-004: Read-only display of current NBR for edit dialog
+const currentEditRuntimeLabel = computed(() => {
+  if (!editForm.value.source_backend_runtime_id && !editForm.value.backend_runtime_id) return '-'
+  const nbrId = editForm.value.source_backend_runtime_id || editForm.value.backend_runtime_id
+  const nbr = allNBRs.value.find((n: any) => n.id === nbrId)
+  if (nbr) return formatNBRLabel(nbr)
+  return nbrId
+})
 const editParameterModel = ref<{ docker_json: Record<string, any>; args_override_json: string[]; default_env_json: Record<string, string>; parameter_values_json: any[] }>({ docker_json: {}, args_override_json: [], default_env_json: {}, parameter_values_json: [] })
 
 function syncEditParameterValues() {
@@ -381,17 +389,13 @@ async function loadRefs() {
 async function loadAllNBRs() {
   nbrsLoaded.value = false
   try {
-    const nodeIds = nodeItems.value.map((n: any) => n.id)
-    const results: any[] = []
-    for (const nid of nodeIds) {
-      try {
-        const nbrs = await apiClient.get(`/nodes/${nid}/backend-runtimes`)
-        for (const nbr of (nbrs || [])) {
-          results.push({ ...nbr, _node_id: nid })
-        }
-      } catch { /* node may not have any NBRs */ }
+    // R-011: Use aggregate endpoint to avoid per-node fan-out
+    const results = await apiClient.get('/nodes/backend-runtimes/all')
+    if (Array.isArray(results)) {
+      allNBRs.value = results
+    } else {
+      allNBRs.value = []
     }
-    allNBRs.value = results
   } catch { allNBRs.value = [] }
   nbrsLoaded.value = true
 }

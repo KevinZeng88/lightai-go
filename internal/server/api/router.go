@@ -162,6 +162,8 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("PATCH /api/v1/backend-runtimes/{id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchBackendRuntime)))
 	mux.Handle("DELETE /api/v1/backend-runtimes/{id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteBackendRuntime)))
 	mux.Handle("GET /api/v1/nodes/{id}/backend-runtimes", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodeBackendRuntimes)))
+	// R-011: Aggregate NBR endpoint — single call returns all tenant-scoped NBRs.
+	mux.Handle("GET /api/v1/nodes/backend-runtimes/all", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListAllNodeBackendRuntimes)))
 	// R-001: /check is DELETED. Session callers must use /enable for NBR creation
 	// and /check-request for server-proxied agent verification. No client-provided
 	// readiness evidence (image_present/docker_available) is trusted.
