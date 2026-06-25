@@ -12,11 +12,13 @@ cd "$RELEASE_ROOT"
 # Create required directories.
 mkdir -p logs data run runtime
 
-# Check password.
-if [ -z "${LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
-  echo "WARNING: LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD not set." >&2
-  echo "A random password will be generated and printed ONCE to stderr." >&2
-  echo "Set it via: export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='...'" >&2
+# Check password. LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD is canonical for clean-DB first start.
+# LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD is supported as legacy fallback with backward compat.
+if [ -z "${LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD:-}" ] && [ -z "${LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
+  echo "WARNING: Neither LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD nor LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD is set." >&2
+  echo "A random password will be generated and written to runtime/initial-credentials.txt." >&2
+  echo "Set it via: export LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD='...'" >&2
+  echo "  (LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD is also accepted for backward compat)" >&2
 fi
 
 echo "=== LightAI Go Server ==="

@@ -31,7 +31,9 @@ go build ./cmd/agent
 
 ```bash
 # Local dev (127.0.0.1 only)
-export LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='Admin@123456'
+# LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD — canonical variable for clean-DB initial admin password
+# LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD — also accepted as legacy fallback
+export LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD='Admin@123456'
 ./server -config configs/server.dev.yaml
 # Server listens at http://127.0.0.1:18080
 ```
@@ -82,19 +84,21 @@ cd web && npm install && npm run dev
 cd web && npm run build
 cd ..
 go build -tags web -o bin/lightai-server ./cmd/server
-LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD='Admin@123456' ./bin/lightai-server --config configs/server.dev.yaml
+LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD='Admin@123456' ./bin/lightai-server --config configs/server.dev.yaml
 # Visit http://127.0.0.1:18080
 ```
 
 ## 6. Bootstrap Admin
 
 First start creates admin user. Password from:
-- `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` env var (preferred)
+- `LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD` env var (canonical, preferred)
+- `LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD` env var (legacy backward compat)
 - Auto-generated (written to `runtime/initial-credentials.txt`, 0600 permissions)
 
 Default username: `admin`. First login requires password change.
 
 Credentials file: `runtime/initial-credentials.txt` — not overwritten on subsequent starts.
+See `docs/engineering/bootstrap/lightai-bootstrap.md` for full password variable contract.
 
 To reset admin password:
 ```bash

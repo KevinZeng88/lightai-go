@@ -140,7 +140,8 @@ func main() {
 	bootstrapCfg := auth.BootstrapConfig{
 		Username:            "admin",
 		Password:            "",
-		PasswordEnv:         "LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD",
+		PasswordEnv:         "LIGHTAI_BOOTSTRAP_ADMIN_PASSWORD",    // legacy backward compat
+		InitialPasswordEnv:  "LIGHTAI_BOOTSTRAP_INITIAL_PASSWORD", // canonical
 		ForceChangePassword: true,
 	}
 	if err := auth.InitBootstrap(database, bootstrapCfg); err != nil {
