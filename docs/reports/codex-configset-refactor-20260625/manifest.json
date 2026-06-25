@@ -1,0 +1,14 @@
+{
+  "created_at": "2026-06-25",
+  "purpose": "LightAI Go ConfigSet/ConfigItem refactor design and Codex handoff",
+  "repository": "KevinZeng88/lightai-go",
+  "files": [
+    "00-index.md",
+    "01-current-code-findings.md",
+    "02-configset-configitem-design.md",
+    "03-implementation-plan.md",
+    "04-validation-and-acceptance.md",
+    "05-codex-execution-prompt.md",
+    "06-progress-reporting-and-commit-policy.md"
+  ]
+}
