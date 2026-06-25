@@ -45,6 +45,7 @@ type ParameterValue struct {
 	Target       string      `json:"target"` // "arg", "env", "container", "metadata"
 	CliName      string      `json:"cli_name"`
 	EnvName      string      `json:"env_name"`
+	RenderStyle  string      `json:"render_style,omitempty"`
 	Enabled      bool        `json:"enabled"`
 	Value        interface{} `json:"value"`
 	Default      interface{} `json:"default"`
@@ -387,6 +388,7 @@ func resolveImage(in ResolveInput) (string, []string) {
 func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	var errors []error
 	var args []string
+	repeatableFlags := make(map[string]bool)
 
 	// NBR is the source of truth for runtime parameters.
 	// No fallback to BackendVersion/BackendRuntime.
@@ -423,15 +425,15 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 				errors = append(errors, fmt.Errorf("parameter %q is enabled but has empty value; provide a value or disable the parameter", cliName))
 				continue
 			}
-			// Substitute template variables (e.g. {{MODEL_CONTAINER_PATH}}) in parameter values.
-			valStr := fmt.Sprintf("%v", pv.Value)
-			resolved, err := substituteVars(valStr, vars)
+			rendered, err := renderParameterValueArgs(pv, cliName, vars)
 			if err != nil {
 				errors = append(errors, fmt.Errorf("parameter %q: %w", cliName, err))
 				continue
 			}
-			args = append(args, cliName)
-			args = append(args, resolved)
+			if pv.RenderStyle == "repeat_flag" {
+				repeatableFlags[cliName] = true
+			}
+			args = append(args, rendered...)
 		}
 	}
 
@@ -464,15 +466,15 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 				errors = append(errors, fmt.Errorf("deployment parameter %q is enabled but has empty value; provide a value or disable the parameter", cliName))
 				continue
 			}
-			// Substitute template variables in deployment override values.
-			valStr := fmt.Sprintf("%v", pv.Value)
-			resolved, err := substituteVars(valStr, vars)
+			rendered, err := renderParameterValueArgs(pv, cliName, vars)
 			if err != nil {
 				errors = append(errors, fmt.Errorf("deployment parameter %q: %w", cliName, err))
 				continue
 			}
-			args = append(args, cliName)
-			args = append(args, resolved)
+			if pv.RenderStyle == "repeat_flag" {
+				repeatableFlags[cliName] = true
+			}
+			args = append(args, rendered...)
 		}
 	}
 
@@ -521,7 +523,7 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	}
 
 	// Deduplicate: remove duplicate consecutive flag-value pairs
-	args = deduplicateArgs(args)
+	args = deduplicateArgs(args, repeatableFlags)
 
 	// Apply disabled tombstones: remove parameters explicitly disabled by deployment
 	if len(in.Deployment.DisabledParameters) > 0 {
@@ -600,13 +602,18 @@ func overridePortArg(args []string, port int) []string {
 // deduplicateArgs removes duplicate --flag value pairs, keeping the LAST occurrence
 // (highest priority — user parameters from Layer 4 override defaults from Layer 1).
 // Logs a warning when duplicates are detected.
-func deduplicateArgs(args []string) []string {
+func deduplicateArgs(args []string, repeatableFlags map[string]bool) []string {
 	lastSeen := make(map[string]int) // flag -> index in result
 	var result []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if strings.HasPrefix(arg, "-") {
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				if repeatableFlags[arg] {
+					result = append(result, arg, args[i+1])
+					i++
+					continue
+				}
 				// key-value pair: flag + value
 				if idx, exists := lastSeen[arg]; exists {
 					// Duplicate detected — log warning before overwriting
@@ -652,6 +659,95 @@ func collectExistingFlags(args []string) map[string]bool {
 		// The flag itself is already recorded
 	}
 	return flags
+}
+
+func renderParameterValueArgs(pv ParameterValue, cliName string, vars map[string]string) ([]string, error) {
+	style := strings.TrimSpace(pv.RenderStyle)
+	if style == "" {
+		style = "flag_space_value"
+	}
+	resolve := func(v interface{}) (string, error) {
+		return substituteVars(fmt.Sprintf("%v", v), vars)
+	}
+	switch style {
+	case "flag_space_value":
+		resolved, err := resolve(pv.Value)
+		if err != nil {
+			return nil, err
+		}
+		return []string{cliName, resolved}, nil
+	case "flag_equals_value":
+		resolved, err := resolve(pv.Value)
+		if err != nil {
+			return nil, err
+		}
+		return []string{cliName + "=" + resolved}, nil
+	case "flag_if_true":
+		if b, ok := pv.Value.(bool); ok {
+			if b {
+				return []string{cliName}, nil
+			}
+			return nil, nil
+		}
+		if strings.EqualFold(fmt.Sprintf("%v", pv.Value), "true") {
+			return []string{cliName}, nil
+		}
+		return nil, nil
+	case "repeat_flag":
+		values := anySlice(pv.Value)
+		out := make([]string, 0, len(values)*2)
+		for _, v := range values {
+			resolved, err := resolve(v)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, cliName, resolved)
+		}
+		return out, nil
+	case "positional":
+		resolved, err := resolve(pv.Value)
+		if err != nil {
+			return nil, err
+		}
+		return []string{resolved}, nil
+	case "raw_lines", "raw_list":
+		values := anySlice(pv.Value)
+		if len(values) == 0 {
+			values = []interface{}{pv.Value}
+		}
+		var out []string
+		for _, v := range values {
+			resolved, err := resolve(v)
+			if err != nil {
+				return nil, err
+			}
+			for _, line := range strings.Split(resolved, "\n") {
+				out = append(out, strings.Fields(line)...)
+			}
+		}
+		return out, nil
+	default:
+		resolved, err := resolve(pv.Value)
+		if err != nil {
+			return nil, err
+		}
+		return []string{cliName, resolved}, nil
+	}
+}
+
+func anySlice(v interface{}) []interface{} {
+	switch t := v.(type) {
+	case []interface{}:
+		return t
+	case []string:
+		out := make([]interface{}, 0, len(t))
+		for _, item := range t {
+			out = append(out, item)
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func mapParametersToArgs(params map[string]interface{}, defs []ParameterDef, errs *[]error, existingFlags map[string]bool) []string {

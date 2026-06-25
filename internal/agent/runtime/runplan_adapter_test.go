@@ -6,10 +6,13 @@ import (
 
 func TestConvertRunplanToAgentSpec(t *testing.T) {
 	input := PlanInput{
+		OperationID:      "op-1",
 		InstanceID:       "inst-000000000001",
 		DeploymentID:     "deploy-1",
 		NodeID:           "node-1",
 		AgentID:          "agent-1",
+		BackendName:      "vllm",
+		Vendor:           "nvidia",
 		ModelPath:        "/data/models/Qwen3-32B",
 		ServedModelName:  "qwen3-32b",
 		Image:            "vllm/vllm-openai:v0.8.5",
@@ -24,6 +27,17 @@ func TestConvertRunplanToAgentSpec(t *testing.T) {
 		ContainerPort:    8000,
 		GPUDeviceIDs:     []string{"0", "1"},
 		GPUVisibleEnvKey: "CUDA_VISIBLE_DEVICES",
+		GPUDriver:        "nvidia",
+		GPUCapabilities:  [][]string{{"gpu"}},
+		HealthCheck: &PlanHealthCheck{
+			Enabled:         true,
+			Path:            "/v1/models",
+			Port:            8001,
+			Scheme:          "http",
+			ExpectedStatus:  200,
+			TimeoutSeconds:  5,
+			IntervalSeconds: 2,
+		},
 		Devices: []PlanDevice{
 			{HostPath: "/dev/dri", ContainerPath: "/dev/dri"},
 		},
@@ -39,6 +53,9 @@ func TestConvertRunplanToAgentSpec(t *testing.T) {
 	}
 	if spec.RuntimeType != "docker" {
 		t.Errorf("runtime_type should be docker: %s", spec.RuntimeType)
+	}
+	if spec.OperationID != "op-1" || spec.BackendType != "vllm" || spec.Vendor != "nvidia" {
+		t.Errorf("metadata mismatch: operation=%q backend=%q vendor=%q", spec.OperationID, spec.BackendType, spec.Vendor)
 	}
 	if spec.Docker.Image != "vllm/vllm-openai:v0.8.5" {
 		t.Errorf("image mismatch: %s", spec.Docker.Image)
@@ -69,6 +86,12 @@ func TestConvertRunplanToAgentSpec(t *testing.T) {
 	}
 	if len(spec.Docker.Args) != 5 {
 		t.Errorf("expected 5 args, got %d", len(spec.Docker.Args))
+	}
+	if spec.Docker.GpuDriver != "nvidia" || len(spec.Docker.GpuCapabilities) != 1 {
+		t.Errorf("gpu docker fields mismatch: driver=%q caps=%v", spec.Docker.GpuDriver, spec.Docker.GpuCapabilities)
+	}
+	if spec.HealthCheck == nil || !spec.HealthCheck.Enabled || spec.HealthCheck.Path != "/v1/models" || spec.HealthCheck.Port != 8001 {
+		t.Errorf("health check mismatch: %#v", spec.HealthCheck)
 	}
 }
 

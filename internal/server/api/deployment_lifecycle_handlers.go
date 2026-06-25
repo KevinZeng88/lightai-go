@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	agentruntime "lightai-go/internal/agent/runtime"
 	"lightai-go/internal/common/log"
 	"lightai-go/internal/server/runplan"
 
@@ -972,6 +973,30 @@ func planRunplanDockerSpec(plan *runplan.ResolvedRunPlan) runplan.DockerSpecInfo
 	}
 }
 
+func agentPlanDevices(devices []runplan.DeviceMapping) []agentruntime.PlanDevice {
+	out := make([]agentruntime.PlanDevice, 0, len(devices))
+	for _, d := range devices {
+		out = append(out, agentruntime.PlanDevice{
+			HostPath:      d.HostPath,
+			ContainerPath: d.ContainerPath,
+			Permissions:   d.Permissions,
+		})
+	}
+	return out
+}
+
+func agentPlanMounts(mounts []runplan.MountMapping) []agentruntime.PlanMount {
+	out := make([]agentruntime.PlanMount, 0, len(mounts))
+	for _, m := range mounts {
+		out = append(out, agentruntime.PlanMount{
+			HostPath:      m.HostPath,
+			ContainerPath: m.ContainerPath,
+			Readonly:      m.Readonly,
+		})
+	}
+	return out
+}
+
 func rtHCOverridePtr(hc runplan.HealthCheckInput) *runplan.HealthCheckInput {
 	if hc.Path == "" {
 		return nil
@@ -1036,59 +1061,47 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	// Transaction: instance + runplan + lease + agent_task
 	now := time.Now().Format(time.RFC3339)
 	planJSON, _ := json.Marshal(pf.plan)
-	agentSpec := map[string]interface{}{
-		"instance_id":         instanceID,
-		"deployment_id":       deployID,
-		"runtime_type":        "docker",
-		"vendor":              pf.rtVendor,
-		"model_path":          pf.absolutePath,
-		"served_model_name":   strVal(pf.params, "served_model_name", strVal(pf.artifact, "name", "")),
-		"node_id":             pf.placement.NodeID,
-		"agent_id":            "",
-		"gpu_device_ids":      gpuDeviceIDs,
-		"gpu_visible_env_key": pf.plan.GPUVisibleEnvKey,
-		"operation_id":        operationID,
-		"env":                 pf.plan.Env,
-		"args":                pf.plan.Args,
-		"volumes":             pf.plan.Mounts,
-		"devices":             pf.plan.Devices,
-		"host_port":           pf.service.HostPort,
-		"container_port":      pf.plan.ContainerPort,
-		"app_port":            firstPositive(pf.service.AppPort, pf.plan.ContainerPort),
-		"health_port":         firstPositive(pf.service.HealthPort, pf.service.HostPort),
-		"api_test_port":       firstPositive(pf.service.APITestPort, pf.service.HostPort),
-		"ports": []map[string]interface{}{
-			{"host_port": pf.service.HostPort, "container_port": pf.plan.ContainerPort},
+	agentSpec := agentruntime.ConvertRunplanToAgentSpec(agentruntime.PlanInput{
+		OperationID:      operationID,
+		InstanceID:       instanceID,
+		DeploymentID:     deployID,
+		NodeID:           pf.placement.NodeID,
+		AgentID:          "",
+		BackendName:      pf.backendName,
+		Vendor:           pf.rtVendor,
+		ModelPath:        pf.absolutePath,
+		ServedModelName:  strVal(pf.params, "served_model_name", strVal(pf.artifact, "name", "")),
+		Image:            pf.plan.Image,
+		ContainerName:    pf.plan.ContainerName,
+		Entrypoint:       pf.plan.Entrypoint,
+		Args:             pf.plan.Args,
+		Env:              pf.plan.Env,
+		Privileged:       pf.plan.Privileged,
+		IPCMode:          pf.plan.IPCMode,
+		UTSMode:          pf.plan.UTSMode,
+		NetworkMode:      pf.plan.NetworkMode,
+		ShmSize:          pf.plan.ShmSize,
+		Ulimits:          pf.plan.Ulimits,
+		Devices:          agentPlanDevices(pf.plan.Devices),
+		Mounts:           agentPlanMounts(pf.plan.Mounts),
+		HostPort:         pf.service.HostPort,
+		ContainerPort:    pf.plan.ContainerPort,
+		GPUDeviceIDs:     gpuDeviceIDs,
+		GPUVisibleEnvKey: pf.plan.GPUVisibleEnvKey,
+		GPUDriver:        pf.plan.GpuDriver,
+		GPUCapabilities:  pf.plan.GpuCapabilities,
+		SecurityOptions:  pf.plan.SecurityOptions,
+		GroupAdd:         pf.plan.GroupAdd,
+		HealthCheck: &agentruntime.PlanHealthCheck{
+			Enabled:         pf.plan.HealthCheck.Path != "",
+			Path:            pf.plan.HealthCheck.Path,
+			Port:            firstPositive(pf.service.HealthPort, pf.service.HostPort),
+			Scheme:          "http",
+			ExpectedStatus:  pf.plan.HealthCheck.ExpectedStatus,
+			TimeoutSeconds:  healthTimeoutSeconds,
+			IntervalSeconds: pf.plan.HealthCheck.IntervalSeconds,
 		},
-		"docker": map[string]interface{}{
-			"image":            pf.plan.Image,
-			"container_name":   pf.plan.ContainerName,
-			"command":          pf.plan.Entrypoint,
-			"args":             pf.plan.Args,
-			"privileged":       pf.plan.Privileged,
-			"ipc_mode":         pf.plan.IPCMode,
-			"uts_mode":         pf.plan.UTSMode,
-			"network_mode":     pf.plan.NetworkMode,
-			"shm_size":         pf.plan.ShmSize,
-			"security_options": pf.plan.SecurityOptions,
-			"ulimits":          pf.plan.Ulimits,
-			"group_add":        pf.plan.GroupAdd,
-			"gpu_device_ids":   gpuDeviceIDs,
-			"gpu_driver":       pf.plan.GpuDriver,
-			"gpu_capabilities": pf.plan.GpuCapabilities,
-		},
-		"health_check": map[string]interface{}{
-			"enabled":          pf.plan.HealthCheck.Path != "",
-			"path":             pf.plan.HealthCheck.Path,
-			"port":             firstPositive(pf.service.HealthPort, pf.service.HostPort),
-			"port_source":      "host_port",
-			"container_port":   pf.plan.ContainerPort,
-			"scheme":           "http",
-			"expected_status":  pf.plan.HealthCheck.ExpectedStatus,
-			"timeout_seconds":  healthTimeoutSeconds,
-			"interval_seconds": pf.plan.HealthCheck.IntervalSeconds,
-		},
-	}
+	})
 	agentPayload, _ := json.Marshal(agentSpec)
 
 	// BRR-E2E-001: Log host/container port mapping so health check URL can be traced.

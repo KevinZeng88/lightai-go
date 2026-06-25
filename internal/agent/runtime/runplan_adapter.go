@@ -7,9 +7,12 @@ package runtime
 // so the Agent can deserialize it directly from task payloads.
 func ConvertRunplanToAgentSpec(plan PlanInput) AgentRunSpec {
 	spec := AgentRunSpec{
+		OperationID:      plan.OperationID,
 		InstanceID:       plan.InstanceID,
 		DeploymentID:     plan.DeploymentID,
 		RuntimeType:      "docker",
+		BackendType:      plan.BackendType,
+		Vendor:           plan.Vendor,
 		ModelPath:        plan.ModelPath,
 		ServedModelName:  plan.ServedModelName,
 		NodeID:           plan.NodeID,
@@ -34,7 +37,23 @@ func ConvertRunplanToAgentSpec(plan PlanInput) AgentRunSpec {
 			Ulimits:         plan.Ulimits,
 			GroupAdd:        plan.GroupAdd,
 			GPUDeviceIDs:    plan.GPUDeviceIDs,
+			GpuDriver:       plan.GPUDriver,
+			GpuCapabilities: plan.GPUCapabilities,
 		},
+	}
+	if spec.BackendType == "" {
+		spec.BackendType = plan.BackendName
+	}
+	if plan.HealthCheck != nil {
+		spec.HealthCheck = &HealthCheckConfig{
+			Enabled:         plan.HealthCheck.Enabled,
+			Path:            plan.HealthCheck.Path,
+			Port:            plan.HealthCheck.Port,
+			Scheme:          plan.HealthCheck.Scheme,
+			ExpectedStatus:  plan.HealthCheck.ExpectedStatus,
+			TimeoutSeconds:  plan.HealthCheck.TimeoutSeconds,
+			IntervalSeconds: plan.HealthCheck.IntervalSeconds,
+		}
 	}
 
 	// Map volumes from resolved mounts.
@@ -70,10 +89,14 @@ func ConvertRunplanToAgentSpec(plan PlanInput) AgentRunSpec {
 // PlanInput is a minimal interface for plan data that avoids importing
 // the server-side runplan package into the agent.
 type PlanInput struct {
+	OperationID      string
 	InstanceID       string
 	DeploymentID     string
 	NodeID           string
 	AgentID          string
+	BackendName      string
+	BackendType      string
+	Vendor           string
 	ModelPath        string
 	ServedModelName  string
 	Image            string
@@ -93,8 +116,11 @@ type PlanInput struct {
 	ContainerPort    int
 	GPUDeviceIDs     []string
 	GPUVisibleEnvKey string
+	GPUDriver        string
+	GPUCapabilities  [][]string
 	SecurityOptions  []string
 	GroupAdd         []string
+	HealthCheck      *PlanHealthCheck
 }
 
 // PlanDevice mirrors runplan.DeviceMapping.
@@ -109,4 +135,15 @@ type PlanMount struct {
 	HostPath      string
 	ContainerPath string
 	Readonly      bool
+}
+
+// PlanHealthCheck mirrors the server resolved health check fields needed by the Agent.
+type PlanHealthCheck struct {
+	Enabled         bool
+	Path            string
+	Port            int
+	Scheme          string
+	ExpectedStatus  int
+	TimeoutSeconds  int
+	IntervalSeconds int
 }

@@ -176,30 +176,38 @@ func configSetParameterValues(set map[string]interface{}) []runplan.ParameterVal
 			continue
 		}
 		kind := strings.TrimSpace(fmt.Sprint(item["kind"]))
-		if kind != "cli_arg" {
+		if kind != "cli_arg" && kind != "cli_args" {
 			continue
 		}
 		render, _ := item["render"].(map[string]interface{})
 		target := strings.TrimSpace(fmt.Sprint(render["target"]))
 		flag := strings.TrimSpace(fmt.Sprint(render["flag"]))
 		envName := strings.TrimSpace(fmt.Sprint(render["env_name"]))
+		style := strings.TrimSpace(fmt.Sprint(render["style"]))
 		enabled, _ := item["enabled"].(bool)
 		value := configValue(set, code, item["default_value"])
+		if kind == "cli_args" && strings.TrimSpace(fmt.Sprint(value)) == "" {
+			continue
+		}
 		pv := runplan.ParameterValue{
-			Key:     code,
-			Type:    strings.TrimSpace(fmt.Sprint(item["type"])),
-			Target:  target,
-			CliName: flag,
-			EnvName: envName,
-			Enabled: enabled,
-			Value:   value,
-			Default: item["default_value"],
-			Source:  "config_set",
+			Key:         code,
+			Type:        strings.TrimSpace(fmt.Sprint(item["type"])),
+			Target:      target,
+			CliName:     flag,
+			EnvName:     envName,
+			RenderStyle: style,
+			Enabled:     enabled,
+			Value:       value,
+			Default:     item["default_value"],
+			Source:      "config_set",
+		}
+		if kind == "cli_args" && pv.RenderStyle == "" {
+			pv.RenderStyle = "raw_lines"
 		}
 		if kind == "env" && pv.Target == "" {
 			pv.Target = "env"
 		}
-		if kind == "cli_arg" && pv.Target == "" {
+		if (kind == "cli_arg" || kind == "cli_args") && pv.Target == "" {
 			pv.Target = "cli"
 		}
 		out = append(out, pv)

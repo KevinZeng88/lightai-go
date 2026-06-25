@@ -37,6 +37,11 @@ All commands were run from `/home/kzeng/projects/ai-platform-study/lightai-go`.
 | `go test ./...` | PASS | All Go packages pass under the fresh ConfigSet schema. |
 | `rg -n "config_snapshot_json|parameter_schema_json|parameter_values_json|image_name|docker_json|default_env_json|capabilities_json|capability_sources_json|parameter_defaults_json|default_args_json|parameter_defs_json|default_backend_params_json|default_images_json|image_candidates_json|docker_options_json|model_mount_json|seedBuiltInBackends|seedTargetBackendCatalog|repairBackendCapabilitiesV27|normalizeLegacyBackendCatalogIDs|migrateV[0-9]+" internal/server/api internal/server/runplan internal/server/db` | PASS | No exact old authority field, old catalog seed/repair, or `migrateVx` hits remain in active API/RunPlan/DB scope. |
 | `git diff --check` | PASS | No whitespace errors in current tracked diff. |
+| `go test ./internal/server/runplan ./internal/agent/runtime ./internal/server/api -count=1` | PASS | Checkpoint D targeted tests pass after ConfigSet parameter renderer styles, repeat-flag preservation, and ResolvedRunPlan-to-AgentRunSpec conversion changes. |
+| `go test ./...` | PASS | All Go packages pass after Checkpoint D renderer and AgentRunSpec changes. |
+| `go build ./cmd/server/...` | PASS | Server binary builds after Checkpoint D changes. |
+| `go build ./cmd/agent/...` | PASS | Agent binary builds after Checkpoint D changes. |
+| `rg -n "config_snapshot_json|parameter_schema_json|parameter_values_json|image_name|docker_json|default_env_json|capabilities_json|capability_sources_json|parameter_defaults_json|default_args_json|parameter_defs_json|default_backend_params_json|default_images_json|image_candidates_json|docker_options_json|model_mount_json|seedBuiltInBackends|seedTargetBackendCatalog|repairBackendCapabilitiesV27|normalizeLegacyBackendCatalogIDs|migrateV[0-9]+" internal/server/api internal/server/runplan internal/server/db` | PASS | No exact old authority field, old catalog seed/repair, or `migrateVx` hits were introduced by Checkpoint D. Command exited 1 because there were no matches. |
 
 ## Old Field Hit Counts
 
@@ -72,3 +77,5 @@ All commands were run from `/home/kzeng/projects/ai-platform-study/lightai-go`.
 PASS for Checkpoint A documentation/inventory scope before commit.
 
 PASS for combined Checkpoint B/C clean-state implementation scope before commit. The implementation uses a fresh DB schema, ConfigSet catalog loader, and ConfigSet copy-on-create paths without active V1->V28 migration replay or old authority-field fallback in API/RunPlan/DB.
+
+PASS for Checkpoint D renderer / RunPlan / AgentRunSpec scope before commit. RunPlan parameter rendering now consumes ConfigSet render styles, preserves repeat flags, and deployment start uses the Agent runtime adapter generated from ResolvedRunPlan.

@@ -211,6 +211,37 @@ func TestResolveImagePriority(t *testing.T) {
 	}
 }
 
+func TestResolveRendersConfigSetParameterStyles(t *testing.T) {
+	in := makeTestInput()
+	in.BackendRuntime.ArgsOverride = nil
+	in.BackendVersion.ParameterDefs = nil
+	in.NBRConfigSnapshot.ArgsOverride = nil
+	in.NBRConfigSnapshot.ParameterValues = []ParameterValue{
+		{Key: "equals", CliName: "--kv-cache-dtype", Enabled: true, Value: "fp8", RenderStyle: "flag_equals_value"},
+		{Key: "bool", CliName: "--enforce-eager", Enabled: true, Value: true, RenderStyle: "flag_if_true"},
+		{Key: "repeat", CliName: "--lora", Enabled: true, Value: []interface{}{"a", "b"}, RenderStyle: "repeat_flag"},
+		{Key: "pos", Enabled: true, Value: "{{MODEL_CONTAINER_PATH}}", RenderStyle: "positional"},
+		{Key: "raw", Enabled: true, Value: "--trust-remote-code\n--max-num-seqs 8", RenderStyle: "raw_lines"},
+	}
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("Resolve errors: %v", errs)
+	}
+	got := strings.Join(plan.Args, " ")
+	for _, want := range []string{
+		"--kv-cache-dtype=fp8",
+		"--enforce-eager",
+		"--lora a --lora b",
+		"/models/Qwen3-32B",
+		"--trust-remote-code --max-num-seqs 8",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("args missing %q: %v", want, plan.Args)
+		}
+	}
+}
+
 func TestResolveArgs(t *testing.T) {
 	plan, _, _ := Resolve(makeTestInput())
 
