@@ -1045,7 +1045,7 @@ func (db *DB) migrateV12() error {
 		status TEXT NOT NULL DEFAULT 'available',
 		collected_at TEXT,
 		reported_at TEXT NOT NULL DEFAULT '',
-		tenant_id TEXT NOT NULL DEFAULT 'default',
+		tenant_id TEXT NOT NULL DEFAULT 'a0000000-0000-0000-0000-000000000001',
 		owner_id TEXT,
 		created_by TEXT NOT NULL DEFAULT 'system',
 		updated_by TEXT NOT NULL DEFAULT 'system',
