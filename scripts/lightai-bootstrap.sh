@@ -1081,9 +1081,17 @@ for a in arr:
 
     update_bootstrap_state "model_artifact_ids" "$model_key" "$artifact_id"
 
-    # Create model location
+    # Create model location — register model root first if needed
     local location_id="" loc_action="REUSE"
     if [[ "$action" != "FAIL" && -n "$artifact_id" ]]; then
+      # Ensure model root exists for the path (needed for location creation)
+      local model_root
+      model_root=$(dirname "$path")
+      if [[ "$kind" == "gguf" ]]; then model_root=$(dirname "$model_root"); fi
+      local root_body="{\"path\":\"$model_root\",\"name\":\"default-model-root\"}"
+      local root_status
+      root_status=$(curl_api_post "/api/v1/nodes/$node_id/model-roots" "$root_body" /dev/null)
+      log_info "model root check for $model_root: HTTP $root_status (may already exist)"
       local loc_body="{\"node_id\":\"$node_id\",\"path_type\":\"$path_type\",\"absolute_path\":\"$path\",\"size_bytes\":0,\"checksum\":\"\",\"manifest_digest\":\"\",\"match_status\":\"exact_match\",\"verification_status\":\"verified\",\"manual_override\":false}"
       local loc_resp="$FINAL_OUTPUT_DIR/responses/location-create-$model_key.json"
       local loc_status
