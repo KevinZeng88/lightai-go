@@ -240,6 +240,14 @@ cp -r configs/backend-catalog/* "$BUILD_DIR/configs/backend-catalog/"
 # Copy optional catalog overrides if present.
 mkdir -p "$BUILD_DIR/configs/backend-catalog.d"
 cp -r configs/backend-catalog.d/* "$BUILD_DIR/configs/backend-catalog.d/" 2>/dev/null || true
+# Copy bootstrap tooling (scripts, profiles, export helper, docs).
+cp scripts/lightai-bootstrap.sh "$BUILD_DIR/scripts/"
+mkdir -p "$BUILD_DIR/scripts/lib"
+cp scripts/lib/bootstrap-export.py "$BUILD_DIR/scripts/lib/"
+mkdir -p "$BUILD_DIR/configs/bootstrap"
+cp -r configs/bootstrap/*.yaml "$BUILD_DIR/configs/bootstrap/" 2>/dev/null || true
+mkdir -p "$BUILD_DIR/docs/engineering/bootstrap"
+cp docs/engineering/bootstrap/lightai-bootstrap.md "$BUILD_DIR/docs/engineering/bootstrap/" 2>/dev/null || true
 chmod +x "$BUILD_DIR"/scripts/*.sh
 echo "  OK"
 
