@@ -234,9 +234,12 @@ cp scripts/status.sh scripts/verify-local.sh "$BUILD_DIR/scripts/"
 cp scripts/collect-logs.sh scripts/collect-debug-bundle.sh "$BUILD_DIR/scripts/"
 cp scripts/apply-patch.sh scripts/diagnose-model-runtime-spec.sh "$BUILD_DIR/scripts/"
 cp scripts/smoke-model-backends.sh "$BUILD_DIR/scripts/"
-# Copy model-runtime configs (backend templates, versions, profiles).
-mkdir -p "$BUILD_DIR/configs/model-runtime"
-cp -r configs/model-runtime/* "$BUILD_DIR/configs/model-runtime/" 2>/dev/null || true
+# Copy backend-catalog configs (backend definitions, version schemas, runtime templates, help docs).
+mkdir -p "$BUILD_DIR/configs/backend-catalog"
+cp -r configs/backend-catalog/* "$BUILD_DIR/configs/backend-catalog/"
+# Copy optional catalog overrides if present.
+mkdir -p "$BUILD_DIR/configs/backend-catalog.d"
+cp -r configs/backend-catalog.d/* "$BUILD_DIR/configs/backend-catalog.d/" 2>/dev/null || true
 chmod +x "$BUILD_DIR"/scripts/*.sh
 echo "  OK"
 
