@@ -1,523 +1,215 @@
 <template>
   <div class="runtime-parameter-editor">
     <el-collapse v-model="activeSections">
-      <!-- High Risk / Docker Scalar Options -->
-      <el-collapse-item :title="t('runtimes.highRiskOptions')" name="highRisk">
-        <div v-for="opt in scalarOptions" :key="opt.key" class="param-row">
+      <el-collapse-item
+        v-for="[category, items] in groupedItems"
+        :key="category"
+        :title="categoryTitle(category)"
+        :name="category"
+      >
+        <div v-for="item in items" :key="item.code" class="param-row">
           <div class="param-header">
-            <el-checkbox v-model:checked="opt.enabled" :disabled="readonly">
-              {{ t(opt.label) }}
+            <el-checkbox v-model="item.enabled" :disabled="readonly" @change="emitOutput">
+              {{ itemLabel(item) }}
             </el-checkbox>
-            <span v-if="opt.warning" class="param-warning">{{ t(opt.warning) }}</span>
+            <el-tag size="small" type="info">{{ item.kind }}</el-tag>
           </div>
+
           <el-input
-            v-model="opt.value"
-            :disabled="!opt.enabled || readonly"
+            v-if="isMultiline(item)"
+            v-model="item.textValue"
+            type="textarea"
+            :rows="3"
+            :disabled="!item.enabled || readonly"
+            class="param-textarea"
+            @input="emitOutput"
+          />
+          <el-switch
+            v-else-if="item.type === 'boolean'"
+            v-model="item.boolValue"
+            :disabled="!item.enabled || readonly"
+            @change="emitOutput"
+          />
+          <el-input
+            v-else
+            v-model="item.textValue"
+            :disabled="!item.enabled || readonly"
             size="small"
             class="param-input"
-            :placeholder="opt.placeholder"
+            @input="emitOutput"
           />
-          <span class="param-hint">{{ opt.hint }}</span>
+
+          <span class="param-hint">{{ renderHint(item) }}</span>
         </div>
       </el-collapse-item>
 
-      <!-- List Options -->
-      <el-collapse-item :title="t('runtimes.listOptions')" name="listOptions">
-        <div v-for="opt in listOptions" :key="opt.key" class="param-row">
-          <div class="param-header">
-            <el-checkbox v-model:checked="opt.enabled" :disabled="readonly">
-              {{ t(opt.label) }}
-            </el-checkbox>
-          </div>
-          <el-input
-            v-model="opt.value"
-            type="textarea"
-            :rows="3"
-            :disabled="!opt.enabled || readonly"
-            :placeholder="opt.placeholder"
-            class="param-textarea"
-          />
-        </div>
-      </el-collapse-item>
-
-      <!-- Backend Serving Args (dynamic from BackendVersion schema, grouped) -->
-      <el-collapse-item v-if="backendParams.length > 0" :title="t('runtimes.backendServingArgs')" name="backendArgs">
-        <el-alert type="info" :closable="false" style="margin-bottom:8px">
-          {{ t('runtimes.backendArgsHint') }}
-        </el-alert>
-        <div v-for="[group, params] in groupedBackendParams" :key="group" class="param-group">
-          <h4 class="param-group-title">{{ group }}</h4>
-          <div v-for="param in params" :key="param.key" class="param-row">
-            <div class="param-header">
-              <el-checkbox v-model:checked="param.enabled" :disabled="readonly || param.required">
-                {{ param.label || param.cli_name }}
-                <el-tag v-if="param.required" size="small" type="danger" style="margin-left:4px">required</el-tag>
-              </el-checkbox>
-              <el-popover v-if="getHelpEntry(param.name)" trigger="hover" :width="280" placement="right">
-                <template #reference>
-                  <span class="help-icon" style="margin-left:4px;cursor:pointer;color:var(--el-color-primary);font-size:12px">?</span>
-                </template>
-                <div style="font-size:13px">
-                  <p><strong>{{ getHelpEntry(param.name).title }}</strong></p>
-                  <p style="margin-top:4px">{{ getHelpEntry(param.name).summary }}</p>
-                  <el-divider style="margin:8px 0" />
-                  <p style="color:var(--el-text-color-secondary)">{{ t('runtimes.helpDefault') }}: {{ getHelpEntry(param.name).official_default }}</p>
-                  <p style="color:var(--el-color-success)">{{ t('runtimes.helpRecommendation') }}: {{ getHelpEntry(param.name).lightai_recommendation }}</p>
-                  <el-alert v-if="getHelpEntry(param.name).risk" :title="getHelpEntry(param.name).risk" type="warning" :closable="false" style="margin-top:8px" />
-                </div>
-              </el-popover>
-            </div>
-            <el-input
-              v-model="param.value"
-              :disabled="!param.enabled || readonly"
-              size="small"
-              class="param-input"
-              :placeholder="param.default || param.type || ''"
-            />
-            <span class="param-hint">{{ param.name }}{{ param.alias ? ' / ' + param.alias : '' }}</span>
-          </div>
-        </div>
-      </el-collapse-item>
-
-      <!-- Custom Args / Env -->
-      <el-collapse-item :title="t('runtimes.customOptions')" name="custom">
-        <div class="param-row">
-          <div class="param-header">
-            <el-checkbox v-model:checked="customArgs.enabled" :disabled="readonly">
-              {{ t('runtimes.customArgs') }}
-            </el-checkbox>
-          </div>
-          <el-input
-            v-model="customArgs.value"
-            type="textarea"
-            :rows="3"
-            :disabled="!customArgs.enabled || readonly"
-            placeholder="--flag value (one per line)"
-            class="param-textarea"
-          />
-        </div>
-        <div class="param-row">
-          <div class="param-header">
-            <el-checkbox v-model:checked="customEnv.enabled" :disabled="readonly">
-              {{ t('runtimes.customEnv') }}
-            </el-checkbox>
-          </div>
-          <el-input
-            v-model="customEnv.value"
-            type="textarea"
-            :rows="3"
-            :disabled="!customEnv.enabled || readonly"
-            placeholder="KEY=VALUE (one per line)"
-            class="param-textarea"
-          />
-        </div>
-      </el-collapse-item>
-
-      <!-- Command Preview -->
-      <el-collapse-item v-if="commandPreview" :title="t('runtimes.commandPreview')" name="preview">
-        <pre class="command-preview">{{ commandPreview }}</pre>
+      <el-collapse-item title="ConfigSet" name="configset">
+        <JsonViewer :value="configSetPreview" title="ConfigSet" max-height="420px" :searchable="true" />
       </el-collapse-item>
     </el-collapse>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed, reactive, ref, watch } from 'vue'
+import JsonViewer from './JsonViewer.vue'
 
-const { t } = useI18n()
-
-interface BackendParamDef {
-  name: string
-  alias?: string
-  label?: string
-  group?: string
-  required?: boolean
-  optional?: boolean
-  default?: string
-  value?: string
-  type?: string
+type ConfigItemView = {
+  code: string
+  category: string
+  kind: string
+  type: string
+  enabled: boolean
+  value: any
+  defaultValue: any
+  render: Record<string, any>
+  supportLevel: string
+  textValue: string
+  boolValue: boolean
 }
 
-interface Props {
-  modelValue: {
-    docker_json?: Record<string, any>
-    args_override_json?: string[]
-    default_env_json?: Record<string, string>
-    entrypoint_override_json?: string[]
-    parameter_values_json?: any[]
-  }
-  backendSchema?: BackendParamDef[]
+const props = withDefaults(defineProps<{
+  modelValue: Record<string, any>
   readonly?: boolean
+  backendSchema?: any[]
   vendor?: string
   helpBackend?: string
   helpVersion?: string
-}
-
-const props = withDefaults(defineProps<Props>(), {
+}>(), {
   readonly: false,
-  vendor: 'nvidia',
   backendSchema: () => [],
+  vendor: 'nvidia',
   helpBackend: '',
   helpVersion: '',
 })
 
 const emit = defineEmits(['update:modelValue'])
+const activeSections = ref<string[]>(['launcher', 'runtime_env', 'model_runtime'])
+const editorItems = reactive<ConfigItemView[]>([])
 
-const activeSections = ref<string[]>(['highRisk'])
-
-interface ParamOption {
-  key: string
-  label: string
-  warning?: string
-  enabled: boolean
-  value: string
-  placeholder?: string
-  hint?: string
-}
-
-const scalarOptions = reactive<ParamOption[]>([
-  { key: 'privileged', label: 'runtimes.privileged', warning: 'runtimes.privilegedRisk', enabled: false, value: 'true', placeholder: 'true/false', hint: 'Docker --privileged' },
-  { key: 'ipc_mode', label: 'runtimes.ipcMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'host', hint: 'Docker --ipc' },
-  { key: 'uts_mode', label: 'runtimes.utsMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'host', hint: 'Docker --uts' },
-  { key: 'network_mode', label: 'runtimes.networkMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'bridge/host/none', hint: 'Docker --network' },
-  { key: 'pid_mode', label: 'runtimes.pidMode', warning: 'runtimes.namespaceRisk', enabled: false, value: 'host', placeholder: 'host', hint: 'Docker --pid' },
-  { key: 'shm_size', label: 'runtimes.shmSize', warning: 'runtimes.resourceRisk', enabled: false, value: '16gb', placeholder: '16gb', hint: 'Docker --shm-size' },
-])
-
-const listOptions = reactive<ParamOption[]>([
-  { key: 'devices', label: 'runtimes.devices', enabled: false, value: '', placeholder: '/dev/fuse:/dev/fuse', hint: 'Docker --device (host:container[:perms])' },
-  { key: 'optional_devices', label: 'runtimes.optionalDevices', enabled: false, value: '', placeholder: '/dev/infiniband:/dev/infiniband', hint: 'Optional devices, failure tolerated' },
-  { key: 'group_add', label: 'runtimes.groupAdd', enabled: false, value: '', placeholder: 'video\nrender', hint: 'Docker --group-add' },
-  { key: 'security_options', label: 'runtimes.securityOpt', enabled: false, value: '', placeholder: 'seccomp=unconfined\napparmor=unconfined', hint: 'Docker --security-opt' },
-  { key: 'cap_add', label: 'runtimes.capAdd', enabled: false, value: '', placeholder: 'SYS_ADMIN\nIPC_LOCK', hint: 'Docker --cap-add' },
-  { key: 'device_cgroup_rules', label: 'runtimes.deviceCgroupRules', enabled: false, value: '', placeholder: 'c 195:* rmw', hint: 'Docker --device-cgroup-rule' },
-  { key: 'extra_hosts', label: 'runtimes.extraHosts', enabled: false, value: '', placeholder: 'host.docker.internal:host-gateway', hint: 'Docker --add-host' },
-  { key: 'ulimits', label: 'runtimes.ulimits', enabled: false, value: '', placeholder: 'memlock=-1\nnofile=65536:65536', hint: 'Docker --ulimit (KEY=VALUE per line)' },
-  { key: 'extra_mounts', label: 'runtimes.extraMounts', enabled: false, value: '', placeholder: '/host/path:/container/path:ro', hint: 'Docker -v / --volume' },
-])
-
-const customArgs = reactive({ enabled: false, value: '' })
-const customEnv = reactive({ enabled: false, value: '' })
-
-// --- Dynamic backend serving args from BackendVersion schema ---
-interface BackendParam {
-  key: string
-  name: string
-  alias: string
-  cli_name: string
-  label: string
-  group: string
-  required: boolean
-  enabled: boolean
-  value: string
-  default: string
-  type: string
-}
-
-const backendParams = reactive<BackendParam[]>([])
-
-// Group backend params by group field
-const groupedBackendParams = computed(() => {
-  const groups = new Map<string, BackendParam[]>()
-  for (const p of backendParams) {
-    const g = p.group || 'other'
-    if (!groups.has(g)) groups.set(g, [])
-    groups.get(g)!.push(p)
-  }
-  return groups
+const sourceConfigSet = computed(() => {
+  const root = props.modelValue || {}
+  if (root.config_set && typeof root.config_set === 'object') return root.config_set
+  return root
 })
 
-function syncBackendParamsFromSchema() {
-  const schema = props.backendSchema || []
-  const existingValues = props.modelValue.parameter_values_json || []
-  const existingMap = new Map<string, any>()
-  for (const pv of existingValues) {
-    existingMap.set(pv.key || pv.cli_name || '', pv)
+const groupedItems = computed(() => {
+  const groups = new Map<string, ConfigItemView[]>()
+  for (const item of editorItems) {
+    if (!groups.has(item.category)) groups.set(item.category, [])
+    groups.get(item.category)!.push(item)
   }
+  return Array.from(groups.entries())
+})
 
-  // Rebuild backendParams from schema
-  backendParams.length = 0
-  for (const def of schema) {
-    const key = (def.name || '').replace(/^-+/, '')
-    const cliName = def.name || key
-    const existing = existingMap.get(key) || existingMap.get(cliName)
-    backendParams.push({
-      key,
-      name: def.name || key,
-      alias: def.alias || '',
-      cli_name: cliName,
-      label: def.label || cliName,
-      group: def.group || 'other',
-      required: !!def.required,
-      // Required params are always enabled — cannot be disabled
-      enabled: def.required ? true : (existing ? !!existing.enabled : false),
-      value: existing?.value != null ? String(existing.value) : (def.default || def.value || ''),
-      default: def.default || def.value || '',
-      type: def.type || 'string',
-    })
-  }
-}
+const configSetPreview = computed(() => buildConfigSet())
 
-// --- Sync guard with try/finally ---
-let syncing = false
+watch(() => sourceConfigSet.value, loadFromModel, { immediate: true, deep: true })
 
 function loadFromModel() {
-  if (syncing) return
-  syncing = true
-  try {
-    const docker = props.modelValue.docker_json || {}
-    for (const opt of scalarOptions) {
-      const v = docker[opt.key]
-      if (v !== undefined && v !== null) {
-        opt.enabled = v !== '' && v !== false
-        opt.value = typeof v === 'boolean' ? String(v) : String(v)
-      } else {
-        opt.enabled = false
-      }
-    }
-    for (const opt of listOptions) {
-      const v = docker[opt.key]
-      if (v !== undefined && v !== null) {
-        opt.enabled = Array.isArray(v) ? v.length > 0 : !!v
-        opt.value = Array.isArray(v) ? v.map(formatListItem).join('\n') : (typeof v === 'object' ? JSON.stringify(v) : String(v || ''))
-      } else {
-        opt.enabled = false
-      }
-    }
-    const argsArr = props.modelValue.args_override_json
-    if (Array.isArray(argsArr)) {
-      customArgs.enabled = argsArr.length > 0
-      customArgs.value = argsArr.join('\n')
-    }
-    const envObj = props.modelValue.default_env_json
-    if (envObj && typeof envObj === 'object') {
-      const entries = Object.entries(envObj)
-      customEnv.enabled = entries.length > 0
-      customEnv.value = entries.map(([k, v]) => `${k}=${v}`).join('\n')
-    }
-    // Sync backend params from schema + existing values
-    syncBackendParamsFromSchema()
-  } finally {
-    syncing = false
-  }
-}
-
-function buildOutput() {
-  if (syncing) return
-  syncing = true
-  try {
-    const docker: Record<string, any> = {}
-    for (const opt of scalarOptions) {
-      if (opt.key === 'privileged') {
-        docker[opt.key] = opt.value === 'true'
-      } else if (opt.value !== '') {
-        docker[opt.key] = opt.value
-      }
-    }
-    for (const opt of listOptions) {
-      const lines = parseLines(opt.value)
-      if (opt.key === 'env') {
-        docker.default_env = Object.fromEntries(lines.map(parseKeyValue))
-      } else if (lines.length > 0) {
-        docker[opt.key] = lines
-      }
-    }
-    const argsOverride = parseLines(customArgs.value)
-    const envOverride = Object.fromEntries(parseLines(customEnv.value).map(parseKeyValue))
-
-    // Build parameter_values_json from backend params
-    const paramValues = backendParams.map(p => ({
-      key: p.key,
-      cli_name: p.cli_name,
-      alias: p.alias,
-      name: p.name,
-      type: p.type,
-      enabled: p.enabled,
-      value: p.value,
-      default: p.default,
-      required: p.required,
-    }))
-
-    emit('update:modelValue', {
-      ...props.modelValue,
-      docker_json: docker,
-      args_override_json: argsOverride,
-      default_env_json: envOverride,
-      parameter_values_json: paramValues,
+  const items = sourceConfigSet.value?.items || {}
+  editorItems.splice(0, editorItems.length)
+  for (const [code, raw] of Object.entries(items)) {
+    const item = raw as Record<string, any>
+    const value = item.value ?? item.default_value ?? ''
+    editorItems.push({
+      code,
+      category: String(item.category || 'model_runtime'),
+      kind: String(item.kind || 'cli_arg'),
+      type: String(item.type || 'string'),
+      enabled: Boolean(item.enabled),
+      value,
+      defaultValue: item.default_value,
+      render: (item.render && typeof item.render === 'object') ? item.render : {},
+      supportLevel: String(item.support_level || 'documented'),
+      textValue: formatValue(value),
+      boolValue: Boolean(value),
     })
-  } finally {
-    // Defer syncing clear to next microtask so the guard stays active
-    // through Vue 3 async watcher flush, preventing re-entry from modelValue watch
-    nextTick(() => { syncing = false })
   }
+  editorItems.sort((a, b) => a.category.localeCompare(b.category) || a.code.localeCompare(b.code))
 }
 
-// Command preview — show ALL enabled parameters
-const commandPreview = computed(() => {
-  const parts = ['docker', 'run', '-d']
-  const docker = props.modelValue.docker_json || {}
-  if (docker.privileged) parts.push('--privileged')
-  if (docker.ipc_mode) parts.push('--ipc', String(docker.ipc_mode))
-  if (docker.uts_mode) parts.push('--uts', String(docker.uts_mode))
-  if (docker.network_mode) parts.push('--network', String(docker.network_mode))
-  if (docker.pid_mode) parts.push('--pid', String(docker.pid_mode))
-  if (docker.shm_size) parts.push('--shm-size', String(docker.shm_size))
-  for (const d of (Array.isArray(docker.devices) ? docker.devices : [])) {
-    parts.push('--device', typeof d === 'string' ? d : `${d.host_path}:${d.container_path || d.host_path}`)
+function emitOutput() {
+  const set = buildConfigSet()
+  emit('update:modelValue', {
+    ...props.modelValue,
+    config_set: set,
+    config_overrides: {
+      parameter_values: editorItems.map((item) => ({
+        key: item.code,
+        value: parsedValue(item),
+        enabled: item.enabled,
+      })),
+    },
+  })
+}
+
+function buildConfigSet() {
+  const root = sourceConfigSet.value || {}
+  const out: Record<string, any> = {
+    ...root,
+    items: { ...(root.items || {}) },
   }
-  for (const g of (Array.isArray(docker.group_add) ? docker.group_add : [])) {
-    parts.push('--group-add', g)
-  }
-  for (const s of (Array.isArray(docker.security_options) ? docker.security_options : [])) {
-    parts.push('--security-opt', s)
-  }
-  for (const c of (Array.isArray(docker.cap_add) ? docker.cap_add : [])) {
-    parts.push('--cap-add', c)
-  }
-  for (const r of (Array.isArray(docker.device_cgroup_rules) ? docker.device_cgroup_rules : [])) {
-    parts.push('--device-cgroup-rule', r)
-  }
-  for (const h of (Array.isArray(docker.extra_hosts) ? docker.extra_hosts : [])) {
-    parts.push('--add-host', h)
-  }
-  for (const [k, v] of Object.entries(docker.ulimits || {})) {
-    parts.push('--ulimit', `${k}=${v}`)
-  }
-  for (const v of (Array.isArray(docker.extra_mounts) ? docker.extra_mounts : [])) {
-    parts.push('-v', typeof v === 'string' ? v : `${v.host_path}:${v.container_path || v.host_path}`)
-  }
-  const envObj = docker.default_env || {}
-  for (const [k, v] of Object.entries(envObj)) {
-    parts.push('-e', `${k}=${v}`)
-  }
-  // Backend serving args
-  for (const p of backendParams) {
-    if (p.enabled && p.value) {
-      parts.push(p.cli_name, String(p.value))
+  for (const item of editorItems) {
+    out.items[item.code] = {
+      ...(out.items[item.code] || {}),
+      value: parsedValue(item),
+      enabled: item.enabled,
     }
   }
-  parts.push('<image>')
-  if (props.modelValue.args_override_json?.length) {
-    parts.push(...props.modelValue.args_override_json)
+  return out
+}
+
+function parsedValue(item: ConfigItemView) {
+  if (item.type === 'boolean') return item.boolValue
+  if (item.type === 'integer') {
+    const n = Number.parseInt(item.textValue, 10)
+    return Number.isFinite(n) ? n : item.textValue
   }
-  return parts.join(' ')
-})
-
-// Watch local changes → emit
-watch([scalarOptions, listOptions, customArgs, customEnv, backendParams], () => { buildOutput() }, { deep: true })
-
-onMounted(loadFromModel)
-
-// Watch external modelValue changes → sync to local
-// Uses shallow identity check + syncing guard to prevent re-entry from our own emit
-let lastModelRef: any = null
-watch(() => props.modelValue, (newVal) => {
-  // Skip if we're the ones emitting (buildOutput sets syncing)
-  if (syncing) return
-  // Skip identical reference (parent passed same object back)
-  if (newVal === lastModelRef) return
-  lastModelRef = newVal
-  loadFromModel()
-}, { deep: false })
-
-// Watch backendSchema changes
-watch(() => props.backendSchema, () => { syncBackendParamsFromSchema() }, { deep: false })
-
-// Help data loading
-const helpData = ref<Record<string, any>>({})
-watch(() => [props.helpBackend, props.helpVersion], async () => {
-  helpData.value = {}
-  if (!props.helpBackend || !props.helpVersion) return
-  try {
-    const { apiClient } = await import('@/api/client')
-    const entries = await apiClient.get(`/backend-help?backend=${encodeURIComponent(props.helpBackend)}&version=${encodeURIComponent(props.helpVersion)}&lang=zh-CN`)
-    if (Array.isArray(entries)) {
-      const map: Record<string, any> = {}
-      for (const e of entries) map[e.name] = e
-      helpData.value = map
-    }
-  } catch {
-    // Graceful fallback: no help available
-    helpData.value = {}
+  if (item.type === 'number') {
+    const n = Number.parseFloat(item.textValue)
+    return Number.isFinite(n) ? n : item.textValue
   }
-}, { immediate: true })
-
-// Help icon helper
-function getHelpEntry(name: string): any {
-  return helpData.value[name] || null
+  if (item.type === 'array' || item.type === 'lines') {
+    return item.textValue.split('\n').map((line) => line.trim()).filter(Boolean)
+  }
+  if (item.type === 'object') {
+    try { return JSON.parse(item.textValue || '{}') } catch { return item.textValue }
+  }
+  return item.textValue
 }
 
-// Helpers
-function parseLines(value: string): string[] {
-  return value.split('\n').map(s => s.trim()).filter(s => s.length > 0)
+function formatValue(value: any) {
+  if (Array.isArray(value)) return value.join('\n')
+  if (value && typeof value === 'object') return JSON.stringify(value, null, 2)
+  return value == null ? '' : String(value)
 }
 
-function parseKeyValue(value: string): [string, string] {
-  const idx = value.indexOf('=')
-  if (idx < 0) return [value, '']
-  return [value.substring(0, idx), value.substring(idx + 1)]
+function isMultiline(item: ConfigItemView) {
+  return item.type === 'array' || item.type === 'lines' || item.type === 'object'
 }
 
-function formatListItem(v: any): string {
-  if (typeof v === 'string') return v
-  if (v?.host_path) return `${v.host_path}:${v.container_path || v.host_path}${v.permissions ? ':' + v.permissions : ''}`
-  return JSON.stringify(v)
+function itemLabel(item: ConfigItemView) {
+  return item.code
+}
+
+function renderHint(item: ConfigItemView) {
+  const flag = item.render?.flag || item.render?.env_name || ''
+  return [flag, item.supportLevel].filter(Boolean).join(' | ')
+}
+
+function categoryTitle(category: string) {
+  if (category === 'runtime_env') return 'Runtime Environment'
+  if (category === 'model_runtime') return 'Model Runtime'
+  if (category === 'launcher') return 'Launcher'
+  return category
 }
 </script>
 
 <style scoped>
-.runtime-parameter-editor {
-  width: 100%;
-}
-.param-group {
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-.param-group:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-}
-.param-group-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-text-color-regular);
-  margin: 0 0 8px 0;
-  text-transform: capitalize;
-}
-.param-row {
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.param-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.param-input {
-  max-width: 300px;
-}
-.param-textarea {
-  width: 100%;
-}
-.param-warning {
-  font-size: 12px;
-  color: var(--el-color-warning);
-}
-.param-hint {
-  font-size: 11px;
-  color: var(--el-text-color-placeholder);
-}
-.command-preview {
-  background: var(--el-fill-color-darker);
-  padding: 12px;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 13px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
+.runtime-parameter-editor { width: 100%; }
+.param-row { padding: 8px 0; border-bottom: 1px solid var(--el-border-color-lighter); }
+.param-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.param-input, .param-textarea { width: 100%; }
+.param-hint { display: block; margin-top: 4px; color: var(--el-text-color-secondary); font-size: 12px; }
 </style>

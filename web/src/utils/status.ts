@@ -72,7 +72,7 @@ const STATUS_REASON_MAP: Record<string, string> = {
   'does not match expected backend': 'runtime.statusReason.backendMismatch',
   'version probe failed': 'runtime.statusReason.versionProbeFailed',
   'version probe timed out': 'runtime.statusReason.versionProbeFailed',
-  'image_present=false': 'runtime.statusReason.missingImage',
+  'image inspect reports missing image': 'runtime.statusReason.missingImage',
   'no image_ref configured': 'runtime.statusReason.evidenceMissing',
   'declared match not verified': 'runtime.statusReason.backendMismatch',
   'backend match: declared_match_unverified': 'runtime.statusReason.backendMismatch',

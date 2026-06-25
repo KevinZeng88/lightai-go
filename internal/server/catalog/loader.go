@@ -176,6 +176,7 @@ func MaterializeBackendVersion(registry *Registry, backend BackendDoc, version V
 	setItem(items, "runtime.health", version.HealthCheck, version.HealthCheck, len(version.HealthCheck) > 0, "BackendVersion", version.ID)
 	addDynamic(items, "backend.capabilities", "model_runtime", "object", normalizedCapabilities(backend, version), "BackendVersion", version.ID, 5)
 	addDynamic(items, "backend.supported_config_items", "model_runtime", "array", configCodesFromArgs(version.DefaultArgsSchema), "BackendVersion", version.ID, 6)
+	addArgConfigItems(items, version.DefaultArgsSchema, "BackendVersion", version.ID)
 	return ConfigSet{
 		SchemaVersion: 1,
 		Context: map[string]string{
@@ -186,6 +187,49 @@ func MaterializeBackendVersion(registry *Registry, backend BackendDoc, version V
 		},
 		Items:          items,
 		SourceMetadata: sourceMetadata(version.SourcePath, version.SourceHash, "backend:"+version.BackendID, "backend_version"),
+	}
+}
+
+func addArgConfigItems(items map[string]ConfigItem, args []map[string]any, layer, ref string) {
+	for idx, arg := range args {
+		name := strings.TrimSpace(fmt.Sprint(arg["name"]))
+		if name == "" || name == "{{MODEL_CONTAINER_PATH}}" {
+			continue
+		}
+		code := configCodeFromArgName(name)
+		if code == "" {
+			continue
+		}
+		typ := strings.TrimSpace(fmt.Sprint(arg["type"]))
+		if typ == "" || typ == "<nil>" {
+			typ = "string"
+		}
+		defaultValue := arg["default"]
+		if defaultValue == nil {
+			defaultValue = arg["value"]
+		}
+		enabled := boolFromAny(arg["required"]) || defaultValue != nil
+		item := ConfigItem{
+			Code:         code,
+			Category:     "model_runtime",
+			Kind:         "cli_arg",
+			Type:         normalizeConfigType(typ),
+			Value:        defaultValue,
+			DefaultValue: defaultValue,
+			Enabled:      enabled,
+			Render: map[string]any{
+				"target": "cli",
+				"flag":   name,
+				"style":  renderStyleForArgType(typ),
+			},
+			Order:        300 + idx,
+			SupportLevel: "documented",
+			Source:       map[string]string{"layer": layer, "ref": ref, "reason": "default_args_schema"},
+		}
+		if label := strings.TrimSpace(fmt.Sprint(arg["label"])); label != "" && label != "<nil>" {
+			item.Extensions = map[string]interface{}{"label": label, "group": strings.TrimSpace(fmt.Sprint(arg["group"]))}
+		}
+		items[code] = item
 	}
 }
 
@@ -464,15 +508,51 @@ func normalizeDockerValue(key string, value any) any {
 func configCodesFromArgs(args []map[string]any) []string {
 	codes := make([]string, 0, len(args)+1)
 	for _, arg := range args {
-		name, _ := arg["name"].(string)
+		name := strings.TrimSpace(fmt.Sprint(arg["name"]))
 		if name == "" {
 			continue
 		}
-		code := "backend.arg." + strings.TrimLeft(strings.ReplaceAll(name, "-", "_"), "_")
-		codes = append(codes, code)
+		if code := configCodeFromArgName(name); code != "" {
+			codes = append(codes, code)
+		}
 	}
 	codes = append(codes, "backend.extra_args")
 	return codes
+}
+
+func configCodeFromArgName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" || strings.HasPrefix(trimmed, "{{") {
+		return ""
+	}
+	return "backend.arg." + strings.TrimLeft(strings.ReplaceAll(trimmed, "-", "_"), "_")
+}
+
+func normalizeConfigType(typ string) string {
+	switch strings.ToLower(strings.TrimSpace(typ)) {
+	case "int":
+		return "integer"
+	case "float", "double":
+		return "number"
+	case "bool":
+		return "boolean"
+	case "integer", "number", "boolean", "array", "object", "lines":
+		return strings.ToLower(strings.TrimSpace(typ))
+	default:
+		return "string"
+	}
+}
+
+func renderStyleForArgType(typ string) string {
+	if normalizeConfigType(typ) == "boolean" {
+		return "flag_if_true"
+	}
+	return "flag_space_value"
+}
+
+func boolFromAny(v any) bool {
+	b, _ := v.(bool)
+	return b
 }
 
 func normalizedCapabilities(backend BackendDoc, version VersionDoc) any {

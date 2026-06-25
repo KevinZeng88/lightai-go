@@ -44,8 +44,6 @@ func TestWorkflowDeploymentRunPlanPreservesNBRSnapshot(t *testing.T) {
 	app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+fixture.NodeID+"/backend-runtimes/enable", map[string]interface{}{
 		"backend_runtime_id": fixture.RuntimeID,
 		"image_ref":          "workflow/live-check-mutation:latest",
-		"image_present":      true,
-		"docker_available":   true,
 	}, http.StatusOK)
 	// R-001: enable sets needs_check; update to ready for deployment test
 	app.DB.Exec(`UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id=?`, fixture.NBRID)
@@ -121,8 +119,6 @@ func newWorkflowDeploymentFixture(t *testing.T, app *workflowTestApp, suffix str
 		"backend_runtime_id": runtimeID,
 		"display_name":       "Workflow deployment NBR " + suffix,
 		"image_ref":          nbrImage,
-		"image_present":      true,
-		"docker_available":   true,
 		"driver_version":     "555.55",
 		"toolkit_version":    "12.5",
 	}, http.StatusOK)

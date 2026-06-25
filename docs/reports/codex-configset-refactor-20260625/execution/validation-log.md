@@ -42,6 +42,15 @@ All commands were run from `/home/kzeng/projects/ai-platform-study/lightai-go`.
 | `go build ./cmd/server/...` | PASS | Server binary builds after Checkpoint D changes. |
 | `go build ./cmd/agent/...` | PASS | Agent binary builds after Checkpoint D changes. |
 | `rg -n "config_snapshot_json|parameter_schema_json|parameter_values_json|image_name|docker_json|default_env_json|capabilities_json|capability_sources_json|parameter_defaults_json|default_args_json|parameter_defs_json|default_backend_params_json|default_images_json|image_candidates_json|docker_options_json|model_mount_json|seedBuiltInBackends|seedTargetBackendCatalog|repairBackendCapabilitiesV27|normalizeLegacyBackendCatalogIDs|migrateV[0-9]+" internal/server/api internal/server/runplan internal/server/db` | PASS | No exact old authority field, old catalog seed/repair, or `migrateVx` hits were introduced by Checkpoint D. Command exited 1 because there were no matches. |
+| `go test ./internal/server/catalog ./internal/server/api ./internal/server/runplan ./internal/agent/runtime -count=1` | PASS | Checkpoint E targeted backend packages pass after public API, OpenAPI, Web/API contract, and current deployment payload updates. Initial failures were stale test assertions for old `config_set_json` public response and old `backend_runtime_id` error wording; tests were updated to assert `config_set`, `node_backend_runtime_id`, and `config_overrides`. |
+| `go test ./...` | PASS | All Go packages pass after Checkpoint E API/UI/script refactor. |
+| `go build ./cmd/server/...` | PASS | Server binary builds after Checkpoint E changes. |
+| `go build ./cmd/agent/...` | PASS | Agent binary builds after Checkpoint E changes. |
+| `cd web && npm test` | PASS | Web static/unit tests pass. `runtimeBoundaryUi.test.mjs` verifies UI and API modules no longer reference old authority fields and that deployment create uses `node_backend_runtime_id` plus `config_overrides`; deployment edit runtime selector is absent. |
+| `cd web && npm run build` | PASS | Web production build passes. Vite emitted existing Rollup annotation and chunk-size warnings, but exited 0. |
+| `python3 - <<'PY' ... yaml.safe_load('docs/api/openapi.yaml') ... PY` | PASS | OpenAPI parses successfully and contains `/deployments` plus `/deployments/preflight`; legacy `/model-deployments`, `/runtime-environments`, and `/run-templates` paths are absent. |
+| `rg -n -g '!scripts/archive/**' -- "config_snapshot_json|parameter_schema_json|parameter_values_json|parameters_json|default_args_json|default_env_json|docker_json|model_mount_json|health_check_json|capabilities_json|image_candidates_json|default_images_json|env_json|ports_json|volumes_json|devices_json|resource_controls_json|/runtime-environments|/run-templates|/model-deployments|image_present|docker_available" web/src docs/api scripts \|\| true` | PASS | Active Web, OpenAPI, and script paths have no old authority fields, old deployment routes, or client-trusted readiness evidence terms. Archived legacy-contract scripts are excluded and kept as historical material only. |
+| `git diff --check` | PASS | No whitespace errors in current tracked diff. |
 
 ## Old Field Hit Counts
 
@@ -79,3 +88,5 @@ PASS for Checkpoint A documentation/inventory scope before commit.
 PASS for combined Checkpoint B/C clean-state implementation scope before commit. The implementation uses a fresh DB schema, ConfigSet catalog loader, and ConfigSet copy-on-create paths without active V1->V28 migration replay or old authority-field fallback in API/RunPlan/DB.
 
 PASS for Checkpoint D renderer / RunPlan / AgentRunSpec scope before commit. RunPlan parameter rendering now consumes ConfigSet render styles, preserves repeat flags, and deployment start uses the Agent runtime adapter generated from ResolvedRunPlan.
+
+PASS for Checkpoint E API/UI/script scope before commit. Public API and OpenAPI expose ConfigSet/current contract names, Web pages no longer present a non-effective deployment runtime selector, active scripts no longer use legacy deployment payload fields or client-trusted readiness evidence, and stale legacy-contract scripts are removed from active entrypoints.

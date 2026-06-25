@@ -1067,7 +1067,7 @@ print(found or '')
       else
         # Create new artifact
         action="CREATE"
-        local create_body="{\"name\":\"$model_key\",\"display_name\":\"$display_name\",\"path\":\"$path\",\"format\":\"$format\",\"task_type\":\"$task_type\",\"source_type\":\"local_path\",\"architecture\":\"custom\",\"quantization\":\"unknown\",\"default_context_length\":0,\"estimated_vram_bytes\":0,\"required_gpu_count\":1,\"capabilities_json\":\"[]\",\"capability_sources_json\":\"{}\",\"default_test_mode\":\"auto\",\"parameter_defaults_json\":\"[]\"}"
+        local create_body="{\"name\":\"$model_key\",\"display_name\":\"$display_name\",\"path\":\"$path\",\"format\":\"$format\",\"task_type\":\"$task_type\",\"source_type\":\"local_path\",\"architecture\":\"custom\",\"quantization\":\"unknown\",\"default_context_length\":0,\"estimated_vram_bytes\":0,\"required_gpu_count\":1,\"capabilities\":[],\"capability_sources\":{},\"default_test_mode\":\"auto\"}"
         local create_resp="$FINAL_OUTPUT_DIR/responses/artifact-create-$model_key.json"
         local create_status
         create_status=$(curl_api_post "/api/v1/model-artifacts" "$create_body" "$create_resp")
@@ -1237,12 +1237,12 @@ for r in arr:
     br_id=$(find_br_id "$rt_key")
     local br_action="REUSE"
     if [[ -z "$br_id" ]]; then
-      local br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_vllm_id\",\"backend_version_id\":\"$rt_version\",\"image_name\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\",\"health_check_override_json\":\"{}\",\"args_override_json\":\"[]\",\"default_env_json\":\"{}\",\"entrypoint_override_json\":\"[]\",\"image_pull_policy\":\"if_not_present\"}"
+      local br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_vllm_id\",\"backend_version_id\":\"$rt_version\",\"image_ref\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\"}"
       # Use the correct backend_id for each runtime
       case "$rt_key" in
-        vllm) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_vllm_id\",\"backend_version_id\":\"$rt_version\",\"image_name\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\",\"health_check_override_json\":\"{}\",\"args_override_json\":\"[]\",\"default_env_json\":\"{}\",\"entrypoint_override_json\":\"[]\",\"image_pull_policy\":\"if_not_present\"}" ;;
-        sglang) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_sglang_id\",\"backend_version_id\":\"$rt_version\",\"image_name\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\",\"health_check_override_json\":\"{}\",\"args_override_json\":\"[]\",\"default_env_json\":\"{}\",\"entrypoint_override_json\":\"[]\",\"image_pull_policy\":\"if_not_present\"}" ;;
-        llamacpp) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_llamacpp_id\",\"backend_version_id\":\"$rt_version\",\"image_name\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\",\"health_check_override_json\":\"{}\",\"args_override_json\":\"[]\",\"default_env_json\":\"{}\",\"entrypoint_override_json\":\"[]\",\"image_pull_policy\":\"if_not_present\"}" ;;
+        vllm) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_vllm_id\",\"backend_version_id\":\"$rt_version\",\"image_ref\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\"}" ;;
+        sglang) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_sglang_id\",\"backend_version_id\":\"$rt_version\",\"image_ref\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\"}" ;;
+        llamacpp) br_body="{\"name\":\"$rt_key\",\"display_name\":\"$rt_key\",\"backend_id\":\"$backend_llamacpp_id\",\"backend_version_id\":\"$rt_version\",\"image_ref\":\"$rt_image\",\"vendor\":\"nvidia\",\"template_name\":\"\"}" ;;
       esac
       local br_resp="$FINAL_OUTPUT_DIR/responses/br-create-$rt_key.json"
       local br_status
@@ -1420,7 +1420,7 @@ for r in arr:
     local depl_action="REUSE"
     if [[ -z "$depl_id" ]]; then
       local svc_json="{\"host_port\":$host_port,\"container_port\":0,\"app_port\":0}"
-      local depl_body="{\"name\":\"$depl_name\",\"model_artifact_id\":\"$model_id\",\"node_backend_runtime_id\":\"$nbr_id\",\"service_json\":$svc_json,\"env_overrides_json\":\"{}\",\"parameter_values_json\":[],\"disabled_parameters_json\":[],\"placement_json\":\"{}\"}"
+      local depl_body="{\"name\":\"$depl_name\",\"model_artifact_id\":\"$model_id\",\"node_backend_runtime_id\":\"$nbr_id\",\"service_json\":$svc_json,\"config_overrides\":{\"parameter_values\":[]},\"placement_json\":\"{}\"}"
       local depl_resp="$FINAL_OUTPUT_DIR/responses/deployment-create-$rt_key.json"
       local depl_status
       depl_status=$(curl_api_post "/api/v1/deployments" "$depl_body" "$depl_resp")
@@ -1582,11 +1582,11 @@ EOF
 
   for rt in vllm sglang llamacpp; do
     log_info "=== full mode: $rt ==="
-    local rt_result="{\"image\":\"${RT_IMAGE[$rt]}\",\"image_present\":false,\"deployment_id\":\"\",\"instance_id\":\"\",\"node_run_plan_id\":\"\",\"container_id_present\":false,\"start_status\":\"SKIP\",\"instance_status\":\"not_started\",\"logs_status\":\"SKIP\",\"health_status\":\"SKIP\",\"models_endpoint_status\":\"SKIP\",\"chat_completion_status\":\"NOT_RUN\",\"stop_status\":\"SKIP\",\"action\":\"SKIP_IMAGE_MISSING\",\"recommended_manual_command\":\"docker pull ${RT_IMAGE[$rt]}\"}"
+    local rt_result="{\"image\":\"${RT_IMAGE[$rt]}\",\"local_image_exists\":false,\"deployment_id\":\"\",\"instance_id\":\"\",\"node_run_plan_id\":\"\",\"container_id_present\":false,\"start_status\":\"SKIP\",\"instance_status\":\"not_started\",\"logs_status\":\"SKIP\",\"health_status\":\"SKIP\",\"models_endpoint_status\":\"SKIP\",\"chat_completion_status\":\"NOT_RUN\",\"stop_status\":\"SKIP\",\"action\":\"SKIP_IMAGE_MISSING\",\"recommended_manual_command\":\"docker pull ${RT_IMAGE[$rt]}\"}"
 
     # Check image
     if docker image inspect "${RT_IMAGE[$rt]}" >/dev/null 2>&1; then
-      rt_result="{\"image\":\"${RT_IMAGE[$rt]}\",\"image_present\":true,\"deployment_id\":\"\",\"instance_id\":\"\",\"node_run_plan_id\":\"\",\"container_id_present\":false,\"start_status\":\"SKIP\",\"instance_status\":\"not_started\",\"logs_status\":\"SKIP\",\"health_status\":\"SKIP\",\"models_endpoint_status\":\"SKIP\",\"chat_completion_status\":\"NOT_RUN\",\"stop_status\":\"SKIP\",\"action\":\"START\",\"recommended_manual_command\":\"\"}"
+      rt_result="{\"image\":\"${RT_IMAGE[$rt]}\",\"local_image_exists\":true,\"deployment_id\":\"\",\"instance_id\":\"\",\"node_run_plan_id\":\"\",\"container_id_present\":false,\"start_status\":\"SKIP\",\"instance_status\":\"not_started\",\"logs_status\":\"SKIP\",\"health_status\":\"SKIP\",\"models_endpoint_status\":\"SKIP\",\"chat_completion_status\":\"NOT_RUN\",\"stop_status\":\"SKIP\",\"action\":\"START\",\"recommended_manual_command\":\"\"}"
     else
       add_error "FULL_IMAGE_MISSING" "$rt: image ${RT_IMAGE[$rt]} not found locally — docker pull required"
       python3 -c "

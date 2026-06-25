@@ -1,26 +1,40 @@
 import { apiClient } from './client'
 
 export interface InferenceBackend {
-  id: string; name: string; display_name: string; description: string
-  protocol_json: any; default_version: string; parameter_format: string
-  common_parameters_json: any; default_env_json: any
-  is_builtin: boolean; is_enabled: boolean; created_at: string; updated_at: string
+  id: string
+  name: string
+  display_name: string
+  description?: string
+  status?: string
+  managed_by?: string
+  config_set: Record<string, any>
+  source_metadata?: Record<string, any>
+  created_at: string
+  updated_at: string
 }
 
 export interface BackendVersion {
-  id: string; backend_id: string; version: string; display_name: string
-  is_default: boolean; default_entrypoint_json: any; default_args_json: any
-  default_backend_params_json: any; parameter_defs_json: any
-  health_check_json: any; default_container_port: number
-  default_images_json: any; env_json: any
-  capabilities_json?: any; docker_options_json?: any; model_mount_json?: any; vendor_options_json?: any
-  image_candidates_json?: any; default_endpoints_json?: any; default_args_schema_json?: any
-  default_host?: string; protocol?: string; readonly?: boolean; description?: string; managed_by?: string; source?: string
-  is_deprecated: boolean; created_at: string; updated_at: string
+  id: string
+  backend_id: string
+  version: string
+  display_name: string
+  is_default: boolean
+  is_deprecated: boolean
+  protocol?: string
+  readonly?: boolean
+  description?: string
+  managed_by?: string
+  source?: string
+  config_set: Record<string, any>
+  source_metadata?: Record<string, any>
+  created_at: string
+  updated_at: string
 }
 
 export interface BackendRuntimeTemplate {
-  name: string; source: string; content: string
+  name: string
+  source: string
+  content: string
 }
 
 export async function listBackends(): Promise<InferenceBackend[]> {

@@ -120,6 +120,14 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
+	if _, ok := req["image_present"]; ok {
+		writeError(w, http.StatusBadRequest, "image_present is server/agent verified evidence; call check-request")
+		return
+	}
+	if _, ok := req["docker_available"]; ok {
+		writeError(w, http.StatusBadRequest, "docker_available is server/agent verified evidence; call check-request")
+		return
+	}
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
 	args := []interface{}{now}
@@ -143,13 +151,6 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 			}
 		}
 	}
-	if v, ok := req["image_present"]; ok {
-		if b, ok := v.(bool); ok {
-			sets = append(sets, "image_present = ?")
-			args = append(args, boolInt(b))
-			needsRecheck = true
-		}
-	}
 	if v, ok := req["config_set"]; ok {
 		sets = append(sets, "config_set_json = ?")
 		args = append(args, jsonString(v))
@@ -171,13 +172,6 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 	if v, ok := req["device_check_json"]; ok {
 		sets = append(sets, "device_check_json = ?")
 		args = append(args, jsonString(v))
-	}
-	if v, ok := req["docker_available"]; ok {
-		if b, ok := v.(bool); ok {
-			sets = append(sets, "docker_available = ?")
-			args = append(args, boolInt(b))
-			needsRecheck = true
-		}
 	}
 	if v, ok := req["disabled"]; ok {
 		if b, ok := v.(bool); ok && b {

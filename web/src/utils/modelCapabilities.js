@@ -34,7 +34,7 @@ function metadataList(model) {
 function explicitCapabilitySet(model) {
   const out = new Set()
   const values = []
-  for (const key of ['capabilities', 'capabilities_json']) {
+  for (const key of ['capabilities']) {
     const raw = model?.[key]
     if (Array.isArray(raw)) values.push(...raw)
     else if (raw && typeof raw === 'object') values.push(...Object.keys(raw).filter((k) => raw[k]))

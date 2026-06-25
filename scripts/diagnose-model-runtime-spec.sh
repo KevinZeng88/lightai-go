@@ -31,7 +31,7 @@ echo ""
 
 # ---- 3. Deployments ----
 echo "## 3. Deployments"
-curl -sf "$SERVER_URL/api/v1/model-deployments" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "  (no deployments or API unavailable)"
+curl -sf "$SERVER_URL/api/v1/deployments" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "  (no deployments or API unavailable)"
 echo ""
 
 # ---- 4. Instances ----
@@ -158,7 +158,7 @@ compare_item 11 "working_dir" "(not set)" "from runtime.docker.working_dir"
 compare_item 12 "security opts" "(not set)" "from runtime.docker.security_options"
 compare_item 13 "ulimits" "(not set)" "from runtime.docker.ulimits"
 compare_item 14 "user/group" "(not set)" "from runtime.docker.user"
-compare_item 15 "health check" "(not set)" "from backend_version health_check_json"
+compare_item 15 "health check" "(not set)" "from runtime.health ConfigSet item"
 compare_item 16 "env vars" "(none by default)" "from runtime.default_env + backend.env"
 compare_item 17 "GPU vendor" "nvidia" "from backend_runtime.vendor (CUDA)"
 echo ""

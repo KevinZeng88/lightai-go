@@ -146,27 +146,8 @@ e2e_create_artifact() {
 }
 
 e2e_enable_nbr() {
-  local imgs; imgs="$(api_body GET "/api/v1/nodes/$NODE_ID/docker-images" 2>/dev/null || echo '[]')"
-  set +e
-  local ip; ip="$(echo "$imgs" | python3 -c "
-import json,sys
-payload=json.load(sys.stdin)
-imgs=payload.get('images', []) if isinstance(payload, dict) else payload
-img='${IMAGE_REF}'
-for i in imgs:
-    refs=[i.get('image_ref','')]
-    repo=i.get('repository','')
-    tag=i.get('tag','')
-    if repo and tag:
-        refs.append(f'{repo}:{tag}')
-    for ref in refs:
-        if img == str(ref):
-            print('true'); sys.exit(0)
-print('false')
-" 2>/dev/null || echo false)"
-  set -e
   local r; r="$(api_ok POST "/api/v1/nodes/$NODE_ID/backend-runtimes/enable" \
-    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\",\"image_present\":$ip,\"docker_available\":true}")"
+    "{\"backend_runtime_id\":\"$BACKEND_RUNTIME_ID\",\"image_ref\":\"$IMAGE_REF\"}")"
   api_body PATCH "/api/v1/nodes/$NODE_ID/backend-runtimes/$NODE_ID:$BACKEND_RUNTIME_ID" "{\"image_ref\":\"$IMAGE_REF\"}" >/dev/null 2>&1 || true
   log "nbr enabled status=$(echo "$r" | json_get status 2>/dev/null || echo '?')"
 }
@@ -199,10 +180,11 @@ e2e_create_deployment() {
   local name; name="e2e-${BACKEND_NAME}-${E2E_RUN_ID}"
   local payload; payload="{\"name\":\"$name\",\"model_artifact_id\":\"$ARTIFACT_ID\",\"node_backend_runtime_id\":\"$NODE_ID:$BACKEND_RUNTIME_ID\",\"placement_json\":{\"node_id\":\"$NODE_ID\",\"accelerator_ids\":[\"$GPU_ID\"]},\"service_json\":{\"host_port\":$HOST_PORT}"
   if [ -n "$DEPLOY_PARAMS" ]; then
-    payload="$payload,\"parameters_json\":{$DEPLOY_PARAMS}"
-  fi
-  if [ -n "$DEPLOY_ENV" ]; then
-    payload="$payload,\"env_overrides_json\":{$DEPLOY_ENV}"
+    local overrides; overrides="$(deploy_params_to_config_overrides "{$DEPLOY_PARAMS}" "${DEPLOY_ENV:-}")"
+    payload="$payload,\"config_overrides\":$overrides"
+  elif [ -n "$DEPLOY_ENV" ]; then
+    local overrides; overrides="$(deploy_params_to_config_overrides "{}" "$DEPLOY_ENV")"
+    payload="$payload,\"config_overrides\":$overrides"
   fi
   payload="$payload}"
   mkdir -p "$ARTIFACT_DIR"
@@ -211,6 +193,35 @@ e2e_create_deployment() {
   DEPLOYMENT_ID="$(api_ok POST /api/v1/deployments "$payload" | json_get id)"
   [ -n "$DEPLOYMENT_ID" ] || { fail "create deployment failed"; return 1; }
   log "deployment_id=$DEPLOYMENT_ID"
+}
+
+deploy_params_to_config_overrides() {
+  local params_json="$1"
+  local env_payload="${2:-}"
+  python3 - "$params_json" "$env_payload" <<'PY'
+import json, sys
+
+params = json.loads(sys.argv[1] or "{}")
+env = json.loads("{" + sys.argv[2] + "}") if len(sys.argv) > 2 and sys.argv[2].strip() else {}
+
+def code_for(key):
+    if key in ("served_model_name", "served-model-name", "--served-model-name"):
+        return "backend.common.served_model_name"
+    normalized = key.strip()
+    if normalized.startswith("--"):
+        normalized = normalized[2:]
+    elif normalized.startswith("-"):
+        normalized = normalized[1:]
+    normalized = normalized.replace("-", "_")
+    return "backend.arg." + normalized
+
+overrides = {"parameter_values": []}
+for key, value in params.items():
+    overrides["parameter_values"].append({"key": code_for(str(key)), "value": value, "enabled": True})
+if env:
+    overrides["env"] = env
+print(json.dumps(overrides, separators=(",", ":")))
+PY
 }
 
 e2e_preflight() {

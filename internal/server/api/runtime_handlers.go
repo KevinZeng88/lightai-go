@@ -61,7 +61,7 @@ func (h *AgentHandler) HandleListBackendRuntimes(w http.ResponseWriter, r *http.
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, publicBackendRuntimeList(out))
 }
 
 func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +156,7 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 	}
 	log.OperationCompleted(ctx, "backend_runtime.create", opStart,
 		"id", id, "name", name, "template", templateName, "tenant_id", tid)
-	writeJSON(w, http.StatusCreated, h.getBackendRuntimeJSON(id))
+	writeJSON(w, http.StatusCreated, publicBackendRuntimeJSON(h.getBackendRuntimeJSON(id)))
 }
 
 func (h *AgentHandler) HandleGetBackendRuntime(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +170,7 @@ func (h *AgentHandler) HandleGetBackendRuntime(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, m)
+	writeJSON(w, http.StatusOK, publicBackendRuntimeJSON(m))
 }
 
 func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.Request) {
@@ -248,7 +248,7 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 		return
 	}
 	log.OperationCompleted(ctx, "backend_runtime.update", opStart, "id", id)
-	writeJSON(w, http.StatusOK, h.getBackendRuntimeJSON(id))
+	writeJSON(w, http.StatusOK, publicBackendRuntimeJSON(h.getBackendRuntimeJSON(id)))
 }
 
 func (h *AgentHandler) HandleDeleteBackendRuntime(w http.ResponseWriter, r *http.Request) {
@@ -319,15 +319,13 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 			"driver_version": driver, "toolkit_version": toolkit, "device_check_json": json.RawMessage(checkJSON),
 			"status": status, "status_reason": reason, "last_checked_at": checked, "tenant_id": tid,
 			"created_at": ca, "updated_at": ua,
-			"deployable":           deployable,
-			"warnings":             warnings,
-			"disabled_reason":      nbrDisabledReason(status, reason),
-			"config_set":           parseConfigSet(configSetJSONRaw),
-			"config_set_json":      json.RawMessage(configSetJSONRaw),
-			"source_metadata":      configSourceMetadata(sourceMetaJSON),
-			"source_metadata_json": json.RawMessage(sourceMetaJSON),
-			"probe_results_json":   json.RawMessage(probeResultsJSON),
-			"backend_runtime":      map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
+			"deployable":         deployable,
+			"warnings":           warnings,
+			"disabled_reason":    nbrDisabledReason(status, reason),
+			"config_set":         parseConfigSet(configSetJSONRaw),
+			"source_metadata":    configSourceMetadata(sourceMetaJSON),
+			"probe_results_json": json.RawMessage(probeResultsJSON),
+			"backend_runtime":    map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
 		})
 	}
 	if out == nil {
@@ -389,9 +387,9 @@ func (h *AgentHandler) HandleListAllNodeBackendRuntimes(w http.ResponseWriter, r
 				"runner_type": runner, "image_ref": imageRef, "image_present": imagePresent == 1, "docker_available": dockerAvailable == 1,
 				"status": status, "status_reason": reason, "last_checked_at": checked,
 				"deployable": deployable, "warnings": warnings,
-				"disabled_reason": nbrDisabledReason(status, reason),
-				"config_set":      parseConfigSet(configSetJSONRaw), "config_set_json": json.RawMessage(configSetJSONRaw),
-				"source_metadata": configSourceMetadata(sourceMetaJSON), "source_metadata_json": json.RawMessage(sourceMetaJSON),
+				"disabled_reason":    nbrDisabledReason(status, reason),
+				"config_set":         parseConfigSet(configSetJSONRaw),
+				"source_metadata":    configSourceMetadata(sourceMetaJSON),
 				"probe_results_json": json.RawMessage(probeResultsJSON),
 				"backend_runtime":    map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
 				"tenant_id":          tid2, "created_at": ca, "updated_at": ua,
@@ -826,6 +824,16 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusBadRequest, "backend_runtime_id is required")
 		return
 	}
+	if !checkOnly {
+		if _, ok := req["image_present"]; ok {
+			writeError(w, http.StatusBadRequest, "image_present is server/agent verified evidence; call check-request after enable")
+			return
+		}
+		if _, ok := req["docker_available"]; ok {
+			writeError(w, http.StatusBadRequest, "docker_available is server/agent verified evidence; call check-request after enable")
+			return
+		}
+	}
 	rt := h.getBackendRuntimeJSON(runtimeID)
 	if rt == nil {
 		writeError(w, http.StatusNotFound, "backend runtime not found")
@@ -1161,6 +1169,24 @@ func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {
 		"source_metadata_json": json.RawMessage(sourceMetaRaw),
 		"created_at":           ca, "updated_at": ua,
 	}
+}
+
+func publicBackendRuntimeList(in []map[string]interface{}) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(in))
+	for _, item := range in {
+		out = append(out, publicBackendRuntimeJSON(item))
+	}
+	return out
+}
+
+func publicBackendRuntimeJSON(in map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	delete(out, "config_set_json")
+	delete(out, "source_metadata_json")
+	return out
 }
 
 func (h *AgentHandler) queryBackendRuntimes(query string, args ...interface{}) ([]map[string]interface{}, error) {

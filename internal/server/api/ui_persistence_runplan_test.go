@@ -321,9 +321,9 @@ func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
 	}
 	var got map[string]interface{}
 	_ = json.Unmarshal(w.Body.Bytes(), &got)
-	snapRaw := got["config_set_json"]
+	snapRaw := got["config_set"]
 	if snapRaw == nil {
-		t.Fatal("config_set_json missing in response")
+		t.Fatal("config_set missing in response")
 	}
 	// snapshot may come back as map[string]interface{} or string
 	var snapStr string
@@ -339,7 +339,7 @@ func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
 		}
 	}
 	if snapStr == "" || snapStr == "{}" || snapStr == "map[]" {
-		t.Fatalf("config_set_json empty after create: %s", snapStr)
+		t.Fatalf("config_set empty after create: %s", snapStr)
 	}
 	if !strings.Contains(snapStr, "rt-snap") {
 		t.Fatalf("config set missing source runtime ref: %s", snapStr)

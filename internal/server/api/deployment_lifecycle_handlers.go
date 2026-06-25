@@ -40,7 +40,7 @@ func (h *AgentHandler) HandleListDeployments(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, publicDeploymentList(out))
 }
 
 // buildDeploymentSourceHash computes a hash of the runtime template config
@@ -88,10 +88,9 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Reject backend_runtime_id — BackendRuntime is a template, not a deployable object.
-	if _, ok := req["backend_runtime_id"]; ok {
+	if legacyKey := rejectLegacyDeploymentPayload(req); legacyKey != "" {
 		writeError(w, http.StatusBadRequest,
-			"BackendRuntime is a template and cannot be used for deployment. Use node_backend_runtime_id.")
+			fmt.Sprintf("%s is not accepted by the ConfigSet deployment contract; use node_backend_runtime_id and config_overrides", legacyKey))
 		return
 	}
 
@@ -149,14 +148,20 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		}
 	}
 
+	id := uuid.NewString()
+	tid := tenantID(r)
+	actorID := actorIDFromSession(r)
+	requestID := log.RequestIDFromContext(r.Context())
+	now := time.Now().Format(time.RFC3339)
+
 	configSetRaw := mergeNBRConfigSnapshot(h.buildDeploymentRuntimeSnapshot(backendRuntimeID), nbrConfigSetRaw, nbrImageRef)
 	configOverrides := map[string]interface{}{}
 	if overrides, ok := req["config_overrides"]; ok {
 		configOverrides = mapFromAny(overrides)
 	}
-	if overrides, ok := req["config_overrides_json"]; ok {
-		configOverrides = mapFromAny(overrides)
-	}
+	deploymentConfigSet := copyConfigSet(configSetRaw)
+	applyConfigOverrides(deploymentConfigSet, configOverrides, "Deployment", id)
+	configSetRaw = configSetJSON(deploymentConfigSet)
 	sourceMetadata := map[string]interface{}{
 		"copy_semantics":                  "copy_on_create",
 		"source_backend_runtime_id":       backendRuntimeID,
@@ -166,12 +171,6 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		"source_type":                     "node_backend_runtime",
 		"source_runtime_config_authority": "config_set",
 	}
-
-	id := uuid.NewString()
-	tid := tenantID(r)
-	actorID := actorIDFromSession(r)
-	requestID := log.RequestIDFromContext(r.Context())
-	now := time.Now().Format(time.RFC3339)
 
 	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, config_overrides_json, source_backend_runtime_id, source_node_backend_runtime_id, source_config_hash, copied_at, config_set_json, source_metadata_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "description", ""),
@@ -208,7 +207,7 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		Action: "deployment.create", ResourceType: "deployment",
 		ResourceID: id, Result: "success", RequestID: requestID,
 	})
-	writeJSON(w, http.StatusCreated, h.getDeploymentJSON(id))
+	writeJSON(w, http.StatusCreated, publicDeploymentJSON(h.getDeploymentJSON(id)))
 }
 
 func (h *AgentHandler) HandleGetDeployment(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +221,7 @@ func (h *AgentHandler) HandleGetDeployment(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, m)
+	writeJSON(w, http.StatusOK, publicDeploymentJSON(m))
 }
 
 func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Request) {
@@ -242,6 +241,11 @@ func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
+	if legacyKey := rejectLegacyDeploymentPayload(req); legacyKey != "" {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("%s is not accepted by the ConfigSet deployment contract; use config_overrides", legacyKey))
+		return
+	}
 
 	now := time.Now().Format(time.RFC3339)
 	sets := []string{"updated_at = ?"}
@@ -259,15 +263,21 @@ func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Requ
 			args = append(args, v)
 		}
 	}
-	for _, f := range []string{"placement_json", "service_json", "config_overrides_json"} {
+	for _, f := range []string{"placement_json", "service_json"} {
 		if v, ok := req[f]; ok {
 			sets = append(sets, f+" = ?")
 			args = append(args, jsonString(v))
 		}
 	}
 	if v, ok := req["config_overrides"]; ok {
+		configSetRaw := rawJSONString(existing["config_set"], rawJSONString(existing["config_set_json"], "{}"))
+		configSet := copyConfigSet(configSetRaw)
+		overrides := mapFromAny(v)
+		applyConfigOverrides(configSet, overrides, "Deployment", id)
 		sets = append(sets, "config_overrides_json = ?")
-		args = append(args, jsonString(v))
+		args = append(args, jsonString(overrides))
+		sets = append(sets, "config_set_json = ?")
+		args = append(args, configSetJSON(configSet))
 	}
 	if v, ok := req["replicas"]; ok {
 		sets = append(sets, "replicas = ?")
@@ -279,7 +289,31 @@ func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, h.getDeploymentJSON(id))
+	writeJSON(w, http.StatusOK, publicDeploymentJSON(h.getDeploymentJSON(id)))
+}
+
+func publicDeploymentList(in []map[string]interface{}) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(in))
+	for _, item := range in {
+		out = append(out, publicDeploymentJSON(item))
+	}
+	return out
+}
+
+func publicDeploymentJSON(in map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	for _, k := range []string{
+		"backend_runtime_id",
+		"config_overrides_json",
+		"config_set_json",
+		"source_metadata_json",
+	} {
+		delete(out, k)
+	}
+	return out
 }
 
 type activeDeploymentRunResponse struct {
@@ -691,18 +725,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	// Parse placement/service JSON from DB fields.
 	json.Unmarshal(rawJSONBytes(deploy["placement_json"]), &pf.placement)
 	json.Unmarshal(rawJSONBytes(deploy["service_json"]), &pf.service)
-	configOverrides := mapFromAny(deploy["config_overrides_json"])
-	if envOverride, ok := configOverrides["env"].(map[string]interface{}); ok {
-		pf.envOverrides = make(map[string]string, len(envOverride))
-		for k, v := range envOverride {
-			pf.envOverrides[k] = fmt.Sprint(v)
-		}
-	}
 	runtimeParameterValues := configSetParameterValues(deployConfigSet)
-	if overrideValues, ok := configOverrides["parameter_values"].([]interface{}); ok {
-		raw, _ := json.Marshal(overrideValues)
-		_ = json.Unmarshal(raw, &pf.parameterValues)
-	}
 
 	// Inject service ports into parameters so mapParametersToArgs uses the
 	// user's app_port instead of the ParameterDef hardcoded default (e.g. --port 8000).

@@ -865,8 +865,8 @@ func TestCreateDeploymentRejectsBackendRuntimeID(t *testing.T) {
 	if w.Code != 400 {
 		t.Fatalf("expected 400 for bare backend_runtime_id, got %d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "template") {
-		t.Fatalf("error should mention template, got: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "node_backend_runtime_id") || !strings.Contains(w.Body.String(), "config_overrides") {
+		t.Fatalf("error should mention current deployment contract, got: %s", w.Body.String())
 	}
 }
 

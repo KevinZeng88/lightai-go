@@ -1,213 +1,330 @@
-# CURRENT CONTRACT: See docs/testing/current-e2e-contract.md
-# Legacy routes (/runtime-environments, /run-templates, /model-deployments, /backend-runtimes/check) are DEPRECATED.
-# Current payload: node_backend_runtime_id, parameter_values_json, /check-request.
-#
-# NOTE: This OpenAPI spec is partially updated. Authoritative contract is in docs/testing/.
-
-# Current contract uses node_backend_runtime_id, /check-request, parameter_values_json.
-# See docs/testing/current-e2e-contract.md for authoritative contract.
-
 openapi: "3.0.3"
 info:
   title: LightAI Go API
-  version: "0.1.14"
+  version: "0.2.0-configset"
   description: |
-    LightAI Go is a lightweight GPU/node management platform.
-    Base URL: http://localhost:18080/api/v1
+    LightAI Go current API contract. Runtime and deployment configuration is
+    expressed through ConfigSet, config_overrides, and source_metadata.
 servers:
   - url: http://localhost:18080/api/v1
-    description: Local dev server
+    description: Local development server
 
 paths:
-  # --- Auth ---
   /auth/login:
     post:
       operationId: login
       summary: Login with username/password
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
+              required: [username, password]
               properties:
                 username: { type: string }
                 password: { type: string }
                 tenant_id: { type: string }
       responses:
-        "200": { description: Login success with session cookie }
-        "401": { description: Invalid credentials }
-        "429": { description: Rate limited }
+        "200": { description: Session cookie and CSRF token }
 
-  /auth/me:
+  /backends:
     get:
-      operationId: getMe
-      summary: Get current user session info
+      operationId: listBackends
+      summary: List backend catalog entries
       responses:
-        "200": { description: Current user, tenant, roles, permissions }
-        "401": { description: Not authenticated }
+        "200":
+          description: Backend list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Backend" }
 
-  /auth/logout:
-    post:
-      operationId: logout
-      summary: Logout and revoke session
+  /backend-runtimes:
+    get:
+      operationId: listBackendRuntimes
+      summary: List BackendRuntime templates
       responses:
-        "200": { description: Logged out }
-
-  /auth/change-password:
+        "200":
+          description: Runtime list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BackendRuntime" }
     post:
-      operationId: changePassword
-      summary: Change current user password
+      operationId: createBackendRuntime
+      summary: Create a user-managed BackendRuntime from a BackendVersion ConfigSet
       requestBody:
+        required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                current_password: { type: string }
-                new_password: { type: string }
+            schema: { $ref: "#/components/schemas/BackendRuntimeCreate" }
       responses:
-        "200": { description: Password changed }
+        "201": { description: Runtime created }
 
-  # --- Nodes ---
-  /nodes:
-    get:
-      operationId: listNodes
-      summary: List nodes (tenant-scoped)
-      responses:
-        "200": { description: Node list }
-
-  /nodes/{id}:
-    get:
-      operationId: getNode
-      summary: Get node by ID
+  /nodes/{id}/backend-runtimes/enable:
+    post:
+      operationId: enableNodeBackendRuntime
+      summary: Materialize a NodeBackendRuntime from a BackendRuntime template
       parameters:
-        - name: id
+        - $ref: "#/components/parameters/NodeID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeBackendRuntimeEnable" }
+      responses:
+        "200": { description: NodeBackendRuntime created or updated and marked needs_check }
+        "400": { description: Invalid request or client-trusted readiness evidence was supplied }
+
+  /nodes/{id}/backend-runtimes/{nbr_id}/check-request:
+    post:
+      operationId: checkNodeBackendRuntime
+      summary: Ask the server to verify NBR deployability through the Agent
+      parameters:
+        - $ref: "#/components/parameters/NodeID"
+        - name: nbr_id
           in: path
           required: true
           schema: { type: string }
       responses:
-        "200": { description: Node details }
-        "404": { description: Node not found }
+        "200": { description: Server/Agent verified NBR check result }
 
-  /nodes/{id}/tenant:
-    patch:
-      operationId: transferNode
-      summary: Transfer node to another tenant
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                tenant_id: { type: string }
-
-  # --- GPUs ---
-  /gpus:
+  /nodes/backend-runtimes/all:
     get:
-      operationId: listGPUs
-      summary: List GPUs (tenant-scoped)
-      parameters:
-        - name: node_id
-          in: query
-          schema: { type: string }
-        - name: vendor
-          in: query
-          schema: { type: string }
+      operationId: listNodeBackendRuntimes
+      summary: List tenant-visible NodeBackendRuntimes
       responses:
-        "200": { description: GPU list }
+        "200":
+          description: NBR list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NodeBackendRuntime" }
 
-  /gpus/{id}:
-    get:
-      operationId: getGPU
-      summary: Get GPU by ID
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200": { description: GPU details }
-
-  # --- Tenant / User / Role management (platform admin) ---
-  /tenants:
-    get:
-      operationId: listTenants
-      summary: List tenants
-    post:
-      operationId: createTenant
-      summary: Create tenant
-
-  /users:
-    get:
-      operationId: listUsers
-      summary: List users
-    post:
-      operationId: createUser
-      summary: Create user
-
-  /roles:
-    get:
-      operationId: listRoles
-      summary: List roles (tenant-scoped)
-
-  # --- Model Runtime ---
   /model-artifacts:
     get:
       operationId: listModelArtifacts
       summary: List model artifacts
+      responses:
+        "200": { description: Model artifact list }
     post:
       operationId: createModelArtifact
-      summary: Create model artifact
+      summary: Create a model artifact
+      responses:
+        "201": { description: Model artifact created }
 
-
-
+  /deployments:
     get:
-      operationId: listModelDeployments
+      operationId: listDeployments
       summary: List model deployments
+      responses:
+        "200":
+          description: Deployment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Deployment" }
+    post:
+      operationId: createDeployment
+      summary: Create a deployment from an NBR ConfigSet snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeploymentCreate" }
+      responses:
+        "201": { description: Deployment created }
+        "400": { description: Invalid request or legacy payload field supplied }
 
-  /model-deployments/{id}/start:
+  /deployments/preflight:
+    post:
+      operationId: preflightDeployment
+      summary: Preview deployment placement and deployability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeploymentPreflight" }
+      responses:
+        "200": { description: Preflight result }
+
+  /deployments/{id}/dry-run:
+    post:
+      operationId: dryRunDeployment
+      summary: Resolve the final RunPlan without starting a container
+      parameters:
+        - $ref: "#/components/parameters/DeploymentID"
+      responses:
+        "200": { description: Resolved RunPlan preview }
+
+  /deployments/{id}/start:
     post:
       operationId: startDeployment
-      summary: Start deployment
+      summary: Start a deployment through the Agent
+      parameters:
+        - $ref: "#/components/parameters/DeploymentID"
+      responses:
+        "200": { description: Start task accepted }
 
-  /model-deployments/{id}/stop:
+  /deployments/{id}/stop:
     post:
       operationId: stopDeployment
-      summary: Stop deployment
-
-  /model-instances:
-    get:
-      operationId: listModelInstances
-      summary: List model instances
-
-  /model-instances/{id}/logs:
-    get:
-      operationId: getInstanceLogs
-      summary: Get instance logs
-
-  # --- Observability ---
-  /observability/status:
-    get:
-      operationId: getObservabilityStatus
-      summary: Get Prometheus/Grafana status
-
-  # --- Agent API (internal, agent-token auth) ---
-  /agent/register:
-    post:
-      operationId: agentRegister
-      summary: Register agent node
-
-  /agent/heartbeat:
-    post:
-      operationId: agentHeartbeat
-      summary: Agent heartbeat
-
-  /agent/resources/report:
-    post:
-      operationId: agentResourceReport
-      summary: Report GPU/system resources
+      summary: Stop active deployment instances
+      parameters:
+        - $ref: "#/components/parameters/DeploymentID"
+      responses:
+        "200": { description: Stop task accepted }
 
 components:
+  parameters:
+    NodeID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    DeploymentID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  schemas:
+    ConfigSet:
+      type: object
+      required: [schema_version, items]
+      properties:
+        schema_version: { type: integer }
+        context:
+          type: object
+          additionalProperties: { type: string }
+        items:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/ConfigItem" }
+
+    ConfigItem:
+      type: object
+      properties:
+        code: { type: string }
+        category: { type: string, enum: [launcher, runtime_env, model_runtime] }
+        kind: { type: string }
+        type: { type: string }
+        value: {}
+        default_value: {}
+        enabled: { type: boolean }
+        render:
+          type: object
+          additionalProperties: true
+        support_level: { type: string }
+
+    SourceMetadata:
+      type: object
+      additionalProperties: true
+
+    Backend:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        display_name: { type: string }
+        status: { type: string }
+        config_set: { $ref: "#/components/schemas/ConfigSet" }
+        source_metadata: { $ref: "#/components/schemas/SourceMetadata" }
+
+    BackendRuntime:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        display_name: { type: string }
+        backend_id: { type: string }
+        backend_version_id: { type: string }
+        vendor: { type: string }
+        runtime_type: { type: string }
+        image_ref: { type: string }
+        config_set: { $ref: "#/components/schemas/ConfigSet" }
+        source_metadata: { $ref: "#/components/schemas/SourceMetadata" }
+
+    BackendRuntimeCreate:
+      type: object
+      required: [backend_id, backend_version_id]
+      properties:
+        backend_id: { type: string }
+        backend_version_id: { type: string }
+        name: { type: string }
+        display_name: { type: string }
+        vendor: { type: string }
+        image_ref: { type: string }
+        config_set: { $ref: "#/components/schemas/ConfigSet" }
+
+    NodeBackendRuntimeEnable:
+      type: object
+      required: [backend_runtime_id]
+      properties:
+        backend_runtime_id:
+          type: string
+          description: BackendRuntime template ID to materialize on this node.
+        display_name: { type: string }
+        image_ref: { type: string }
+        config_set: { $ref: "#/components/schemas/ConfigSet" }
+
+    NodeBackendRuntime:
+      type: object
+      properties:
+        id: { type: string }
+        backend_runtime_id: { type: string }
+        node_id: { type: string }
+        image_ref: { type: string }
+        status: { type: string }
+        deployable: { type: boolean }
+        config_set: { $ref: "#/components/schemas/ConfigSet" }
+        source_metadata: { $ref: "#/components/schemas/SourceMetadata" }
+
+    DeploymentCreate:
+      type: object
+      required: [name, model_artifact_id, node_backend_runtime_id]
+      properties:
+        name: { type: string }
+        display_name: { type: string }
+        model_artifact_id: { type: string }
+        node_backend_runtime_id: { type: string }
+        placement_json:
+          type: object
+          additionalProperties: true
+        service_json:
+          type: object
+          additionalProperties: true
+        config_overrides:
+          type: object
+          additionalProperties: true
+
+    DeploymentPreflight:
+      type: object
+      required: [model_artifact_id, node_backend_runtime_id]
+      properties:
+        model_artifact_id: { type: string }
+        node_backend_runtime_id: { type: string }
+        node_id: { type: string }
+        host_port: { type: integer }
+
+    Deployment:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        display_name: { type: string }
+        model_artifact_id: { type: string }
+        source_node_backend_runtime_id: { type: string }
+        config_set: { $ref: "#/components/schemas/ConfigSet" }
+        config_overrides:
+          type: object
+          additionalProperties: true
+        source_metadata: { $ref: "#/components/schemas/SourceMetadata" }
+
   securitySchemes:
     sessionCookie:
       type: apiKey

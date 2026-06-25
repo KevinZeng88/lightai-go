@@ -228,6 +228,106 @@ func setConfigValue(set map[string]interface{}, code string, value interface{}, 
 	set["items"] = items
 }
 
+func setConfigEnabled(set map[string]interface{}, code string, enabled bool, layer, ref, reason string) {
+	items := configSetItems(set)
+	item, _ := items[code].(map[string]interface{})
+	if item == nil {
+		item = map[string]interface{}{"code": code}
+	}
+	item["enabled"] = enabled
+	item["source"] = map[string]string{"layer": layer, "ref": ref, "reason": reason}
+	items[code] = item
+	set["items"] = items
+}
+
+func applyConfigOverrides(set map[string]interface{}, overrides map[string]interface{}, layer, ref string) {
+	if len(overrides) == 0 {
+		return
+	}
+	for key, value := range overrides {
+		switch key {
+		case "parameter_values":
+			values, _ := value.([]interface{})
+			for _, raw := range values {
+				item, _ := raw.(map[string]interface{})
+				if item == nil {
+					continue
+				}
+				code := strings.TrimSpace(fmt.Sprint(item["key"]))
+				if code == "" {
+					code = strings.TrimSpace(fmt.Sprint(item["code"]))
+				}
+				if code == "" {
+					code = strings.TrimSpace(fmt.Sprint(item["name"]))
+				}
+				if code == "" {
+					code = strings.TrimSpace(fmt.Sprint(item["cli_name"]))
+				}
+				if code == "" {
+					continue
+				}
+				if v, ok := item["value"]; ok {
+					setConfigValue(set, code, v, layer, ref, "config_override")
+				}
+				if enabled, ok := item["enabled"].(bool); ok {
+					setConfigEnabled(set, code, enabled, layer, ref, "config_override")
+				}
+			}
+		case "disabled_parameters":
+			values, _ := value.([]interface{})
+			for _, raw := range values {
+				item, _ := raw.(map[string]interface{})
+				if item == nil {
+					continue
+				}
+				code := strings.TrimSpace(fmt.Sprint(item["key"]))
+				if code == "" {
+					code = strings.TrimSpace(fmt.Sprint(item["code"]))
+				}
+				if code != "" {
+					setConfigEnabled(set, code, false, layer, ref, "config_override_disabled")
+				}
+			}
+		case "env":
+			current := configObject(set, "runtime.env")
+			for envKey, envVal := range mapFromAny(value) {
+				current[envKey] = envVal
+			}
+			setConfigValue(set, "runtime.env", current, layer, ref, "config_override")
+		default:
+			if entry, ok := value.(map[string]interface{}); ok {
+				if v, exists := entry["value"]; exists {
+					setConfigValue(set, key, v, layer, ref, "config_override")
+					if enabled, ok := entry["enabled"].(bool); ok {
+						setConfigEnabled(set, key, enabled, layer, ref, "config_override")
+					}
+					continue
+				}
+			}
+			setConfigValue(set, key, value, layer, ref, "config_override")
+		}
+	}
+}
+
+func rejectLegacyDeploymentPayload(req map[string]interface{}) string {
+	for _, key := range []string{
+		"backend_runtime_id",
+		"parameters_json",
+		"parameter_values_json",
+		"disabled_parameters_json",
+		"env_overrides_json",
+		"config_snapshot_json",
+		"config_overrides_json",
+		"source_metadata_json",
+		"config_set_json",
+	} {
+		if _, ok := req[key]; ok {
+			return key
+		}
+	}
+	return ""
+}
+
 func copyConfigSet(raw string) map[string]interface{} {
 	var out map[string]interface{}
 	_ = json.Unmarshal([]byte(raw), &out)

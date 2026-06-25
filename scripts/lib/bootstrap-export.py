@@ -54,7 +54,7 @@ if __name__ == '__main__':
     for nbr in nbrs:
         brid = nbr.get('backend_runtime_id',''); br = br_map.get(brid, {})
         bid = br.get('backend_id',''); backend_name = bid.split('.')[-1] if '.' in bid else bid
-        config = nbr.get('config_snapshot_json',{})
+        config = nbr.get('config_set',{})
         if isinstance(config, str):
             try: config = json.loads(config)
             except: config = {}
@@ -66,12 +66,12 @@ if __name__ == '__main__':
         key = backend_name if backend_name else f'rt_{brid[:8]}'
         if key in runtimes: key = f'{key}_2'
         runtimes[key] = {
-            'backend': backend_name, 'image': nbr.get('image_ref','') or br.get('image_name',''),
+            'backend': backend_name, 'image': nbr.get('image_ref','') or br.get('image_ref',''),
             'model': model_key, 'container_port': 8000,
             'host_port': nbr.get('host_port',8000), 'backend_runtime_id': brid,
             'node_backend_runtime_id': nbr.get('id',''), 'parameters': {},
-            'docker_json': {}, 'args_override_json': [], 'default_env_json': {},
-            'parameter_values_json': [], 'health_check': {}, 'status': nbr.get('status','unknown')
+            'config_set': config, 'config_overrides': {},
+            'health_check': {}, 'status': nbr.get('status','unknown')
         }
     
     # Write profile
