@@ -1608,6 +1608,7 @@ func (db *DB) repairBackendCapabilitiesV27() {
 		"backend-version.ollama.latest": `{"supported_formats":["ollama"],"supported_tasks":["chat","completion"],"supported_capabilities":["chat","completion"],"model_path_modes":["ollama_managed"],"serving_protocols":["ollama"],"test_endpoints":{"chat":"/api/chat","completion":"/api/generate"}}`,
 	}
 	for id, capsJSON := range caps {
+		log.Info("db.repairBackendCapabilitiesV27 applying", "id", id)
 		if _, err := db.Exec(`UPDATE backend_versions SET capabilities_json = ?, updated_at = datetime('now') WHERE id = ?`, capsJSON, id); err != nil {
 			log.Warn("db.repairBackendCapabilitiesV27 warning", "error", err, "id", id)
 		}
