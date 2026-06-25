@@ -109,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -330,7 +330,9 @@ function buildOutput() {
       parameter_values_json: paramValues,
     })
   } finally {
-    syncing = false
+    // Defer syncing clear to next microtask so the guard stays active
+    // through Vue 3 async watcher flush, preventing re-entry from modelValue watch
+    nextTick(() => { syncing = false })
   }
 }
 
@@ -391,13 +393,15 @@ watch([scalarOptions, listOptions, customArgs, customEnv, backendParams], () => 
 onMounted(loadFromModel)
 
 // Watch external modelValue changes → sync to local
-let lastModelJson = ''
+// Uses shallow identity check + syncing guard to prevent re-entry from our own emit
+let lastModelRef: any = null
 watch(() => props.modelValue, (newVal) => {
-  const json = JSON.stringify(newVal)
-  if (json !== lastModelJson) {
-    lastModelJson = json
-    loadFromModel()
-  }
+  // Skip if we're the ones emitting (buildOutput sets syncing)
+  if (syncing) return
+  // Skip identical reference (parent passed same object back)
+  if (newVal === lastModelRef) return
+  lastModelRef = newVal
+  loadFromModel()
 }, { deep: false })
 
 // Watch backendSchema changes
