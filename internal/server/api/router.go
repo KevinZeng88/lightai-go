@@ -162,10 +162,10 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	mux.Handle("PATCH /api/v1/backend-runtimes/{id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchBackendRuntime)))
 	mux.Handle("DELETE /api/v1/backend-runtimes/{id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleDeleteBackendRuntime)))
 	mux.Handle("GET /api/v1/nodes/{id}/backend-runtimes", brReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListNodeBackendRuntimes)))
+	// R-001: /check is DELETED. Session callers must use /enable for NBR creation
+	// and /check-request for server-proxied agent verification. No client-provided
+	// readiness evidence (image_present/docker_available) is trusted.
 	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/enable", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleEnableNodeBackendRuntime)))
-	// R-001: /check is kept for agent backward compat but session callers
-	// receive 403. Session callers MUST use /check-request.
-	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/check", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCheckNodeBackendRuntime)))
 	mux.Handle("PATCH /api/v1/nodes/{id}/backend-runtimes/{nbr_id}", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandlePatchNodeBackendRuntime)))
 	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/{nbr_id}/check-request", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleRequestNodeBackendRuntimeCheck)))
 	mux.Handle("POST /api/v1/nodes/{id}/backend-runtimes/{nbr_id}/probe", brWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleProbeNodeBackendRuntime)))

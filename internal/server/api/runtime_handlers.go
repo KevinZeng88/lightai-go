@@ -305,13 +305,12 @@ func (h *AgentHandler) HandleEnableNodeBackendRuntime(w http.ResponseWriter, r *
 	h.upsertNodeBackendRuntime(w, r, false)
 }
 
+// HandleCheckNodeBackendRuntime is DEPRECATED (R-001, 2026-06-25).
+// The /check route has been deleted from the router. Session callers must use
+// /enable for NBR creation and /check-request for server-proxied agent verification.
+// This function is retained only as an internal handler reference; no route maps to it.
 func (h *AgentHandler) HandleCheckNodeBackendRuntime(w http.ResponseWriter, r *http.Request) {
-	// R-001: Session callers MUST use /check-request for server-proxied agent
-	// verification. This route is kept for backward compatibility but ALWAYS
-	// runs as enable mode (checkOnly=false), which forces status to needs_check
-	// and NEVER trusts client-provided image_present/docker_available.
-	// Agent callers should use /heartbeat for readiness reporting instead.
-	h.upsertNodeBackendRuntime(w, r, false)
+	http.Error(w, `{"error":"deprecated — use /enable or /check-request"}`, http.StatusGone)
 }
 
 // HandleRequestNodeBackendRuntimeCheck is the UI-facing check endpoint.
