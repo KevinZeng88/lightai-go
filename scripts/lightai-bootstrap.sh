@@ -593,7 +593,7 @@ run_auth_only() {
 
     if [[ "$login_status" == "200" ]]; then
       local must_change
-      must_change=$(python3 -c "import json; d=json.load(open('$resp_file')); print(d.get('must_change_password','false'))" 2>/dev/null || echo "true")
+      must_change=$(python3 -c "import json; d=json.load(open('$resp_file')); v=d.get('must_change_password','false'); print('true' if v == True or str(v).lower() == 'true' else 'false')" 2>/dev/null || echo "true")
       if [[ "$must_change" == "false" ]]; then
         auth_method="final_password"
         log_info "login succeeded with final password (no change required)"
@@ -651,7 +651,7 @@ run_auth_only() {
     fi
 
     local must_change
-    must_change=$(python3 -c "import json; d=json.load(open('$resp_file')); print(d.get('must_change_password','false'))" 2>/dev/null || echo "true")
+    must_change=$(python3 -c "import json; d=json.load(open('$resp_file')); v=d.get('must_change_password','false'); print('true' if v == True or str(v).lower() == 'true' else 'false')" 2>/dev/null || echo "true")
 
     if [[ "$must_change" == "true" ]]; then
       # Step 8: Change password required
@@ -802,8 +802,17 @@ ensure_auth() {
     final_pw=$(get_final_password_value)
     local resp_file="$FINAL_OUTPUT_DIR/responses/login-auth-prereq.json"
     mkdir -p "$FINAL_OUTPUT_DIR/responses"
-    local status
-    status=$(curl_server_post "/api/v1/auth/login" "{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$final_pw\"}" "$resp_file")
+    local status=""
+    # Retry with backoff for rate limiting
+    for attempt in 1 2 3; do
+      status=$(curl_server_post "/api/v1/auth/login" "{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$final_pw\"}" "$resp_file")
+      if [[ "$status" == "429" ]]; then
+        log_warn "rate limited, retrying in ${attempt}s..."
+        sleep $((attempt * 2))
+      else
+        break
+      fi
+    done
     if [[ "$status" == "200" ]]; then
       local csrf_val
       csrf_val=$(python3 -c "import json;d=json.load(open('$resp_file'));print(d.get('csrf_token',''))" 2>/dev/null || echo "")
@@ -823,8 +832,11 @@ ensure_auth() {
   init_pw=$(get_initial_password_value)
   local resp_file="$FINAL_OUTPUT_DIR/responses/login-auth-prereq2.json"
   mkdir -p "$FINAL_OUTPUT_DIR/responses"
-  local status
-  status=$(curl_server_post "/api/v1/auth/login" "{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$init_pw\"}" "$resp_file")
+  local status=""
+  for attempt in 1 2 3; do
+    status=$(curl_server_post "/api/v1/auth/login" "{\"username\":\"$PROFILE_AUTH_USERNAME\",\"password\":\"$init_pw\"}" "$resp_file")
+    if [[ "$status" == "429" ]]; then log_warn "rate limited, retrying in ${attempt}s..."; sleep $((attempt * 2)); else break; fi
+  done
   if [[ "$status" != "200" ]]; then
     add_error "AUTH_PREREQ_FAILED" "login failed (HTTP $status)"
     return 1
