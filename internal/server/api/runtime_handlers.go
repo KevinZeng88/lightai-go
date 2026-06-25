@@ -306,7 +306,12 @@ func (h *AgentHandler) HandleEnableNodeBackendRuntime(w http.ResponseWriter, r *
 }
 
 func (h *AgentHandler) HandleCheckNodeBackendRuntime(w http.ResponseWriter, r *http.Request) {
-	h.upsertNodeBackendRuntime(w, r, true)
+	// R-001: Session callers MUST use /check-request for server-proxied agent
+	// verification. This route is kept for backward compatibility but ALWAYS
+	// runs as enable mode (checkOnly=false), which forces status to needs_check
+	// and NEVER trusts client-provided image_present/docker_available.
+	// Agent callers should use /heartbeat for readiness reporting instead.
+	h.upsertNodeBackendRuntime(w, r, false)
 }
 
 // HandleRequestNodeBackendRuntimeCheck is the UI-facing check endpoint.

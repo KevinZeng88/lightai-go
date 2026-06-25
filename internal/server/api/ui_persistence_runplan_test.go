@@ -459,14 +459,17 @@ func snapshotSetupFullChain(t *testing.T, h *AgentHandler, suffix string) (strin
 
 	insertRuntime(t, db, runtimeID, "Runtime "+suffix, "")
 
-	// Enable NBR with ready status
+	// R-001: /check now enforces server-side verification (checkOnly=false).
+	// First enable NBR (creates the record), then set status to ready directly.
 	ew := httptest.NewRecorder()
-	h.HandleCheckNodeBackendRuntime(ew, newReq("POST", "/x",
-		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR `+suffix+`","image_ref":"img:nbr-`+suffix+`","image_present":true,"docker_available":true}`,
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","display_name":"NBR `+suffix+`","image_ref":"img:nbr-`+suffix+`"}`,
 		adminSession(), map[string]string{"id": nodeID}))
 	if ew.Code != 200 {
 		t.Fatalf("enable nbr code=%d body=%s", ew.Code, ew.Body.String())
 	}
+	nbrID := nodeID + ":" + runtimeID
+	db.Exec(`UPDATE node_backend_runtimes SET status='ready', image_present=1, docker_available=1 WHERE id=?`, nbrID)
 
 	insertUIPersistenceArtifact(t, h, artifactID)
 	snapshotInsertModelLocation(t, db, "ml-"+suffix, artifactID, nodeID)

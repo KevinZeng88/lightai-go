@@ -203,8 +203,10 @@ func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 	if err := db.QueryRow(`SELECT status, last_checked_at FROM node_backend_runtimes WHERE id='node-check:rt-check'`).Scan(&status, &lastChecked); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
-	if status != "ready" {
-		t.Fatalf("status=%s, want ready", status)
+	if status != "needs_check" {
+		// R-001: /check now runs as enable (checkOnly=false), forcing needs_check
+		
+		t.Fatalf("status=%s, want needs_check (R-001: session callers cannot set ready)", status)
 	}
 	if lastChecked == "" {
 		t.Fatalf("last_checked_at was not updated")
@@ -273,8 +275,10 @@ func TestNodeBackendRuntimeCheckDoesNotMutateImageRef(t *testing.T) {
 	if err := db.QueryRow(`SELECT status, last_checked_at FROM node_backend_runtimes WHERE id='node-imgref:rt-imgref'`).Scan(&status, &lastChecked); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
-	if status != "ready" {
-		t.Fatalf("status=%s, want ready", status)
+	if status != "needs_check" {
+		// R-001: /check now runs as enable (checkOnly=false), forcing needs_check
+		
+		t.Fatalf("status=%s, want needs_check (R-001: session callers cannot set ready)", status)
 	}
 	if lastChecked == "" {
 		t.Fatalf("last_checked_at was not updated")

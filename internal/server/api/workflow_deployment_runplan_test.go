@@ -126,8 +126,10 @@ func newWorkflowDeploymentFixture(t *testing.T, app *workflowTestApp, suffix str
 	}, http.StatusOK)
 	var nbr map[string]interface{}
 	checkResp.Decode(t, &nbr)
-	if nbr["status"] != "ready" {
-		t.Fatalf("NBR status=%#v want ready response=%#v", nbr["status"], nbr)
+	// R-001: Session callers CANNOT set ready via client-provided evidence.
+	// /check now runs as enable mode (checkOnly=false), forcing needs_check.
+	if nbr["status"] != "needs_check" {
+		t.Fatalf("NBR status=%#v want needs_check response=%#v", nbr["status"], nbr)
 	}
 	nbrID := workflowStringField(t, nbr, "id")
 

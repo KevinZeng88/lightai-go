@@ -136,7 +136,7 @@ for n in json.load(sys.stdin):
 
   # ── Test 3b: Agent check verifies Docker + image → ready ──
   log "  --- Test 3b: Agent check → ready ---"
-  local check_resp; check_resp=$(api_post "nodes/$NODE_ID/backend-runtimes/check" "{\"backend_runtime_id\":\"$clone_id\",\"image_present\":true,\"docker_available\":true}")
+  local check_resp; check_resp=$(api_post "nodes/$NODE_ID/backend-runtimes/$nbr_id/check-request" "{}")
   echo "$check_resp" > "$ARTIFACT_DIR/${label}-check-response.json"
   local check_status; check_status=$(echo "$check_resp" | json_field status)
   assert_eq "$label: agent check sets ready" "ready" "$check_status" || log "check status=$check_status (expected ready)"
