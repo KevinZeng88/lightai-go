@@ -1310,8 +1310,201 @@ json.dump(d2,open(nf,'w'),indent=2)
 }
 
 run_dry_run() {
-  log_info "mode: dry-run"
-  add_error "NOT_IMPLEMENTED" "dry-run mode not yet implemented (Batch 6)"
+  log_info "===== dry-run mode ====="
+
+  # Step 1: Run runtimes-only first
+  if ! run_runtimes_only; then
+    log_error "runtimes-only failed, cannot proceed to dry-run"
+    return 1
+  fi
+
+  local node_id
+  node_id=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['ids']['node_id'])" 2>/dev/null || echo "")
+  if [[ -z "$node_id" ]]; then add_error "DRYRUN_NO_NODE" "no node_id in bootstrap state"; return 1; fi
+
+  # Load NBR IDs from state
+  local nbr_vllm nbr_sglang nbr_llamacpp
+  nbr_vllm=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['node_backend_runtime_ids']['vllm'])" 2>/dev/null || echo "")
+  nbr_sglang=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['node_backend_runtime_ids']['sglang'])" 2>/dev/null || echo "")
+  nbr_llamacpp=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['node_backend_runtime_ids']['llamacpp'])" 2>/dev/null || echo "")
+
+  # Load model IDs
+  local model_hf model_gguf
+  model_hf=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['model_artifact_ids']['qwen3_small'])" 2>/dev/null || echo "")
+  model_gguf=$(python3 -c "import json;print(json.load(open('$BOOTSTRAP_STATE_JSON'))['model_artifact_ids']['qwen35_gguf'])" 2>/dev/null || echo "")
+  log_info "NBR IDs: vllm=$nbr_vllm sglang=$nbr_sglang llamacpp=$nbr_llamacpp"
+
+  local check_results="{}" preflight_results="{}" runplan_results="{}" deployment_ids="{}"
+  local overall_status="PASS"
+
+  # Helper: check-request + poll until ready
+  do_check_request() {
+    local rt_key="$1" nbr_id="$2"
+    log_info "check-request: $rt_key (nbr=$nbr_id)"
+    local ck_resp="$FINAL_OUTPUT_DIR/responses/check-request-$rt_key.json"
+    mkdir -p "$FINAL_OUTPUT_DIR/responses"
+    local ck_status
+    ck_status=$(curl_api_post "/api/v1/nodes/$node_id/backend-runtimes/$nbr_id/check-request" "{}" "$ck_resp")
+    log_info "check-request $rt_key: HTTP $ck_status"
+    if [[ "$ck_status" != "200" ]]; then
+      python3 -c "import json;d=json.load(open('$ck_resp'));print('status:',d.get('status','?'));print('reason:',d.get('status_reason',''))" 2>/dev/null
+      echo "FAIL"
+      return 1
+    fi
+    # Poll for ready status (up to 10 attempts = 50s)
+    local nbr_status="" attempt=0 max_attempts=10
+    while [[ $attempt -lt $max_attempts ]]; do
+      local nbr_resp="$FINAL_OUTPUT_DIR/responses/nbr-status-$rt_key.json"
+      curl_api_get "/api/v1/nodes/$node_id/backend-runtimes" "$nbr_resp" 2>/dev/null || true
+      nbr_status=$(python3 -c "
+import json;d=json.load(open('$nbr_resp'))
+arr=d if isinstance(d,list) else d.get('data',d.get('items',[]))
+for r in arr:
+  if r.get('id','')=='$nbr_id': print(r.get('status',''));break
+" 2>/dev/null || echo "")
+      case "$nbr_status" in
+        ready|ready_with_warnings) echo "$nbr_status"; return 0 ;;
+        failed|missing_image|inspect_failed|docker_error|agent_unreachable) echo "FAIL:$nbr_status"; return 1 ;;
+        *) sleep 5; attempt=$((attempt+1)) ;;
+      esac
+    done
+    echo "FAIL:timeout_${nbr_status:-unknown}"
+    return 1
+  }
+
+  # Helper: preflight + dry-run for a runtime
+  do_preflight_and_dryrun() {
+    local rt_key="$1" nbr_id="$2" model_id="$3" host_port="$4"
+    # Preflight
+    local pf_body="{\"model_artifact_id\":\"$model_id\",\"node_backend_runtime_id\":\"$nbr_id\",\"node_id\":\"$node_id\",\"host_port\":$host_port,\"accelerator_ids\":[\"0\"]}"
+    local pf_resp="$FINAL_OUTPUT_DIR/responses/preflight-$rt_key.json"
+    local pf_status
+    pf_status=$(curl_api_post "/api/v1/deployments/preflight" "$pf_body" "$pf_resp")
+    log_info "preflight $rt_key: HTTP $pf_status"
+    local pf_pass="FAIL" pf_errors="[]" pf_warnings="[]"
+    if [[ "$pf_status" == "200" ]]; then
+      pf_pass=$(python3 -c "import json;d=json.load(open('$pf_resp'));print('PASS' if d.get('can_run',False) else 'FAIL')" 2>/dev/null || echo "FAIL")
+      pf_errors=$(python3 -c "import json;d=json.load(open('$pf_resp'));print(json.dumps(d.get('errors',[])))" 2>/dev/null || echo "[]")
+      pf_warnings=$(python3 -c "import json;d=json.load(open('$pf_resp'));print(json.dumps(d.get('warnings',[])))" 2>/dev/null || echo "[]")
+    fi
+    if [[ "$pf_pass" != "PASS" ]]; then
+      log_error "preflight $rt_key FAILED: $(python3 -c "import json;print(json.load(open('$pf_resp')).get('errors',[])[:3])" 2>/dev/null)"
+    fi
+
+    # Create deployment for dry-run
+    local depl_name="bootstrap-${rt_key}-dryrun"
+    # Check for existing deployment
+    local existing_depl_resp="$FINAL_OUTPUT_DIR/responses/deployments-list.json"
+    curl_api_get "/api/v1/deployments" "$existing_depl_resp" 2>/dev/null || true
+    local depl_id=""
+    depl_id=$(python3 -c "
+import json;d=json.load(open('$existing_depl_resp'))
+arr=d if isinstance(d,list) else d.get('data',d.get('items',[]))
+for r in arr:
+  if r.get('name','')=='$depl_name': print(r.get('id',''));break
+" 2>/dev/null || echo "")
+    local depl_action="REUSE"
+    if [[ -z "$depl_id" ]]; then
+      local svc_json="{\"host_port\":$host_port,\"container_port\":0,\"app_port\":0}"
+      local depl_body="{\"name\":\"$depl_name\",\"model_artifact_id\":\"$model_id\",\"node_backend_runtime_id\":\"$nbr_id\",\"service_json\":$svc_json,\"env_overrides_json\":\"{}\",\"parameter_values_json\":[],\"disabled_parameters_json\":[],\"placement_json\":\"{}\"}"
+      local depl_resp="$FINAL_OUTPUT_DIR/responses/deployment-create-$rt_key.json"
+      local depl_status
+      depl_status=$(curl_api_post "/api/v1/deployments" "$depl_body" "$depl_resp")
+      if [[ "$depl_status" == "200" || "$depl_status" == "201" ]]; then
+        depl_id=$(python3 -c "import json;d=json.load(open('$depl_resp'));print(d.get('id',''))" 2>/dev/null || echo "")
+        depl_action="CREATE"
+        log_info "created deployment: $rt_key (id=$depl_id)"
+      else
+        log_error "failed to create deployment $rt_key (HTTP $depl_status)"
+        python3 -c "import json;d=json.load(open('$depl_resp'));print(d.get('error','?'))" 2>/dev/null
+      fi
+    else
+      log_info "reusing existing deployment: $rt_key (id=$depl_id)"
+    fi
+    update_bootstrap_state "deployment_ids" "$rt_key" "${depl_id:-}"
+
+    # Dry-run
+    local dr_pass="FAIL" dr_image="" dr_model="" dr_ports="[]" dr_args="[]" dr_env="false" dr_params="false"
+    if [[ -n "$depl_id" ]]; then
+      local dr_resp="$FINAL_OUTPUT_DIR/responses/dryrun-$rt_key.json"
+      local dr_status
+      dr_status=$(curl_api_post "/api/v1/deployments/$depl_id/dry-run" "{}" "$dr_resp")
+      log_info "dry-run $rt_key: HTTP $dr_status"
+      if [[ "$dr_status" == "200" ]]; then
+        dr_pass="PASS"
+        dr_image=$(python3 -c "import json;d=json.load(open('$dr_resp'));rp=d.get('resolved_run_plan',d);print(rp.get('image','?'))" 2>/dev/null || echo "?")
+        dr_model=$(python3 -c "import json;d=json.load(open('$dr_resp'));rp=d.get('resolved_run_plan',d);print(rp.get('model_path',rp.get('model_location','?')))" 2>/dev/null || echo "?")
+        dr_ports=$(python3 -c "import json;d=json.load(open('$dr_resp'));rp=d.get('resolved_run_plan',d);print(json.dumps(rp.get('ports',[])))" 2>/dev/null || echo "[]")
+        dr_args=$(python3 -c "import json;d=json.load(open('$dr_resp'));rp=d.get('resolved_run_plan',d);print(json.dumps(rp.get('args',rp.get('cmd',[]))))" 2>/dev/null || echo "[]")
+        dr_env=$(python3 -c "import json;d=json.load(open('$dr_resp'));rp=d.get('resolved_run_plan',d);print('true' if rp.get('env') else 'false')" 2>/dev/null || echo "false")
+        dr_params=$(python3 -c "import json;d=json.load(open('$dr_resp'));rp=d.get('resolved_run_plan',d);print('true' if rp.get('resource_controls') or rp.get('parameters') else 'false')" 2>/dev/null || echo "false")
+      fi
+    fi
+
+    python3 -c "
+import json,os
+# Preflight result
+pf='$FINAL_OUTPUT_DIR/preflight-results.json'
+d=json.load(open(pf)) if os.path.exists(pf) else {'status':'PASS','check_results':{},'preflight_results':{},'runplan_results':{},'deployment_ids':{},'checked_at':'$TIMESTAMP'}
+d['preflight_results']['$rt_key']={'status':'$pf_pass','errors':$pf_errors,'warnings':$pf_warnings,'deployment_id':'${depl_id:-}','node_backend_runtime_id':'$nbr_id'}
+d['runplan_results']['$rt_key']={'status':'$dr_pass','image':'$dr_image','model_path':'$dr_model','ports':${dr_ports:-[]},'args':${dr_args:-[]},'env_present':$([[ "$dr_env" == "true" ]] && echo "true" || echo "false"),'resource_parameters_present':$([[ "$dr_params" == "true" ]] && echo "true" || echo "false")}
+d['deployment_ids']['$rt_key']='${depl_id:-}'
+fails=0
+for k in 'vllm' 'sglang' 'llamacpp':
+  if d['preflight_results'].get(k,{}).get('status')=='FAIL': fails+=1
+  if d['runplan_results'].get(k,{}).get('status')=='FAIL': fails+=1
+d['status']='FAIL' if fails>0 else 'PASS'
+json.dump(d,open(pf,'w'),indent=2)
+" 2>/dev/null
+    echo "$pf_pass"
+  }
+
+  # Process each runtime
+  for rt_key in vllm sglang llamacpp; do
+    local nbr_id="" model_id="" host_port=""
+    case "$rt_key" in
+      vllm) nbr_id="$nbr_vllm"; model_id="$model_hf"; host_port=8004 ;;
+      sglang) nbr_id="$nbr_sglang"; model_id="$model_hf"; host_port=30000 ;;
+      llamacpp) nbr_id="$nbr_llamacpp"; model_id="$model_gguf"; host_port=8002 ;;
+    esac
+    if [[ -z "$nbr_id" || -z "$model_id" ]]; then
+      log_error "missing NBR or model ID for $rt_key"; overall_status="FAIL"; continue
+    fi
+
+    # Check-request
+    local ck_result
+    ck_result=$(do_check_request "$rt_key" "$nbr_id")
+    log_info "check $rt_key: $ck_result"
+    local ck_entry="{\"node_backend_runtime_id\":\"$nbr_id\",\"status\":\"$ck_result\",\"action\":\"CHECK\",\"warnings\":[]}"
+    if [[ "$ck_result" == FAIL:* ]]; then ck_entry="{\"node_backend_runtime_id\":\"$nbr_id\",\"status\":\"${ck_result#FAIL:}\",\"action\":\"CHECK\",\"warnings\":[]}"; overall_status="FAIL"; fi
+
+    python3 -c "
+import json,os
+pf='$FINAL_OUTPUT_DIR/preflight-results.json'
+d=json.load(open(pf)) if os.path.exists(pf) else {'status':'PASS','check_results':{},'preflight_results':{},'runplan_results':{},'deployment_ids':{},'checked_at':'$TIMESTAMP'}
+d['check_results']['$rt_key']=json.loads('''$ck_entry''')
+d['status']='FAIL' if '${ck_result}'=='FAIL:'* else d.get('status','PASS')
+json.dump(d,open(pf,'w'),indent=2)
+" 2>/dev/null
+
+    # If check passed, do preflight + dry-run
+    if [[ "$ck_result" == ready || "$ck_result" == ready_with_warnings ]]; then
+      local pf_result
+      pf_result=$(do_preflight_and_dryrun "$rt_key" "$nbr_id" "$model_id" "$host_port")
+      if [[ "$pf_result" != "PASS" ]]; then overall_status="FAIL"; fi
+    else
+      log_warn "skipping preflight for $rt_key (NBR not ready: $ck_result)"
+      add_error "DRYRUN_NBR_NOT_READY" "$rt_key NBR not ready: $ck_result (image may be missing — pull image and re-run check-request)"
+      overall_status="FAIL"
+    fi
+  done
+
+  log_info "preflight-results.json written (status=$overall_status)"
+  if [[ "$overall_status" == "FAIL" ]]; then
+    add_error "DRYRUN_FAILED" "one or more dry-run checks failed"
+    return 1
+  fi
+  return 0
 }
 
 run_full() {
