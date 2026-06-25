@@ -100,18 +100,6 @@ Claude 审核时建议重点看：
 
 ## 当前状态
 
-`READY_FOR_IMPLEMENTATION`
+**CLOSED** (2026-06-25)
 
-Claude 审核已完成。文档已根据审核意见修正（2026-06-25）。修正内容包括：
-- 区分 Server-Side 与 Bootstrap-Script-Side 密码解析优先级（`01-password-contract-and-credentials-file.md`）
-- 补充 CSRF/session handling 说明（`02-bootstrap-tool-design.md`）
-- 明确 `gpu_ids` 与 `accelerator_ids` 区别（`03-profile-schema.md`）
-- 统一 `runtime_dir` 默认值为 `/tmp/lightai`
-- 明确 `configs/bootstrap/` 为待创建目录
-
-## 实现注意事项
-
-- `configs/bootstrap/` 目录**当前不存在**，将在 Batch 2 实现阶段创建。
-- `configs/bootstrap/local-kz-laptop.yaml` 包含真实开发机路径（可提交），但不得包含密码、token、cookie、CSRF。
-- `configs/bootstrap/bootstrap-profile.example.yaml` 为通用模板。
-- 密码契约已部分实现：server 侧已完成（Batch 1 已实质完成），bootstrap 脚本侧待实现。
+所有 Batch 1-10 已完成。所有 7 个 mode 已实现并通过验证。详见 `bootstrap-final-closeout.md`。

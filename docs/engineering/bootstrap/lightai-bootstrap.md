@@ -1,8 +1,9 @@
 # LightAI Bootstrap — Password Environment Variable Contract
 
-> Status: ACTIVE
-> Date: 2026-06-25
+> Status: CLOSED — Implementation complete (2026-06-25)
+> Version: 0.1.23
 > Scope: Server, scripts, E2E, bootstrap tool, documentation
+> Final closeout: `docs/engineering/bootstrap/bootstrap-final-closeout.md`
 
 ---
 
