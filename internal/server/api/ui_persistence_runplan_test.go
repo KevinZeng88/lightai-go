@@ -129,6 +129,7 @@ func TestDeploymentSaveOnlyAndPatchEditableFields(t *testing.T) {
 	database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-save','node-save','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-save")
+	snapshotInsertModelLocation(t, database, "ml-art-save", "art-save", "node-save")
 	insertRuntime(t, database, "rt-save", "Runtime Save", "")
 	// R-001: enable sets needs_check; set ready via DB for deployment tests
 	h.HandleEnableNodeBackendRuntime(httptest.NewRecorder(), newReq("POST", "/x",
@@ -302,6 +303,7 @@ func TestDeploymentCapturesConfigSnapshotAtCreate(t *testing.T) {
 	database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-snap','node-snap','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-snap")
+	snapshotInsertModelLocation(t, database, "ml-art-snap", "art-snap", "node-snap")
 	insertRuntime(t, database, "rt-snap", "llama.cpp NVIDIA CUDA Runtime", "")
 	// Create ready NBR
 	nbrW := httptest.NewRecorder()
@@ -361,6 +363,7 @@ func TestDeploymentPatchPortsAndDisplayName(t *testing.T) {
 	database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-edit','node-edit','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-edit")
+	snapshotInsertModelLocation(t, database, "ml-art-edit", "art-edit", "node-edit")
 	insertRuntime(t, database, "rt-edit", "Runtime Edit", "")
 	// Create ready NBR
 	nbrW := httptest.NewRecorder()
@@ -789,6 +792,7 @@ func TestDeploymentListReturnsAfterRun(t *testing.T) {
 	database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
 		VALUES ('gpu-lr','node-lr','nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`)
 	insertUIPersistenceArtifact(t, h, "art-list-run")
+	snapshotInsertModelLocation(t, database, "ml-art-list-run", "art-list-run", "node-lr")
 	insertRuntime(t, database, "rt-list-run", "Runtime List Run", "")
 	// Create ready NBR
 	nbrW := httptest.NewRecorder()
