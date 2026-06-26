@@ -72,13 +72,13 @@
           <el-form-item :label="$t('artifacts.taskType')"><el-input :model-value="form.task_type || '-'" disabled /></el-form-item>
         </template>
 
-        <!-- Model Serving Parameter Defaults (model-specific hints, NOT Docker runtime params) -->
+        <!-- Model Facts and Hints (model-level metadata, NOT Docker/runtime configuration) -->
         <el-divider content-position="left">{{ $t('artifacts.parameterDefaults') }}</el-divider>
         <el-alert type="info" :closable="false" style="margin-bottom:8px">
           {{ $t('artifacts.parameterDefaultsHint') }}
         </el-alert>
         <el-form-item :label="$t('artifacts.servingParams')">
-          <el-input v-model="parameterDefaultsText" type="textarea" :rows="4" placeholder="--max-model-len 4096&#10;--served-model-name my-model&#10;--gpu-memory-utilization 0.9" />
+          <el-input v-model="parameterDefaultsText" type="textarea" :rows="4" :placeholder="$t('artifacts.parameterDefaultsPlaceholder')" />
         </el-form-item>
       </el-form>
       <template #footer><el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button><el-button type="primary" @click="doSave" :loading="saving">{{ $t('common.save') }}</el-button></template>

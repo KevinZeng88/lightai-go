@@ -23,6 +23,9 @@ const (
 	LintCategoryPlatformOverridden LintCategory = "platform_overridden"
 	LintCategoryHighRisk           LintCategory = "high_risk"
 	LintCategoryUnsupported        LintCategory = "unsupported"
+	LintCategoryDisabledApplied    LintCategory = "disabled_applied"
+	LintCategoryMissingRequired    LintCategory = "missing_required"
+	LintCategoryVendorIncompatible LintCategory = "vendor_incompatible"
 )
 
 // LintFinding is a single lint finding.
@@ -59,6 +62,18 @@ type LintInput struct {
 	// Env source tracking: which env vars came from which layer
 	// Key: env var name, Value: source (platform, backend_default, user_env, node_override)
 	EnvSources map[string]string
+	// RequiredParamKeys: parameter keys that are required (must have a value in final args)
+	RequiredParamKeys []string
+	// DisabledParamKeys: parameter keys that were disabled — should NOT appear in final args
+	DisabledParamKeys []string
+	// DisabledParamSources: where each disabled param was disabled (for error messages)
+	DisabledParamSources map[string]string
+	// ActiveParamKeys: all parameter keys that were active (enabled) during resolution
+	ActiveParamKeys []string
+	// Vendor: hardware vendor for compatibility checks (nvidia, amd, metax, cpu)
+	Vendor string
+	// BackendArgsSchema: known CLI flag names for the backend (to detect unsupported params)
+	BackendArgsSchema []string
 }
 
 // LogicalParamSpec defines a logical parameter and its conflict policy.
@@ -100,7 +115,7 @@ func DefaultLogicalParamSpecs() []LogicalParamSpec {
 }
 
 // LintRunPlan performs lint on a RunPlan.
-// It runs two stages: pre-normalization and final lint.
+// It runs three stages: pre-normalization, param rules, and final lint.
 func LintRunPlan(in LintInput) LintResult {
 	var findings []LintFinding
 
@@ -108,7 +123,11 @@ func LintRunPlan(in LintInput) LintResult {
 	preFindings := lintPreNormalization(in.PreDedupArgs, in.PlatformOwnedParams, in.Env, in.EnvSources)
 	findings = append(findings, preFindings...)
 
-	// Stage 2: Final lint (on resolved args + env)
+	// Stage 2: Parameter rules (disabled applied, missing required, vendor incompatible, unsupported)
+	paramFindings := lintParamRules(in)
+	findings = append(findings, paramFindings...)
+
+	// Stage 3: Final lint (on resolved args + env)
 	finalFindings := lintFinal(in.FinalArgs, in.Env, in.PlatformOwnedParams, in.EnvSources, in.DockerSpec)
 	findings = append(findings, finalFindings...)
 
@@ -299,4 +318,132 @@ func lintFinal(args []string, env map[string]string, specs []LogicalParamSpec, e
 	}
 
 	return findings
+}
+
+// lintParamRules checks parameter-level rules: disabled-applied, missing-required,
+// vendor-incompatible, and unsupported parameters.
+func lintParamRules(in LintInput) []LintFinding {
+	var findings []LintFinding
+
+	// Build set of CLI flags from final args for quick lookup.
+	finalFlagSet := make(map[string]bool)
+	i := 0
+	for i < len(in.FinalArgs) {
+		arg := in.FinalArgs[i]
+		if strings.HasPrefix(arg, "-") {
+			finalFlagSet[arg] = true
+		}
+		if strings.HasPrefix(arg, "-") && i+1 < len(in.FinalArgs) && !strings.HasPrefix(in.FinalArgs[i+1], "-") {
+			i += 2
+		} else {
+			i++
+		}
+	}
+
+	// Build set of known CLI flag names from schema.
+	schemaFlagSet := make(map[string]bool)
+	for _, f := range in.BackendArgsSchema {
+		schemaFlagSet[f] = true
+	}
+
+	// 1. Check: disabled params that still appear in final args.
+	for _, key := range in.DisabledParamKeys {
+		for flag := range finalFlagSet {
+			if paramKeyMatchesFlag(key, flag) && !schemaFlagSet[flag] {
+				source := "unknown"
+				if in.DisabledParamSources != nil {
+					if s, ok := in.DisabledParamSources[key]; ok {
+						source = s
+					}
+				}
+				findings = append(findings, LintFinding{
+					ID:         "param.disabled_applied",
+					Severity:   LintSeverityWarning,
+					Category:   LintCategoryDisabledApplied,
+					Message:    fmt.Sprintf("Disabled parameter %q (flag %s) appears in final args", key, flag),
+					Suggestion: fmt.Sprintf("Parameter %q was disabled at layer %q but its CLI flag %s was found in the resolved args. This may indicate a config merge bug.", key, source, flag),
+					FieldPath:  "params",
+					Sources:    []string{source},
+				})
+			}
+		}
+	}
+
+	// 2. Check: required params that are missing from final args.
+	for _, key := range in.RequiredParamKeys {
+		found := false
+		for flag := range finalFlagSet {
+			if paramKeyMatchesFlag(key, flag) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			findings = append(findings, LintFinding{
+				ID:         "param.missing_required",
+				Severity:   LintSeverityError,
+				Category:   LintCategoryMissingRequired,
+				Message:    fmt.Sprintf("Required parameter %q is not present in final args", key),
+				Suggestion: fmt.Sprintf("Enable and set a value for required parameter %q before starting the deployment.", key),
+				FieldPath:  "params",
+				Sources:    []string{"platform"},
+			})
+		}
+	}
+
+	// 3. Check: vendor-incompatible params (CUDA-specific params on non-NVIDIA).
+	nvidiaOnlyFlags := map[string]bool{
+		"--gpu-memory-utilization": true, "--tensor-parallel-size": true,
+		"--pipeline-parallel-size": true, "--kv-cache-dtype": true,
+	}
+	if in.Vendor != "" && in.Vendor != "nvidia" && in.Vendor != "cpu" {
+		for flag := range finalFlagSet {
+			if nvidiaOnlyFlags[flag] {
+				findings = append(findings, LintFinding{
+					ID:         "param.vendor_incompatible",
+					Severity:   LintSeverityError,
+					Category:   LintCategoryVendorIncompatible,
+					Message:    fmt.Sprintf("NVIDIA-specific flag %s used with vendor=%q", flag, in.Vendor),
+					Suggestion: fmt.Sprintf("Flag %s requires an NVIDIA GPU. Remove it for %s deployments.", flag, in.Vendor),
+					FieldPath:  "params",
+					Sources:    []string{"user"},
+				})
+			}
+		}
+	}
+
+	// 4. Check: unknown flags in final args that aren't in schema.
+	// Only flag user-provided args, not platform-managed ones (--model, --host, --port, etc.).
+	platformManaged := map[string]bool{
+		"--model": true, "--host": true, "--port": true,
+		"--model-path": true, "-m": true,
+	}
+	for flag := range finalFlagSet {
+		if schemaFlagSet[flag] || platformManaged[flag] || len(schemaFlagSet) == 0 {
+			continue
+		}
+		findings = append(findings, LintFinding{
+			ID:         "param.unsupported",
+			Severity:   LintSeverityWarning,
+			Category:   LintCategoryUnsupported,
+			Message:    fmt.Sprintf("CLI flag %s is not in the backend's known args schema for %s", flag, in.BackendName),
+			Suggestion: fmt.Sprintf("Remove flag %s or add it to the backend catalog's default_args_schema.", flag),
+			FieldPath:  "params",
+			Sources:    []string{"user"},
+		})
+	}
+
+	return findings
+}
+
+// paramKeyMatchesFlag checks whether a parameter key (e.g. "backend.arg.max_model_len")
+// could produce the given CLI flag (e.g. "--max-model-len").
+func paramKeyMatchesFlag(paramKey, flag string) bool {
+	// Convert param key suffix to CLI flag: "max_model_len" -> "--max-model-len"
+	suffix := paramKey
+	if idx := strings.LastIndex(paramKey, "."); idx >= 0 {
+		suffix = paramKey[idx+1:]
+	}
+	expected := "--" + strings.ReplaceAll(suffix, "_", "-")
+	return flag == expected
 }

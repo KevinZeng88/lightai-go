@@ -21,6 +21,13 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column :label="$t('common.actions')" width="100" fixed="right">
+        <template #default="{ row }">
+          <el-button v-if="!row.is_editable" size="small" @click.stop="cloneRuntime(row)">
+            {{ $t('runtimes.clone') }}
+          </el-button>
+        </template>
+      </el-table-column>
     </el-table>
 
     <el-drawer v-model="detailVisible" :title="selected?.display_name || selected?.name || ''" size="65%">
@@ -31,6 +38,20 @@
           <el-descriptions-item :label="$t('runtimes.vendor')">{{ selected.vendor }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.image')">{{ selected.image_ref }}</el-descriptions-item>
         </el-descriptions>
+        <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
+        <RuntimeParameterEditor
+          :model-value="selectedEditState"
+          :readonly="!selected.is_editable"
+          :vendor="selected.vendor"
+          :layer="'backend_runtime'"
+          :show-advanced="true"
+          @update:model-value="onEditUpdate"
+        />
+        <div v-if="selected.is_editable" style="margin-top: 12px; text-align: right">
+          <el-button type="primary" :loading="saving" @click="saveEdit">
+            {{ $t('common.save') }}
+          </el-button>
+        </div>
         <JsonViewer :value="selected.config_set || {}" title="ConfigSet" max-height="520px" :searchable="true" />
         <JsonViewer :value="selected.source_metadata || {}" title="Source Metadata" max-height="260px" :searchable="true" />
       </template>
@@ -39,17 +60,53 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, reactive } from 'vue'
+import { ElMessage } from 'element-plus'
 import { listRuntimes } from '@/api/runtimes'
+import { apiClient } from '@/api/client'
 import JsonViewer from '@/components/common/JsonViewer.vue'
+import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 
 const loading = ref(false)
+const saving = ref(false)
 const runtimes = ref<any[]>([])
 const selected = ref<any | null>(null)
+const selectedEditState = ref<Record<string, any>>({})
 const detailVisible = computed({
   get: () => !!selected.value,
-  set: (value: boolean) => { if (!value) selected.value = null },
+  set: (value: boolean) => { if (!value) { selected.value = null; selectedEditState.value = {} } },
 })
+
+function onEditUpdate(val: Record<string, any>) {
+  selectedEditState.value = val
+}
+
+async function saveEdit() {
+  if (!selected.value) return
+  saving.value = true
+  try {
+    await apiClient.patch(`/backend-runtimes/${selected.value.id}`, selectedEditState.value)
+    ElMessage.success('Saved')
+    await load()
+    // Refresh selected from new data
+    const updated = runtimes.value.find(r => r.id === selected.value?.id)
+    if (updated) selected.value = updated
+  } catch (e: any) {
+    ElMessage.error(e?.message || 'Save failed')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function cloneRuntime(row: any) {
+  try {
+    await apiClient.post(`/backend-runtimes/${row.id}/clone`)
+    ElMessage.success('Cloned')
+    await load()
+  } catch (e: any) {
+    ElMessage.error(e?.message || 'Clone failed')
+  }
+}
 
 async function load() {
   loading.value = true
