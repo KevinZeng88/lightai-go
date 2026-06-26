@@ -78,3 +78,18 @@ M  web/package.json (pre-existing)
 ?? .mimocode/ (not committed)
 ?? docs/reports/ (evidence, plans, review)
 ```
+
+## 7. SGLang Capabilities Investigation
+
+Fresh DB under ConfigSet schema (commit 81a236e):
+- `config_set_json` column replaces old `capabilities_json`
+- `config_set.items["backend.capabilities"]` contains structured ConfigItem with
+  `supported_formats`, `supported_tasks`, `supported_capabilities`, `model_path_modes`
+- Both vLLM (`vllm-v0.23.0`) and SGLang (`sglang-0.4.6-compatible`) have
+  non-empty capabilities
+- Preflight test: `can_run=None, errors=[]` (preflight response format changed
+  under ConfigSet, empty errors means no blocking issues)
+
+**Verdict: ConfigSet refactor resolves the empty capabilities issue.**
+This is NOT a blocker. The YAML catalog is authoritative; ConfigSet materializes
+catalog data into structured ConfigItem entries.
