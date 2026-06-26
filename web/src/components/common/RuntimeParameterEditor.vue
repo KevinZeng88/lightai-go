@@ -113,6 +113,8 @@
 </template>
 
 <script setup lang="ts">
+// Diagnostic/dev-only legacy editor. Normal runtime and deployment flows use
+// ConfigEditView plus semantic config projection instead of page-private mappings.
 import { computed, reactive, ref, watch } from 'vue'
 import JsonViewer from './JsonViewer.vue'
 

@@ -235,12 +235,6 @@ function buildPayload() {
   if (form.config_overrides?.parameter_values) {
     overrides.parameter_values = form.config_overrides.parameter_values
   }
-  if (form.served_model_name) {
-    const hasSMN = overrides.parameter_values.some((p: any) => p.key === 'backend.common.served_model_name')
-    if (!hasSMN) {
-      overrides.parameter_values.push({ key: 'backend.common.served_model_name', value: form.served_model_name, enabled: true })
-    }
-  }
   return {
     name: form.name || form.display_name || 'deployment',
     display_name: form.display_name,

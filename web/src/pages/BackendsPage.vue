@@ -62,7 +62,7 @@
                     {{ $t('backends.addParameterHint') || 'Developer parameter definition. Fields here define the schema and capabilities for this BackendVersion. These are not runtime configuration values.' }}
                   </el-alert>
                   <el-form label-position="top" class="param-grid">
-                    <el-form-item :label="$t('backends.paramCode') || 'Code'"><el-input v-model="newParam.code" placeholder="backend.arg.fake_new_param" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramCode') || 'Code'"><el-input v-model="newParam.code" placeholder="model_runtime.custom_parameter" /></el-form-item>
                     <el-form-item :label="$t('backends.paramLabel') || 'Label'"><el-input v-model="newParam.label" /></el-form-item>
                     <el-form-item :label="$t('backends.paramHelp') || 'Help'"><el-input v-model="newParam.help" /></el-form-item>
                     <el-form-item :label="$t('backends.paramCategory') || 'Category'"><el-input v-model="newParam.category" /></el-form-item>
@@ -116,8 +116,8 @@ const versionEditView = ref<ConfigEditViewModel | null>(null)
 const versionEditPatch = ref<ConfigEditPatch | null>(null)
 const versionForm = reactive<Record<string, any>>({ id: '', creating: false, version: '', display_name: '', description: '', readonly: true })
 const newParam = reactive({
-  code: 'backend.arg.fake_new_param',
-  label: 'Fake New Param',
+  code: 'model_runtime.custom_parameter',
+  label: 'Custom Parameter',
   help: '',
   category: 'model_runtime',
   group: 'Custom',
@@ -224,6 +224,10 @@ async function removeVersion(row: any) {
 function addParameter() {
   const code = newParam.code.trim()
   if (!code) return
+  if (isLegacyUserConfigKey(code)) {
+    ElMessage.error('Legacy backend/common/launcher keys are diagnostic-only; use a canonical semantic key.')
+    return
+  }
   const configSet = versionEditorModel.value.config_set || { items: {} }
   configSet.items = configSet.items || {}
   configSet.items[code] = {
@@ -247,6 +251,13 @@ function addParameter() {
     support_level: 'documented',
   }
   versionEditorModel.value = { ...versionEditorModel.value, config_set: configSet }
+}
+
+function isLegacyUserConfigKey(code: string): boolean {
+  return code.startsWith('backend.arg.') ||
+    code.startsWith('backend.common.') ||
+    code === 'launcher.listen_host' ||
+    code === 'launcher.container_port'
 }
 
 function parseParamValue(value: string, type: string) {
