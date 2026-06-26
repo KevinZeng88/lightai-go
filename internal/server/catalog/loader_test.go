@@ -68,6 +68,43 @@ func TestMaterializeConfigSetsPreservesRuntimeRequirements(t *testing.T) {
 	assertRuntime("runtime.llamacpp.nvidia-docker", "gpu_capabilities")
 }
 
+func TestMaterializeConfigSetsUseCanonicalSemanticKeys(t *testing.T) {
+	registry, err := LoadRegistry("")
+	if err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	cat, err := LoadBackendCatalog("")
+	if err != nil {
+		t.Fatalf("LoadBackendCatalog: %v", err)
+	}
+	backendByID := map[string]BackendDoc{}
+	for _, backend := range cat.Backends {
+		backendByID[backend.ID] = backend
+	}
+	legacyKeys := []string{
+		"backend.common.host",
+		"backend.common.port",
+		"launcher.listen_host",
+		"launcher.container_port",
+		"backend.arg.max_model_len",
+		"backend.arg.gpu_memory_utilization",
+		"backend.common.served_model_name",
+	}
+	for _, version := range cat.Versions {
+		set := MaterializeBackendVersion(registry, backendByID[version.BackendID], version)
+		for _, legacy := range legacyKeys {
+			if _, ok := set.Items[legacy]; ok {
+				t.Fatalf("version %s materialized legacy key %s", version.ID, legacy)
+			}
+		}
+		for _, canonical := range []string{"service.listen_host", "service.container_port"} {
+			if _, ok := set.Items[canonical]; !ok {
+				t.Fatalf("version %s missing canonical key %s", version.ID, canonical)
+			}
+		}
+	}
+}
+
 func containsString(haystack, needle string) bool {
 	for i := 0; i+len(needle) <= len(haystack); i++ {
 		if haystack[i:i+len(needle)] == needle {

@@ -144,7 +144,7 @@ items:
       style: raw_lines
     order: 190
     support_level: documented
-  - code: backend.common.host
+  - code: service.listen_host
     category: model_runtime
     kind: cli_arg
     type: string
@@ -157,7 +157,7 @@ items:
       style: flag_space_value
     order: 210
     support_level: verified
-  - code: backend.common.port
+  - code: service.container_port
     category: model_runtime
     kind: cli_arg
     type: integer
@@ -170,7 +170,7 @@ items:
       style: flag_space_value
     order: 220
     support_level: verified
-  - code: backend.common.served_model_name
+  - code: deployment.served_model_name
     category: model_runtime
     kind: cli_arg
     type: string

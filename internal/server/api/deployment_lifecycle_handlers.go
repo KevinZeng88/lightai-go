@@ -947,7 +947,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	}
 
 	// Call the real RunPlan resolver with snapshot-based RuntimeInfo.
-	plan, resolveErrs, resolveWarns := runplan.Resolve(runplan.ResolveInput{
+	resolveInput := runplan.ResolveInput{
 		Backend:             &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
 		BackendVersion:      &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap, VendorOptionsJSON: pf.bvVendorOptions},
 		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount, HealthCheckOverride: rtHCOverridePtr(rtHC)},
@@ -965,7 +965,12 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		AssignedGPUs:       pf.gpuInfos,
 		ProcessStartConfig: pf.processStartConfig,
 		NBRConfigSnapshot:  nbrSnapshot,
-	})
+	}
+	resolveInput = runplan.ApplySemanticSnapshot(resolveInput, semanticDeploymentSnapshot(deployConfigSet, map[string]interface{}{
+		"host_port":      pf.service.HostPort,
+		"container_port": pf.service.ContainerPort,
+	}), pf.backendName)
+	plan, resolveErrs, resolveWarns := runplan.Resolve(resolveInput)
 	for _, e := range resolveErrs {
 		pf.addErr("unknown", e.Error(), nil)
 	}

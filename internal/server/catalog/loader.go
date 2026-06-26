@@ -181,8 +181,8 @@ func MaterializeBackendVersion(registry *Registry, backend BackendDoc, version V
 	}
 	setItem(items, "launcher.entrypoint", version.DefaultEntrypoint, version.DefaultEntrypoint, len(version.DefaultEntrypoint) > 0, "BackendVersion", version.ID)
 	setItem(items, "launcher.command", args, args, len(args) > 0, "BackendVersion", version.ID)
-	setItem(items, "backend.common.host", nonEmpty(version.DefaultHost, "0.0.0.0"), nonEmpty(version.DefaultHost, "0.0.0.0"), true, "BackendVersion", version.ID)
-	setItem(items, "backend.common.port", nonZero(version.DefaultPort, 8000), nonZero(version.DefaultPort, 8000), true, "BackendVersion", version.ID)
+	setItem(items, "service.listen_host", nonEmpty(version.DefaultHost, "0.0.0.0"), nonEmpty(version.DefaultHost, "0.0.0.0"), true, "BackendVersion", version.ID)
+	setItem(items, "service.container_port", nonZero(version.DefaultPort, 8000), nonZero(version.DefaultPort, 8000), true, "BackendVersion", version.ID)
 	setItem(items, "runtime.model_mount", version.DefaultModelMount, version.DefaultModelMount, len(version.DefaultModelMount) > 0, "BackendVersion", version.ID)
 	setItem(items, "runtime.health", version.HealthCheck, version.HealthCheck, len(version.HealthCheck) > 0, "BackendVersion", version.ID)
 	addDynamic(items, "backend.capabilities", "model_runtime", "object", normalizedCapabilities(backend, version), "BackendVersion", version.ID, 5)
@@ -540,7 +540,17 @@ func configCodeFromArgName(name string) string {
 	if trimmed == "" || strings.HasPrefix(trimmed, "{{") {
 		return ""
 	}
-	return "backend.arg." + strings.TrimLeft(strings.ReplaceAll(trimmed, "-", "_"), "_")
+	normalized := strings.TrimLeft(strings.ReplaceAll(trimmed, "-", "_"), "_")
+	switch normalized {
+	case "max_model_len", "context_length", "ctx_size":
+		return "model_runtime.max_model_len"
+	case "gpu_memory_utilization", "mem_fraction_static":
+		return "model_runtime.gpu_memory_utilization"
+	case "served_model_name":
+		return "deployment.served_model_name"
+	default:
+		return "model_runtime." + normalized
+	}
 }
 
 func normalizeConfigType(typ string) string {

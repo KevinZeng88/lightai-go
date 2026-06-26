@@ -204,6 +204,8 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 		AssignedGPUs:      gpuIDs,
 		NBRConfigSnapshot: nbrSnapshot,
 	}
+	serviceJSON, _ := rawBody["service_json"].(map[string]interface{})
+	input = runplan.ApplySemanticSnapshot(input, semanticDeploymentSnapshot(nbrConfigSet, serviceJSON), backendName)
 
 	plan, resolveErrs, resolveWarns := runplan.Resolve(input)
 	for _, e := range resolveErrs {

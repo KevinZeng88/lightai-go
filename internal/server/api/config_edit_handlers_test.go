@@ -76,14 +76,14 @@ func TestDeploymentCreateAppliesEditableConfigPatchToSnapshot(t *testing.T) {
 	}
 	rtSet := copyConfigSet(rtSetRaw)
 	items := configSetItems(rtSet)
-	items["backend.arg.fake_new_param"] = map[string]interface{}{
-		"code":     "backend.arg.fake_new_param",
+	items["model_runtime.max_model_len"] = map[string]interface{}{
+		"code":     "model_runtime.max_model_len",
 		"category": "model_runtime",
 		"kind":     "cli_arg",
-		"type":     "string",
+		"type":     "integer",
 		"enabled":  false,
-		"value":    "runtime-default",
-		"render":   map[string]interface{}{"flag": "--fake-new-param", "label": "Fake new param"},
+		"value":    2048,
+		"render":   map[string]interface{}{"label": "Max model length"},
 	}
 	if _, err := db.Exec(`UPDATE backend_runtimes SET config_set_json=? WHERE id='rt-config-edit-dep'`, configSetJSON(rtSet)); err != nil {
 		t.Fatalf("update runtime config set: %v", err)
@@ -100,7 +100,7 @@ func TestDeploymentCreateAppliesEditableConfigPatchToSnapshot(t *testing.T) {
 			"layer":     "deployment",
 			"object_id": "new",
 			"fields": []map[string]any{
-				{"key": "backend.arg.fake_new_param", "internal_key": "backend.arg.fake_new_param", "value": "deployment-value", "enabled": true},
+				{"key": "model_runtime.max_model_len", "internal_key": "model_runtime.max_model_len", "value": 4096, "enabled": true},
 			},
 		},
 	})
@@ -113,8 +113,8 @@ func TestDeploymentCreateAppliesEditableConfigPatchToSnapshot(t *testing.T) {
 		t.Fatalf("decode deployment: %v", err)
 	}
 	set, _ := resp["config_set"].(map[string]any)
-	item, _ := configSetItems(set)["backend.arg.fake_new_param"].(map[string]any)
-	if item == nil || item["value"] != "deployment-value" || item["enabled"] != true {
+	item, _ := configSetItems(set)["model_runtime.max_model_len"].(map[string]any)
+	if item == nil || item["value"] != float64(4096) || item["enabled"] != true {
 		t.Fatalf("deployment editable_config_patch not in snapshot: %#v", resp["config_set"])
 	}
 }

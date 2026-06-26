@@ -1,6 +1,9 @@
 package configedit
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 var deploymentProtectedFields = map[string]bool{
 	"launcher.image":      true,
@@ -14,6 +17,9 @@ func ValidateEditPatch(set map[string]any, patch ConfigEditPatch) error {
 	items := itemsMap(normalized)
 	layer := patch.Layer
 	for _, field := range patch.Fields {
+		if isDirectLegacyPatchKey(field.Key) {
+			return fmt.Errorf("direct legacy key patch %q is not allowed", field.Key)
+		}
 		internal := field.InternalKey
 		if internal == "" {
 			internal = field.Key
@@ -47,4 +53,11 @@ func ValidateEditPatch(set map[string]any, patch ConfigEditPatch) error {
 		}
 	}
 	return nil
+}
+
+func isDirectLegacyPatchKey(key string) bool {
+	return strings.HasPrefix(key, "backend.arg.") ||
+		strings.HasPrefix(key, "backend.common.") ||
+		key == "launcher.listen_host" ||
+		key == "launcher.container_port"
 }

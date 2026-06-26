@@ -154,22 +154,16 @@ func TestApplyEditPatchToConfigSetMergesDockerOptionsAndForcesRequiredEnabled(t 
 	}
 }
 
-func TestApplyEditPatchAllowsModelServingAtDeployment(t *testing.T) {
-	// Model serving params (backend.arg.*) allowed at deployment layer.
-	out, err := ApplyEditPatchToConfigSet(testConfigSet(), ConfigEditPatch{
+func TestApplyEditPatchRejectsDirectLegacyModelServingAtDeployment(t *testing.T) {
+	_, err := ApplyEditPatchToConfigSet(testConfigSet(), ConfigEditPatch{
 		Layer:    "deployment",
 		ObjectID: "dep-test",
 		Fields: []EditFieldPatch{
 			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "xyz", Enabled: boolPtr(true)},
 		},
 	}, "Deployment", "dep-test")
-	if err != nil {
-		t.Fatalf("apply patch at deployment: %v", err)
-	}
-	items := out["items"].(map[string]any)
-	param := items["backend.arg.fake_new_param"].(map[string]any)
-	if param["value"] != "xyz" || param["enabled"] != true {
-		t.Fatalf("param patch not applied at deployment: %#v", param)
+	if err == nil {
+		t.Fatal("expected direct legacy backend.arg patch to be rejected")
 	}
 }
 
@@ -216,8 +210,7 @@ func TestValidateEditPatchRejectsModelServingAtNodeBackendRuntime(t *testing.T) 
 	}
 }
 
-func TestValidateEditPatchAllowsModelServingAtDeployment(t *testing.T) {
-	// backend.arg.* allowed at deployment layer.
+func TestValidateEditPatchRejectsDirectLegacyModelServingAtDeployment(t *testing.T) {
 	err := ValidateEditPatch(testConfigSet(), ConfigEditPatch{
 		Layer:    "deployment",
 		ObjectID: "dep-test",
@@ -225,8 +218,8 @@ func TestValidateEditPatchAllowsModelServingAtDeployment(t *testing.T) {
 			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "xyz", Enabled: boolPtr(true)},
 		},
 	})
-	if err != nil {
-		t.Fatalf("expected success: backend.arg.fake_new_param should be allowed at deployment layer, got: %v", err)
+	if err == nil {
+		t.Fatal("expected direct legacy backend.arg patch to be rejected")
 	}
 }
 
