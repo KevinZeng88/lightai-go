@@ -52,3 +52,5 @@ run/*.pid
 /run/e2e/
 run/
 __pycache__/
+
+.mimocode/
