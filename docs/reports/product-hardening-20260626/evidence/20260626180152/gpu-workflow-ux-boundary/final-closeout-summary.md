@@ -2,7 +2,7 @@
 
 Timestamp: 2026-06-26 18:39 UTC | Evidence dir: `20260626180152/gpu-workflow-ux-boundary/`
 
-## Commit List (12 commits)
+## Commit List (13 commits)
 
 ```
 3cd3be0  docs: add gpu workflow ux boundary design package (8 files, 1619 lines)
@@ -17,6 +17,7 @@ ee00c25  fix: close gpu workflow ux boundary blockers (5 blockers: config name, 
 20b7bcf  fix: derive deployment model locations from artifacts (no /model-locations API needed)
 2c27bb4  fix: enforce deployment create model location compatibility
 e9e71df  fix: add model location fixtures to deployment create tests
+fa309e4  docs: close gpu workflow ux boundary repair
 ```
 
 ## Tests Run

@@ -137,6 +137,7 @@ ee00c25  fix: close gpu workflow ux boundary blockers
 20b7bcf  fix: derive deployment model locations from artifacts
 2c27bb4  fix: enforce deployment create model location compatibility
 e9e71df  fix: add model location fixtures to deployment create tests
+fa309e4  docs: close gpu workflow ux boundary repair
 ```
 
 ## 10. Final Status
