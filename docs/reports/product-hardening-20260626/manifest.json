@@ -1,0 +1,21 @@
+{
+  "package": "product-hardening-20260626",
+  "created_for": "LightAI Go",
+  "target_repo": "/home/kzeng/projects/ai-platform-study/lightai-go",
+  "github": "https://github.com/KevinZeng88/lightai-go",
+  "documents": [
+    "00-index.md",
+    "01-current-code-findings.md",
+    "02-file-level-implementation-plan-template.md",
+    "03-workstream-a-naming-debt.md",
+    "04-workstream-b-model-deployment-ui.md",
+    "05-workstream-c-runtime-parameter-completeness.md",
+    "06-workstream-d-openai-gateway-audit-metering.md",
+    "07-workstream-e-stability-regression.md",
+    "08-validation-matrix.md",
+    "09-claude-plan-review-prompt.md",
+    "10-claude-autorun-prompt.md",
+    "11-closeout-template.md"
+  ],
+  "note": "Executable, file-level plan package for Claude review and development. Do not place under phase-3."
+}
