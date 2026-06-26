@@ -22,25 +22,16 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="createVisible" :title="$t('deployments.title')" width="680px">
-      <el-form label-position="top">
-        <el-form-item :label="$t('deployments.name')"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item :label="$t('deployments.artifact')">
-          <el-select v-model="form.model_artifact_id" style="width:100%" filterable>
-            <el-option v-for="artifact in artifacts" :key="artifact.id" :label="artifact.display_name || artifact.name" :value="artifact.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('deployments.runtime')">
-          <el-select v-model="form.node_backend_runtime_id" style="width:100%" filterable>
-            <el-option v-for="runtime in deployableRuntimes" :key="runtime.id" :label="runtime.display_name || runtime.id" :value="runtime.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('deployments.hostPort')"><el-input-number v-model="form.host_port" :min="1" :max="65535" /></el-form-item>
-        <el-form-item :label="$t('deployments.servedModelName')"><el-input v-model="form.served_model_name" /></el-form-item>
-      </el-form>
+    <el-dialog v-model="createVisible" :title="$t('deployments.createDeployment') || $t('deployments.title')" width="960px" :close-on-click-modal="false">
+      <DeploymentWizard
+        ref="wizardRef"
+        :artifacts="artifacts"
+        :node-runtimes="nodeRuntimes"
+        :saving="saving"
+        @save="createFromWizard"
+      />
       <template #footer>
         <el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="saving" @click="create">{{ $t('common.save') }}</el-button>
       </template>
     </el-dialog>
 
@@ -61,34 +52,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { createDeployment, dryRunDeployment, startDeployment, stopDeployment } from '@/api/deployments'
 import JsonViewer from '@/components/common/JsonViewer.vue'
+import DeploymentWizard from '@/components/deployments/DeploymentWizard.vue'
 
 const loading = ref(false)
 const saving = ref(false)
 const createVisible = ref(false)
+const wizardRef = ref<any>(null)
 const deployments = ref<any[]>([])
 const artifacts = ref<any[]>([])
 const nodeRuntimes = ref<any[]>([])
 const selected = ref<any | null>(null)
 const lastDryRun = ref<any | null>(null)
-const form = reactive({
-  name: '',
-  model_artifact_id: '',
-  node_backend_runtime_id: '',
-  host_port: 8000,
-  served_model_name: '',
-})
 
 const detailVisible = computed({
   get: () => !!selected.value,
   set: (value: boolean) => { if (!value) { selected.value = null; lastDryRun.value = null } },
 })
-
-const deployableRuntimes = computed(() => nodeRuntimes.value.filter((runtime) => runtime.deployable))
 
 async function load() {
   loading.value = true
@@ -106,22 +90,17 @@ async function load() {
   }
 }
 
-async function create() {
+async function createFromWizard() {
   saving.value = true
   try {
-    const overrides = form.served_model_name
-      ? { parameter_values: [{ key: 'backend.common.served_model_name', value: form.served_model_name, enabled: true }] }
-      : { parameter_values: [] }
-    await createDeployment({
-      name: form.name,
-      model_artifact_id: form.model_artifact_id,
-      node_backend_runtime_id: form.node_backend_runtime_id,
-      service_json: { host_port: form.host_port },
-      config_overrides: overrides,
-    })
+    const payload = wizardRef.value?.buildPayload()
+    if (!payload) { ElMessage.error('Invalid payload'); return }
+    await createDeployment(payload)
     createVisible.value = false
     ElMessage.success('Saved')
     await load()
+  } catch (e: any) {
+    ElMessage.error(e?.message || 'Create failed')
   } finally {
     saving.value = false
   }

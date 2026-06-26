@@ -53,7 +53,7 @@ check('Backend runtime page shows ConfigSet', sources['src/pages/BackendRuntimes
 check('Runner config page enables NBR through current route', sources['src/pages/RunnerConfigsPage.vue'].includes('/backend-runtimes/enable'))
 check('Runner config page checks NBR through check-request', sources['src/pages/RunnerConfigsPage.vue'].includes('check-request'))
 check('Deployment create uses node_backend_runtime_id', sources['src/pages/ModelDeploymentsPage.vue'].includes('node_backend_runtime_id'))
-check('Deployment create uses config_overrides', sources['src/pages/ModelDeploymentsPage.vue'].includes('config_overrides'))
+check('Deployment create uses DeploymentWizard (with config_overrides)', sources['src/pages/ModelDeploymentsPage.vue'].includes('DeploymentWizard'))
 check('Deployment edit runtime selector is absent', !sources['src/pages/ModelDeploymentsPage.vue'].includes('editForm') && !sources['src/pages/ModelDeploymentsPage.vue'].includes('runtime selector'))
 check('Model deployment page does not import RuntimeParameterEditor', !sources['src/pages/ModelDeploymentsPage.vue'].includes('RuntimeParameterEditor'))
 
