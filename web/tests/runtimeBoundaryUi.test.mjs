@@ -49,7 +49,7 @@ for (const token of [
 
 check('RuntimeParameterEditor edits ConfigSet items', sources['src/components/common/RuntimeParameterEditor.vue'].includes('config_set'))
 check('RuntimeParameterEditor emits config_overrides', sources['src/components/common/RuntimeParameterEditor.vue'].includes('config_overrides'))
-check('Backend runtime page shows ConfigSet', sources['src/pages/BackendRuntimesPage.vue'].includes('ConfigSet'))
+check('Backend runtime page shows Advanced Diagnostics (ConfigSet collapsed)', sources['src/pages/BackendRuntimesPage.vue'].includes('advancedDiagnostics') || sources['src/pages/BackendRuntimesPage.vue'].includes('Advanced Diagnostics'))
 check('Runner config page enables NBR through current route (via wizard)', sources['src/pages/RunnerConfigsPage.vue'].includes('NodeRuntimeConfigWizard') || all.includes('/backend-runtimes/enable'))
 check('Runner config page checks NBR through check-request', all.includes('check-request'))
 check('Deployment create uses node_backend_runtime_id', sources['src/pages/ModelDeploymentsPage.vue'].includes('node_backend_runtime_id'))

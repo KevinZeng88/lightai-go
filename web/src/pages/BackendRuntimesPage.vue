@@ -5,36 +5,44 @@
       <el-button @click="load">{{ $t('common.refresh') }}</el-button>
     </div>
 
-    <el-table :data="runtimes" v-loading="loading" stripe @row-click="selected = $event">
+    <el-table :data="displayRuntimes" v-loading="loading" stripe @row-click="selected = $event.raw">
       <el-table-column :label="$t('runtimes.name')" min-width="220">
-        <template #default="{ row }">{{ row.display_name || row.name }}</template>
+        <template #default="{ row }">{{ row.displayName }}</template>
       </el-table-column>
-      <el-table-column prop="backend_id" :label="$t('runtimes.backend')" min-width="160" />
-      <el-table-column prop="backend_version_id" :label="$t('runtimes.backendVersion')" min-width="200" />
-      <el-table-column prop="vendor" :label="$t('runtimes.vendor')" width="120" />
-      <el-table-column prop="image_ref" :label="$t('runtimes.image')" min-width="260" show-overflow-tooltip />
-      <el-table-column prop="deployable_count" :label="$t('runtimes.readyCount')" width="120" />
+      <el-table-column :label="$t('runtimes.vendor')" width="120">
+        <template #default="{ row }">{{ row.vendor }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('runtimes.backend')" width="120">
+        <template #default="{ row }">{{ row.backend }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('runtimes.backendVersion')" width="120">
+        <template #default="{ row }">{{ row.version || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="image" :label="$t('runtimes.image')" min-width="240" show-overflow-tooltip />
+      <el-table-column :label="$t('runtimes.readyCount')" width="120">
+        <template #default="{ row }">{{ row.readyCount }}</template>
+      </el-table-column>
       <el-table-column :label="$t('runtimes.managedBy')" width="140">
         <template #default="{ row }">
-          <el-tag :type="row.is_editable ? 'success' : 'info'">
-            {{ row.is_editable ? $t('runtimes.userManaged') : $t('runtimes.systemManaged') }}
+          <el-tag :type="row.managedBy === 'user' ? 'success' : 'info'">
+            {{ row.managedBy === 'user' ? $t('runtimes.userManaged') : $t('runtimes.systemManaged') }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column :label="$t('common.actions')" width="100" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="!row.is_editable" size="small" @click.stop="cloneRuntime(row)">
+          <el-button v-if="row.managedBy === 'system'" size="small" @click.stop="cloneRuntime(row.raw)">
             {{ $t('runtimes.clone') }}
           </el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-drawer v-model="detailVisible" :title="selected?.display_name || selected?.name || ''" size="65%">
+    <el-drawer v-model="detailVisible" :title="selectedDisplay?.displayName || selected?.display_name || selected?.name || ''" size="65%">
       <template v-if="selected">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item :label="$t('runtimes.backend')">{{ selected.backend_id }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runtimes.backendVersion')">{{ selected.backend_version_id }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.backend')">{{ selectedDisplay?.backend || selected.backend_id }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runtimes.backendVersion')">{{ selectedDisplay?.version || selected.backend_version_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.vendor')">{{ selected.vendor }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.image')">{{ selected.image_ref }}</el-descriptions-item>
         </el-descriptions>
@@ -52,18 +60,23 @@
             {{ $t('common.save') }}
           </el-button>
         </div>
-        <JsonViewer :value="selected.config_set || {}" title="ConfigSet" max-height="520px" :searchable="true" />
-        <JsonViewer :value="selected.source_metadata || {}" title="Source Metadata" max-height="260px" :searchable="true" />
+        <el-collapse style="margin-top:12px">
+          <el-collapse-item :title="$t('runtimes.advancedDiagnostics') || 'Advanced Diagnostics'">
+            <JsonViewer :value="selected.config_set || {}" :title="$t('common.technicalConfig')" max-height="520px" :searchable="true" />
+            <JsonViewer :value="selected.source_metadata || {}" title="Source Metadata" max-height="260px" :searchable="true" />
+          </el-collapse-item>
+        </el-collapse>
       </template>
     </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, reactive } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listRuntimes } from '@/api/runtimes'
 import { apiClient } from '@/api/client'
+import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/runtimeDisplay'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 
@@ -72,6 +85,14 @@ const saving = ref(false)
 const runtimes = ref<any[]>([])
 const selected = ref<any | null>(null)
 const selectedEditState = ref<Record<string, any>>({})
+
+const displayRuntimes = computed(() => runtimes.value.map(toRuntimeTemplateDisplay))
+
+const selectedDisplay = computed(() => {
+  if (!selected.value) return null
+  return toRuntimeTemplateDisplay(selected.value)
+})
+
 const detailVisible = computed({
   get: () => !!selected.value,
   set: (value: boolean) => { if (!value) { selected.value = null; selectedEditState.value = {} } },
@@ -88,7 +109,6 @@ async function saveEdit() {
     await apiClient.patch(`/backend-runtimes/${selected.value.id}`, selectedEditState.value)
     ElMessage.success('Saved')
     await load()
-    // Refresh selected from new data
     const updated = runtimes.value.find(r => r.id === selected.value?.id)
     if (updated) selected.value = updated
   } catch (e: any) {
