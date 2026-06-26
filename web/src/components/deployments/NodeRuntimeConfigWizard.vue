@@ -36,19 +36,29 @@
             <el-button @click="loadRuntimes">{{ $t('common.refresh') }}</el-button>
           </el-empty>
         </div>
-        <el-table v-else :data="runtimes" highlight-current-row @current-change="onRuntimeSelected" max-height="400">
+        <el-table v-else :data="displayRuntimes" highlight-current-row @current-change="onDisplayRuntimeSelected" max-height="400">
           <el-table-column :label="$t('runtimes.name')" min-width="200">
-            <template #default="{ row }">{{ row.display_name || row.name }}</template>
+            <template #default="{ row }">{{ row.displayName }}</template>
           </el-table-column>
-          <el-table-column prop="backend_id" :label="$t('runtimes.backend')" width="120" />
-          <el-table-column prop="vendor" :label="$t('runtimes.vendor')" width="100" />
-          <el-table-column prop="image_ref" :label="$t('runtimes.image')" min-width="240" show-overflow-tooltip />
+          <el-table-column :label="$t('runtimes.backend')" width="120">
+            <template #default="{ row }">{{ row.backendDisplay }}</template>
+          </el-table-column>
+          <el-table-column :label="$t('runtimes.vendor')" width="100">
+            <template #default="{ row }">{{ row.vendorDisplay }}</template>
+          </el-table-column>
+          <el-table-column :label="$t('runtimes.backendVersion')" width="100">
+            <template #default="{ row }">{{ row.versionDisplay || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="image" :label="$t('runtimes.image')" min-width="240" show-overflow-tooltip />
+          <el-table-column :label="$t('runtimes.source') || 'Source'" width="100">
+            <template #default="{ row }">{{ row.sourceType === 'user' ? $t('runtimes.userConfig') : $t('runtimes.builtinTemplate') }}</template>
+          </el-table-column>
         </el-table>
         <div v-if="runtimes.length" style="margin-top:12px; text-align:right">
           <el-button size="small" @click="loadRuntimes">{{ $t('common.refresh') }}</el-button>
         </div>
         <div v-if="selectedRuntime" style="margin-top:12px">
-          <el-tag type="success">{{ $t('runnerConfigs.selectedTemplate') }}: {{ selectedRuntime.display_name || selectedRuntime.name }}</el-tag>
+          <el-tag type="success">{{ $t('runnerConfigs.selectedTemplate') }}: {{ selectedRuntimeDisplay?.displayName || selectedRuntime.display_name || selectedRuntime.name }}</el-tag>
         </div>
       </div>
 
@@ -135,6 +145,7 @@ import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { getConfigEditView } from '@/api/configEdit'
 import { listRuntimes } from '@/api/runtimes'
+import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/runtimeDisplay'
 import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
@@ -154,8 +165,13 @@ const runtimesLoading = ref(false)
 const runtimesError = ref('')
 const nodes = ref<any[]>([])
 const runtimes = ref<any[]>([])
+const displayRuntimes = computed(() => runtimes.value.map(toRuntimeTemplateDisplay))
 const selectedNode = ref<any>(null)
 const selectedRuntime = ref<any>(null)
+const selectedRuntimeDisplay = computed(() => {
+  if (!selectedRuntime.value) return null
+  return toRuntimeTemplateDisplay(selectedRuntime.value)
+})
 const paramOverrides = ref<ConfigEditPatch | null>(null)
 const runtimeEditView = ref<ConfigEditViewModel | null>(null)
 const checkResult = ref<any>(null)
@@ -167,10 +183,10 @@ const form = reactive({
 
 const defaultConfigName = computed(() => {
   const host = selectedNode.value?.name || selectedNode.value?.hostname || selectedNode.value?.id || 'node'
-  const vendor = selectedRuntime.value?.vendor || 'unknown'
-  const backend = selectedRuntime.value?.backend_id || ''
-  const name = backend.replace(/^backend\./, '')
-  return `${host} / ${vendor} / ${name}`
+  const display = selectedRuntimeDisplay.value
+  const vendorName = display?.vendorDisplay || selectedRuntime.value?.vendor || 'unknown'
+  const backendName = display?.backendDisplay || (selectedRuntime.value?.backend_id || '').replace(/^backend\./, '')
+  return `${host} / ${vendorName} / ${backendName}`
 })
 
 const canProceed = computed(() => {
@@ -204,7 +220,14 @@ function onNodeSelected(node: any) {
   selectedNode.value = node
 }
 
+function onDisplayRuntimeSelected(displayRow: RuntimeTemplateDisplay | null) {
+  if (!displayRow) return
+  selectedRuntime.value = displayRow.raw
+  form.image_ref = displayRow.raw.image_ref || ''
+}
+
 function onRuntimeSelected(row: any) {
+  // Keep for backward compat; new code uses onDisplayRuntimeSelected.
   if (!row) return
   selectedRuntime.value = row
   form.image_ref = row.image_ref || ''

@@ -92,13 +92,30 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	if required {
 		enabled = true
 	}
+	// Determine if this is a capability/internal field that should be forced to readonly summary.
+	isCapability := capabilityLikeCodes[key] || strings.Contains(key, "capabilities") || strings.Contains(key, "supported_config")
+	isInternalMeta := strings.HasPrefix(key, "internal.") || strings.HasPrefix(key, "source_metadata.") || strings.HasPrefix(key, "resolver.")
+
 	visibility := stringValue(item["visibility"])
-	advanced := boolValue(item["advanced"]) || visibility == "internal" || visibility == "hidden" || strings.HasPrefix(key, "internal.") || strings.HasPrefix(key, "source_metadata.") || strings.HasPrefix(key, "resolver.")
+	advanced := boolValue(item["advanced"]) || isCapability || isInternalMeta || visibility == "internal" || visibility == "hidden"
 	section := sectionFor(key, item)
 	if advanced {
 		section = "advanced_raw"
 	}
-	readonly := input.Readonly || boolValue(item["readonly"]) || visibility == "readonly" || visibility == "internal" || (input.Layer == "deployment" && deploymentProtectedFields[internalKey])
+	readonly := input.Readonly || boolValue(item["readonly"]) || isCapability || visibility == "readonly" || visibility == "internal" || (input.Layer == "deployment" && deploymentProtectedFields[internalKey])
+
+	// Determine widget, forcing readonly_summary for capability fields.
+	widget := widgetFor(item)
+	if isCapability && section == "advanced_raw" {
+		widget = "readonly_summary"
+	}
+
+	// Handle {{container_port}} template variable: show as readonly hint, not editable.
+	value := valueOrDefault(item)
+	if s, ok := value.(string); ok && strings.Contains(s, "{{") {
+		readonly = true
+	}
+
 	return EditField{
 		Key:          key,
 		InternalKey:  internalKey,
@@ -110,8 +127,8 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		Group:        firstString(nestedString(item, "render", "group"), nestedString(item, "extensions", "group")),
 		Order:        intValue(item["order"]),
 		Type:         firstString(stringValue(item["type"]), "string"),
-		Widget:       widgetFor(item),
-		Value:        valueOrDefault(item),
+		Widget:       widget,
+		Value:        value,
 		DefaultValue: item["default_value"],
 		Enabled:      enabled,
 		HasEnable:    !required && !readonly,
@@ -138,6 +155,12 @@ func widgetFor(item map[string]any) string {
 	}
 	if style := nestedString(item, "render", "style"); style == "raw_lines" {
 		return "textarea"
+	}
+	// Check widget overrides based on code.
+	if code := stringValue(item["code"]); code != "" {
+		if w, ok := widgetOverrides[code]; ok {
+			return w
+		}
 	}
 	switch stringValue(item["type"]) {
 	case "boolean", "bool":

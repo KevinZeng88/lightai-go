@@ -54,9 +54,9 @@
         <div style="margin-top:12px;text-align:right">
           <el-button type="primary" :loading="saving" @click="saveNBREdit">{{ $t('common.save') }}</el-button>
         </div>
-        <JsonViewer :value="selected.config_set || {}" title="ConfigSet" max-height="520px" :searchable="true" />
-        <JsonViewer :value="selected.source_metadata || {}" title="Source Metadata" max-height="260px" :searchable="true" />
-        <JsonViewer :value="selected.probe_results_json || {}" title="Probe Results" max-height="260px" :searchable="true" />
+        <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
+        <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
+        <JsonViewer :value="selected.probe_results_json || {}" :title="$t('nodeRuntimeProbe.title')" max-height="260px" :searchable="true" />
       </template>
     </el-drawer>
   </div>

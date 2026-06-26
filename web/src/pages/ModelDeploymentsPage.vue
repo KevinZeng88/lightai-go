@@ -45,8 +45,8 @@
           <el-descriptions-item :label="$t('common.status')">{{ selected.status }}</el-descriptions-item>
           <el-descriptions-item :label="$t('deployments.created')">{{ selected.created_at }}</el-descriptions-item>
         </el-descriptions>
-        <JsonViewer :value="selected.config_set || {}" title="Deployment ConfigSet" max-height="520px" :searchable="true" />
-        <JsonViewer :value="selected.source_metadata || {}" title="Source Metadata" max-height="260px" :searchable="true" />
+        <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
+        <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
         <JsonViewer v-if="lastDryRun" :value="lastDryRun" title="Last Dry Run" max-height="420px" :searchable="true" />
       </template>
     </el-drawer>

@@ -46,6 +46,30 @@ var taxonomyLabels = map[string]string{
 	"runtime.model_mount":                      "Model mount",
 	"runtime.env":                              "Environment variables",
 	"runtime.health":                           "Health check",
+	"service.container_port":                   "Container port",
+	"service.host_port":                        "Host port",
+	"backend.capabilities":                     "Backend capabilities",
+	"backend.supported_config_items":           "Supported config items",
+}
+
+// capabilityLikeCodes are codes that contain capability/metadata information
+// that should be shown as readonly_summary in advanced_raw, not as editable fields.
+var capabilityLikeCodes = map[string]bool{
+	"backend.capabilities":            true,
+	"backend.supported_config_items":  true,
+	"backend.capability_profile":      true,
+	"backend.detected_capabilities":   true,
+	"capabilities":                    true,
+	"capabilities_detail":             true,
+}
+
+// widgetOverrides maps internal keys to preferred widget types for structured display.
+var widgetOverrides = map[string]string{
+	"runtime.env":               "key_value_table",
+	"runtime.model_mount":       "mount_form",
+	"runtime.health":            "health_check_form",
+	"service.container_port":    "port_form",
+	"service.host_port":         "port_form",
 }
 
 var dockerFieldSpecs = []struct {
@@ -61,9 +85,9 @@ var dockerFieldSpecs = []struct {
 	{"uts_mode", "container_resources", "string", "string", 40},
 	{"network_mode", "container_resources", "string", "string", 50},
 	{"security_options", "container_resources", "array", "string_list", 60},
-	{"ulimits", "container_resources", "object", "key_value_list", 70},
-	{"devices", "devices_mounts", "array", "device_list", 10},
-	{"optional_devices", "devices_mounts", "array", "device_list", 20},
+	{"ulimits", "container_resources", "object", "key_value_table", 70},
+	{"devices", "devices_mounts", "array", "device_table", 10},
+	{"optional_devices", "devices_mounts", "array", "device_table", 20},
 	{"group_add", "devices_mounts", "array", "string_list", 30},
 }
 
@@ -73,6 +97,10 @@ func sectionFor(code string, item map[string]any) string {
 	}
 	if sec := nestedString(item, "extensions", "section"); sec != "" {
 		return sec
+	}
+	// Capability-like codes always go to advanced_raw.
+	if capabilityLikeCodes[code] || strings.Contains(code, "capabilities") || strings.Contains(code, "supported_config") {
+		return "advanced_raw"
 	}
 	switch {
 	case code == "launcher.image":
@@ -101,6 +129,8 @@ func sectionFor(code string, item map[string]any) string {
 		case "env":
 			return "environment"
 		case "advanced", "internal":
+			return "advanced_raw"
+		case "capabilities", "metadata":
 			return "advanced_raw"
 		}
 	}

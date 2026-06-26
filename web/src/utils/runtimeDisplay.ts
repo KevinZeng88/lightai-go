@@ -1,9 +1,16 @@
 export interface RuntimeTemplateDisplay {
   id: string
   displayName: string
+  rawName: string
+  rawId: string
+  sourceType: 'builtin' | 'user'
+  sourceLabel: string
   vendor: string
+  vendorDisplay: string
   backend: string
+  backendDisplay: string
   version: string
+  versionDisplay: string
   image: string
   formats: string[]
   readyCount: number
@@ -11,33 +18,83 @@ export interface RuntimeTemplateDisplay {
   raw: any
 }
 
+// Product-friendly display names for backends.
+const BACKEND_DISPLAY: Record<string, string> = {
+  vllm: 'vLLM',
+  sglang: 'SGLang',
+  llamacpp: 'llama.cpp',
+  ollama: 'Ollama',
+}
+
+// Product-friendly display names for vendors.
+const VENDOR_DISPLAY: Record<string, string> = {
+  nvidia: 'NVIDIA',
+  metax: 'MetaX',
+  huawei: 'Huawei Ascend',
+  ascend: 'Huawei Ascend',
+  cpu: 'CPU',
+}
+
 export function toRuntimeTemplateDisplay(row: any): RuntimeTemplateDisplay {
   const vendor = row.vendor || 'unknown'
   const backendId = (row.backend_id || '').replace(/^backend\./, '')
   const version = extractVersion(row)
+  const isEditable = !!row.is_editable
+
+  const backendDisplay = BACKEND_DISPLAY[backendId] || backendId
+  const vendorDisplay = VENDOR_DISPLAY[vendor] || vendor
+  const versionDisplay = version === '*' ? '*' : (version || '')
+
+  // displayName priority:
+  // 1. row.display_name (user-specified)
+  // 2. Product-friendly: "vLLM / NVIDIA"
+  // 3. row.name
+  // 4. row.id
+  let displayName = ''
+  if (row.display_name && row.display_name.trim()) {
+    displayName = row.display_name.trim()
+  } else if (backendDisplay && vendorDisplay) {
+    displayName = `${backendDisplay} / ${vendorDisplay}`
+  } else {
+    displayName = row.name || row.id || ''
+  }
+
+  // Source type and label.
+  const sourceType: 'builtin' | 'user' = isEditable ? 'user' : 'builtin'
+  const sourceLabel = isEditable ? 'userConfig' : 'builtinTemplate'
 
   return {
     id: row.id,
-    displayName: `${vendor}.${backendId}`,
+    displayName,
+    rawName: row.name || '',
+    rawId: row.id || '',
+    sourceType,
+    sourceLabel,
     vendor,
+    vendorDisplay,
     backend: backendId,
+    backendDisplay,
     version,
+    versionDisplay: versionDisplay || version || '',
     image: row.image_ref || '',
     formats: extractSupportedFormats(row),
     readyCount: row.deployable_count ?? 0,
-    managedBy: row.is_editable ? 'user' : 'system',
+    managedBy: isEditable ? 'user' : 'system',
     raw: row,
   }
 }
 
 function extractVersion(row: any): string {
-  // Try to get version from source_template_name (e.g., "vllm-nvidia-docker" → we want the version from backend_version_id)
-  // Fall back to backend_version_id or source
+  // Builtin generic runtimes (no specific version) → show *.
+  if (row.source_type === 'builtin' || row.managed_by === 'system') {
+    const vid = row.backend_version_id || ''
+    if (!vid || vid === 'latest') return '*'
+  }
   const vid = row.backend_version_id || ''
   // If version_id looks like "version.vllm.v0.23.0", extract "v0.23.0"
   const match = vid.match(/v\d+\.\d+\.\d+/)
   if (match) return match[0]
-  // Otherwise just use a shortened form
+  // Otherwise use shortened form
   if (vid.startsWith('version.')) return vid.replace(/^version\./, '').replace(/\..*\./, '.')
   return vid
 }
@@ -46,7 +103,6 @@ function extractSupportedFormats(row: any): string[] {
   const cs = row.config_set
   if (!cs?.items) return []
   const formats: string[] = []
-  // Check for format-related config items
   for (const item of Object.values(cs.items) as any[]) {
     if (item?.render?.label && item.render.label.toLowerCase().includes('format')) {
       formats.push(item.render.label)

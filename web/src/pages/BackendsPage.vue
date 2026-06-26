@@ -16,8 +16,8 @@
       <template v-if="selected">
         <el-tabs>
           <el-tab-pane label="Backend">
-            <JsonViewer :value="selected.config_set || {}" title="ConfigSet" max-height="520px" :searchable="true" />
-            <JsonViewer :value="selected.source_metadata || {}" title="Source Metadata" max-height="240px" :searchable="true" />
+            <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
+            <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="240px" :searchable="true" />
           </el-tab-pane>
           <el-tab-pane label="Versions">
             <div class="version-toolbar">

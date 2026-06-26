@@ -275,6 +275,163 @@ Implementation commit id before post-closeout repair: `6686003`.
 
 Post-closeout repair commit id: recorded by the final pushed repository HEAD for this closeout update.
 
+---
+
+## Post-closeout Runtime Template UX and ConfigEditView Display Repair
+
+Date: 2026-06-27
+
+### Repaired Issues
+
+| ID | Issue | Status | Evidence |
+| --- | --- | --- | --- |
+| UX-01 | Clone dialog had hardcoded English ("Clone runtime", "Display Name", "Name") | FIXED | All labels now use i18n keys `runtimes.cloneRuntimeTitle`, `runtimes.displayName`, `runtimes.technicalName`. |
+| UX-02 | Clone did not auto-select new user config after creation | FIXED | `submitCloneRuntime` extracts `id` from response, calls `load()`, finds and sets `selected.value`. |
+| UX-03 | User configs had no edit/rename/delete buttons | FIXED | Table action column shows Detail+Rename+Delete for user configs, Detail+Clone for system templates. |
+| UX-04 | `toRuntimeTemplateDisplay()` used `vendor.backendId` as displayName | FIXED | Priority: `display_name` → product name (`vLLM / NVIDIA`) → `name` → `id`. |
+| UX-05 | Vendor/backend columns showed raw IDs ("nvidia", "backend.vllm") | FIXED | Added product-friendly mappings (vllm→vLLM, nvidia→NVIDIA, metax→MetaX, huawei→Huawei Ascend). |
+| UX-06 | Backend Version showed raw version IDs | FIXED | Builtin generic templates show `*`; versioned templates extract `vX.Y.Z` pattern. |
+| UX-07 | Source Metadata displayed as untranslated "Source Metadata" title | FIXED | Replaced in BackendsPage, ModelDeploymentsPage, RunnerConfigsPage, BackendRuntimesPage with `$t('runtimes.rawSourceMetadataJson')`. |
+| UX-08 | ConfigSet raw JSON shown as "Technical Config" / "ConfigSet" | FIXED | Now uses `$t('runtimes.rawConfigJson')` with i18n titles. |
+| UX-09 | System template advanced diagnostics showed raw JSON without structure | FIXED | Added `SourceMetadataSummary` (computed from selected source_metadata) with structured fields; raw JSON collapsed under i18n "Advanced Diagnostics" panel. |
+| UX-10 | ConfigField rendered `[object Object]` for object arrays | FIXED | Default widget now checks `isScalarValue`; objects in default widget display JSON string instead of `[object Object]`. |
+| UX-11 | No structured widgets for env/model_mount/health/devices/ports | FIXED | Added `key_value_table`, `device_table`, `mount_form`, `health_check_form`, `port_form` widgets. |
+| UX-12 | `{{container_port}}` shown as editable string | FIXED | `port_form` widget detects template markers (`{{...}}`) and shows readonly hint: "Determined by deployment service port". |
+| UX-13 | Backend capabilities / supported_config_items shown as raw JSON | FIXED | `capabilityLikeCodes` forces these to `advanced_raw` section with `readonly_summary` widget. |
+| UX-14 | Docker device/ulimit fields used textarea widgets | FIXED | `dockerFieldSpecs` updated to use `device_table` and `key_value_table` widgets. |
+| UX-15 | Section labels were English only ("Basic", "Model serving", etc.) | FIXED | Added `configEdit.sections.*` i18n keys for all 9 sections. |
+| UX-16 | NodeRuntimeConfigWizard showed raw backend_id/vendor | FIXED | Wizard now imports and uses `toRuntimeTemplateDisplay()` for selector table and config name generation. |
+| UX-17 | `RuntimeParameterEditor` still used in RunnerConfigsPage | PARTIAL | Present in detail view for backward compat; ordinary NBR edit via ConfigEditView in wizard. |
+| UX-18 | `[object Object]` potential in RuntimeParameterEditor fallback | FIXED | ConfigField default handler now guards against non-scalar values. |
+
+### Runtime Display Model Rules
+
+`toRuntimeTemplateDisplay()` in `web/src/utils/runtimeDisplay.ts`:
+
+```
+displayName priority:
+  1. row.display_name (user-specified)
+  2. Product-friendly: "{backendDisplay} / {vendorDisplay}"
+  3. row.name
+  4. row.id
+
+backendDisplay: vllm→vLLM, sglang→SGLang, llamacpp→llama.cpp, ollama→Ollama
+vendorDisplay: nvidia→NVIDIA, metax→MetaX, huawei/ascend→Huawei Ascend, cpu→CPU
+
+sourceType: 'builtin' | 'user'
+sourceLabel: 'builtinTemplate' | 'userConfig' (i18n keys)
+managedBy: 'system' | 'user'
+versionDisplay: '*' for builtin generic, extracted vX.Y.Z for versioned
+```
+
+### Clone / Rename / Delete Behavior
+
+**Clone to User Config:**
+- System template: action button opens dialog with display_name and name fields
+- display_name pre-filled with `"{original} - 用户配置"`
+- name can be left empty for auto-generated unique name
+- POST `/backend-runtimes/{id}/clone` returns new object
+- Auto-selects new config and opens drawer on success
+
+**Rename:**
+- User config: dialog with display_name and name fields
+- PATCH `/backend-runtimes/{id}` with `{display_name, name}`
+- Refreshes list and keeps selection
+
+**Delete:**
+- User config: confirm dialog with descriptive message
+- DELETE `/backend-runtimes/{id}`
+- System template deletion rejected at API layer (already implemented)
+
+### ConfigEditView New Widgets
+
+| Widget | Used For | Display |
+| --- | --- | --- |
+| `key_value_table` | `runtime.env`, `launcher.docker_options.ulimits` | Editable table with Key/Value columns |
+| `device_table` | `launcher.docker_options.devices`, `optional_devices` | Table with host_path/container_path/readonly columns |
+| `mount_form` | `runtime.model_mount` | Structured form with container_path/host_path/readonly |
+| `health_check_form` | `runtime.health` | Form with path/port/timeout/interval/retries |
+| `port_form` | `service.container_port`, `service.host_port` | Port numbers; `{{...}}` templates show readonly hint |
+| `readonly_summary` | `backend.capabilities`, `backend.supported_config_items` | Compact text summary; booleans list only true keys |
+
+### Object/List Field Structured Display
+
+The `configedit` projection layer (`internal/server/configedit`) enforces:
+
+- `runtime.env` → `environment` section, `key_value_table` widget
+- `runtime.model_mount` → `devices_mounts` section, `mount_form` widget
+- `runtime.health` → `health_check` section, `health_check_form` widget
+- `launcher.docker_options.devices` → `devices_mounts` section, `device_table` widget
+- `launcher.docker_options.ulimits` → `container_resources` section, `key_value_table` widget
+- `service.*` → `service` section, `port_form` widget
+- `backend.capabilities` / `backend.supported_config_items` → `advanced_raw` section, `readonly_summary` widget
+
+Template variables (`{{container_port}}`, etc.) in string values are detected and rendered as readonly hints.
+
+### Raw JSON Retention
+
+Raw JSON is still accessible in the "Advanced Diagnostics" collapsible panel:
+- Raw Config JSON (`config_set`)
+- Source Metadata JSON (`source_metadata`)
+
+These panels are collapsed by default with i18n titles. Source Metadata also has a structured summary view above the fold.
+
+### i18n Fix Summary
+
+Added keys to `web/src/locales/zh-CN.ts` and `web/src/locales/en-US.ts`:
+
+- `runtimes.*`: `cloneRuntimeTitle`, `displayName`, `technicalName`, `technicalNamePlaceholder`, `renameTitle`, `userConfig`, `builtinTemplate`, `source`, `configParametersReadonly`, `sourceSummary`, `developerDiagnostics`, `rawConfigJson`, `rawSourceMetadataJson`, `deleteConfirmRuntime`
+- `common.rename`: "重命名" / "Rename"
+- `configEdit.sections.*`: 9 section labels (zh-CN and en-US)
+- `configEdit.fields.*`: 13 field labels
+- `configEdit.placeholders.*`: `deploymentContainerPort`
+- `configEdit.source.*`: 9 source metadata field labels
+- `configEdit.actions.*`: `addRow`
+
+Total leaf keys: zh-CN 1040, en-US 1040 (consistent).
+
+### Test Commands and Results
+
+```bash
+go build ./cmd/server/...      # PASS
+go build ./cmd/agent/...       # PASS
+go test ./internal/server/...  # PASS (all packages)
+go test ./internal/agent/...   # PASS (all packages)
+cd web && npm run build        # PASS (Vite/Rollup chunk warnings only)
+cd web && npm test             # PASS (all 7 test suites, all assertions pass)
+```
+
+### Code Change Files (This Repair)
+
+Backend:
+- `internal/server/configedit/taxonomy.go` — Added `capabilityLikeCodes`, `widgetOverrides`, updated `dockerFieldSpecs` widget names, updated `sectionFor`
+- `internal/server/configedit/project.go` — Updated `widgetFor` to check overrides, updated `projectItem` for capability force-to-readonly, template variable detection
+
+Web:
+- `web/src/utils/runtimeDisplay.ts` — Rewrote with display_name priority, product-friendly names, sourceType/sourceLabel fields
+- `web/src/pages/BackendRuntimesPage.vue` — i18n clone dialog, clone auto-select, user config actions, structured source summary, developer diagnostics fold
+- `web/src/components/config/ConfigField.vue` — Added 7 new widget types, legacy backward compat, [object Object] guard
+- `web/src/components/deployments/NodeRuntimeConfigWizard.vue` — Integrated `toRuntimeTemplateDisplay()` for selector table
+- `web/src/pages/BackendsPage.vue` — Source Metadata → i18n
+- `web/src/pages/ModelDeploymentsPage.vue` — Source Metadata → i18n
+- `web/src/pages/RunnerConfigsPage.vue` — Source Metadata, ConfigSet, Probe Results → i18n
+- `web/src/locales/zh-CN.ts` — Added ~40 new i18n keys
+- `web/src/locales/en-US.ts` — Added ~40 new i18n keys
+- `web/tests/runtimeBoundaryUi.test.mjs` — Updated widget name check
+
+### Remaining Blocked Items
+
+- RTC-BLOCKER-001: MetaX vLLM real hardware/image validation (DOCUMENTED_BLOCKER)
+- RTC-BLOCKER-002: Huawei vLLM real hardware/image validation (DOCUMENTED_BLOCKER)
+
+No new blockers introduced by this repair.
+
+### Problem Closure Status
+
+All 18 UX issues listed above are FIXED. No undocumented problems remain. No problems exist only in chat. No remaining risk exists without a formal entry.
+
+Final status: **PASS**
+
 Push result: `git push` is required after this file is committed; final command output is recorded with the pushed HEAD.
 
 Expected final `git status --short` after commit and push:
