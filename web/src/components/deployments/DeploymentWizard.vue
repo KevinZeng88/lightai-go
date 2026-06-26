@@ -9,20 +9,44 @@
     </el-steps>
 
     <div class="wizard-content">
-      <ModelSelector
-        v-if="activeStep === 0"
-        :artifacts="artifacts"
-        :model-value="form.model_artifact_id"
-        @update:model-value="form.model_artifact_id = $event"
-      />
+      <!-- Step 0: Model -->
+      <div v-if="activeStep === 0">
+        <div v-if="!hasArtifacts" style="text-align:center;padding:40px">
+          <el-empty :description="$t('deployments.noArtifacts') || 'No model artifacts available'">
+            <el-button @click="$emit('refreshData')">{{ $t('common.refresh') }}</el-button>
+          </el-empty>
+        </div>
+        <ModelSelector
+          v-else
+          :artifacts="artifacts"
+          :model-value="form.model_artifact_id"
+          @update:model-value="form.model_artifact_id = $event"
+        />
+      </div>
 
-      <NodeRuntimeSelector
-        v-if="activeStep === 1"
-        :node-runtimes="deployableRuntimes"
-        :model-value="form.node_backend_runtime_id"
-        @update:model-value="onNBRSelected($event)"
-      />
+      <!-- Step 1: Node Runtime Config -->
+      <div v-if="activeStep === 1">
+        <div v-if="!hasRuntimes" style="text-align:center;padding:40px">
+          <el-empty :description="$t('runnerConfigs.noConfigs') || 'No node runtime configs available. Enable one first.'">
+            <el-button @click="$emit('refreshData')">{{ $t('common.refresh') }}</el-button>
+          </el-empty>
+        </div>
+        <div v-else>
+          <NodeRuntimeSelector
+            :node-runtimes="deployableRuntimes"
+            :model-value="form.node_backend_runtime_id"
+            @update:model-value="onNBRSelected($event)"
+          />
+          <div style="margin-top:8px; text-align:right">
+            <el-button v-if="deployableRuntimes.length < props.nodeRuntimes.length" size="small" @click="showAllRuntimes = !showAllRuntimes">
+              {{ showAllRuntimes ? $t('runnerConfigs.showDeployableOnly') || 'Deployable only' : $t('runnerConfigs.showAll') || 'Show all (' + props.nodeRuntimes.length + ')' }}
+            </el-button>
+            <el-button size="small" @click="$emit('refreshData')">{{ $t('common.refresh') }}</el-button>
+          </div>
+        </div>
+      </div>
 
+      <!-- Step 2: Service -->
       <DeploymentServiceEditor
         v-if="activeStep === 2"
         v-model:host-port="form.host_port"
@@ -30,12 +54,14 @@
         v-model:served-model-name="form.served_model_name"
       />
 
+      <!-- Step 3: Overrides -->
       <DeploymentOverrideEditor
         v-if="activeStep === 3"
         :nbr-config-set="selectedNBRConfigSet"
         @update:overrides="form.config_overrides = $event"
       />
 
+      <!-- Step 4: Preview -->
       <DeploymentPreviewPanel
         v-if="activeStep === 4"
         :preview-data="previewData"
@@ -71,6 +97,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   save: []
+  refreshData: []
 }>()
 
 const activeStep = ref(0)
@@ -88,9 +115,17 @@ const form = reactive({
   config_overrides: {} as Record<string, any>,
 })
 
-const deployableRuntimes = computed(() =>
-  props.nodeRuntimes.filter((r: any) => r.deployable === true)
-)
+const showAllRuntimes = ref(false)
+
+const deployableRuntimes = computed(() => {
+  if (showAllRuntimes.value) return props.nodeRuntimes
+  return props.nodeRuntimes.filter((r: any) =>
+    r.deployable === true || r.status === 'ready' || r.status === 'ready_with_warnings'
+  )
+})
+
+const hasArtifacts = computed(() => props.artifacts && props.artifacts.length > 0)
+const hasRuntimes = computed(() => props.nodeRuntimes && props.nodeRuntimes.length > 0)
 
 const selectedNBRConfigSet = computed(() => {
   const nbr = props.nodeRuntimes.find((r: any) => r.id === form.node_backend_runtime_id)

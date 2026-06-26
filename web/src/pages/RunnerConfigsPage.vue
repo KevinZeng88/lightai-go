@@ -23,24 +23,10 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="createVisible" :title="$t('runnerConfigs.create')" width="640px">
-      <el-form label-position="top">
-        <el-form-item :label="$t('deployments.node')">
-          <el-select v-model="form.node_id" style="width:100%" filterable>
-            <el-option v-for="node in nodes" :key="node.id" :label="node.name || node.id" :value="node.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('deployments.runtime')">
-          <el-select v-model="form.runtime_id" style="width:100%" filterable>
-            <el-option v-for="runtime in runtimes" :key="runtime.id" :label="runtime.display_name || runtime.name" :value="runtime.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('runtimes.displayName')"><el-input v-model="form.display_name" /></el-form-item>
-        <el-form-item :label="$t('runtimes.image')"><el-input v-model="form.image_ref" /></el-form-item>
-      </el-form>
+    <el-dialog v-model="createVisible" :title="$t('runnerConfigs.create')" width="960px" :close-on-click-modal="false">
+      <NodeRuntimeConfigWizard ref="nbrWizardRef" @saved="onNBRCreated" />
       <template #footer>
         <el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="saving" @click="enable">{{ $t('common.save') }}</el-button>
       </template>
     </el-dialog>
 
@@ -77,12 +63,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { listRuntimes } from '@/api/runtimes'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
+import NodeRuntimeConfigWizard from '@/components/deployments/NodeRuntimeConfigWizard.vue'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -92,7 +79,6 @@ const nodes = ref<any[]>([])
 const runtimes = ref<any[]>([])
 const selected = ref<any | null>(null)
 const nbrEditState = ref<Record<string, any>>({})
-const form = reactive({ node_id: '', runtime_id: '', display_name: '', image_ref: '' })
 
 const detailVisible = computed({
   get: () => !!selected.value,
@@ -148,21 +134,9 @@ async function load() {
   }
 }
 
-async function enable() {
-  if (!form.node_id || !form.runtime_id) return
-  saving.value = true
-  try {
-    await apiClient.post(`/nodes/${form.node_id}/backend-runtimes/enable`, {
-      backend_runtime_id: form.runtime_id,
-      display_name: form.display_name,
-      image_ref: form.image_ref,
-    })
-    createVisible.value = false
-    ElMessage.success('Saved')
-    await load()
-  } finally {
-    saving.value = false
-  }
+async function onNBRCreated() {
+  createVisible.value = false
+  await load()
 }
 
 async function check(row: any) {

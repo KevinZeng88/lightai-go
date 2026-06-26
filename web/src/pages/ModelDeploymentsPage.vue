@@ -29,6 +29,7 @@
         :node-runtimes="nodeRuntimes"
         :saving="saving"
         @save="createFromWizard"
+        @refresh-data="load"
       />
       <template #footer>
         <el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button>

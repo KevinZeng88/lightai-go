@@ -14,18 +14,21 @@
         <template #default="{ row }">{{ row.backend_runtime?.vendor || '' }}</template>
       </el-table-column>
       <el-table-column prop="image_ref" :label="$t('runtimes.image')" min-width="200" show-overflow-tooltip />
-      <el-table-column :label="$t('common.status')" width="140">
+      <el-table-column :label="$t('common.status')" width="160">
         <template #default="{ row }">
-          <el-tag :type="row.status === 'ready' ? 'success' : row.status === 'ready_with_warnings' ? 'warning' : 'info'">
+          <el-tag :type="statusTagType(row)" size="small">
             {{ row.status }}
           </el-tag>
-          <div v-if="row.warnings?.length" style="font-size:11px;color:var(--el-color-warning);margin-top:2px">
+          <div v-if="row.disabled_reason" style="font-size:11px;color:var(--el-color-warning);margin-top:2px">
+            {{ row.disabled_reason }}
+          </div>
+          <div v-if="row.warnings?.length && !row.disabled_reason" style="font-size:11px;color:var(--el-color-warning);margin-top:2px">
             {{ row.warnings[0] }}
           </div>
         </template>
       </el-table-column>
     </el-table>
-    <el-empty v-if="!props.nodeRuntimes.length" :description="$t('common.noData')" />
+    <el-empty v-if="!props.nodeRuntimes.length" :description="$t('common.noData') || 'No node runtime configs available'" />
   </div>
 </template>
 
@@ -38,6 +41,14 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+
+function statusTagType(row: any): string {
+  if (row.status === 'ready') return 'success'
+  if (row.status === 'ready_with_warnings') return 'warning'
+  if (row.status === 'needs_check') return 'info'
+  if (row.status === 'missing_image' || row.status === 'error') return 'danger'
+  return 'info'
+}
 
 function onSelect(row: any) {
   if (row) emit('update:modelValue', row.id)
