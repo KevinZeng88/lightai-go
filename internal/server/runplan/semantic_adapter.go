@@ -21,20 +21,28 @@ func ApplySemanticSnapshot(in ResolveInput, snapshot semanticconfig.Snapshot, ba
 		in.Deployment.Service.ContainerPort = port
 		in.Deployment.Service.AppPort = port
 	}
+	if item, ok := snapshot.Items["service.listen_host"]; ok {
+		if host := fmt.Sprintf("%v", item.Value); host != "" && host != "<nil>" {
+			in.Deployment.Service.ListenHost = host
+		}
+	}
 	if item, ok := snapshot.Items["deployment.served_model_name"]; ok {
 		value := fmt.Sprintf("%v", item.Value)
-		in.Deployment.Parameters["served_model_name"] = value
-		in.Deployment.ParameterValues = upsertParameterValue(in.Deployment.ParameterValues, ParameterValue{
-			Key:         "deployment.served_model_name",
-			Type:        "string",
-			Target:      "arg",
-			CliName:     adapterFlag(backendName, "deployment.served_model_name"),
-			RenderStyle: "flag_space_value",
-			Enabled:     value != "",
-			Value:       value,
-			Source:      "semantic_snapshot",
-			CopiedFrom:  item.CopiedFrom,
-		})
+		flag := adapterFlag(backendName, "deployment.served_model_name")
+		if flag != "" {
+			in.Deployment.Parameters["served_model_name"] = value
+			in.Deployment.ParameterValues = upsertParameterValue(in.Deployment.ParameterValues, ParameterValue{
+				Key:         "deployment.served_model_name",
+				Type:        "string",
+				Target:      "arg",
+				CliName:     flag,
+				RenderStyle: "flag_space_value",
+				Enabled:     value != "",
+				Value:       value,
+				Source:      "semantic_snapshot",
+				CopiedFrom:  item.CopiedFrom,
+			})
+		}
 	}
 	if item, ok := snapshot.Items["model_runtime.max_model_len"]; ok {
 		value := item.Value
@@ -84,8 +92,6 @@ func adapterFlag(backendName, semanticKey string) string {
 		switch semanticKey {
 		case "model_runtime.max_model_len":
 			return "--ctx-size"
-		case "deployment.served_model_name":
-			return "--model"
 		}
 	default:
 		switch semanticKey {

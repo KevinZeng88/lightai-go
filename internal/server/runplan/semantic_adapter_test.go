@@ -17,14 +17,50 @@ func TestSemanticAdapterVLLMMapsCanonicalKeysToRunPlan(t *testing.T) {
 		t.Fatalf("resolve errors: %v", errs)
 	}
 	args := strings.Join(plan.Args, " ")
-	for _, want := range []string{"--host 0.0.0.0", "--port 8000", "--max-model-len 4096", "--served-model-name llama"} {
+	for _, want := range []string{"--host 0.0.0.0", "--port 8000", "--max-model-len 4096", "--served-model-name served-alias"} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("vllm args missing %q: %s", want, args)
 		}
 	}
 }
 
-func TestSemanticAdapterSGLangAndLlamaCppUseBackendSpecificContextFlags(t *testing.T) {
+func TestSemanticAdapterSGLangMapsHostPortAndContextLength(t *testing.T) {
+	in := semanticAdapterBaseInput("sglang")
+	in = ApplySemanticSnapshot(in, semanticAdapterSnapshot(), "sglang")
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("resolve errors: %v", errs)
+	}
+	args := strings.Join(plan.Args, " ")
+	for _, want := range []string{"--host 0.0.0.0", "--port 8000", "--context-length 4096", "--served-model-name served-alias"} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("sglang args missing %q: %s", want, args)
+		}
+	}
+}
+
+func TestSemanticAdapterLlamaCppUsesModelPathNotServedModelName(t *testing.T) {
+	in := semanticAdapterBaseInput("llamacpp")
+	in = ApplySemanticSnapshot(in, semanticAdapterSnapshot(), "llamacpp")
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("resolve errors: %v", errs)
+	}
+	args := strings.Join(plan.Args, " ")
+	for _, want := range []string{"-m /models/llama.gguf", "--host 0.0.0.0", "--port 8000", "--ctx-size 4096"} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("llama.cpp args missing %q: %s", want, args)
+		}
+	}
+	if strings.Contains(args, "served-alias") {
+		t.Fatalf("llama.cpp served_model_name leaked into model path args: %s", args)
+	}
+	if strings.Contains(args, "--model served-alias") || strings.Contains(args, "-m served-alias") {
+		t.Fatalf("llama.cpp served_model_name must not map to model flag: %s", args)
+	}
+}
+
+func TestSemanticAdapterContextFlags(t *testing.T) {
 	for _, tt := range []struct {
 		backend string
 		flag    string
@@ -88,7 +124,11 @@ func semanticAdapterSnapshot() semanticconfig.Snapshot {
 			},
 			"deployment.served_model_name": {
 				Key:   "deployment.served_model_name",
-				Value: "llama",
+				Value: "served-alias",
+			},
+			"service.listen_host": {
+				Key:   "service.listen_host",
+				Value: "0.0.0.0",
 			},
 			"model_runtime.max_model_len": {
 				Key:   "model_runtime.max_model_len",

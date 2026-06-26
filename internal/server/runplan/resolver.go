@@ -189,6 +189,7 @@ type ServiceInfo struct {
 	HostPort      int `json:"host_port"`
 	ContainerPort int `json:"container_port,omitempty"`
 	AppPort       int `json:"app_port,omitempty"`
+	ListenHost    string
 	HealthPort    int `json:"health_port,omitempty"`
 	APITestPort   int `json:"api_test_port,omitempty"`
 }
@@ -541,11 +542,8 @@ func applyServiceArgs(args []string, svc ServiceInfo) []string {
 	if svc.AppPort > 0 {
 		args = setLastFlagValue(args, "--port", fmt.Sprintf("%d", svc.AppPort))
 	}
-	// --host from service is the bind address (typically 0.0.0.0).
-	// Only override if explicitly set.
-	if svc.HostPort > 0 {
-		// host_port is the external port; app_host is the listen address.
-		// Currently no separate app_host field, so --host remains from args.
+	if strings.TrimSpace(svc.ListenHost) != "" {
+		args = setLastFlagValue(args, "--host", strings.TrimSpace(svc.ListenHost))
 	}
 	return args
 }
