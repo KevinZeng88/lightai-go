@@ -10,34 +10,14 @@
     <div class="wizard-content">
       <!-- Step 0: Select Node -->
       <div v-if="activeStep === 0">
-        <div v-if="nodesLoading" style="text-align:center;padding:40px">
-          <el-icon class="is-loading" :size="32"><Loading /></el-icon>
-          <p>{{ $t('common.loading') }}</p>
-        </div>
-        <div v-else-if="nodesError" style="text-align:center;padding:40px">
-          <el-result icon="error" :title="$t('common.error')" :sub-title="nodesError">
-            <template #extra><el-button @click="loadNodes">{{ $t('common.refresh') }}</el-button></template>
-          </el-result>
-        </div>
-        <div v-else-if="!nodes.length" style="text-align:center;padding:40px">
-          <el-empty :description="$t('nodes.noNodes')">
-            <el-button @click="loadNodes">{{ $t('common.refresh') }}</el-button>
-          </el-empty>
-        </div>
-        <el-table v-else :data="nodes" highlight-current-row @current-change="onNodeSelect" max-height="400">
-          <el-table-column :label="$t('nodes.hostname')" min-width="160">
-            <template #default="{ row }">{{ row.name || row.hostname || row.id }}</template>
-          </el-table-column>
-          <el-table-column prop="id" :label="$t('nodes.nodeId')" width="200" show-overflow-tooltip />
-          <el-table-column :label="$t('common.status')" width="100">
-            <template #default="{ row }">
-              <StatusTag :status="row.status || 'unknown'" />
-            </template>
-          </el-table-column>
-        </el-table>
-        <div v-if="nodes.length" style="margin-top:12px; text-align:right">
-          <el-button size="small" @click="loadNodes">{{ $t('common.refresh') }}</el-button>
-        </div>
+        <NodeSelectorTable
+          :nodes="nodes"
+          :loading="nodesLoading"
+          :error="nodesError"
+          :label="$t('nodeSelector.selectRuntimeNode')"
+          @select="onNodeSelected"
+          @refresh="loadNodes"
+        />
       </div>
 
       <!-- Step 1: Select Runtime Template -->
@@ -56,7 +36,7 @@
             <el-button @click="loadRuntimes">{{ $t('common.refresh') }}</el-button>
           </el-empty>
         </div>
-        <el-table v-else :data="runtimes" highlight-current-row @current-change="onRuntimeSelect" max-height="400">
+        <el-table v-else :data="runtimes" highlight-current-row @current-change="onRuntimeSelected" max-height="400">
           <el-table-column :label="$t('runtimes.name')" min-width="200">
             <template #default="{ row }">{{ row.display_name || row.name }}</template>
           </el-table-column>
@@ -72,11 +52,11 @@
         </div>
       </div>
 
-      <!-- Step 2: Image + Parameters -->
+      <!-- Step 2: Config name, image, and parameters -->
       <div v-if="activeStep === 2">
         <el-form label-position="top">
-          <el-form-item label="Display Name">
-            <el-input v-model="form.display_name" :placeholder="selectedRuntime?.display_name || selectedRuntime?.name || ''" />
+          <el-form-item :label="$t('runnerConfigs.configName')">
+            <el-input v-model="form.display_name" :placeholder="defaultConfigName" />
           </el-form-item>
           <el-form-item :label="$t('runtimes.image')">
             <el-input v-model="form.image_ref" :placeholder="selectedRuntime?.image_ref || ''" />
@@ -94,14 +74,20 @@
         <el-empty v-else :description="$t('common.noData')" />
       </div>
 
-      <!-- Step 3: Check -->
+      <!-- Step 3: Save and check -->
       <div v-if="activeStep === 3">
+        <h4>{{ $t('runnerConfigs.summary') || 'Summary' }}</h4>
         <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
           <el-descriptions-item :label="$t('deployments.node')">{{ selectedNode?.name || selectedNode?.id || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('deployments.runtime')">{{ selectedRuntime?.display_name || selectedRuntime?.name || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.configName')">{{ form.display_name || defaultConfigName }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.image')">{{ form.image_ref || selectedRuntime?.image_ref || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Display Name">{{ form.display_name || '-' }}</el-descriptions-item>
         </el-descriptions>
+
+        <!-- Error display -->
+        <el-alert v-if="wizardError" type="error" :title="wizardError" show-icon :closable="false" style="margin-bottom:12px" />
+
+        <!-- Check result display -->
         <div v-if="checkResult" style="margin-bottom:16px">
           <el-alert
             :type="checkResult.deployable ? 'success' : 'warning'"
@@ -113,9 +99,20 @@
             <div v-for="(w, i) in checkResult.warnings" :key="i" style="color:var(--el-color-warning);font-size:12px">{{ w }}</div>
           </div>
         </div>
-        <div style="text-align:center">
-          <el-button type="primary" :loading="checking" @click="doCheckAndSave">
-            {{ $t('runnerConfigs.saveAndCheck') || 'Save & Check' }}
+
+        <div style="text-align:center;display:flex;gap:8px;justify-content:center">
+          <el-button type="primary" :loading="savingState === 'saving'" @click="doSave">
+            {{ $t('runnerConfigs.saveOnly') }}
+          </el-button>
+          <el-button type="primary" :loading="savingState === 'checking'" @click="doSaveAndCheck">
+            {{ $t('runnerConfigs.saveAndCheck') }}
+          </el-button>
+          <el-button
+            v-if="checkResult?.deployable"
+            type="success"
+            @click="finish"
+          >
+            {{ $t('runnerConfigs.finish') }}
           </el-button>
         </div>
       </div>
@@ -134,21 +131,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { listRuntimes } from '@/api/runtimes'
-import StatusTag from '@/components/StatusTag.vue'
+import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
 import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 
+const { t } = useI18n()
+
 const emit = defineEmits<{
-  saved: []
+  completed: []
 }>()
 
 const activeStep = ref(0)
-const saving = ref(false)
-const checking = ref(false)
+const savingState = ref<'idle' | 'saving' | 'save_failed' | 'checking' | 'check_failed' | 'checked_ready'>('idle')
+const wizardError = ref('')
 const nodesLoading = ref(false)
 const nodesError = ref('')
 const runtimesLoading = ref(false)
@@ -165,6 +165,14 @@ const form = reactive({
   image_ref: '',
 })
 
+const defaultConfigName = computed(() => {
+  const host = selectedNode.value?.name || selectedNode.value?.hostname || selectedNode.value?.id || 'node'
+  const vendor = selectedRuntime.value?.vendor || 'unknown'
+  const backend = selectedRuntime.value?.backend_id || ''
+  const name = backend.replace(/^backend\./, '')
+  return `${host} / ${vendor} / ${name}`
+})
+
 const runtimeConfigForEditor = computed(() => {
   if (!selectedRuntime.value) return null
   return { config_set: selectedRuntime.value.config_set || {} }
@@ -179,16 +187,29 @@ const canProceed = computed(() => {
 
 const cannotProceedReason = computed(() => {
   const s = activeStep.value
-  if (s === 0 && !selectedNode.value) return 'Select a node'
-  if (s === 1 && !selectedRuntime.value) return 'Select a runtime template'
+  if (s === 0 && !selectedNode.value) return t('runnerConfigs.selectNode')
+  if (s === 1 && !selectedRuntime.value) return t('runnerConfigs.selectTemplate')
   return ''
 })
 
-function onNodeSelect(row: any) {
-  selectedNode.value = row
+function resetWizard() {
+  activeStep.value = 0
+  selectedNode.value = null
+  selectedRuntime.value = null
+  form.display_name = ''
+  form.image_ref = ''
+  paramOverrides.value = {}
+  checkResult.value = null
+  wizardError.value = ''
+  savingState.value = 'idle'
 }
 
-function onRuntimeSelect(row: any) {
+function onNodeSelected(node: any) {
+  selectedNode.value = node
+}
+
+function onRuntimeSelected(row: any) {
+  if (!row) return
   selectedRuntime.value = row
   form.image_ref = row.image_ref || ''
 }
@@ -225,10 +246,18 @@ async function loadRuntimes() {
   }
 }
 
-async function doCheckAndSave() {
+async function doSave() {
+  await saveAndMaybeCheck(false)
+}
+
+async function doSaveAndCheck() {
+  await saveAndMaybeCheck(true)
+}
+
+async function saveAndMaybeCheck(andCheck: boolean) {
   if (!selectedNode.value || !selectedRuntime.value) return
-  saving.value = true
-  checking.value = true
+  wizardError.value = ''
+  savingState.value = 'saving'
   try {
     const payload: Record<string, any> = {
       backend_runtime_id: selectedRuntime.value.id,
@@ -240,25 +269,48 @@ async function doCheckAndSave() {
     }
     const enableResp = await apiClient.post(`/nodes/${selectedNode.value.id}/backend-runtimes/enable`, payload)
     const nbrId = enableResp?.id
-    if (nbrId) {
+
+    if (!andCheck) {
+      ElMessage.success('Saved')
+      checkResult.value = null
+      savingState.value = 'idle'
+      return
+    }
+
+    if (!nbrId) {
+      wizardError.value = 'Enable succeeded but no NBR ID returned'
+      savingState.value = 'save_failed'
+      return
+    }
+
+    savingState.value = 'checking'
+    try {
       const checkResp = await apiClient.post(`/nodes/${selectedNode.value.id}/backend-runtimes/${nbrId}/check-request`, {})
       checkResult.value = checkResp
+      if (checkResp?.deployable) {
+        savingState.value = 'checked_ready'
+      } else {
+        savingState.value = 'idle'
+      }
+    } catch (e: any) {
+      wizardError.value = e?.message || 'Check failed'
+      savingState.value = 'check_failed'
     }
-    ElMessage.success(checkResult.value?.deployable ? 'Ready' : 'Saved — needs check')
-    emit('saved')
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Save failed')
-  } finally {
-    saving.value = false
-    checking.value = false
+    wizardError.value = e?.message || 'Save failed'
+    savingState.value = 'save_failed'
   }
+}
+
+function finish() {
+  emit('completed')
 }
 
 // Load on init
 loadNodes()
 loadRuntimes()
 
-defineExpose({ saving })
+defineExpose({ resetWizard, saving: savingState })
 </script>
 
 <style scoped>

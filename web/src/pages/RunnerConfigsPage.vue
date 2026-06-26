@@ -23,8 +23,8 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="createVisible" :title="$t('runnerConfigs.create')" width="960px" :close-on-click-modal="false">
-      <NodeRuntimeConfigWizard ref="nbrWizardRef" @saved="onNBRCreated" />
+    <el-dialog v-model="createVisible" :title="$t('runnerConfigs.create')" width="960px" :close-on-click-modal="false" destroy-on-close>
+      <NodeRuntimeConfigWizard ref="nbrWizardRef" @completed="onNBRCreated" />
       <template #footer>
         <el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button>
       </template>
