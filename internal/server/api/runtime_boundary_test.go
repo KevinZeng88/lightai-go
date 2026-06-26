@@ -37,7 +37,7 @@ func TestCreateBackendRuntimeCopiesBackendVersionSnapshot(t *testing.T) {
 
 	vw := httptest.NewRecorder()
 	h.HandleCreateBackendVersion(vw, newReq("POST", "/x",
-		`{"id":"backend-version.user.snapshot","version":"snapshot-v1","display_name":"Snapshot V1","image_ref":"snapshot:v1","command":["serve"]}`,
+		`{"id":"backend-version.user.snapshot","version":"snapshot-v1","display_name":"Snapshot V1","config_set":{"schema_version":1,"items":{"backend.arg.fake_new_param":{"code":"backend.arg.fake_new_param","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"from-version","default_value":"from-version","render":{"flag":"--fake-new-param","label":"Fake New Param","group":"Test Params"},"order":340}}}}`,
 		adminSession(), map[string]string{"id": "backend.vllm"}))
 	if vw.Code != 201 {
 		t.Fatalf("create version code=%d body=%s", vw.Code, vw.Body.String())
@@ -60,27 +60,53 @@ func TestCreateBackendRuntimeCopiesBackendVersionSnapshot(t *testing.T) {
 	if rt["backend_version_id"] != "backend-version.user.snapshot" {
 		t.Fatalf("backend_version_id=%v", rt["backend_version_id"])
 	}
-	if rt["image_ref"] != "snapshot:v1" {
-		t.Fatalf("image_ref=%v", rt["image_ref"])
-	}
 	raw, _ := json.Marshal(rt["config_set"])
-	if !strings.Contains(string(raw), "serve") || !strings.Contains(string(raw), "snapshot:v1") {
+	if !strings.Contains(string(raw), "backend.arg.fake_new_param") || !strings.Contains(string(raw), "from-version") {
 		t.Fatalf("config set did not include version defaults: %s", string(raw))
 	}
 
 	pw := httptest.NewRecorder()
-	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"image_ref":"changed:v2","command":["changed"]}`, adminSession(), map[string]string{"version_id": "backend-version.user.snapshot"}))
+	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x",
+		`{"config_set":{"schema_version":1,"items":{"backend.arg.fake_new_param":{"code":"backend.arg.fake_new_param","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"changed-version","default_value":"changed-version","render":{"flag":"--fake-new-param"},"order":340},"backend.arg.after_runtime":{"code":"backend.arg.after_runtime","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"after","render":{"flag":"--after-runtime"}}}}}`,
+		adminSession(), map[string]string{"version_id": "backend-version.user.snapshot"}))
 	if pw.Code != 200 {
 		t.Fatalf("patch version code=%d body=%s", pw.Code, pw.Body.String())
 	}
 
 	got := h.getBackendRuntimeJSON(rt["id"].(string))
-	if got["image_ref"] != "snapshot:v1" {
-		t.Fatalf("runtime image changed after BackendVersion edit: %v", got["image_ref"])
-	}
 	raw, _ = json.Marshal(got["config_set"])
-	if strings.Contains(string(raw), "changed:v2") {
+	if strings.Contains(string(raw), "changed-version") || strings.Contains(string(raw), "backend.arg.after_runtime") {
 		t.Fatalf("runtime config set changed after BackendVersion edit: %s", string(raw))
+	}
+}
+
+func TestBackendVersionRejectsRuntimeOnlyFields(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	dir := t.TempDir()
+	origUserVersionDir := backendCatalogUserVersionsDir
+	backendCatalogUserVersionsDir = filepath.Join(dir, "user")
+	defer func() { backendCatalogUserVersionsDir = origUserVersionDir }()
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"image_ref", `{"version":"bad-image","image_ref":"runtime-only:v1"}`},
+		{"command", `{"version":"bad-command","command":["serve"]}`},
+		{"entrypoint", `{"version":"bad-entrypoint","entrypoint":["python3"]}`},
+		{"model_mount", `{"version":"bad-mount","model_mount":{"container_path":"/models"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			h.HandleCreateBackendVersion(w, newReq("POST", "/x", tc.body, adminSession(), map[string]string{"id": "backend.vllm"}))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "BackendRuntime") {
+				t.Fatalf("error should mention BackendRuntime boundary, got %s", w.Body.String())
+			}
+		})
 	}
 }
 
@@ -311,7 +337,7 @@ func TestBackendVersionCreatePatchAndReloadUserCatalog(t *testing.T) {
 
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	body := `{"version":"user-v1","display_name":"User V1","image_ref":"user:v1","command":["serve"],"model_mount":{"container_path":"/models","readonly":true},"description":"custom"}`
+	body := `{"version":"user-v1","display_name":"User V1","description":"custom","config_set":{"schema_version":1,"items":{"backend.arg.user_param":{"code":"backend.arg.user_param","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"user-v1","default_value":"user-v1","render":{"flag":"--user-param","label":"User Param"},"order":350}}}}`
 	w := httptest.NewRecorder()
 	h.HandleCreateBackendVersion(w, newReq("POST", "/x", body, adminSession(), map[string]string{"id": "backend.vllm"}))
 	if w.Code != 201 {
@@ -326,7 +352,7 @@ func TestBackendVersionCreatePatchAndReloadUserCatalog(t *testing.T) {
 		t.Fatalf("readonly=%v, want false", created["readonly"])
 	}
 	pw := httptest.NewRecorder()
-	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"display_name":"User V1 patched","image_ref":"user:v2"}`, adminSession(), map[string]string{"version_id": created["id"].(string)}))
+	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"display_name":"User V1 patched","config_set":{"schema_version":1,"items":{"backend.arg.user_param":{"code":"backend.arg.user_param","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"user-v2","default_value":"user-v1","render":{"flag":"--user-param","label":"User Param"},"order":350}}}}`, adminSession(), map[string]string{"version_id": created["id"].(string)}))
 	if pw.Code != 200 {
 		t.Fatalf("patch version code=%d body=%s", pw.Code, pw.Body.String())
 	}
@@ -335,7 +361,7 @@ func TestBackendVersionCreatePatchAndReloadUserCatalog(t *testing.T) {
 	if err := db.QueryRow(`SELECT config_set_json FROM backend_versions WHERE id=?`, created["id"]).Scan(&configSetRaw); err != nil {
 		t.Fatalf("read version: %v", err)
 	}
-	if !strings.Contains(configSetRaw, "user:v2") {
+	if !strings.Contains(configSetRaw, "user-v2") {
 		t.Fatalf("patched version not persisted in config set: %s", configSetRaw)
 	}
 	var checksum string
@@ -461,6 +487,43 @@ func TestBackendRuntimeListShowsTemplatesWithNodeAggregatesOnly(t *testing.T) {
 	t.Fatalf("runtime rt-list missing from list")
 }
 
+func TestBackendRuntimeListHidesHiddenReferenceDisabledTemplates(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	w := httptest.NewRecorder()
+	h.HandleListBackendRuntimes(w, newReq("GET", "/x", "", adminSession(), nil))
+	if w.Code != 200 {
+		t.Fatalf("list code=%d body=%s", w.Code, w.Body.String())
+	}
+	var list []map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, item := range list {
+		id := fmt.Sprint(item["id"])
+		seen[id] = true
+		for _, forbidden := range []string{"template-only", "<from Metax release package>", "0d307f1665d3"} {
+			if strings.Contains(strings.ToLower(fmt.Sprint(item)), strings.ToLower(forbidden)) {
+				t.Fatalf("visible runtime list leaked %q in item %#v", forbidden, item)
+			}
+		}
+		if fmt.Sprint(item["visibility"]) == "hidden" || fmt.Sprint(item["support_level"]) == "reference" || fmt.Sprint(item["status"]) == "disabled" {
+			t.Fatalf("ordinary runtime list leaked non-visible template: %#v", item)
+		}
+	}
+	for _, want := range []string{"runtime.vllm.nvidia-docker", "runtime.sglang.nvidia-docker", "runtime.llamacpp.nvidia-docker", "runtime.llamacpp.cpu-docker", "runtime.vllm.metax-docker", "runtime.vllm.huawei-docker"} {
+		if !seen[want] {
+			t.Fatalf("visible runtime %s missing from list; got ids=%v", want, seen)
+		}
+	}
+	for _, hidden := range []string{"runtime.sglang.huawei-docker", "runtime.llamacpp.huawei-docker", "sglang-0.4.6-metax-macart", "vllm-v0.23.0-nvidia-cuda"} {
+		if seen[hidden] {
+			t.Fatalf("hidden/reference runtime %s appeared in ordinary list", hidden)
+		}
+	}
+}
+
 func runtimeBoundaryInsertDeployment(t *testing.T, db *db.DB, depID string) {
 	t.Helper()
 	now := time.Now().Format(time.RFC3339)
@@ -572,6 +635,39 @@ func TestPreflightDeploymentFailsWhenNBRNotReady(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "not ready") && !strings.Contains(w.Body.String(), "needs_check") {
 		t.Fatalf("expected rejection for needs_check NBR, got: %s", w.Body.String())
+	}
+}
+
+func TestCreateDeploymentRejectsMissingNodeRuntimeSnapshot(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID := "node-empty-nbr"
+	runtimeID := "rt-empty-nbr"
+	artifactID := "art-empty-nbr"
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	if _, err := database.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-empty-nbr',?,?,?,?,?,datetime('now'),datetime('now'),datetime('now'))`,
+		nodeID, "nvidia", 0, "RTX", ""); err != nil {
+		t.Fatalf("insert gpu: %v", err)
+	}
+	insertRuntime(t, database, runtimeID, "Runtime empty NBR", "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	snapshotInsertModelLocation(t, database, "ml-empty-nbr", artifactID, nodeID)
+	insertNodeBackendRuntime(t, database, nodeID+":"+runtimeID, runtimeID, nodeID, "img:empty", "ready", "ok", 1, 1, "")
+	if _, err := database.Exec(`UPDATE node_backend_runtimes SET config_set_json='{}' WHERE id=?`, nodeID+":"+runtimeID); err != nil {
+		t.Fatalf("clear NBR snapshot: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	h.HandleCreateDeployment(w, newReq("POST", "/x",
+		`{"name":"dep-empty-nbr","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nodeID+`:`+runtimeID+`","service_json":{"host_port":8021}}`,
+		adminSession(), nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "config snapshot is missing") {
+		t.Fatalf("error should mention missing NBR snapshot, got %s", w.Body.String())
 	}
 }
 

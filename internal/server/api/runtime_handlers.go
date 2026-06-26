@@ -22,13 +22,16 @@ import (
 
 func (h *AgentHandler) HandleListBackendRuntimes(w http.ResponseWriter, r *http.Request) {
 	tid := tenantID(r)
-	q := `SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, config_set_json, source_metadata_json, created_at, updated_at FROM backend_runtimes`
+	q := `SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, status, visibility, support_level, config_set_json, source_metadata_json, created_at, updated_at FROM backend_runtimes`
+	ordinarySelectorFilter := `(managed_by != 'system' OR (visibility = 'visible' AND status IN ('active','experimental')))`
 	var err error
 	var out []map[string]interface{}
-	if isPlatformAdmin(r) {
+	if isPlatformAdmin(r) && strings.EqualFold(r.URL.Query().Get("include_hidden"), "true") {
 		out, err = h.queryBackendRuntimes(q + ` ORDER BY name`)
+	} else if isPlatformAdmin(r) {
+		out, err = h.queryBackendRuntimes(q + ` WHERE ` + ordinarySelectorFilter + ` ORDER BY name`)
 	} else {
-		out, err = h.queryBackendRuntimes(q+` WHERE tenant_id = ? OR tenant_id = '' ORDER BY name`, tid)
+		out, err = h.queryBackendRuntimes(q+` WHERE (tenant_id = ? OR tenant_id = '') AND `+ordinarySelectorFilter+` ORDER BY name`, tid)
 	}
 	if err != nil {
 		log.Error("list backend runtimes", "error", err)
@@ -1144,10 +1147,10 @@ func getVersionProbeConfig(rt map[string]interface{}) map[string]interface{} {
 }
 
 func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {
-	row := h.DB.QueryRow(`SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, config_set_json, source_metadata_json, created_at, updated_at FROM backend_runtimes WHERE id = ?`, id)
-	var rid, name, dn, bid, bvid, stn, vendor, rt, tid, configSetRaw, sourceMetaRaw, ca, ua string
+	row := h.DB.QueryRow(`SELECT id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, status, visibility, support_level, config_set_json, source_metadata_json, created_at, updated_at FROM backend_runtimes WHERE id = ?`, id)
+	var rid, name, dn, bid, bvid, stn, vendor, rt, tid, status, visibility, supportLevel, configSetRaw, sourceMetaRaw, ca, ua string
 	var isB, isE int
-	if err := row.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &isB, &isE, &tid, &configSetRaw, &sourceMetaRaw, &ca, &ua); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &isB, &isE, &tid, &status, &visibility, &supportLevel, &configSetRaw, &sourceMetaRaw, &ca, &ua); err != nil {
 		return nil
 	}
 	configSet := parseConfigSet(configSetRaw)
@@ -1156,6 +1159,7 @@ func (h *AgentHandler) getBackendRuntimeJSON(id string) map[string]interface{} {
 		"id": rid, "name": name, "display_name": dn, "backend_id": bid, "backend_version_id": bvid,
 		"source_template_name": stn, "vendor": vendor, "runtime_type": rt,
 		"is_builtin": isB == 1, "is_editable": isE == 1, "tenant_id": tid,
+		"status": status, "visibility": visibility, "support_level": supportLevel,
 		"image_ref":            configString(configSet, "launcher.image", ""),
 		"entrypoint":           configStringSlice(configSet, "launcher.entrypoint"),
 		"command":              configStringSlice(configSet, "launcher.command"),
@@ -1197,9 +1201,9 @@ func (h *AgentHandler) queryBackendRuntimes(query string, args ...interface{}) (
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var rid, name, dn, bid, bvid, stn, vendor, rt, tid, configSetRaw, sourceMetaRaw, ca, ua string
+		var rid, name, dn, bid, bvid, stn, vendor, rt, tid, status, visibility, supportLevel, configSetRaw, sourceMetaRaw, ca, ua string
 		var isB, isE int
-		if err := rows.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &isB, &isE, &tid, &configSetRaw, &sourceMetaRaw, &ca, &ua); err != nil {
+		if err := rows.Scan(&rid, &name, &dn, &bid, &bvid, &stn, &vendor, &rt, &isB, &isE, &tid, &status, &visibility, &supportLevel, &configSetRaw, &sourceMetaRaw, &ca, &ua); err != nil {
 			continue
 		}
 		configSet := parseConfigSet(configSetRaw)
@@ -1207,6 +1211,7 @@ func (h *AgentHandler) queryBackendRuntimes(query string, args ...interface{}) (
 			"id": rid, "name": name, "display_name": dn, "backend_id": bid, "backend_version_id": bvid,
 			"source_template_name": stn, "vendor": vendor, "runtime_type": rt,
 			"is_builtin": isB == 1, "is_editable": isE == 1, "tenant_id": tid,
+			"status": status, "visibility": visibility, "support_level": supportLevel,
 			"image_ref":            configString(configSet, "launcher.image", ""),
 			"entrypoint":           configStringSlice(configSet, "launcher.entrypoint"),
 			"command":              configStringSlice(configSet, "launcher.command"),

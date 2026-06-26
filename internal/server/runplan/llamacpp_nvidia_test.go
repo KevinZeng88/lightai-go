@@ -39,7 +39,7 @@ func TestLlamaCppNvidiaRunPlan(t *testing.T) {
 			ID:           "runtime-llamacpp-nvidia",
 			Vendor:       "nvidia",
 			RuntimeType:  "docker",
-			ImageName:    "", // leave empty to test defaultImages fallback
+			ImageName:    "ghcr.io/ggml-org/llama.cpp:server-cuda13",
 			ArgsOverride: []string{"--ctx-size", "4096", "--n-gpu-layers", "999"},
 			DefaultEnv:   map[string]string{},
 			Docker:       DockerSpecInfo{},
@@ -76,7 +76,7 @@ func TestLlamaCppNvidiaRunPlan(t *testing.T) {
 
 	// --- Structural validation against real Docker command ---
 
-	// 1. Image: should resolve from BackendVersion.defaultImages[nvidia]
+	// 1. Image: should resolve from BackendRuntime/NBR snapshot.
 	if plan.Image != "ghcr.io/ggml-org/llama.cpp:server-cuda13" {
 		t.Errorf("image: got %q, want ghcr.io/ggml-org/llama.cpp:server-cuda13", plan.Image)
 	}
@@ -212,6 +212,7 @@ func TestLlamaCppGGUFFileInDirectory(t *testing.T) {
 			ID:          "runtime-llamacpp-nvidia",
 			Vendor:      "nvidia",
 			RuntimeType: "docker",
+			ImageName:   "ghcr.io/ggml-org/llama.cpp:server-cuda13",
 			DefaultEnv:  map[string]string{},
 			Docker:      DockerSpecInfo{},
 			ModelMount:  ModelMountInfo{ContainerPath: "/models", Readonly: true},

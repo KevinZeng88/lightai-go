@@ -190,21 +190,17 @@ func TestResolveImagePriority(t *testing.T) {
 		t.Errorf("expected runtime image, got %s", plan2.Image)
 	}
 
-	// Priority 3: BackendVersion.defaultImages[vendor]
+	// BackendVersion.defaultImages is not a runtime fallback.
 	in3 := makeTestInput()
 	in3.BackendRuntime.ImageName = ""
-	plan3, errs, _ := Resolve(in3)
-	if len(errs) > 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if plan3.Image != "vllm/vllm-openai:v0.8.5" {
-		t.Errorf("expected default image, got %s", plan3.Image)
+	_, errs, _ := Resolve(in3)
+	if len(errs) == 0 {
+		t.Fatal("expected error when image exists only on BackendVersion")
 	}
 
 	// No image available → error
 	in4 := makeTestInput()
 	in4.BackendRuntime.ImageName = ""
-	in4.BackendVersion.DefaultImages = nil
 	_, errs4, _ := Resolve(in4)
 	if len(errs4) == 0 {
 		t.Error("expected error for no image")
@@ -875,6 +871,7 @@ func TestRequiredParamFromDefaultArgs(t *testing.T) {
 		BackendRuntime: &RuntimeInfo{
 			Vendor:      "nvidia",
 			RuntimeType: "docker",
+			ImageName:   "ghcr.io/ggml-org/llama.cpp:server-cuda13",
 			DefaultEnv:  map[string]string{},
 			Docker:      DockerSpecInfo{},
 		},

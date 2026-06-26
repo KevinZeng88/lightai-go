@@ -43,15 +43,15 @@ func (h *AgentHandler) HandleListDeployments(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, publicDeploymentList(out))
 }
 
-// buildDeploymentSourceHash computes a hash of the runtime template config
-// for use in detecting template changes during manual sync.
-func (h *AgentHandler) buildDeploymentSourceHash(runtimeID string) string {
-	snap := h.buildDeploymentRuntimeSnapshot(runtimeID)
-	if snap == "{}" {
+func deploymentConfigSnapshotFromNBR(nbrSnapshot, imageRef string) string {
+	if nbrSnapshot == "" || nbrSnapshot == "{}" {
 		return ""
 	}
-	// Use planHash from runplan package or a simple content-based hash
-	return planHashStr(snap)
+	set := copyConfigSet(nbrSnapshot)
+	if imageRef != "" {
+		setConfigValue(set, "launcher.image", imageRef, "NodeBackendRuntime", "", "checked_image_ref")
+	}
+	return configSetJSON(set)
 }
 
 func (h *AgentHandler) buildDeploymentRuntimeSnapshot(runtimeID string) string {
@@ -60,20 +60,6 @@ func (h *AgentHandler) buildDeploymentRuntimeSnapshot(runtimeID string) string {
 		return "{}"
 	}
 	return rawJSONString(rt["config_set_json"], "{}")
-}
-
-// mergeNBRConfigSnapshot returns the NBR ConfigSet snapshot used by deployments.
-// The name is retained only for call-site locality during the larger refactor;
-// the input/output is ConfigSet JSON, not legacy snapshot authority.
-func mergeNBRConfigSnapshot(brSnapshot, nbrSnapshot, imageRef string) string {
-	if nbrSnapshot == "" || nbrSnapshot == "{}" {
-		return brSnapshot
-	}
-	set := copyConfigSet(nbrSnapshot)
-	if imageRef != "" {
-		setConfigValue(set, "launcher.image", imageRef, "NodeBackendRuntime", "", "checked_image_ref")
-	}
-	return configSetJSON(set)
 }
 
 func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +156,11 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 	requestID := log.RequestIDFromContext(r.Context())
 	now := time.Now().Format(time.RFC3339)
 
-	configSetRaw := mergeNBRConfigSnapshot(h.buildDeploymentRuntimeSnapshot(backendRuntimeID), nbrConfigSetRaw, nbrImageRef)
+	configSetRaw := deploymentConfigSnapshotFromNBR(nbrConfigSetRaw, nbrImageRef)
+	if configSetRaw == "" {
+		writeError(w, http.StatusBadRequest, "node backend runtime config snapshot is missing; recreate node backend runtime")
+		return
+	}
 	configOverrides := map[string]interface{}{}
 	if overrides, ok := req["config_overrides"]; ok {
 		configOverrides = mapFromAny(overrides)

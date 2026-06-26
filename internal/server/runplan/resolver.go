@@ -221,7 +221,7 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	// 2. Build variable map for template substitution.
 	vars := buildVarMap(in)
 
-	// 3. Resolve image: NodeOverride > BackendRuntime > BackendVersion.defaultImages[vendor] > error.
+	// 3. Resolve image from the frozen runtime snapshot.
 	image, imgWarns := resolveImage(in)
 	warnings = append(warnings, imgWarns...)
 	if image == "" {
@@ -376,12 +376,6 @@ func resolveImage(in ResolveInput) (string, []string) {
 		return in.BackendRuntime.ImageName, warnings
 	}
 
-	// 3. BackendVersion.defaultImages[vendor]
-	if img, ok := in.BackendVersion.DefaultImages[in.BackendRuntime.Vendor]; ok && img != "" {
-		return img, warnings
-	}
-
-	// 4. No image available.
 	return "", warnings
 }
 
@@ -413,6 +407,9 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 		for _, pv := range in.NBRConfigSnapshot.ParameterValues {
 			if !pv.Enabled {
 				continue // disabled parameters are excluded
+			}
+			if pv.Target == "env" {
+				continue
 			}
 			cliName := pv.CliName
 			if cliName == "" {
@@ -450,6 +447,9 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 		for _, pv := range in.Deployment.ParameterValues {
 			if !pv.Enabled {
 				continue // disabled parameters are excluded
+			}
+			if pv.Target == "env" {
+				continue
 			}
 			cliName := pv.CliName
 			if cliName == "" {

@@ -63,12 +63,13 @@
           </el-form-item>
         </el-form>
         <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
-        <HumanRuntimeParameterForm
+        <RuntimeParameterEditor
           v-if="runtimeConfigForEditor"
-          :config-set="selectedRuntime?.config_set || null"
-          :backend-name="selectedRuntime?.backend_id"
+          v-model="editorModel"
           :vendor="selectedRuntime?.vendor || 'nvidia'"
-          @update:output="onHumanParamOutput"
+          :layer="'node_backend_runtime'"
+          :show-advanced="true"
+          @update:model-value="onSchemaParamOutput"
         />
         <el-empty v-else :description="$t('common.noData')" />
       </div>
@@ -130,15 +131,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { listRuntimes } from '@/api/runtimes'
 import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
-import HumanRuntimeParameterForm from '@/components/runtime/HumanRuntimeParameterForm.vue'
-import type { RuntimeParamFormOutput } from '@/utils/runtimeParameterViewModel'
+import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
 
 const { t } = useI18n()
 
@@ -157,7 +157,8 @@ const nodes = ref<any[]>([])
 const runtimes = ref<any[]>([])
 const selectedNode = ref<any>(null)
 const selectedRuntime = ref<any>(null)
-const paramOverrides = ref<RuntimeParamFormOutput>({})
+const paramOverrides = ref<Record<string, any>>({})
+const editorModel = ref<Record<string, any>>({ config_set: {} })
 const checkResult = ref<any>(null)
 
 const form = reactive({
@@ -198,7 +199,8 @@ function resetWizard() {
   selectedRuntime.value = null
   form.display_name = ''
   form.image_ref = ''
-  paramOverrides.value = {} as RuntimeParamFormOutput
+  paramOverrides.value = {}
+  editorModel.value = { config_set: {} }
   checkResult.value = null
   wizardError.value = ''
   savingState.value = 'idle'
@@ -214,7 +216,11 @@ function onRuntimeSelected(row: any) {
   form.image_ref = row.image_ref || ''
 }
 
-function onHumanParamOutput(output: RuntimeParamFormOutput) {
+watch(selectedRuntime, (runtime) => {
+  editorModel.value = { config_set: runtime?.config_set ? JSON.parse(JSON.stringify(runtime.config_set)) : {} }
+})
+
+function onSchemaParamOutput(output: Record<string, any>) {
   paramOverrides.value = output
 }
 
@@ -264,29 +270,8 @@ async function saveAndMaybeCheck(andCheck: boolean) {
       display_name: form.display_name || defaultConfigName.value,
       image_ref: form.image_ref || undefined,
     }
-    // Apply human-readable parameter overrides to config_set
-    if (paramOverrides.value?.parameter_values?.length || paramOverrides.value?.docker_options) {
-      const cs = selectedRuntime.value?.config_set
-        ? JSON.parse(JSON.stringify(selectedRuntime.value.config_set))
-        : { items: {} }
-      cs.items = cs.items || {}
-      for (const pv of (paramOverrides.value.parameter_values || [])) {
-        cs.items[pv.key] = { ...(cs.items[pv.key] || {}), value: pv.value, enabled: pv.enabled }
-      }
-      // Merge docker_options into launcher.docker_options in config_set
-      if (paramOverrides.value.docker_options && Object.keys(paramOverrides.value.docker_options).length) {
-        const existingDocker = cs.items['launcher.docker_options']?.value || {}
-        const merged = { ...(typeof existingDocker === 'object' ? existingDocker : {}), ...paramOverrides.value.docker_options }
-        cs.items['launcher.docker_options'] = {
-          ...(cs.items['launcher.docker_options'] || {}),
-          category: 'launcher', kind: 'docker_options', type: 'object',
-          value: merged, enabled: true,
-        }
-      }
-      payload.config_set = cs
-    }
-    if (paramOverrides.value?.env && Object.keys(paramOverrides.value.env).length) {
-      payload.env = paramOverrides.value.env
+    if (paramOverrides.value?.config_set) {
+      payload.config_set = paramOverrides.value.config_set
     }
     const enableResp = await apiClient.post(`/nodes/${selectedNode.value.id}/backend-runtimes/enable`, payload)
     const nbrId = enableResp?.id

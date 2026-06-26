@@ -7,6 +7,10 @@ type ConfigItem struct {
 	Category     string                 `json:"category" yaml:"category"`
 	Kind         string                 `json:"kind" yaml:"kind"`
 	Type         string                 `json:"type" yaml:"type"`
+	Required     bool                   `json:"required" yaml:"required"`
+	Visibility   string                 `json:"visibility,omitempty" yaml:"visibility"`
+	Readonly     bool                   `json:"readonly,omitempty" yaml:"readonly"`
+	Advanced     bool                   `json:"advanced,omitempty" yaml:"advanced"`
 	Value        any                    `json:"value" yaml:"value"`
 	DefaultValue any                    `json:"default_value" yaml:"default_value"`
 	Enabled      bool                   `json:"enabled" yaml:"enabled"`
@@ -118,6 +122,9 @@ type RuntimeDoc struct {
 	ManagedBy                  string            `yaml:"managed_by"`
 	Source                     string            `yaml:"source"`
 	Readonly                   bool              `yaml:"readonly"`
+	Visibility                 string            `yaml:"visibility"`
+	SupportLevel               string            `yaml:"support_level"`
+	Status                     string            `yaml:"status"`
 	Vendor                     string            `yaml:"vendor"`
 	HardwareFamily             string            `yaml:"hardware_family"`
 	AcceleratorAPI             string            `yaml:"accelerator_api"`

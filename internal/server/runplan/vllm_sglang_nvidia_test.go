@@ -23,7 +23,7 @@ func TestResolveVLLMNVIDIA(t *testing.T) {
 			DefaultImages:        map[string]string{"nvidia": "vllm/vllm-openai:latest"},
 		},
 		BackendRuntime: &RuntimeInfo{
-			Vendor: "nvidia", RuntimeType: "docker", ImageName: "",
+			Vendor: "nvidia", RuntimeType: "docker", ImageName: "vllm/vllm-openai:latest",
 			ArgsOverride: []string{},
 			DefaultEnv:   map[string]string{},
 			Docker:       DockerSpecInfo{Privileged: true, IPCMode: "host", ShmSize: "10g"},
@@ -113,7 +113,7 @@ func TestResolveSGLangNVIDIA(t *testing.T) {
 			DefaultImages:        map[string]string{"nvidia": "lmsysorg/sglang:latest"},
 		},
 		BackendRuntime: &RuntimeInfo{
-			Vendor: "nvidia", RuntimeType: "docker", ImageName: "",
+			Vendor: "nvidia", RuntimeType: "docker", ImageName: "lmsysorg/sglang:latest",
 			ArgsOverride: []string{},
 			DefaultEnv:   map[string]string{},
 			Docker:       DockerSpecInfo{Privileged: true, IPCMode: "host", ShmSize: "32g"},

@@ -49,11 +49,11 @@
         <template v-if="selected.is_editable">
           <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
           <div style="margin-bottom:12px">
-            <HumanRuntimeParameterForm
-              :config-set="selected.config_set || null"
-              :backend-name="selected.backend_id"
+            <RuntimeParameterEditor
+              v-model="editorModel"
               :vendor="selected.vendor"
-              @update:output="onHumanParamOutput"
+              :layer="'backend_runtime'"
+              :show-advanced="true"
             />
           </div>
           <div style="margin-top: 12px; text-align: right">
@@ -86,21 +86,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listRuntimes } from '@/api/runtimes'
 import { apiClient } from '@/api/client'
 import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/runtimeDisplay'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
-import HumanRuntimeParameterForm from '@/components/runtime/HumanRuntimeParameterForm.vue'
-import type { RuntimeParamFormOutput } from '@/utils/runtimeParameterViewModel'
 
 const loading = ref(false)
 const saving = ref(false)
 const runtimes = ref<any[]>([])
 const selected = ref<any | null>(null)
-const humanParamOutput = ref<RuntimeParamFormOutput>({})
+const editorModel = ref<Record<string, any>>({ config_set: {} })
 
 const displayRuntimes = computed(() => runtimes.value.map(toRuntimeTemplateDisplay))
 
@@ -111,32 +109,18 @@ const selectedDisplay = computed(() => {
 
 const detailVisible = computed({
   get: () => !!selected.value,
-  set: (value: boolean) => { if (!value) { selected.value = null; humanParamOutput.value = {} } },
+  set: (value: boolean) => { if (!value) { selected.value = null; editorModel.value = { config_set: {} } } },
 })
 
-function onHumanParamOutput(output: RuntimeParamFormOutput) {
-  humanParamOutput.value = output
-}
+watch(selected, (value) => {
+  editorModel.value = { config_set: value?.config_set ? JSON.parse(JSON.stringify(value.config_set)) : {} }
+})
 
 async function saveEdit() {
   if (!selected.value) return
   saving.value = true
   try {
-    const patchPayload: Record<string, any> = {}
-    // Build config_set patch from human parameter output
-    if (humanParamOutput.value?.parameter_values?.length || humanParamOutput.value?.docker_options) {
-      const cs = selected.value.config_set ? JSON.parse(JSON.stringify(selected.value.config_set)) : { items: {} }
-      cs.items = cs.items || {}
-      for (const pv of (humanParamOutput.value.parameter_values || [])) {
-        cs.items[pv.key] = { ...(cs.items[pv.key] || {}), value: pv.value, enabled: pv.enabled }
-      }
-      if (humanParamOutput.value.docker_options && Object.keys(humanParamOutput.value.docker_options).length) {
-        const existingDocker = cs.items['launcher.docker_options']?.value || {}
-        const merged = { ...(typeof existingDocker === 'object' ? existingDocker : {}), ...humanParamOutput.value.docker_options }
-        cs.items['launcher.docker_options'] = { ...(cs.items['launcher.docker_options'] || {}), category: 'launcher', kind: 'docker_options', type: 'object', value: merged, enabled: true }
-      }
-      patchPayload.config_set = cs
-    }
+    const patchPayload: Record<string, any> = { config_set: editorModel.value?.config_set || selected.value.config_set || { items: {} } }
     await apiClient.patch(`/backend-runtimes/${selected.value.id}`, patchPayload)
     ElMessage.success('Saved')
     await load()

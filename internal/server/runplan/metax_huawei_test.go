@@ -20,6 +20,7 @@ func TestResolveMetaXRunPlanUsesRuntimeDockerOptions(t *testing.T) {
 			ID:          "runtime.vllm.metax-docker",
 			Vendor:      "metax",
 			RuntimeType: "docker",
+			ImageName:   "vllm-metax:latest",
 			DefaultEnv: map[string]string{
 				"CUDA_VISIBLE_DEVICES":                   "{{vendor_visible_devices}}",
 				"MACA_SMALL_PAGESIZE_ENABLE":             "1",
@@ -108,6 +109,7 @@ func TestResolveHuaweiRunPlanUsesAscendVisibleDevices(t *testing.T) {
 			ID:          "runtime.vllm.huawei-docker",
 			Vendor:      "huawei",
 			RuntimeType: "docker",
+			ImageName:   "quay.io/ascend/vllm-ascend:v0.21.0rc1",
 			DefaultEnv: map[string]string{
 				"ASCEND_VISIBLE_DEVICES": "{{vendor_visible_devices}}",
 			},

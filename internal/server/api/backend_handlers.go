@@ -178,7 +178,7 @@ func (h *AgentHandler) HandleCreateBackendVersion(w http.ResponseWriter, r *http
 		id = "backend-version.user." + uuid.NewString()
 	}
 	if err := h.upsertBackendVersionFromRequest(id, backendID, req, true); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, backendVersionUpsertStatus(err), err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, h.getBackendVersionJSON(id))
@@ -209,7 +209,7 @@ func (h *AgentHandler) HandlePatchBackendVersion(w http.ResponseWriter, r *http.
 	}
 	backendID, _ := existing["backend_id"].(string)
 	if err := h.upsertBackendVersionFromRequest(id, backendID, req, false); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, backendVersionUpsertStatus(err), err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, h.getBackendVersionJSON(id))
@@ -316,6 +316,9 @@ func (h *AgentHandler) upsertBackendVersionFromRequest(id, backendID string, req
 	if backendID == "" {
 		return fmt.Errorf("backend_id is required")
 	}
+	if field := backendVersionRuntimeOnlyField(req); field != "" {
+		return fmt.Errorf("%s belongs to BackendRuntime, not BackendVersion", field)
+	}
 	var exists int
 	if err := h.DB.QueryRow(`SELECT COUNT(*) FROM inference_backends WHERE id=?`, backendID).Scan(&exists); err != nil || exists == 0 {
 		return fmt.Errorf("backend not found")
@@ -387,22 +390,10 @@ func (h *AgentHandler) upsertBackendVersionFromRequest(id, backendID string, req
 		}
 		configSet = copyConfigSet(backendConfigRaw)
 	}
-	if imageRef := strings.TrimSpace(strVal(req, "image_ref", "")); imageRef != "" {
-		setConfigValue(configSet, "launcher.image", imageRef, "BackendVersion", id, "api_request")
-	}
-	if command, ok := req["command"]; ok {
-		setConfigValue(configSet, "launcher.command", command, "BackendVersion", id, "api_request")
-	}
-	if entrypoint, ok := req["entrypoint"]; ok {
-		setConfigValue(configSet, "launcher.entrypoint", entrypoint, "BackendVersion", id, "api_request")
-	}
-	if modelMount, ok := req["model_mount"]; ok {
-		setConfigValue(configSet, "runtime.model_mount", modelMount, "BackendVersion", id, "api_request")
-	}
 	if health, ok := req["health_check"]; ok {
 		setConfigValue(configSet, "runtime.health", health, "BackendVersion", id, "api_request")
 	}
-	sourceMeta := jsonString(map[string]interface{}{"source_type": "api", "source_ref": id, "materialized_at": now})
+	sourceMeta := jsonString(map[string]interface{}{"source_type": "api", "source_ref": id, "copied_at": now, "materialized_at": now, "copy_semantics": "copy_on_create", "copy_boundary": "detached_after_create"})
 	checksum := checksumString(id + version + configSetJSON(configSet))
 	if creating || current == nil {
 		_, err := h.DB.Exec(`INSERT INTO backend_versions
@@ -417,6 +408,28 @@ func (h *AgentHandler) upsertBackendVersionFromRequest(id, backendID string, req
 		WHERE id=?`,
 		version, displayName, isDefault, isDeprecated, slug, checksum, description, protocol, revision, configSetJSON(configSet), sourceMeta, now, id)
 	return err
+}
+
+func backendVersionRuntimeOnlyField(req map[string]interface{}) string {
+	for _, field := range []string{"image_ref", "command", "entrypoint", "model_mount", "docker_options", "devices", "volumes", "env"} {
+		if _, ok := req[field]; ok {
+			return field
+		}
+	}
+	return ""
+}
+
+func backendVersionUpsertStatus(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "belongs to BackendRuntime") ||
+		strings.Contains(msg, "required") ||
+		strings.Contains(msg, "not found") {
+		return http.StatusBadRequest
+	}
+	return http.StatusInternalServerError
 }
 
 func (h *AgentHandler) getBackendVersionJSON(id string) map[string]interface{} {

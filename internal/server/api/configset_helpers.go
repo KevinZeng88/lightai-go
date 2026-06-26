@@ -176,7 +176,7 @@ func configSetParameterValues(set map[string]interface{}) []runplan.ParameterVal
 			continue
 		}
 		kind := strings.TrimSpace(fmt.Sprint(item["kind"]))
-		if kind != "cli_arg" && kind != "cli_args" {
+		if kind != "cli_arg" && kind != "cli_args" && kind != "env" {
 			continue
 		}
 		render, _ := item["render"].(map[string]interface{})
@@ -184,6 +184,9 @@ func configSetParameterValues(set map[string]interface{}) []runplan.ParameterVal
 		flag := strings.TrimSpace(fmt.Sprint(render["flag"]))
 		envName := strings.TrimSpace(fmt.Sprint(render["env_name"]))
 		style := strings.TrimSpace(fmt.Sprint(render["style"]))
+		if kind == "env" && envName == "" {
+			continue
+		}
 		enabled, _ := item["enabled"].(bool)
 		value := configValue(set, code, item["default_value"])
 		if kind == "cli_args" && strings.TrimSpace(fmt.Sprint(value)) == "" {

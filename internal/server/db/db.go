@@ -307,6 +307,8 @@ CREATE TABLE backend_runtimes (
 	catalog_version TEXT NOT NULL DEFAULT 'configset-v1',
 	checksum TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'active',
+	visibility TEXT NOT NULL DEFAULT 'visible',
+	support_level TEXT NOT NULL DEFAULT 'documented',
 	verification_json TEXT NOT NULL DEFAULT '{}',
 	hardware_family TEXT NOT NULL DEFAULT '',
 	accelerator_api TEXT NOT NULL DEFAULT '',

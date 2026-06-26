@@ -5,7 +5,7 @@ slug: vllm-metax-docker
 managed_by: system
 runner_type: docker
 vendor: metax
-image_ref: "0d307f1665d3"
+image_ref: vllm-metax:latest
 mount_policy:
   model:
     container_mount_dir: /models

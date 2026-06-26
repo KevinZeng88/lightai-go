@@ -125,6 +125,7 @@ func ValidateCatalog(catalog *BackendCatalog) error {
 		versionIDs[version.ID] = true
 	}
 	runtimeIDs := map[string]bool{}
+	visibleRuntimeKeys := map[string]string{}
 	for _, runtime := range catalog.Runtimes {
 		if runtime.ID == "" || runtime.BackendID == "" || runtime.BackendVersionID == "" {
 			return fmt.Errorf("backend runtime has empty id/backend_id/backend_version_id")
@@ -139,6 +140,16 @@ func ValidateCatalog(catalog *BackendCatalog) error {
 			return fmt.Errorf("duplicate backend runtime id %q", runtime.ID)
 		}
 		runtimeIDs[runtime.ID] = true
+		if runtimeVisibility(runtime) == "visible" {
+			status := runtimeStatus(runtime)
+			if status == "active" || status == "experimental" {
+				key := runtime.Vendor + "|" + runtime.BackendID + "|" + runtime.BackendVersionID
+				if existing := visibleRuntimeKeys[key]; existing != "" {
+					return fmt.Errorf("duplicate visible backend runtime for %s: %s and %s", key, existing, runtime.ID)
+				}
+				visibleRuntimeKeys[key] = runtime.ID
+			}
+		}
 	}
 	return nil
 }
@@ -333,22 +344,23 @@ func SeedCatalog(db *sql.DB, registryDir, catalogRoot string) error {
 			return err
 		}
 		if _, err := db.Exec(`INSERT INTO backend_runtimes
-			(id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, slug, managed_by, source, catalog_version, checksum, status, verification_json, hardware_family, accelerator_api, runtime_distribution, runtime_distribution_version, config_hash, loaded_from, loaded_at, config_set_json, source_metadata_json, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			(id, name, display_name, backend_id, backend_version_id, source_template_name, vendor, runtime_type, is_builtin, is_editable, tenant_id, slug, managed_by, source, catalog_version, checksum, status, visibility, support_level, verification_json, hardware_family, accelerator_api, runtime_distribution, runtime_distribution_version, config_hash, loaded_from, loaded_at, config_set_json, source_metadata_json, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 			ON CONFLICT(id) DO UPDATE SET
 				name=excluded.name, display_name=excluded.display_name, backend_id=excluded.backend_id,
 				backend_version_id=excluded.backend_version_id, source_template_name=excluded.source_template_name,
 				vendor=excluded.vendor, runtime_type=excluded.runtime_type, is_builtin=excluded.is_builtin,
 				is_editable=excluded.is_editable, tenant_id=excluded.tenant_id, slug=excluded.slug,
 				managed_by=excluded.managed_by, source=excluded.source, catalog_version=excluded.catalog_version,
-				checksum=excluded.checksum, status=excluded.status, verification_json=excluded.verification_json,
+				checksum=excluded.checksum, status=excluded.status, visibility=excluded.visibility,
+				support_level=excluded.support_level, verification_json=excluded.verification_json,
 				hardware_family=excluded.hardware_family, accelerator_api=excluded.accelerator_api,
 				runtime_distribution=excluded.runtime_distribution, runtime_distribution_version=excluded.runtime_distribution_version,
 				config_hash=excluded.config_hash, loaded_from=excluded.loaded_from, loaded_at=excluded.loaded_at,
 				config_set_json=excluded.config_set_json, source_metadata_json=excluded.source_metadata_json,
 				updated_at=excluded.updated_at`,
 			runtime.ID, nonEmpty(runtime.Name, runtime.Slug), displayRuntimeName(runtime), runtime.BackendID, runtime.BackendVersionID, runtime.Slug, runtime.Vendor, nonEmpty(runtime.RunnerType, "docker"), 1, 0, "",
-			runtime.Slug, "system", "config-registry", "configset-v1", runtime.SourceHash, runtimeStatus(runtime), mustJSON(runtime.Verification),
+			runtime.Slug, "system", "config-registry", "configset-v1", runtime.SourceHash, runtimeStatus(runtime), runtimeVisibility(runtime), runtimeSupportLevel(runtime), mustJSON(runtime.Verification),
 			runtime.HardwareFamily, runtime.AcceleratorAPI, runtime.RuntimeDistribution, runtime.RuntimeDistributionVersion, runtime.SourceHash, runtime.SourcePath, now, configSet, mustJSON(set.SourceMetadata), now, now); err != nil {
 			return fmt.Errorf("seed backend runtime %s: %w", runtime.ID, err)
 		}
@@ -452,8 +464,11 @@ func sourceMetadata(path, hash, parentRef, kind string) map[string]interface{} {
 		"source_ref":      path,
 		"source_hash":     hash,
 		"parent_ref":      parentRef,
+		"copied_at":       "catalog-import",
 		"materialized_at": "catalog-import",
 		"kind":            kind,
+		"copy_semantics":  "copy_on_create",
+		"copy_boundary":   "detached_after_create",
 	}
 }
 
@@ -665,8 +680,58 @@ func displayRuntimeName(runtime RuntimeDoc) string {
 }
 
 func runtimeStatus(runtime RuntimeDoc) string {
+	if runtime.Status != "" {
+		return runtime.Status
+	}
+	if runtimeVisibility(runtime) != "visible" {
+		return "disabled"
+	}
 	if status, _ := runtime.Verification["status"].(string); status != "" {
+		if status == "template_only" {
+			return "experimental"
+		}
+		if status == "requires_hardware_validation" {
+			return "experimental"
+		}
+		if status == "verified" {
+			return "active"
+		}
 		return status
 	}
 	return "active"
+}
+
+func runtimeVisibility(runtime RuntimeDoc) string {
+	if runtime.Visibility != "" {
+		return runtime.Visibility
+	}
+	if visibleRuntimeIDs[runtime.ID] {
+		return "visible"
+	}
+	return "hidden"
+}
+
+func runtimeSupportLevel(runtime RuntimeDoc) string {
+	if runtime.SupportLevel != "" {
+		return runtime.SupportLevel
+	}
+	if runtimeVisibility(runtime) != "visible" {
+		return "reference"
+	}
+	if runtime.Vendor == "metax" || runtime.Vendor == "huawei" {
+		return "experimental"
+	}
+	if status, _ := runtime.Verification["status"].(string); status == "verified" {
+		return "verified"
+	}
+	return "documented"
+}
+
+var visibleRuntimeIDs = map[string]bool{
+	"runtime.vllm.nvidia-docker":     true,
+	"runtime.sglang.nvidia-docker":   true,
+	"runtime.llamacpp.nvidia-docker": true,
+	"runtime.llamacpp.cpu-docker":    true,
+	"runtime.vllm.metax-docker":      true,
+	"runtime.vllm.huawei-docker":     true,
 }

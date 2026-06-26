@@ -43,9 +43,26 @@
             :disabled="!item.enabled || readonly"
             @change="onItemChanged(item)"
           />
+          <el-select
+            v-else-if="item.type === 'select' || item.type === 'multi_select'"
+            v-model="item.selectValue"
+            :multiple="item.type === 'multi_select'"
+            :disabled="!item.enabled || readonly"
+            size="small"
+            class="param-input"
+            @change="onItemChanged(item)"
+          >
+            <el-option
+              v-for="option in item.options"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
           <el-input
             v-else
             v-model="item.textValue"
+            :placeholder="item.placeholder"
             :disabled="!item.enabled || readonly"
             size="small"
             class="param-input"
@@ -73,9 +90,16 @@
             v-else-if="item.type === 'boolean'"
             v-model="item.boolValue" :disabled="!item.enabled || readonly" @change="onItemChanged(item)"
           />
+          <el-select
+            v-else-if="item.type === 'select' || item.type === 'multi_select'"
+            v-model="item.selectValue" :multiple="item.type === 'multi_select'"
+            :disabled="!item.enabled || readonly" size="small" class="param-input" @change="onItemChanged(item)"
+          >
+            <el-option v-for="option in item.options" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
           <el-input
             v-else v-model="item.textValue" :disabled="!item.enabled || readonly"
-            size="small" class="param-input" @input="onItemChanged(item)"
+            :placeholder="item.placeholder" size="small" class="param-input" @input="onItemChanged(item)"
           />
           <span class="param-hint">{{ renderHint(item) }}</span>
         </div>
@@ -102,9 +126,18 @@ type ConfigItemView = {
   value: any
   defaultValue: any
   render: Record<string, any>
+  extensions: Record<string, any>
+  constraints: Record<string, any>
+  order: number
+  visibility: string
+  readonly: boolean
+  advanced: boolean
+  options: Array<{ label: string, value: any }>
+  placeholder: string
   supportLevel: string
   textValue: string
   boolValue: boolean
+  selectValue: any
   sourceLayer: string
   baseValue: any
   validationError: string
@@ -144,7 +177,7 @@ const emit = defineEmits<{
 
 const activeSections = ref<string[]>(['launcher', 'runtime_env', 'model_runtime'])
 const editorItems = reactive<ConfigItemView[]>([])
-const advancedItems = computed(() => editorItems.filter(i => i.supportLevel === 'advanced' || i.category === 'advanced'))
+const advancedItems = computed(() => editorItems.filter(i => i.advanced || i.supportLevel === 'advanced' || i.category === 'advanced'))
 
 const sourceConfigSet = computed(() => {
   const root = props.modelValue || {}
@@ -166,7 +199,7 @@ const baseValueMap = computed(() => {
 
 const groupedItems = computed(() => {
   const groups = new Map<string, ConfigItemView[]>()
-  const nonAdvanced = editorItems.filter(i => i.supportLevel !== 'advanced' && i.category !== 'advanced')
+  const nonAdvanced = editorItems.filter(i => !i.advanced && i.supportLevel !== 'advanced' && i.category !== 'advanced')
   for (const item of nonAdvanced) {
     if (!groups.has(item.category)) groups.set(item.category, [])
     groups.get(item.category)!.push(item)
@@ -183,10 +216,15 @@ function loadFromModel() {
   editorItems.splice(0, editorItems.length)
   for (const [code, raw] of Object.entries(items)) {
     const item = raw as Record<string, any>
+    if (!shouldShowItem(item)) continue
     const value = item.value ?? item.default_value ?? ''
     const baseVal = baseValueMap.value.get(code)
     const required = Boolean(item.required)
     const sourceLayer = item.source ? String(item.source) : (baseVal !== undefined && baseVal !== value ? 'override' : '')
+    const render = (item.render && typeof item.render === 'object') ? item.render as Record<string, any> : {}
+    const extensions = (item.extensions && typeof item.extensions === 'object') ? item.extensions as Record<string, any> : {}
+    const constraints = (item.constraints && typeof item.constraints === 'object') ? item.constraints as Record<string, any> : ((render.constraints && typeof render.constraints === 'object') ? render.constraints as Record<string, any> : {})
+    const options = normalizeOptions(render.options || constraints.options || extensions.options || item.options)
     editorItems.push({
       code,
       category: String(item.category || 'model_runtime'),
@@ -196,16 +234,25 @@ function loadFromModel() {
       enabled: required ? true : Boolean(item.enabled),
       value,
       defaultValue: item.default_value,
-      render: (item.render && typeof item.render === 'object') ? item.render : {},
+      render,
+      extensions,
+      constraints,
+      order: Number.isFinite(Number(item.order)) ? Number(item.order) : 9999,
+      visibility: String(item.visibility || 'visible'),
+      readonly: Boolean(item.readonly),
+      advanced: Boolean(item.advanced),
+      options,
+      placeholder: String(render.placeholder || extensions.placeholder || ''),
       supportLevel: String(item.support_level || 'documented'),
       textValue: formatValue(value),
       boolValue: Boolean(value),
+      selectValue: item.type === 'multi_select' ? (Array.isArray(value) ? value : []) : value,
       sourceLayer,
       baseValue: baseVal,
       validationError: '',
     })
   }
-  editorItems.sort((a, b) => a.category.localeCompare(b.category) || a.code.localeCompare(b.code))
+  editorItems.sort((a, b) => categoryOrder(a.category) - categoryOrder(b.category) || groupName(a).localeCompare(groupName(b)) || a.order - b.order || a.code.localeCompare(b.code))
 }
 
 function onItemChanged(item: ConfigItemView) {
@@ -253,7 +300,7 @@ function validateItem(item: ConfigItemView): string[] {
     const n = Number.parseInt(val, 10)
     if (val !== '' && !Number.isFinite(n)) errs.push('must be an integer')
     else if (Number.isFinite(n)) {
-      const constraints = item.render?.constraints
+      const constraints = item.constraints
       if (constraints) {
         if (constraints.min !== undefined && n < constraints.min) errs.push(`min ${constraints.min}`)
         if (constraints.max !== undefined && n > constraints.max) errs.push(`max ${constraints.max}`)
@@ -264,7 +311,7 @@ function validateItem(item: ConfigItemView): string[] {
     const n = Number.parseFloat(val)
     if (val !== '' && !Number.isFinite(n)) errs.push('must be a number')
     else if (Number.isFinite(n)) {
-      const constraints = item.render?.constraints
+      const constraints = item.constraints
       if (constraints) {
         if (constraints.min !== undefined && n < constraints.min) errs.push(`min ${constraints.min}`)
         if (constraints.max !== undefined && n > constraints.max) errs.push(`max ${constraints.max}`)
@@ -292,6 +339,7 @@ function buildConfigSet() {
 
 function parsedValue(item: ConfigItemView) {
   if (item.type === 'boolean') return item.boolValue
+  if (item.type === 'select' || item.type === 'multi_select') return item.selectValue
   if (item.type === 'integer') {
     const n = Number.parseInt(item.textValue, 10)
     return Number.isFinite(n) ? n : item.textValue
@@ -327,12 +375,45 @@ function isMultiline(item: ConfigItemView) {
 }
 
 function itemLabel(item: ConfigItemView) {
-  return item.render?.label || item.code
+  return item.render?.label || item.extensions?.label || item.code
 }
 
 function renderHint(item: ConfigItemView) {
   const flag = item.render?.flag || item.render?.env_name || ''
-  return [flag, item.supportLevel].filter(Boolean).join(' | ')
+  const help = item.render?.help || item.extensions?.help || ''
+  return [flag, help, item.supportLevel].filter(Boolean).join(' | ')
+}
+
+function groupName(item: ConfigItemView) {
+  return String(item.render?.group || item.extensions?.group || item.category)
+}
+
+function shouldShowItem(item: Record<string, any>) {
+  const visibility = String(item.visibility || '')
+  if (visibility === 'internal' || visibility === 'hidden') return false
+  const code = String(item.code || '')
+  if (code.startsWith('internal.') || code.startsWith('resolver.') || code.startsWith('source_metadata.')) return false
+  return true
+}
+
+function normalizeOptions(raw: any): Array<{ label: string, value: any }> {
+  if (!Array.isArray(raw)) return []
+  return raw.map((option) => {
+    if (option && typeof option === 'object') {
+      const record = option as Record<string, any>
+      const value = record.value ?? record.key ?? record.label
+      return { label: String(record.label ?? value), value }
+    }
+    return { label: String(option), value: option }
+  })
+}
+
+function categoryOrder(category: string) {
+  if (category === 'launcher') return 10
+  if (category === 'runtime_env') return 20
+  if (category === 'model_runtime') return 30
+  if (category === 'advanced') return 90
+  return 80
 }
 
 function categoryTitle(category: string) {

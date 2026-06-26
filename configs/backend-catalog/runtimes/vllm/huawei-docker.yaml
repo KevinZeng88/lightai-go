@@ -5,7 +5,7 @@ slug: vllm-huawei-docker
 managed_by: system
 runner_type: docker
 vendor: huawei
-image_ref: template-only
+image_ref: quay.io/ascend/vllm-ascend:v0.21.0rc1
 mount_policy:
   model:
     container_mount_dir: /models
