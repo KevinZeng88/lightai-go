@@ -1,6 +1,8 @@
 # 01 — File-Level Implementation Plan
 
-Generated: 2026-06-26 | Based on: `00-current-code-inventory.md`
+Revised: 2026-06-26 | Based on: `00-current-code-inventory.md`
+Scope: 模型运行管理闭环 — BackendRuntime / NBR / Deployment / Instance / RunPlan / preflight / smoke
+Excluded: OpenAI Gateway / API Key / Usage Metering (deferred to `future-openai-gateway-notes.md`)
 
 ## 1. Baseline
 
@@ -18,113 +20,183 @@ git diff --check            # PASS
 
 **Pre-existing failures: NONE.** All tests pass at baseline. Any failure after implementation is a regression.
 
-## 2. Implementation Order
-
-Workstreams should be executed in this order to minimize conflicts:
+## 2. Revised Implementation Order
 
 ```
-A (naming) → B (deployment UI) → C (runtime parameters) → D (gateway) → E (regression evidence)
+A (inventory, done) → B (NBR / runtime parameters) → C (deployment UI + preview) → D (start/stop/status/logs) → E (E2E regression) → F (naming cleanup, safe only) → G (gateway future notes, document only)
 ```
 
-Rationale: A establishes vocabulary used by B and C. B creates the wizard that C's parameter editor integrates into. D depends on B (needs running deployments to proxy). E runs last to capture final state.
+Rationale:
+- **A** already exists (`00-current-code-inventory.md`).
+- **B** (runtime parameter completeness) comes before **C** (deployment wizard) — the wizard's override editor depends on the parameter editor working correctly.
+- **C** (deployment UI) adds preview endpoint + wizard — the wizard integrates parameter editor from B.
+- **D** (start/stop/status/logs stability) validates the full instance lifecycle with the new preview/wizard contract.
+- **E** (E2E regression) runs last — captures final state of all code changes with vLLM/SGLang/llama.cpp smoke.
+- **F** (naming cleanup) runs last among code changes — safe label/i18n fixes only, no route renames.
+- **G** (gateway notes) is document-only, no code.
 
-Non-conflicting workstreams: A and D's DB schema can be pre-staged. C's backend changes are independent.
+OpenAI Gateway (API keys, usage, `/v1/models`, `/v1/chat/completions`, billing) is **deferred** — see `future-openai-gateway-notes.md`.
 
 ---
 
-## 3. Workstream A — Naming Debt
+## 3. Workstream B — Runtime Config / NBR Parameter Completeness
 
 ### Objective
-Apply consistent vocabulary: BackendRuntime → "Runtime Template", NodeBackendRuntime → "Node Runtime Config", remove "ConfigSet"/"RunPlan"/"NBR" from user-facing text.
+Surface all backend runtime parameters from catalog YAMLs in the `RuntimeParameterEditor`, integrate into BackendRuntime template and NodeBackendRuntime pages at correct layers. Model page must not hold runtime serving args. Lint rules for duplicate/conflict/incompatible parameters.
 
 ### Files to modify
 
 | File | Action | Detail |
 |---|---|---|
-| `web/src/router/index.ts` | CHANGE | Rename route `RunnerConfigs` → `NodeRuntimeConfigs`, path `/runner-configs` → `/node-runtime-configs` |
-| `web/src/layouts/ConsoleLayout.vue` | CHANGE | Update menu item index from `/runner-configs` to `/node-runtime-configs`, change i18n key |
-| `web/src/pages/BackendRuntimesPage.vue` | CHANGE | Rename component to `RuntimeTemplatesPage.vue` (file rename); change JsonViewer title from `"ConfigSet"` to `$t('runtimes.technicalConfig')` |
-| `web/src/pages/RunnerConfigsPage.vue` | CHANGE | Rename component to `NodeRuntimeConfigsPage.vue` (file rename); change page title i18n key from `runnerConfigs.title` to `nodeRuntimeConfigs.title`; remove raw `backend_runtime_id` table column — show display name; change JsonViewer title from `"ConfigSet"` to `$t('nodeRuntimeConfigs.technicalConfig')`; change table column label for NBR name |
-| `web/src/pages/ModelDeploymentsPage.vue` | CHANGE | Change JsonViewer title from `"Deployment ConfigSet"` to `$t('deployments.technicalConfig')`; remove raw `source_node_backend_runtime_id` table column — resolve and show display name; change runtime selector label from `$t('deployments.runtime')` to `$t('deployments.nodeRuntimeConfig')`; add `display_name` lookup via join/map from `nodeRuntimes` |
-| `web/src/pages/ModelInstancesPage.vue` | CHANGE | Replace `t('runnerConfigs.advancedJson')` with `t('common.advancedJson')` |
-| `web/src/pages/BackendsPage.vue` | CHANGE | Change JsonViewer title from `"ConfigSet"` to `$t('backends.technicalConfig')` |
-| `web/src/components/common/RuntimeParameterEditor.vue` | CHANGE | Change collapsible title from `"ConfigSet"` to `$t('common.parameterConfig')` |
-| `web/src/locales/zh-CN.ts` | CHANGE | Rename `runnerConfigs` → `nodeRuntimeConfigs`; update all sub-keys to avoid "NBR"/"RunPlan"/"ConfigSet" raw text; change `nbrTemplateGroup` → `runtimeTemplateGroup`, `runPlanSourceNote` → `paramSourceNote`; change `deployments.existingOverrides` to remove "ConfigSet"; change `deployments.overrideHint` to remove "ConfigSet" |
-| `web/src/locales/en-US.ts` | CHANGE | Mirror all zh-CN changes in English |
-| `web/src/api/runtimes.ts` | CHANGE | Rename `BackendRuntime` interface to `RuntimeTemplate` (type alias kept for compat) |
-| `web/src/api/deployments.ts` | MINOR | No functional change — field names align with backend JSON |
-| `docs/engineering/naming-dictionary.md` | CREATE | New file with concept table per 03-workstream-a-naming-debt.md Step A2 |
-| `docs/api/openapi.yaml` | CHANGE | Update description text to use "runtime template" / "node runtime config" / "run plan" vocabulary; remove "runner-config" from descriptions |
-| `docs/README.md` | CHANGE | Update references to `RunnerConfigsPage` → `NodeRuntimeConfigsPage` |
-| `docs/CURRENT.md` | CHANGE | Same update |
+| `web/src/components/common/RuntimeParameterEditor.vue` | CHANGE | Add props: `layer` (`'backend_runtime'` / `'node_backend_runtime'` / `'deployment'`), `baseValues` (inherited values from parent layer), `showSource`, `showAdvanced`; add emit: `validate`; add behavior: required fields locked enabled, optional fields have enable/disable toggle, disabled values retained in model but excluded from final args output, validation errors shown inline, advanced groups collapsible, source/diff from base visible; add backend/vendor applicability filter (only show params for current backend) |
+| `web/src/pages/BackendRuntimesPage.vue` | CHANGE | Install `RuntimeParameterEditor` in detail drawer: system-managed templates read-only, user-managed templates editable; add "Clone from system template" button → creates new user-managed template with copied ConfigSet |
+| `web/src/pages/RunnerConfigsPage.vue` | CHANGE | Install `RuntimeParameterEditor` in create dialog and detail drawer: show inherited BackendRuntime values as read-only `baseValues`, NBR-specific overrides editable as diff; save emits `PATCH` with NBR-specific parameter values |
+| `web/src/pages/ModelArtifactsPage.vue` | CHANGE | Keep `parameter_defaults` textarea but relabel to "Model Facts and Hints"; remove `--max-model-len`, `--served-model-name`, `--gpu-memory-utilization` from placeholder text; add explicit hint: "Model facts only — Docker/runtime parameters belong in Runtime Template or Deployment configuration"; forbid backend serve args in model edit surface |
+| `web/src/pages/ModelDeploymentsPage.vue` | CHANGE | Wire `RuntimeParameterEditor` (via `DeploymentOverrideEditor` wrapper from Workstream C): show NBR param values as base, deployment overrides as diff |
+| `internal/server/api/runtime_handlers.go` | CHANGE | Ensure `PATCH /api/v1/backend-runtimes/{id}` saves `config_set_json` with full parameter values; ensure `PATCH /api/v1/nodes/{id}/backend-runtimes/{nbr_id}` saves node-specific parameter values; read-only guard for system-managed (managed_by != "user") |
+| `internal/server/api/deployment_lifecycle_handlers.go` | CHANGE | Ensure `HandlePatchDeployment` properly processes `config_overrides` with full `parameter_values`, `disabled_parameters`, `env` arrays |
+| `internal/server/runplan/lint.go` | CHANGE | Add lint rules: `LintRuleDuplicateArg` (same CLI flag in extra_args + parameter_values), `LintRuleEnvCLIConflict` (env override conflicts with CLI arg), `LintRulePlatformArgOverridden` (user overriding `--host`/`--port`/`--model`), `LintRuleUnsupportedParam` (param not in backend args_schema), `LintRuleDisabledFieldApplied` (disabled value appearing in final args), `LintRuleMissingRequired` (required param without value), `LintRuleVendorIncompatible` (CUDA param on non-NVIDIA vendor) |
+| `internal/server/runplan/resolver.go` | MINOR | Ensure lint results accessible from Resolve output (add `LintResult` to return struct or expose via separate method) |
+| `configs/backend-catalog/versions/vllm/vllm-v0.23.0.yaml` | MINOR | Verify all 17 `default_args_schema` entries have `group`, `type`, `advanced` fields; verify `vendor_options.resource_controls` entries complete |
+| `configs/backend-catalog/versions/sglang/sglang-v0.5.13.post1.yaml` | MINOR | Add `--chunked-prefill-size` and `--attention-backend` to `default_args_schema` (currently only in resource_controls — needed for UI rendering) |
+| `configs/backend-catalog/versions/llamacpp/llamacpp-b9700.yaml` | MINOR | Verify no fake `gpu_memory_fraction` surfaces (already correct: `supported: false` with reason) |
 
 ### Functions/components changed
-- `BackendRuntimesPage.vue` → `RuntimeTemplatesPage.vue`: component name, route reference, i18n key namespace
-- `RunnerConfigsPage.vue` → `NodeRuntimeConfigsPage.vue`: component name, table column for `backend_runtime_id` → resolved template name, route reference, i18n key namespace
-- `ConsoleLayout.vue`: menu `index` attribute
-- `router/index.ts`: route `path`, `name`, component import path, `meta.title`
 
-### Data/API contract changes: NONE
-No API routes or DB schema change. Purely frontend + docs.
+**RuntimeParameterEditor.vue** — major enhancement (currently dead code, 0 imports):
+- New prop `layer: string` — `'backend_runtime'` / `'node_backend_runtime'` / `'deployment'`
+- New prop `baseValues: ParameterValue[]` — inherited values from parent layer
+- New prop `showSource: boolean` — toggle source/diff column
+- New prop `showAdvanced: boolean` — toggle advanced group visibility
+- New emit `validate: (errors: ValidationError[]) => void`
+- New behavior: `backend`/`vendor` applicability filter — only params for current backend
+- New behavior: required fields locked (lock icon, toggle disabled)
+- New behavior: disabled optional field — value retained in editor state, excluded from `config_overrides.parameter_values` output
+- New behavior: source trace per parameter (BackendVersion → BackendRuntime → NBR → Deployment)
+
+**BackendRuntimesPage.vue** — interactive parameter editing:
+- Detail drawer: install `RuntimeParameterEditor`
+- System-managed (`managed_by != 'user'`): editor in read-only mode
+- User-managed: editor editable
+- "Clone" action on system template row → `POST /api/v1/backend-versions/{id}/clone` then redirect to new user-managed runtime
+
+**RunnerConfigsPage.vue** — interactive parameter editing:
+- Create dialog: after selecting node + runtime template, show `RuntimeParameterEditor` with template values as `baseValues` (read-only)
+- Detail drawer: show `RuntimeParameterEditor` with inherited + overridden values
+- NBR-specific overrides shown as diff from template
+
+**lint.go** — 7 new lint rules:
+- `LintRuleDuplicateArg`, `LintRuleEnvCLIConflict`, `LintRulePlatformArgOverridden`, `LintRuleUnsupportedParam`, `LintRuleDisabledFieldApplied`, `LintRuleMissingRequired`, `LintRuleVendorIncompatible`
+
+### Data/API contract changes
+
+| Method | Path | Change |
+|---|---|---|
+| PATCH | `/api/v1/backend-runtimes/{id}` | ENHANCE: accept full `config_set` parameter values; reject if system-managed |
+| PATCH | `/api/v1/nodes/{id}/backend-runtimes/{nbr_id}` | ENHANCE: accept node-specific `config_set` overrides |
+| PATCH | `/api/v1/deployments/{id}` | ENHANCE: accept full `config_overrides` with `parameter_values`, `disabled_parameters`, `env` |
+
+No new routes. No routes removed. No DB schema changes. Existing routes already store these payloads — frontend must send them.
 
 ### Tests to add/update
 
-| Test file | Change |
-|---|---|
-| `web/tests/runtimeBoundaryUi.test.mjs` | UPDATE: change references from `RunnerConfigsPage` to `NodeRuntimeConfigsPage` |
-| `web/tests/i18nKeys.test.mjs` | NO CHANGE (key count may change — update expected counts) |
-| `web/tests/i18nMissingKeys.test.mjs` | NO CHANGE (auto-validates) |
-| `web/tests/namingDictionary.test.mjs` | CREATE: assert `RunnerConfig` term absent from Vue templates; assert `ConfigSet` absent from user-facing labels; assert all pages use dictionary terms |
-| `docs/engineering/naming-dictionary.md` | CREATE: reference document, not a test |
+**Go tests** — `internal/server/api/runtime_parameter_layering_test.go` (CREATE):
+```
+Test cases:
+1. nbr_value_wins_over_backend_runtime
+2. deployment_override_wins_over_nbr
+3. disabled_optional_value_retained_not_applied
+4. required_field_cannot_be_disabled
+5. vllm_gpu_memory_fraction_validates_0.1_to_0.95
+6. sglang_mem_fraction_static_validates
+7. llamacpp_no_fake_memory_fraction
+8. vendor_incompatible_param_linted
+9. system_managed_runtime_rejects_patch
+```
+
+**Go tests** — `internal/server/api/model_artifact_boundary_test.go` (CREATE):
+```
+Test cases:
+1. model_page_parameter_defaults_not_used_as_runtime_args
+2. deployment_does_not_mutate_nbr
+```
+
+**Go tests** — `internal/server/runplan/lint_test.go` (UPDATE existing):
+```
+Add cases for 7 new lint rules
+```
+
+**Frontend tests** — `web/tests/runtimeParameterEditor.test.mjs` (CREATE):
+```javascript
+// Assertions:
+// 1. required fields rendered as locked enabled (toggle disabled state)
+// 2. optional fields have enable checkbox
+// 3. disabled field value retained in internal model
+// 4. disabled field value NOT emitted in config_overrides output
+// 5. vLLM memory fraction renders with range 0.1-0.95 validation
+// 6. SGLang memory fraction renders
+// 7. llama.cpp does NOT render memory fraction (supported: false)
+// 8. source/diff shows inherited vs override values from baseValues prop
+// 9. validation errors shown inline for out-of-range values
+// 10. backend/vendor filter excludes inapplicable params
+```
+
+**Frontend tests** — `web/tests/modelCapabilities.test.mjs` (UPDATE existing):
+```
+Add assertion: ModelArtifactsPage placeholder does not reference --max-model-len, --gpu-memory-utilization, --served-model-name
+```
 
 ### Validation commands
 ```bash
-grep -r "ConfigSet" web/src/pages/ web/src/components/ web/src/layouts/ web/src/locales/  # should return ONLY test files or intentionally retained internal uses
-grep -r "RunnerConfig" web/src/router/ web/src/layouts/ web/src/pages/  # should return ZERO matches
-grep -r "NBR" web/src/locales/  # should return ZERO matches in user-facing text
+# Backend
+go test ./internal/server/api/... -run 'Parameter|ConfigSet|Lint|Runtime'
+go test ./internal/server/runplan/... -run 'vllm|sglang|llamacpp|Resource|Lint'
+
+# Frontend
 cd web && npm test
 cd web && npm run build
+
+# Verify model page placeholder has no runtime args
+grep -n "max-model-len\|gpu-memory-utilization\|served-model-name" web/src/pages/ModelArtifactsPage.vue
 ```
 
 ---
 
-## 4. Workstream B — Model Deployment UI
+## 4. Workstream C — Model Deployment UI + RunPlan Preview
 
 ### Objective
-Replace the thin create dialog in `ModelDeploymentsPage.vue` with a guided deployment wizard showing model facts, NBR status, service config, overrides, RunPlan preview, and blockers.
+Replace thin create dialog in `ModelDeploymentsPage.vue` with guided deployment wizard showing model facts, NBR status, service config, parameter overrides, RunPlan preview, Docker command preview, lint/preflight findings, and start blockers. Add `POST /api/v1/deployments/preview` endpoint.
 
 ### Files to modify
 
 | File | Action | Detail |
 |---|---|---|
-| `web/src/pages/ModelDeploymentsPage.vue` | REPLACE | Replace thin create dialog (lines 25-45) with wizard sections; add preview panel; keep list table and detail drawer; add NBR status column with color tags; add model name column (resolve from artifact list) |
-| `web/src/components/deployments/DeploymentWizard.vue` | CREATE | Multi-section wizard component: 6 steps as defined in 04-workstream-b Step B4 |
-| `web/src/components/deployments/ModelSelector.vue` | CREATE | Model selection: display name, format, task type, capabilities, location warning |
-| `web/src/components/deployments/NodeRuntimeSelector.vue` | CREATE | NBR selection: display name, node, backend, version, image, status tag, status reason, block non-deployable |
-| `web/src/components/deployments/DeploymentServiceEditor.vue` | CREATE | Service config: host_port, container_port, served_model_name, endpoint preview |
-| `web/src/components/deployments/DeploymentOverrideEditor.vue` | CREATE | Wraps RuntimeParameterEditor for deployment override layer; shows inherited NBR values as source; marks overridden values |
-| `web/src/components/deployments/DeploymentPreviewPanel.vue` | CREATE | Preview: can_run, errors/warnings, lint, resource admission, Docker command, RunPlan JSON via JsonViewer, source trace |
-| `web/src/api/deployments.ts` | CHANGE | Add `previewDeployment(data)` function calling `POST /deployments/preview`; add `getDeployment(id)` type |
+| `web/src/pages/ModelDeploymentsPage.vue` | REPLACE | Replace thin create dialog (lines 25–45) with `DeploymentWizard` component; keep list table and detail drawer; add NBR status column with colored `StatusTag`; resolve and show model/artifact display names (not raw UUIDs) |
+| `web/src/components/deployments/DeploymentWizard.vue` | CREATE | 6-section wizard: (1) Model, (2) Node Runtime Config, (3) Service, (4) Resource/Placement, (5) Overrides, (6) Preview; stepper or tab navigation; validate each step before proceeding |
+| `web/src/components/deployments/ModelSelector.vue` | CREATE | Model card: display_name, format, task_type, capabilities, location node/path, verification status; warning if no model location on selected node; filter/search |
+| `web/src/components/deployments/NodeRuntimeSelector.vue` | CREATE | NBR card: display_name, node label, backend + version, vendor, image ref, deployable status tag with reason text; block `needs_check`, `missing_image`, `error`, `unknown`; allow `ready` and `ready_with_warnings`; show last check time |
+| `web/src/components/deployments/DeploymentServiceEditor.vue` | CREATE | Fields: host_port (number, 1–65535), container_port (number, default from backend catalog), served_model_name (text), endpoint preview (read-only derived URL) |
+| `web/src/components/deployments/DeploymentOverrideEditor.vue` | CREATE | Wraps `RuntimeParameterEditor` with `layer="deployment"` and `baseValues` from selected NBR; shows inherited vs overridden diff; saves only deployment-level changes |
+| `web/src/components/deployments/DeploymentPreviewPanel.vue` | CREATE | Calls `POST /api/v1/deployments/preview`; shows: can_run (boolean + reason), lint findings (status + list), resource_admission (status + list), preflight errors/warnings, Docker command preview (code block), RunPlan JSON (JsonViewer, collapsible), source trace; "Save" and "Save & Start" buttons (disabled if !can_run) |
+| `web/src/api/deployments.ts` | CHANGE | Add `previewDeployment(data)` function: `POST /deployments/preview`, returns `PreviewResult`; add `PreviewResult` interface |
 | `internal/server/api/router.go` | ADD | Register `POST /api/v1/deployments/preview` → `HandleDeploymentPreview` with `mdWriteChain` |
-| `internal/server/api/deployment_preview_handlers.go` | CREATE | `HandleDeploymentPreview`: same logic as `preflightDeployment()` but accepts create payload without existing deployment ID; returns `preflightResult` |
-| `internal/server/api/preflight_handlers.go` | REFACTOR | Extract shared `preflightCreatePayload()` function used by both `HandlePreflightDeployments` and new `HandleDeploymentPreview` |
+| `internal/server/api/deployment_preview_handlers.go` | CREATE | `HandleDeploymentPreview`: accepts same payload as create (without requiring deployment ID), runs shared `preflightDeployment()` resolver, returns full `preflightResult` including RunPlan + lint + command preview; does NOT write to DB |
+| `internal/server/api/preflight_handlers.go` | REFACTOR | Extract `performDeploymentPreflight(ctx, db, payload) (*preflightResult, error)` from `HandlePreflightDeployments` — shared by both preflight and new preview handlers |
 | `docs/api/openapi.yaml` | ADD | Schema for `DeploymentPreview` request/response, `POST /deployments/preview` path |
 
 ### Functions/components changed
 
-**New Go handler** — `HandleDeploymentPreview`:
+**New Go handler — `HandleDeploymentPreview`:**
 - File: `internal/server/api/deployment_preview_handlers.go`
 - Signature: `func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Request)`
-- Input: same as create payload (`name`, `model_artifact_id`, `node_backend_runtime_id`, `service_json`, `placement_json`, `config_overrides`)
-- Logic: validate NBR → validate artifact → check model location → check GPU → run `runplan.Resolve()` → lint → build command preview → return `preflightResult`
-- Does NOT check `deployment_id` in URL, does NOT write to DB
-- MUST use same resolver path as `HandleStartDeployment` (single source of truth)
+- Input: `{ name, display_name?, model_artifact_id, node_backend_runtime_id, placement_json?, service_json?, config_overrides? }`
+- Logic: validate NBR deployable → validate artifact exists → check model location on node → check GPU availability → run `runplan.Resolve()` → run `LintRunPlan()` → build `EquivalentCommandPreview()` → return result
+- MUST use same resolver path as `HandleStartDeployment` (single source of truth — verified by test)
+- Does NOT require deployment ID in URL, does NOT write to DB
 
-**Refactored code** — `preflight_handlers.go`:
-- Extract `performDeploymentPreflight(ctx, db, payload) (*preflightResult, error)` from the shared logic in `HandlePreflightDeployments`
-- Both old handler and new handler call the same function
-
-**New Vue components** — 6 deployment wizard components as listed above.
+**Refactored — `preflight_handlers.go`:**
+- Extract `performDeploymentPreflight(ctx, db, payload) (*preflightResult, error)`
+- Called by: `HandlePreflightDeployments` (existing), `HandleDeploymentPreview` (new), `HandleStartDeployment` (existing, already calls `preflightDeployment()` internally — verify shared path)
 
 ### Data/API contract changes
 
@@ -132,45 +204,48 @@ Replace the thin create dialog in `ModelDeploymentsPage.vue` with a guided deplo
 |---|---|---|---|
 | POST | `/api/v1/deployments/preview` | **ADD** | `HandleDeploymentPreview` |
 
-Request body: `{ name, display_name?, model_artifact_id, node_backend_runtime_id, placement_json?, service_json?, config_overrides? }`
+Request: `{ name, display_name?, model_artifact_id, node_backend_runtime_id, placement_json?, service_json?, config_overrides? }`
 
-Response body: `{ can_run, run_plan, docker_preview, lint: { status, findings[] }, resource_admission: { status, findings[] }, preflight: { status, errors[], warnings[] }, source_trace }`
+Response: `{ can_run: bool, run_plan: object, docker_preview: string, lint: { status, findings[] }, resource_admission: { status, findings[] }, preflight: { status, errors[], warnings[] }, source_trace: object }`
 
-No existing routes changed. No routes removed.
+No routes removed. No breaking changes.
 
 ### Tests to add/update
 
-**Backend tests** — `internal/server/api/deployment_preview_test.go` (CREATE):
+**Backend — `internal/server/api/deployment_preview_test.go` (CREATE):**
 ```go
-// Test cases:
 // 1. preview_rejects_legacy_backend_runtime_id
-// 2. preview_rejects_non_ready_nbr
-// 3. preview_accepts_ready_with_warnings
+// 2. preview_rejects_non_ready_nbr (needs_check, missing_image, error)
+// 3. preview_accepts_ready_with_warnings (with warnings in response)
 // 4. preview_blocks_missing_model_location
 // 5. preview_blocks_host_port_conflict
-// 6. preview_and_start_use_same_resolver_path
-// 7. preview_disabled_parameter_not_applied
+// 6. preview_and_start_use_same_resolver_path (same Resolve() call, same result)
+// 7. preview_disabled_parameter_not_applied (disabled value absent from run_plan args)
 // 8. preview_deployment_override_wins_over_nbr
+// 9. preview_no_deployment_id_in_url (endpoint does not read {id} from path)
+// 10. preview_does_not_write_to_db (no rows in model_deployments after call)
 ```
 
-**Backend tests** — `internal/server/api/preflight_handlers_test.go` (UPDATE):
-- Add test: `preflight_rejects_standalone_preview_without_nbr` (ensure preflight still works for existing deployments)
+**Backend — `internal/server/api/preflight_handlers_test.go` (UPDATE):**
+- Add: `preflight_rejects_legacy_fields` (ensure existing preflight still works)
 
-**Frontend tests** — `web/tests/deploymentWizard.test.mjs` (CREATE):
+**Frontend — `web/tests/deploymentWizard.test.mjs` (CREATE):**
 ```javascript
-// Assertions:
-// 1. create payload uses node_backend_runtime_id
-// 2. non-deployable NBR cannot be selected for start
-// 3. ready_with_warnings shows warning and is selectable
-// 4. preview button sends full payload to /deployments/preview
-// 5. preview panel shows Docker command
-// 6. preview panel shows lint/preflight findings
-// 7. served_model_name in service_json or config_overrides
-// 8. raw UUID not shown as primary label (display_name required)
+// 1. create payload uses node_backend_runtime_id (not backend_runtime_id)
+// 2. non-deployable NBR cannot be selected for start (needs_check blocked)
+// 3. ready_with_warnings shows warning badge and is selectable
+// 4. preview button sends full payload to POST /deployments/preview
+// 5. preview panel shows Docker command string
+// 6. preview panel shows lint findings when present
+// 7. preview panel shows resource_admission findings
+// 8. served_model_name stored in config_overrides.parameter_values or service_json
+// 9. raw UUID not shown as primary label (display_name resolved)
+// 10. save button disabled when can_run is false
+// 11. save+start button disabled when can_run is false
 ```
 
-**Frontend tests** — `web/tests/runtimeBoundaryUi.test.mjs` (UPDATE):
-- Add assertion: `DeploymentWizard` imports `RuntimeParameterEditor`
+**Frontend — `web/tests/runtimeBoundaryUi.test.mjs` (UPDATE):**
+- Add: `DeploymentWizard` imports `RuntimeParameterEditor`
 
 ### Validation commands
 ```bash
@@ -182,540 +257,436 @@ go test ./internal/server/runplan/...
 cd web && npm test
 cd web && npm run build
 
-# API smoke (manual or via script)
+# API smoke
 curl -X POST http://localhost:18080/api/v1/deployments/preview \
   -H 'Content-Type: application/json' \
   -d '{"name":"test","model_artifact_id":"...","node_backend_runtime_id":"..."}'
-# Expect: {... "can_run": ..., "docker_preview": "...", "lint": {...} ...}
 ```
 
 ---
 
-## 5. Workstream C — Runtime Parameter Completeness
+## 5. Workstream D — Start/Stop/Status/Log Stability
 
 ### Objective
-Surface ALL backend parameters from catalog YAMLs in the RuntimeParameterEditor, integrate editor into BackendRuntime, NodeBackendRuntime, and Deployment pages at correct layers. Clean model page of runtime args.
+Verify and harden the full instance lifecycle: start (with preflight gate), status polling, stopped instance display/cleanup, log fetching, instance list auto-refresh. No new features — verify current behavior, fix any gaps found.
 
-### Files to modify
-
-| File | Action | Detail |
-|---|---|---|
-| `web/src/pages/BackendRuntimesPage.vue` | CHANGE | Add `RuntimeParameterEditor` component in detail drawer for user-managed templates; read-only for system templates; add "Clone" button for system templates |
-| `web/src/pages/RunnerConfigsPage.vue` | CHANGE (becomes NodeRuntimeConfigsPage after A) | Add `RuntimeParameterEditor` in create/edit: show inherited values from BackendRuntime; editable for node-specific overrides; show source/diff from template |
-| `web/src/pages/ModelDeploymentsPage.vue` | CHANGE | Wire `DeploymentOverrideEditor` (from Workstream B) which wraps `RuntimeParameterEditor`; show NBR values as base, deployment overrides as diff |
-| `web/src/pages/ModelArtifactsPage.vue` | CHANGE | Keep `parameter_defaults` textarea but relabel to "Model Facts and Hints" (remove serving-related placeholder text); remove `--max-model-len`, `--served-model-name`, `--gpu-memory-utilization` from placeholder; add explicit hint: "Model facts only — Docker/runtime parameters belong in Runtime Template or Deployment configuration" |
-| `web/src/components/common/RuntimeParameterEditor.vue` | CHANGE | Add props: `layer` (backend_runtime/node_backend_runtime/deployment), `baseValues` (inherited values from parent layer), `showSource`, `showAdvanced`; add emits: `validate`; add behavior: required fields locked enabled, optional fields have enable/disable toggle, disabled values retained in model but excluded from final args, validation errors shown inline, advanced groups collapsible, source/diff from base visible; add backend applicability check (`backend`/`vendor` fields); filter parameters based on enabled backends |
-| `internal/server/api/runtime_handlers.go` | CHANGE | Ensure `PATCH /api/v1/backend-runtimes/{id}` saves `config_set_json` with parameter values; ensure `PATCH /api/v1/nodes/{id}/backend-runtimes/{nbr_id}` saves node-specific parameter values |
-| `internal/server/api/deployment_lifecycle_handlers.go` | CHANGE | Ensure `HandlePatchDeployment` properly processes `config_overrides` with full parameter_values/disabl_parameters/env arrays |
-| `internal/server/runplan/lint.go` | CHANGE | Add lint checks: duplicate CLI flag across layers, env/CLI conflict, user extra_arg overrides platform-owned arg, unsupported backend param, disabled field applied, missing required field, vendor-incompatible field |
-| `internal/server/runplan/resolver.go` | MINOR | Ensure lint results are returned in Resolve output (add `LintResult` to return or make available via separate call) |
-| `configs/backend-catalog/versions/vllm/vllm-v0.23.0.yaml` | MINOR | Verify all 17 args_schema items have correct `group`, `type`, `advanced` fields |
-| `configs/backend-catalog/versions/sglang/sglang-v0.5.13.post1.yaml` | MINOR | Add `--chunked-prefill-size` and `--attention-backend` to args_schema (currently only in resource_controls) |
-| `configs/backend-catalog/versions/llamacpp/llamacpp-b9700.yaml` | MINOR | Verify no fake `gpu_memory_fraction` surfaces (already correct: `supported: false`) |
-
-### Functions/components changed
-
-**RuntimeParameterEditor.vue** — major enhancement:
-- New prop `layer: string` — sets context for source display
-- New prop `baseValues: ParameterValue[]` — inherited values from parent layer
-- New prop `showSource: boolean` — toggles source/diff column
-- New prop `showAdvanced: boolean` — toggles advanced group visibility
-- New emit `validate: (errors: ValidationError[]) => void`
-- New behavior: `backend`/`vendor` filter — only show params applicable to current backend
-- New behavior: required fields have lock icon, disabled toggle
-- New behavior: source trace per parameter (BackendVersion → BackendRuntime → NBR → Deployment)
-
-**BackendRuntimesPage.vue** — add interactive editing:
-- Install `RuntimeParameterEditor` in drawer
-- System-managed (readonly) runtimes: editor in read-only mode
-- User-managed runtimes: editor editable
-- "Clone from system template" button → creates new user-managed runtime with copied values
-
-**NodeRuntimeConfigsPage.vue** (renamed in Workstream A) — add interactive editing:
-- Install `RuntimeParameterEditor` in create and edit
-- Show inherited BackendRuntime values as `baseValues` (read-only)
-- NBR-specific overrides shown as diff
-- Save emits `PATCH` with NBR-specific values only
-
-**ModelDeploymentsPage.vue** — wire parameter editing:
-- `DeploymentOverrideEditor` wraps `RuntimeParameterEditor`
-- NBR values as base, deployment values as overrides
-- Preview panel resolves effective RunPlan with deployment overrides applied
-
-**lint.go** — new lint rules:
-- `LintRuleDuplicateArg`: detect same CLI flag in extra_args and parameter_values
-- `LintRuleEnvCLIConflict`: detect env override conflicting with CLI arg
-- `LintRulePlatformArgOverridden`: detect user overriding `--host`/`--port`/`--model`
-- `LintRuleUnsupportedParam`: detect param not in backend's args_schema
-- `LintRuleVendorIncompatible`: detect param not supported by vendor (e.g., CUDA param on MetaX)
-
-### Data/API contract changes
-
-| Method | Path | Change |
-|---|---|---|
-| PATCH | `/api/v1/backend-runtimes/{id}` | ENHANCE: accept full `config_set` parameter values |
-| PATCH | `/api/v1/nodes/{id}/backend-runtimes/{nbr_id}` | ENHANCE: accept node-specific `config_set` overrides |
-| PATCH | `/api/v1/deployments/{id}` | ENHANCE: accept full `config_overrides` with `parameter_values`, `disabled_parameters`, `env` |
-
-No new routes. No routes removed. Existing routes already support these payloads — frontend needs to send them.
-
-### Tests to add/update
-
-**Go tests:**
-```bash
-# New file: internal/server/api/runtime_parameter_layering_test.go
-# Test cases:
-# 1. nbr_value_wins_over_backend_runtime
-# 2. deployment_override_wins_over_nbr
-# 3. disabled_optional_value_retained_not_applied
-# 4. required_field_cannot_be_disabled
-# 5. vllm_gpu_memory_fraction_validates_0.1_to_0.95
-# 6. sglang_mem_fraction_static_validates
-# 7. llamacpp_no_fake_memory_fraction
-# 8. vendor_incompatible_param_linted
-
-# New file: internal/server/api/model_artifact_boundary_test.go
-# Test cases:
-# 1. model_page_parameter_defaults_not_used_as_runtime_args
-# 2. deployment_does_not_mutate_nbr
-```
-
-**Frontend tests:**
-```javascript
-// New file: web/tests/runtimeParameterEditor.test.mjs
-// Assertions:
-// 1. required fields rendered as locked enabled
-// 2. optional fields have enable checkbox
-// 3. disabled field value retained in model
-// 4. disabled field value NOT emitted in config_overrides
-// 5. vLLM memory fraction renders with range 0.1-0.95
-// 6. SGLang memory fraction renders
-// 7. llama.cpp does NOT render memory fraction
-// 8. source/diff shows inherited vs override values
-// 9. validation errors shown inline for out-of-range values
-
-// New file: web/tests/modelCapabilities.test.mjs (UPDATE existing)
-// Assertion: model page does not expose backend runtime args
-```
-
-### Validation commands
-```bash
-# Backend: parameter layering
-go test ./internal/server/api/... -run 'Parameter|ConfigSet|Lint'
-
-# Backend: runplan resolution with all parameters
-go test ./internal/server/runplan/... -run 'vllm|sglang|llamacpp|Resource|Lint'
-
-# Frontend
-cd web && npm test
-cd web && npm run build
-
-# Verify model page has no runtime args
-grep -n "max-model-len\|gpu-memory-utilization\|served-model-name" web/src/pages/ModelArtifactsPage.vue
-# Expect: ZERO matches (placeholders only; labels removed)
-```
-
----
-
-## 6. Workstream D — OpenAI Gateway, Audit, Metering
-
-### Objective
-Add tenant-scoped OpenAI-compatible gateway (`GET /v1/models`, `POST /v1/chat/completions`), API key management, usage recording, and audit logging. Minimal product boundary for future billing.
-
-### Files to modify/create
-
-#### DB schema
+### Files to inspect and potentially fix
 
 | File | Action | Detail |
 |---|---|---|
-| `internal/server/db/db.go` | CHANGE | ADD `CREATE TABLE api_keys (...)` and `CREATE TABLE gateway_usage_records (...)` with indexes per 06-workstream-d Step D3 |
+| `internal/server/api/deployment_lifecycle_handlers.go` | INSPECT + FIX | `HandleStartDeployment` (line 1061): verify preflight gate, instance creation, runplan write, lease acquire, task dispatch are atomic; `HandleStopDeployment` (line 1333): verify non-terminal instances found, stop tasks dispatched, instance state updated; `HandleListInstances` (line 1449): verify filtering + pagination; `HandleGetNodeRunPlanLogs` (line 1569): verify agent task dispatch + polling |
+| `web/src/pages/ModelInstancesPage.vue` | INSPECT + FIX | Verify auto-refresh interval, stopped instance display (show stopped_at, last_error, restart_count), log viewer error handling, instance state transitions shown correctly |
+| `web/src/pages/ModelDeploymentsPage.vue` | INSPECT + FIX | Verify start/stop buttons correctly gated on deployment status; dry-run result clears on close; list refreshes after start/stop actions |
+| `internal/server/runplan/log_classifier.go` | INSPECT | Verify log classification rules cover common failure patterns for vLLM/SGLang/llama.cpp |
+| `internal/agent/runtime/docker_test.go` | INSPECT | Verify docker lifecycle test coverage: create, start, stop, remove, logs |
 
-#### Backend — new files
+### Specific checks to perform
 
-| File | Action | Detail |
-|---|---|---|
-| `internal/server/api/gateway_auth.go` | CREATE | `GatewayAuthMiddleware`: parse Bearer token → hash → lookup active key → verify tenant/expiry/status → attach to context → update `last_used_at` |
-| `internal/server/gateway/model_resolver.go` | CREATE | `ResolveGatewayTarget(tenantID, requestedModel, keyScopes, db) (*GatewayTarget, error)`: tenant-owned deployments only, running healthy instances only, unambiguous match, return `GatewayTarget` struct |
-| `internal/server/api/gateway_handlers.go` | CREATE | `HandleGatewayListModels` (GET /v1/models) and `HandleGatewayChatCompletions` (POST /v1/chat/completions): resolve target → proxy request → parse usage → write audit + usage record → return response |
-| `internal/server/api/api_key_handlers.go` | CREATE | `HandleCreateAPIKey`, `HandleListAPIKeys`, `HandleDisableAPIKey`, `HandleDeleteAPIKey`: CRUD for API keys with hash storage, prefix exposure, full key shown once |
-| `internal/server/api/gateway_usage_handlers.go` | CREATE | `HandleListGatewayUsage` (GET /api/v1/gateway/usage): paginated query with filters (time range, deployment_id, model_artifact_id, api_key_id, success, route), summary stats |
-| `internal/server/models/api_key.go` | CREATE | `APIKey` struct + `GatewayUsageRecord` struct |
-| `internal/common/types/gateway.go` | CREATE | `GatewayTarget` struct: DeploymentID, InstanceID, ModelArtifactID, RequestedModel, ResolvedModel, BackendURL, Route |
+1. **Start gate:** Does `HandleStartDeployment` always run preflight before creating instance? Is the transaction truly atomic (instance + runplan + lease + task)?
+2. **Stop cleanup:** Does `HandleStopDeployment` handle instances in `running`, `pending`, `error` states? Are GPU leases released? Are agent tasks cancelled?
+3. **Stopped instance display:** Does `ModelInstancesPage` show `stopped_at` time? Does it show `last_error` when stopped with error? Does it show `restart_count`?
+4. **Log fetch error handling:** What happens when agent is unreachable? When container has no logs? When logs are too large?
+5. **Auto-refresh:** Does instance list auto-refresh stop when all instances are terminal?
+6. **Status transitions:** Are all state transitions valid (pending → running → stopped, pending → error, running → error → stopped)?
 
-#### Backend — modified files
+### Expected findings and fixes
 
-| File | Action | Detail |
-|---|---|---|
-| `internal/server/api/router.go` | CHANGE | ADD routes: `POST /api/v1/api-keys` → `HandleCreateAPIKey`, `GET /api/v1/api-keys` → `HandleListAPIKeys`, `POST /api/v1/api-keys/{id}/disable` → `HandleDisableAPIKey`, `DELETE /api/v1/api-keys/{id}` → `HandleDeleteAPIKey`, `GET /api/v1/gateway/usage` → `HandleListGatewayUsage`; ADD external routes: `GET /v1/models` → `HandleGatewayListModels`, `POST /v1/chat/completions` → `HandleGatewayChatCompletions` (these go OUTSIDE `/api/v1` prefix, possibly at server root level) |
-| `internal/server/auth/bootstrap.go` | CHANGE | ADD permissions: `api_key:read`, `api_key:write` to permission catalog |
-| `internal/server/api/audit_writer.go` | MINOR | No change needed — gateway handlers call existing `WriteAudit()` |
-| `docs/api/openapi.yaml` | CHANGE | ADD gateway routes, API key management schemas, usage query schema |
+Based on source inspection, the lifecycle code is already solid — this workstream is primarily **verification + gap filling**, not redesign.
 
-#### Frontend — new files
-
-| File | Action | Detail |
-|---|---|---|
-| `web/src/pages/ApiKeysPage.vue` | CREATE | API key management: create key → show full key once with copy button → list with prefix/name/status/last_used → disable button → delete button |
-| `web/src/pages/GatewayUsagePage.vue` | CREATE | Usage table: time, deployment, model, API key, route, HTTP status, latency, tokens; summary bar: requests, success, errors, total tokens, unknown tokens, avg latency |
-| `web/src/api/apiKeys.ts` | CREATE | API client functions: `createApiKey`, `listApiKeys`, `disableApiKey`, `deleteApiKey` |
-| `web/src/api/gatewayUsage.ts` | CREATE | API client functions: `listGatewayUsage` |
-
-#### Frontend — modified files
-
-| File | Action | Detail |
-|---|---|---|
-| `web/src/router/index.ts` | CHANGE | ADD routes: `/system/api-keys` → `ApiKeysPage`, `/observability/gateway-usage` → `GatewayUsagePage` |
-| `web/src/layouts/ConsoleLayout.vue` | CHANGE | ADD menu items: "API Keys" under System group, "Gateway Usage" under Observability group |
-| `web/src/locales/zh-CN.ts` | CHANGE | ADD i18n groups: `apiKeys.*`, `gatewayUsage.*` |
-| `web/src/locales/en-US.ts` | CHANGE | ADD mirror i18n groups |
-
-### Functions/components
-
-**Go:**
-- `GatewayAuthMiddleware(next http.Handler) http.Handler` — file: `internal/server/api/gateway_auth.go`
-- `ResolveGatewayTarget(ctx, tenantID, requestedModel, scopes, db) (*GatewayTarget, error)` — file: `internal/server/gateway/model_resolver.go`
-- `HandleGatewayListModels(w, r)` — file: `internal/server/api/gateway_handlers.go`
-- `HandleGatewayChatCompletions(w, r)` — file: `internal/server/api/gateway_handlers.go`
-- `HandleCreateAPIKey(w, r)` — file: `internal/server/api/api_key_handlers.go`
-- `HandleListAPIKeys(w, r)` — file: `internal/server/api/api_key_handlers.go`
-- `HandleDisableAPIKey(w, r)` — file: `internal/server/api/api_key_handlers.go`
-- `HandleDeleteAPIKey(w, r)` — file: `internal/server/api/api_key_handlers.go`
-- `HandleListGatewayUsage(w, r)` — file: `internal/server/api/gateway_usage_handlers.go`
-- `hashAPIKey(key string) string` — file: `internal/server/api/api_key_handlers.go` (use bcrypt or sha256)
-- `generateAPIKey() (full, prefix string)` — file: `internal/server/api/api_key_handlers.go`
-
-**Vue:**
-- `ApiKeysPage.vue`: create dialog (show full key once, copy button), table (prefix, name, status, last used), disable/delete actions
-- `GatewayUsagePage.vue`: filter bar (time range, deployment, model, API key, success, route), usage table, summary bar
-
-### Data/API contract changes
-
-| Method | Path | Change | Permission | Handler |
-|---|---|---|---|---|
-| GET | `/v1/models` | **ADD** | Bearer API key | HandleGatewayListModels |
-| POST | `/v1/chat/completions` | **ADD** | Bearer API key | HandleGatewayChatCompletions |
-| POST | `/api/v1/api-keys` | **ADD** | api_key:write | HandleCreateAPIKey |
-| GET | `/api/v1/api-keys` | **ADD** | api_key:read | HandleListAPIKeys |
-| POST | `/api/v1/api-keys/{id}/disable` | **ADD** | api_key:write | HandleDisableAPIKey |
-| DELETE | `/api/v1/api-keys/{id}` | **ADD** | api_key:write | HandleDeleteAPIKey |
-| GET | `/api/v1/gateway/usage` | **ADD** | gateway_usage:read | HandleListGatewayUsage |
-
-### DB schema changes (ADD only — clean DB, no migration)
-
-**New table: `api_keys`**
-```sql
-CREATE TABLE api_keys (
-  id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  key_prefix TEXT NOT NULL,
-  key_hash TEXT NOT NULL,
-  scopes_json TEXT NOT NULL DEFAULT '{}',
-  status TEXT NOT NULL DEFAULT 'active',
-  last_used_at TEXT,
-  expires_at TEXT,
-  created_by TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(tenant_id, name)
-);
-CREATE INDEX idx_api_keys_tenant ON api_keys(tenant_id);
-CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
-```
-
-**New table: `gateway_usage_records`**
-```sql
-CREATE TABLE gateway_usage_records (
-  id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
-  api_key_id TEXT NOT NULL DEFAULT '',
-  deployment_id TEXT NOT NULL DEFAULT '',
-  instance_id TEXT NOT NULL DEFAULT '',
-  model_artifact_id TEXT NOT NULL DEFAULT '',
-  request_id TEXT NOT NULL DEFAULT '',
-  operation_id TEXT NOT NULL DEFAULT '',
-  route TEXT NOT NULL DEFAULT '',
-  requested_model TEXT NOT NULL DEFAULT '',
-  resolved_model TEXT NOT NULL DEFAULT '',
-  backend_url TEXT NOT NULL DEFAULT '',
-  http_status INTEGER NOT NULL DEFAULT 0,
-  success INTEGER NOT NULL DEFAULT 0,
-  latency_ms INTEGER NOT NULL DEFAULT 0,
-  prompt_tokens INTEGER,
-  completion_tokens INTEGER,
-  total_tokens INTEGER,
-  usage_source TEXT NOT NULL DEFAULT 'unknown',
-  error_code TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX idx_gateway_usage_tenant_created ON gateway_usage_records(tenant_id, created_at);
-CREATE INDEX idx_gateway_usage_deployment_created ON gateway_usage_records(deployment_id, created_at);
-CREATE INDEX idx_gateway_usage_key_created ON gateway_usage_records(api_key_id, created_at);
-```
-
-**New permission seeds** — in `internal/server/auth/bootstrap.go`:
-```
-api_key:read, api_key:write, gateway_usage:read
-```
+Anticipated fixes (TBD after detailed inspection):
+- Stopped instance row may need `stopped_at` column exposed in table
+- Auto-refresh may not stop for terminal states (wasteful polling)
+- Log error messages may not distinguish "container not found" vs "agent unreachable"
 
 ### Tests to add
 
-**Go tests** — `internal/server/api/gateway_test.go` (CREATE):
+**Go tests** — `internal/server/api/instance_lifecycle_test.go` (CREATE):
 ```go
-// Test cases:
-// 1. missing_bearer_header_rejected
-// 2. invalid_key_rejected
-// 3. disabled_key_rejected
-// 4. expired_key_rejected
-// 5. cross_tenant_deployment_not_accessible
-// 6. ambiguous_model_rejected (two deployments with same served_model_name)
-// 7. no_running_instance_returns_503
-// 8. successful_chat_request_proxied
-// 9. backend_usage_parsed_and_recorded (prompt_tokens, completion_tokens in usage record)
-// 10. missing_usage_recorded_as_unknown (usage_source='missing')
-// 11. audit_record_written_on_success
-// 12. audit_record_written_on_failure
-// 13. full_key_never_returned_after_creation
-// 14. create_key_returns_full_key_once
-// 15. list_keys_shows_prefix_only
+// 1. start_without_preflight_rejected (if preflight was somehow skipped)
+// 2. stop_cleans_up_leases
+// 3. stop_cancels_pending_tasks
+// 4. instance_state_transitions_valid
+// 5. logs_return_error_for_unreachable_agent
+// 6. stop_idempotent (stopping already-stopped instance returns success)
 ```
 
-**Go tests** — `internal/server/api/api_key_test.go` (CREATE):
-```go
-// Test cases:
-// 1. create_key_requires_tenant_admin
-// 2. create_key_duplicate_name_rejected
-// 3. disable_key_sets_status
-// 4. delete_key_removes_row
-// 5. disabled_key_auth_rejected
-```
-
-**Go tests** — `internal/server/gateway/model_resolver_test.go` (CREATE):
-```go
-// Test cases:
-// 1. resolve_by_served_model_name
-// 2. resolve_by_deployment_name
-// 3. resolve_by_model_artifact_name
-// 4. ambiguous_multiple_matches_rejected
-// 5. scoped_to_deployment_ids_respected
-// 6. stopped_deployment_not_resolved
-```
-
-**Frontend tests** — `web/tests/apiKeys.test.mjs` (CREATE):
+**Frontend tests** — `web/tests/instanceLifecycle.test.mjs` (CREATE):
 ```javascript
-// Assertions:
-// 1. create dialog shows full key with copy button
-// 2. key list shows prefix only (not hash, not full key)
-// 3. disable button sends PATCH
-// 4. delete button sends DELETE
+// 1. stopped instance shows stopped_at column
+// 2. error instance shows last_error
+// 3. auto-refresh stops for terminal states
+// 4. log viewer shows error state when fetch fails
 ```
 
-**Frontend tests** — `web/tests/gatewayUsage.test.mjs` (CREATE):
-```javascript
-// Assertions:
-// 1. usage table renders rows
-// 2. summary bar shows aggregate stats
-// 3. filters send correct query params
-```
+### Data/API contract changes: NONE
+No new routes, no DB changes. Purely verification + gap fixes within existing contracts.
 
 ### Validation commands
 ```bash
-# DB rebuild (clean DB policy)
-rm -f /tmp/lightai/data/lightai.db
+# Backend lifecycle tests
+go test ./internal/server/api/... -run 'Instance|Lifecycle|Start|Stop|Log'
 
-# Backend tests
-go test ./internal/server/api/... -run 'Gateway|APIKey|Usage|Audit|Key'
-go test ./internal/server/gateway/...
+# Full suite
+go test ./...
 
 # Frontend
 cd web && npm test
 cd web && npm run build
 
-# API smoke testing
-curl -X POST http://localhost:18080/api/v1/api-keys \
-  -H 'Content-Type: application/json' \
-  -H 'Cookie: ...' \
-  -d '{"name":"test-key"}'
-# Expect: {"id":"...","key":"lak-...","key_prefix":"lak-...","name":"test-key",...}
-
-curl http://localhost:18080/v1/models \
-  -H 'Authorization: Bearer lak-...'
-# Expect: {"object":"list","data":[...]}
-
-curl -X POST http://localhost:18080/v1/chat/completions \
-  -H 'Authorization: Bearer lak-...' \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"qwen3-demo","messages":[{"role":"user","content":"hi"}]}'
-# Expect: OpenAI-compatible response with usage
+# Manual smoke: create → preview → start → poll instance → fetch logs → stop → verify stopped state
 ```
 
 ---
 
-## 7. Workstream E — Stability Regression
+## 6. Workstream E — vLLM / SGLang / llama.cpp E2E Regression
 
 ### Objective
-Establish authoritative current regression baseline with Go tests, frontend tests, API E2E, browser smoke, and runtime smoke evidence — all timestamped and reproducible.
+Establish authoritative current regression baseline with Go tests, frontend tests, API E2E, and runtime smoke evidence — all timestamped and reproducible. Run after B–C–D changes.
 
-### Files to create/update
+### Scope
+- Full Go test suite
+- Full frontend test suite + build
+- API-first E2E (18-step chain without gateway steps)
+- Runtime smoke: vLLM, SGLang, llama.cpp (where GPU hardware available)
+- Browser smoke: manual verification of key pages (or Playwright if configured)
+
+### Files to create
 
 | File | Action | Detail |
 |---|---|---|
-| `docs/reports/product-hardening-20260626/evidence/<YYYYMMDDHHMMSS>/baseline/` | CREATE | Baseline test outputs before any change |
-| `docs/reports/product-hardening-20260626/evidence/<YYYYMMDDHHMMSS>/api-e2e/` | CREATE | API-first E2E result (18 steps per Step E3) |
-| `docs/reports/product-hardening-20260626/evidence/<YYYYMMDDHHMMSS>/browser-smoke/` | CREATE | Browser smoke evidence (if Playwright configured) or manual screenshots |
-| `docs/reports/product-hardening-20260626/evidence/<YYYYMMDDHHMMSS>/runtime-smoke/` | CREATE | vLLM/SGLang/llama.cpp runtime smoke matrix |
-| `docs/reports/product-hardening-20260626/execution/test-and-evidence-inventory.md` | CREATE | Script classification table (keep/repair/archive) per Step E2 |
-| `docs/reports/product-hardening-20260626/execution/final-regression-report.md` | CREATE | Final closeout document per Step E7 |
-| `scripts/archive/legacy-contract/` | LABEL | Add `README.md` in directory: "ARCHIVED — These scripts use deprecated API contract (backend_runtime_id, parameters_json, image_present). Do not use for current validation. See scripts/e2e-current-contract-*.sh for current equivalents." |
-| `scripts/smoke-model-backends.sh` | ARCHIVE or REPAIR | Move to `scripts/archive/` with label: "Direct Docker smoke — bypasses product API. Use e2e-real-smoke-all-three.sh for product-level validation." |
+| `docs/reports/product-hardening-20260626/evidence/<TS>/baseline/` | CREATE | Baseline test outputs captured before B–D changes (already done: all PASS at c13f91f) |
+| `docs/reports/product-hardening-20260626/evidence/<TS>/api-e2e/` | CREATE | API-first E2E result (18 steps, see below) |
+| `docs/reports/product-hardening-20260626/evidence/<TS>/runtime-smoke/` | CREATE | vLLM / SGLang / llama.cpp smoke matrix |
+| `docs/reports/product-hardening-20260626/evidence/<TS>/browser-smoke/` | CREATE | Screenshots or manual verification notes |
+| `docs/reports/product-hardening-20260626/execution/test-and-evidence-inventory.md` | CREATE | Script classification: keep / repair / archive |
+| `docs/reports/product-hardening-20260626/execution/final-regression-report.md` | CREATE | Final closeout: commit range, test results, smoke matrix, known blocks, git status |
 
-### Functions/components: NONE
-No code changes in Workstream E. Evidence collection only.
+### API-first E2E chain (18 steps)
+
+1. login → get session cookie
+2. CSRF token
+3. list nodes
+4. list model artifacts
+5. list runtime templates (BackendRuntimes)
+6. list node runtime configs (NBRs)
+7. check/probe NBR
+8. create deployment preview (`POST /api/v1/deployments/preview`)
+9. verify preview response (can_run, docker_preview, lint, preflight)
+10. create deployment (`POST /api/v1/deployments`)
+11. dry-run deployment
+12. start deployment (`POST /api/v1/deployments/{id}/start`)
+13. poll instance until running
+14. fetch instance logs
+15. test model endpoint (via `POST /api/v1/model-instances/{id}/test`)
+16. stop deployment
+17. verify instance stopped state
+18. verify audit logs recorded
+
+No gateway steps (no `/v1/models`, no `/v1/chat/completions` proxy).
+
+### Runtime smoke matrix
+
+| Backend | Check | Expected |
+|---|---|---|
+| vLLM | NBR probe → preview → start → health → inference → stop | PASS or DOCUMENTED_BLOCKER |
+| SGLang | NBR probe → preview → start → health → inference → stop | PASS or DOCUMENTED_BLOCKER |
+| llama.cpp | NBR probe → preview → start → health → inference → stop | PASS or DOCUMENTED_BLOCKER |
+
+Each blocked backend must be classified: external dependency, catalog/config bug, code bug, or environment missing. Fix if code/config bug. Document if external.
+
+### Script inventory (test-and-evidence-inventory.md)
+
+Classify all scripts in `scripts/`:
+
+| Category | Action |
+|---|---|
+| Current contract E2E (6 files in `scripts/e2e-current-contract-*.sh`) | KEEP — actively maintained |
+| Current contract lib (10 files in `scripts/e2e/lib/`) | KEEP — shared library |
+| Legacy contract E2E (15 files in `scripts/archive/legacy-contract/`) | ARCHIVE — add README with deprecation notice |
+| `scripts/smoke-model-backends.sh` | ARCHIVE — bypasses product API |
+| Operational scripts (start/stop/status/etc.) | KEEP |
 
 ### Data/API contract changes: NONE
+Evidence collection only. No code changes in Workstream E.
 
-### Tests: NONE to add
-All tests are run on the final code state after Workstreams A–D complete.
-
-### Validation commands (mandatory, run after A–D changes)
-
+### Validation commands (run after B–D)
 ```bash
 # 1. Full Go test suite
 go test ./... 2>&1 | tee docs/reports/product-hardening-20260626/evidence/<TS>/go-test.log
 
-# 2. Go build
-go build ./cmd/server/... && echo "SERVER OK" || echo "SERVER FAIL"
-go build ./cmd/agent/... && echo "AGENT OK" || echo "AGENT FAIL"
+# 2. Build
+go build ./cmd/server/... && go build ./cmd/agent/...
 
-# 3. Frontend tests
+# 3. Frontend tests + build
 cd web && npm test 2>&1 | tee ../docs/reports/product-hardening-20260626/evidence/<TS>/frontend-test.log
-
-# 4. Frontend build
 cd web && npm run build 2>&1 | tee ../docs/reports/product-hardening-20260626/evidence/<TS>/frontend-build.log
 
-# 5. Diff hygiene
+# 4. Diff hygiene
 git diff --check
 
-# 6. API E2E (18-step chain per Step E3)
+# 5. API E2E
 bash scripts/e2e-current-contract-api-dryrun.sh 2>&1 | tee docs/reports/product-hardening-20260626/evidence/<TS>/api-e2e.log
 
-# 7. Runtime smoke (requires GPU hardware)
+# 6. Runtime smoke (GPU required)
 bash scripts/e2e-real-smoke-all-three.sh 2>&1 | tee docs/reports/product-hardening-20260626/evidence/<TS>/runtime-smoke.log
 
-# 8. Gateway smoke (if D implemented)
-# curl /v1/models, /v1/chat/completions with API key
-
-# 9. Final status
+# 7. Final git status
 git status --short
 ```
 
 ---
 
-## 8. DB/Schema Impact Summary
+## 7. Workstream F — Naming Cleanup (Safe Only)
+
+### Objective
+Fix user-visible labels, i18n strings, table columns, and drawer titles to use consistent vocabulary. Do NOT rename component files or route paths.
+
+### Downgraded scope — what is NOT changed
+- Route path `/runner-configs` stays as-is (no redirect, no rename)
+- Component file `RunnerConfigsPage.vue` stays as-is (no file rename)
+- Component file `BackendRuntimesPage.vue` stays as-is (no file rename)
+- Route name `RunnerConfigs` stays as-is
+- Only i18n display values, menu labels, page titles, table column labels, and hardcoded strings change
+
+### Target vocabulary
+
+| Internal entity | zh-CN UI label | en-US UI label | Where visible |
+|---|---|---|---|
+| BackendRuntime | 运行模板 | Runtime Template | `/runtimes` page title, menu, table |
+| NodeBackendRuntime | 节点运行配置 | Node Runtime Config | `/runner-configs` page title, menu, table, deployment selector |
+| ModelDeployment | 模型部署 | Deployment | `/models/deployments` page |
+| ModelInstance | 模型实例 | Instance | `/models/instances` page |
+| ResolvedRunPlan | 运行计划 | Run Plan | preview/detail panels |
+| ConfigSet | 技术配置 | Technical Config | drawer section title (technical label only) |
+
+### Files to modify
+
+| File | Action | Detail |
+|---|---|---|
+| `web/src/locales/zh-CN.ts` | CHANGE | Change `runnerConfigs.title` from `"运行配置"` → `"节点运行配置"`; change `runtimes.title` (if not already) → `"运行模板"`; change `deployments.existingOverrides` to remove raw "ConfigSet"; change `deployments.overrideHint` to remove raw "ConfigSet"; change `deployments.nbrTemplateGroup` → `deployments.runtimeTemplateGroup` (remove "NBR" acronym); change `deployments.runPlanSourceNote` → remove raw "NBR"; change `help.runPlanTitle` → translate "RunPlan" to "运行计划" |
+| `web/src/locales/en-US.ts` | CHANGE | Mirror all zh-CN changes: `runnerConfigs.title` → `"Node Runtime Configs"`; `runtimes.title` → `"Runtime Templates"`; `deployments.nbrTemplateGroup` → `deployments.runtimeTemplateGroup`; etc. |
+| `web/src/layouts/ConsoleLayout.vue` | CHANGE | Menu item label for `/runner-configs`: use `$t('runnerConfigs.title')` (already i18n — label changes via locale files); menu item label for `/runtimes`: use `$t('runtimes.title')` |
+| `web/src/pages/RunnerConfigsPage.vue` | CHANGE | Table column `prop="backend_runtime_id"` → resolve and show BackendRuntime `name` or `display_name` (not raw UUID); change hardcoded `title="ConfigSet"` on JsonViewer → `$t('common.technicalConfig')`; add i18n key `common.technicalConfig` = `"技术配置"` / `"Technical Config"` |
+| `web/src/pages/BackendRuntimesPage.vue` | CHANGE | Change hardcoded `title="ConfigSet"` on JsonViewer → `$t('common.technicalConfig')` |
+| `web/src/pages/ModelDeploymentsPage.vue` | CHANGE | Change hardcoded `title="Deployment ConfigSet"` on JsonViewer → `$t('deployments.technicalConfig')`; table column `prop="source_node_backend_runtime_id"` → resolve and show NBR `display_name` (not raw UUID); runtime selector label → `$t('deployments.nodeRuntimeConfig')` |
+| `web/src/pages/ModelInstancesPage.vue` | CHANGE | Replace `t('runnerConfigs.advancedJson')` → `t('common.advancedJson')` |
+| `web/src/pages/BackendsPage.vue` | CHANGE | Change hardcoded `title="ConfigSet"` on JsonViewer → `$t('common.technicalConfig')` |
+| `web/src/components/common/RuntimeParameterEditor.vue` | CHANGE | Change hardcoded `title="ConfigSet"` → `$t('common.parameterConfiguration')` |
+| `docs/engineering/naming-dictionary.md` | CREATE | Concept table with owner layer, user-editability, copy semantics, preferred label, forbidden terms |
+| `docs/api/openapi.yaml` | CHANGE | Update description text: "runner config" → "node runtime config", "runtime config" → "runtime template" where appropriate |
+| `docs/README.md` | CHANGE | Update concept references to match dictionary |
+
+### i18n keys to add
+
+```javascript
+// zh-CN.ts additions
+common: {
+  technicalConfig: "技术配置",
+  parameterConfiguration: "参数配置",
+  advancedJson: "高级 JSON",
+}
+
+// en-US.ts additions
+common: {
+  technicalConfig: "Technical Config",
+  parameterConfiguration: "Parameter Configuration",
+  advancedJson: "Advanced JSON",
+}
+```
+
+### i18n keys to change (value only, key stays)
+
+| Key | Old zh-CN | New zh-CN | Old en-US | New en-US |
+|---|---|---|---|---|
+| `runnerConfigs.title` | 运行配置 | 节点运行配置 | Runtime Configs | Node Runtime Configs |
+| `runtimes.title` | (verify) | 运行模板 | (verify) | Runtime Templates |
+| `deployments.nbrTemplateGroup` | NBR 静态模板预览 | 运行模板快照 | NBR Template (Static Snapshot) | Runtime Template Snapshot |
+| `deployments.runPlanSourceNote` | 参数按来源分组：NBR 模板 → ... | 参数按来源分组 | Parameters grouped by source: NBR template → ... | Parameters grouped by source |
+| `help.runPlanTitle` | RunPlan / Docker 预览 | 运行计划 / Docker 预览 | RunPlan / Docker Preview | Run Plan / Docker Preview |
+| `deployments.existingOverrides` | 部署级 ConfigSet 覆盖 | 部署级参数覆盖 | Deployment Config Overrides | Deployment Config Overrides |
+| `deployments.overrideHint` | ...物化到部署 ConfigSet。 | ...保存到部署配置。 | ...materialized into the deployment ConfigSet. | ...saved to deployment config. |
+
+### Data/API contract changes: NONE
+Purely frontend labels + i18n + docs.
+
+### Tests to add/update
+
+| Test file | Change |
+|---|---|
+| `web/tests/i18nKeys.test.mjs` | NO CODE CHANGE (keys not renamed, only values changed — key count stays same) |
+| `web/tests/i18nMissingKeys.test.mjs` | NO CHANGE (auto-validates new keys) |
+| `web/tests/runtimeBoundaryUi.test.mjs` | UPDATE: change any assertions that reference old hardcoded strings |
+| `web/tests/namingDictionary.test.mjs` | CREATE: assert no raw "ConfigSet" in Vue template text content (exclude test files); assert no raw "NBR" in i18n zh-CN/en-US values; assert menu labels match dictionary |
+
+### Validation commands
+```bash
+# No raw "ConfigSet" in user-facing labels
+grep -rn "ConfigSet" web/src/pages/ web/src/components/ web/src/layouts/ web/src/locales/
+# Expected: zero matches in text content (may appear in variable names, data keys)
+
+# No raw "NBR" in i18n values
+grep -rn '"NBR' web/src/locales/
+# Expected: zero matches
+
+# Raw UUIDs not in table column props
+grep -rn 'prop="backend_runtime_id"\|prop="source_node_backend_runtime_id"' web/src/pages/
+# Expected: zero matches (replaced with resolved name columns)
+
+cd web && npm test
+cd web && npm run build
+```
+
+---
+
+## 8. Workstream G — OpenAI Gateway Future Notes (Document Only)
+
+### Objective
+Document design boundaries, dependency conditions, and implementation suggestions for future OpenAI-compatible gateway, API key management, usage metering, and billing. **No code is written in this workstream.**
+
+### Deliverable
+
+**Single file:** `docs/reports/product-hardening-20260626/execution/future-openai-gateway-notes.md`
+
+See that file for full content. Summary of what it covers:
+
+1. **Design boundaries:** tenant scoping, API key auth model, model routing policy, usage record schema, billing integration points
+2. **Dependency conditions:** requires stable deployment/instance lifecycle (Workstreams B–D completed), requires running deployments to proxy, requires at least one healthy instance per deployment
+3. **Architecture sketch:** gateway routes outside `/api/v1`, Bearer `lak-*` keys, model resolution order, proxy timeout/error handling, usage capture from backend response
+4. **DB tables needed:** `api_keys`, `gateway_usage_records` (full DDL provided in notes)
+5. **API routes needed:** `GET /v1/models`, `POST /v1/chat/completions`, CRUD `/api/v1/api-keys`, `GET /api/v1/gateway/usage`
+6. **UI pages needed:** `ApiKeysPage.vue`, `GatewayUsagePage.vue`
+7. **Security considerations:** key hashing (bcrypt), redaction in logs, prefix-only display after creation, audit on all key operations
+8. **Implementation prerequisites:** all items in this document's Workstreams B–E must be complete and stable
+
+**No code changes. No DB changes. No route additions. No frontend pages created. Document only.**
+
+---
+
+## 9. DB/Schema Impact Summary
 
 | Workstream | DB Change | Type |
 |---|---|---|
-| A — Naming | None | — |
-| B — Deployment UI | None | — |
-| C — Runtime Parameters | None (ConfigSet JSON within existing columns) | — |
-| D — Gateway | ADD `api_keys` table, ADD `gateway_usage_records` table, ADD 4 indexes | Clean fresh schema only |
-| E — Regression | None | — |
+| B — NBR / Runtime Parameters | None (ConfigSet JSON within existing columns) | — |
+| C — Deployment UI + Preview | None | — |
+| D — Start/Stop/Status/Logs | None | — |
+| E — E2E Regression | None | — |
+| F — Naming Cleanup | None | — |
+| G — Gateway Future Notes | None (document only) | — |
 
-**Breaking DB change: YES — Workstream D adds tables.** Clean DB rebuild required:
-```bash
-rm -f /tmp/lightai/data/lightai.db
-# Restart server to recreate with new schema
-```
-
-No data migration needed (clean DB policy). No legacy compatibility required.
+**DB change: NONE.** No new tables, no schema changes, no migration, no clean rebuild required for this hardening scope. Gateway tables (`api_keys`, `gateway_usage_records`) are deferred to future workstream.
 
 ---
 
-## 9. API Contract Impact Summary
+## 10. API Contract Impact Summary
 
 | Method | Path | Workstream | Change |
 |---|---|---|---|
-| POST | `/api/v1/deployments/preview` | B | ADD |
-| GET | `/v1/models` | D | ADD |
-| POST | `/v1/chat/completions` | D | ADD |
-| POST | `/api/v1/api-keys` | D | ADD |
-| GET | `/api/v1/api-keys` | D | ADD |
-| POST | `/api/v1/api-keys/{id}/disable` | D | ADD |
-| DELETE | `/api/v1/api-keys/{id}` | D | ADD |
-| GET | `/api/v1/gateway/usage` | D | ADD |
-| PATCH | `/api/v1/backend-runtimes/{id}` | C | ENHANCE (accept parameter values) |
-| PATCH | `/api/v1/nodes/{id}/backend-runtimes/{nbr_id}` | C | ENHANCE (accept parameter values) |
-| PATCH | `/api/v1/deployments/{id}` | C | ENHANCE (accept full config_overrides) |
+| POST | `/api/v1/deployments/preview` | C | **ADD** |
+| PATCH | `/api/v1/backend-runtimes/{id}` | B | ENHANCE (accept full parameter values; block if system-managed) |
+| PATCH | `/api/v1/nodes/{id}/backend-runtimes/{nbr_id}` | B | ENHANCE (accept node-specific parameter values) |
+| PATCH | `/api/v1/deployments/{id}` | B | ENHANCE (accept full config_overrides) |
 
-No existing routes removed. No breaking changes to existing route contracts.
+**Routes explicitly NOT added in this scope:**
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- `POST /api/v1/api-keys`
+- `GET /api/v1/api-keys`
+- `POST /api/v1/api-keys/{id}/disable`
+- `DELETE /api/v1/api-keys/{id}`
+- `GET /api/v1/gateway/usage`
+
+No existing routes removed. No breaking changes to existing route contracts. 1 new route, 3 enhanced routes.
 
 ---
 
-## 10. UI Contract Impact Summary
+## 11. UI Contract Impact Summary
 
 | Page/Component | Workstream | Change |
 |---|---|---|
-| `RuntimeTemplatesPage.vue` (renamed) | A | Name change, add parameter editor (C) |
-| `NodeRuntimeConfigsPage.vue` (renamed) | A | Name change, add parameter editor (C) |
-| `ModelDeploymentsPage.vue` | A, B, C | Naming fixes, wizard replacement, override editor |
-| `ModelArtifactsPage.vue` | C | Remove runtime args from placeholder/label |
-| `BackendsPage.vue` | A | "ConfigSet" → i18n label |
-| `ModelInstancesPage.vue` | A | "runnerConfigs" → "common" i18n reference |
-| `ConsoleLayout.vue` | A, D | Menu item name/route changes, add API Keys + Gateway Usage |
-| `RuntimeParameterEditor.vue` | A, C | Title fix + major feature expansion |
-| `DeploymentWizard.vue` | B | NEW |
-| `ApiKeysPage.vue` | D | NEW |
-| `GatewayUsagePage.vue` | D | NEW |
+| `RunnerConfigsPage.vue` | B, F | Add `RuntimeParameterEditor` in create/detail; fix labels + remove raw UUID column |
+| `BackendRuntimesPage.vue` | B, F | Add `RuntimeParameterEditor` in detail (read-only for system, editable for user); fix labels |
+| `ModelDeploymentsPage.vue` | B, C, F | Replace dialog with wizard; wire `DeploymentOverrideEditor`; fix labels + remove raw UUID column |
+| `ModelArtifactsPage.vue` | B | Relabel + remove runtime args from placeholder |
+| `ModelInstancesPage.vue` | D, F | Stopped instance display; fix i18n reference |
+| `BackendsPage.vue` | F | Fix hardcoded "ConfigSet" title |
+| `ConsoleLayout.vue` | F | Menu label updates (via i18n) |
+| `RuntimeParameterEditor.vue` | B, F | Major enhancement (props/emits/behavior); fix hardcoded "ConfigSet" title |
+| `DeploymentWizard.vue` | C | **NEW** — 6-section wizard |
+| `ModelSelector.vue` | C | **NEW** |
+| `NodeRuntimeSelector.vue` | C | **NEW** |
+| `DeploymentServiceEditor.vue` | C | **NEW** |
+| `DeploymentOverrideEditor.vue` | C | **NEW** |
+| `DeploymentPreviewPanel.vue` | C | **NEW** |
+
+Pages NOT created in this scope: `ApiKeysPage.vue`, `GatewayUsagePage.vue`.
 
 ---
 
-## 11. Commit Plan
-
-Proposed commit sequence (one commit per workstream after validation):
+## 12. Commit Plan
 
 ```
-Commit 1: "fix: apply naming dictionary (Workstream A)"
-  - All naming changes
-  - docs/engineering/naming-dictionary.md
-  - Test updates
-
-Commit 2: "feat: add deployment preview endpoint and wizard UI (Workstream B)"
-  - POST /api/v1/deployments/preview
-  - 6 new Vue components
-  - Backend + frontend tests
-
-Commit 3: "feat: integrate runtime parameter editor across layers (Workstream C)"
-  - RuntimeParameterEditor enhancement
-  - Editor integration in BackendRuntime/NBR/Deployment pages
-  - Lint.go new rules
+Commit 1: "feat: integrate runtime parameter editor across BackendRuntime/NBR/Deployment layers (B)"
+  - RuntimeParameterEditor.vue enhancement
+  - Editor in BackendRuntimesPage, RunnerConfigsPage, ModelDeploymentsPage
+  - Lint rules (7 new rules in lint.go)
   - ModelArtifactsPage cleanup
-  - Tests
+  - Catalog YAML verification/fixes
+  - Go tests (runtime_parameter_layering_test.go, model_artifact_boundary_test.go)
+  - Frontend tests (runtimeParameterEditor.test.mjs, modelCapabilities update)
 
-Commit 4: "feat: add OpenAI-compatible gateway with API keys and usage (Workstream D)"
-  - api_keys + gateway_usage_records tables
-  - /v1/models, /v1/chat/completions handlers
-  - API key CRUD + UI
-  - Gateway usage query + UI
-  - Auth middleware + model resolver
-  - Tests
+Commit 2: "feat: add deployment preview endpoint and wizard UI (C)"
+  - POST /api/v1/deployments/preview (deployment_preview_handlers.go)
+  - Refactor preflight_handlers.go (extract shared function)
+  - 6 new Vue components (DeploymentWizard + 5 sub-components)
+  - Go tests (deployment_preview_test.go)
+  - Frontend tests (deploymentWizard.test.mjs)
 
-Commit 5: "chore: final regression evidence and closeout (Workstream E)"
-  - Evidence directories
-  - test-and-evidence-inventory.md
-  - final-regression-report.md
+Commit 3: "fix: harden instance lifecycle display and edge cases (D)"
+  - Instance stopped state display fixes
+  - Auto-refresh terminal state optimization
+  - Log fetch error handling
+  - Go tests (instance_lifecycle_test.go)
+  - Frontend tests (instanceLifecycle.test.mjs)
+
+Commit 4: "chore: final regression evidence and naming cleanup (E + F)"
+  - Evidence directories (baseline, api-e2e, runtime-smoke, browser-smoke)
+  - test-and-evidence-inventory.md, final-regression-report.md
+  - i18n label fixes (runnerConfigs, deployments, common keys)
+  - Hardcoded "ConfigSet"/"RunPlan"/"NBR" removal from UI
+  - docs/engineering/naming-dictionary.md
   - Legacy script archival labels
+  - Frontend tests (namingDictionary.test.mjs)
+
+Commit 5: "docs: add OpenAI gateway future design notes (G)"
+  - future-openai-gateway-notes.md
+  - No code changes
 ```
 
 ---
 
-## 12. File Count Summary
+## 13. File Count Summary
 
 | Workstream | Files CREATE | Files MODIFY | Files RENAME | Total |
 |---|---|---|---|---|
-| A — Naming | 1 (naming-dictionary.md) + 1 (test) | 10 (pages, layout, router, locales, api, docs) | 2 (page renames) | 14 |
-| B — Deployment UI | 7 (1 handler + 6 Vue components) | 4 (router, deployments.ts, preflight handler, openapi) | 0 | 11 |
-| C — Runtime Parameters | 0 | 8 (components, pages, lint, catalog YAMLs, handlers) | 0 | 8 |
-| D — Gateway | 11 (4 handlers + 2 models + 2 Vue pages + 2 API clients + 1 resolver) | 5 (db.go, router.go, bootstrap.go, layout, router, locales, openapi) | 0 | 16 |
-| E — Regression | 5 (evidence dirs + inventory + report) | 0 | 0 | 5 |
-| **Total** | **26** | **27** | **2** | **~55** |
+| B — Runtime Parameters | 0 | 11 (editor, 4 pages, 3 handlers, lint, resolver, 3 catalog YAMLs) + 3 test files | 0 | 14 |
+| C — Deployment UI | 7 (1 handler + 6 Vue components) + 2 test files | 4 (ModelDeploymentsPage, deployments.ts, router, preflight handler, openapi) | 0 | 11 |
+| D — Start/Stop/Logs | 0 | 2 (lifecycle handler, instances page) + 2 test files | 0 | 4 |
+| E — E2E Regression | 5 (evidence dirs + inventory + report) | 0 | 0 | 5 |
+| F — Naming Cleanup | 1 (dictionary) + 1 test | 8 (2 locales, layout, 4 pages, editor, openapi, docs) | 0 | 10 |
+| G — Gateway Notes | 1 (future notes doc) | 0 | 0 | 1 |
+| **Total** | **17** | **25** | **0** | **~42** |
+
+---
+
+## 14. Revised Top 10 Concrete Code Changes
+
+1. **Enhance `RuntimeParameterEditor.vue`** with 4 new props (`layer`, `baseValues`, `showSource`, `showAdvanced`), 1 new emit (`validate`), required-field lock, optional enable/disable toggle with value retention, backend/vendor filter, source trace (Workstream B)
+2. **Wire `RuntimeParameterEditor.vue`** into `BackendRuntimesPage.vue` (system templates read-only, user templates editable with clone), `RunnerConfigsPage.vue` (inherited + NBR override diff), and `ModelDeploymentsPage.vue` via `DeploymentOverrideEditor` wrapper (Workstream B)
+3. **Add 7 lint rules** to `runplan/lint.go`: duplicate args, env/CLI conflict, platform arg override, unsupported param, disabled field applied, missing required, vendor incompatibility (Workstream B)
+4. **Add `POST /api/v1/deployments/preview`** — new handler in `deployment_preview_handlers.go`, shares `preflightDeployment()` resolver with start, returns `{can_run, run_plan, docker_preview, lint, resource_admission, preflight, source_trace}` (Workstream C)
+5. **Refactor `preflight_handlers.go`** — extract `performDeploymentPreflight()` shared by `HandlePreflightDeployments`, new `HandleDeploymentPreview`, and `HandleStartDeployment` (Workstream C)
+6. **Create `DeploymentWizard.vue`** — 6-section guided workflow replacing thin create dialog in `ModelDeploymentsPage.vue`: Model → Node Runtime Config → Service → Resource/Placement → Overrides → Preview (Workstream C)
+7. **Harden instance lifecycle display** — stopped instance shows `stopped_at` + `last_error` + `restart_count`; auto-refresh stops for terminal states; log errors distinguish "container not found" vs "agent unreachable" (Workstream D)
+8. **Strip "ConfigSet"/"RunPlan"/"NBR" from user-facing labels** — replace hardcoded `title="ConfigSet"` on 4 pages + 1 component with i18n keys; fix i18n string values to remove raw "NBR"/"RunPlan"; resolve raw UUID table columns to display names (Workstream F)
+9. **Create `docs/engineering/naming-dictionary.md`** — concept table with owner layer, editability, copy semantics, preferred zh-CN/en-US labels, forbidden stale terms (Workstream F)
+10. **Run full E2E regression** — Go test suite, frontend test suite, API E2E (18 steps), vLLM/SGLang/llama.cpp runtime smoke, evidence collection, final closeout report (Workstream E)
