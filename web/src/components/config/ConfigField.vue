@@ -7,7 +7,7 @@
         :disabled="readonly || field.readonly"
         @change="$emit('change')"
       />
-      <span class="field-label">{{ field.label }}</span>
+      <span class="field-label">{{ displayLabel }}</span>
       <el-tag v-if="field.required" size="small" type="danger" effect="plain">required</el-tag>
     </div>
     <div class="field-control">
@@ -55,16 +55,21 @@
       <!-- Key-value table (structured, replaces key_value_list textarea) -->
       <div v-else-if="field.widget === 'key_value_table'" class="kv-table-wrap">
         <el-table :data="kvRows" border size="small" max-height="260px">
-          <el-table-column prop="key" :label="$t('configEdit.fields.key')" width="200" />
-          <el-table-column prop="value" :label="$t('configEdit.fields.value')">
-            <template #default="{ row, $index }">
+          <el-table-column :label="$t('configEdit.fields.key')" width="200">
+            <template #default="{ row }">
+              <template v-if="readonly || field.readonly">{{ row.key }}</template>
+              <el-input v-else v-model="row.key" size="small" @input="onKeyValueTableChange" />
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('configEdit.fields.value')">
+            <template #default="{ row }">
               <template v-if="readonly || field.readonly">{{ row.value }}</template>
               <el-input v-else v-model="row.value" size="small" @input="onKeyValueTableChange" />
             </template>
           </el-table-column>
           <el-table-column v-if="!(readonly || field.readonly)" width="60">
             <template #default="{ $index }">
-              <el-button size="small" type="danger" :icon="'Delete'" circle @click="removeKvRow($index)" />
+              <el-button size="small" type="danger" circle @click="removeKvRow($index)" />
             </template>
           </el-table-column>
         </el-table>
@@ -76,10 +81,23 @@
       <!-- Device table -->
       <div v-else-if="field.widget === 'device_table'" class="kv-table-wrap">
         <el-table :data="deviceRows" border size="small" max-height="260px">
-          <el-table-column prop="host_path" :label="$t('configEdit.fields.hostPath')" />
-          <el-table-column prop="container_path" :label="$t('configEdit.fields.containerPath')" />
-          <el-table-column prop="readonly" :label="$t('configEdit.fields.readonly')" width="80">
-            <template #default="{ row }">{{ row.readonly ? $t('common.yes') : $t('common.no') }}</template>
+          <el-table-column :label="$t('configEdit.fields.hostPath')">
+            <template #default="{ row }">
+              <template v-if="readonly || field.readonly">{{ row.host_path }}</template>
+              <el-input v-else v-model="row.host_path" size="small" @input="onDeviceTableChange" />
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('configEdit.fields.containerPath')">
+            <template #default="{ row }">
+              <template v-if="readonly || field.readonly">{{ row.container_path }}</template>
+              <el-input v-else v-model="row.container_path" size="small" @input="onDeviceTableChange" />
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('configEdit.fields.readonly')" width="80">
+            <template #default="{ row }">
+              <template v-if="readonly || field.readonly">{{ row.readonly ? $t('common.yes') : $t('common.no') }}</template>
+              <el-switch v-else v-model="row.readonly" size="small" @change="onDeviceTableChange" />
+            </template>
           </el-table-column>
           <el-table-column v-if="!(readonly || field.readonly)" width="60">
             <template #default="{ $index }">
@@ -186,7 +204,10 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ConfigEditField } from '@/utils/configEditView'
+
+const { t } = useI18n()
 
 const TEMPLATE_PORT_MARKER = '{{container_port}}'
 
@@ -196,6 +217,20 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ change: [] }>()
+
+// Map field key to i18n label. Falls back to backend-provided label.
+const displayLabel = computed(() => {
+  const i18nKey = `configEdit.labels.${props.field.key}`
+  const translated = t(i18nKey)
+  if (translated !== i18nKey) return translated
+  // Also try internal_key if different from key
+  if (props.field.internal_key && props.field.internal_key !== props.field.key) {
+    const altKey = `configEdit.labels.${props.field.internal_key}`
+    const altTranslated = t(altKey)
+    if (altTranslated !== altKey) return altTranslated
+  }
+  return props.field.label
+})
 
 // -- Scalar check for default widget --
 const isScalarValue = computed(() => {
@@ -281,7 +316,12 @@ function initKvRows() {
 }
 
 function onKeyValueTableChange() {
-  props.field.value = Object.fromEntries(kvRows.value.map((r: { key: string; value: string }) => [r.key, r.value]))
+  // Filter out rows with empty keys (avoids writing garbage back).
+  props.field.value = Object.fromEntries(
+    kvRows.value
+      .filter((r: { key: string; value: string }) => r.key.trim() !== '')
+      .map((r: { key: string; value: string }) => [r.key.trim(), r.value])
+  )
   emit('change')
 }
 
@@ -300,28 +340,56 @@ const deviceRows = ref<any[]>([])
 
 function initDeviceRows() {
   const v = props.field.value
-  if (Array.isArray(v)) {
+  if (!Array.isArray(v)) {
+    deviceRows.value = []
+    return
+  }
+  // Check if array elements are plain strings (e.g. optional_devices = ["/dev/mem"]).
+  const allStrings = v.length > 0 && v.every((e: any) => typeof e === 'string')
+  if (allStrings) {
+    deviceRows.value = v.map((s: string) => ({
+      host_path: s,
+      container_path: s,
+      readonly: false,
+    }))
+  } else {
     deviceRows.value = v.map((d: any) => ({
       host_path: d?.host_path ?? d?.HostPath ?? d?.source ?? '',
       container_path: d?.container_path ?? d?.ContainerPath ?? d?.target ?? '',
       readonly: Boolean(d?.readonly ?? d?.Readonly ?? false),
     }))
-  } else {
-    deviceRows.value = []
   }
 }
 
 function onDeviceTableChange() {
-  props.field.value = deviceRows.value.map((d: { host_path: string; container_path: string }) => ({
-    host_path: d.host_path,
-    container_path: d.container_path,
-  }))
+  const allStrings = deviceRows.value.every(
+    (d: any) => d.host_path === d.container_path && d.host_path !== '' && !d.readonly
+  )
+  if (allStrings && Array.isArray(props.field.value) &&
+      props.field.value.length > 0 && typeof props.field.value[0] === 'string') {
+    // Original was string array — preserve as string array.
+    props.field.value = deviceRows.value.map((d: any) => d.host_path)
+  } else {
+    props.field.value = deviceRows.value.map((d: { host_path: string; container_path: string; readonly: boolean }) => ({
+      host_path: d.host_path,
+      container_path: d.container_path,
+      readonly: d.readonly,
+    }))
+  }
   emit('change')
 }
 
 function addDeviceRow() {
-  deviceRows.value.push({ host_path: '', container_path: '', readonly: false })
-  onDeviceTableChange()
+  // Check if original value was string array.
+  if (Array.isArray(props.field.value) && props.field.value.length > 0 &&
+      typeof props.field.value[0] === 'string') {
+    deviceRows.value.push({ host_path: '', container_path: '', readonly: false })
+  } else {
+    deviceRows.value.push({ host_path: '', container_path: '', readonly: false })
+  }
+  // Don't trigger change for empty row — wait for user input.
+  // But we must emit so the view knows rows changed.
+  emit('change')
 }
 
 function removeDeviceRow(index: number) {

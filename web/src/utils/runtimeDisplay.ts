@@ -86,7 +86,10 @@ export function toRuntimeTemplateDisplay(row: any): RuntimeTemplateDisplay {
 
 function extractVersion(row: any): string {
   // Builtin generic runtimes (no specific version) → show *.
-  if (row.source_type === 'builtin' || row.managed_by === 'system') {
+  // API guarantees is_builtin and is_editable are present in list response.
+  // is_editable === false means builtin/system template.
+  const isBuiltin = row.is_builtin === true || row.is_editable === false
+  if (isBuiltin) {
     const vid = row.backend_version_id || ''
     if (!vid || vid === 'latest') return '*'
   }

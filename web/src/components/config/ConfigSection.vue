@@ -2,8 +2,8 @@
   <el-collapse :model-value="activeNames" @update:model-value="activeNames = normalizeActive($event)">
     <el-collapse-item :name="section.key">
       <template #title>
-        <span>{{ section.label }}</span>
-        <el-tag v-if="section.key === 'advanced_raw'" size="small" effect="plain" class="section-tag">advanced_raw</el-tag>
+        <span>{{ sectionI18nLabel }}</span>
+        <el-tag v-if="section.key === 'advanced_raw'" size="small" effect="plain" class="section-tag">{{ $t('configEdit.sections.advancedRaw') }}</el-tag>
       </template>
       <p v-if="section.description" class="section-description">{{ section.description }}</p>
       <div class="section-fields">
@@ -20,9 +20,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ConfigField from './ConfigField.vue'
 import { sortedFields, type ConfigEditSection } from '@/utils/configEditView'
+
+const { t } = useI18n()
+
+// Map section.key to i18n key. Falls back to section.label (from backend) if no mapping exists.
+const SECTION_I18N_MAP: Record<string, string> = {
+  basic: 'configEdit.sections.basic',
+  model_serving: 'configEdit.sections.modelServing',
+  backend_runtime: 'configEdit.sections.backendRuntime',
+  container_resources: 'configEdit.sections.containerResources',
+  devices_mounts: 'configEdit.sections.devicesMounts',
+  environment: 'configEdit.sections.environment',
+  service: 'configEdit.sections.service',
+  health_check: 'configEdit.sections.healthCheck',
+  advanced_raw: 'configEdit.sections.advancedRaw',
+}
 
 const props = defineProps<{
   section: ConfigEditSection
@@ -30,6 +46,17 @@ const props = defineProps<{
 }>()
 
 defineEmits<{ change: [] }>()
+
+const sectionI18nLabel = computed(() => {
+  const i18nKey = SECTION_I18N_MAP[props.section.key]
+  if (i18nKey) {
+    const translated = t(i18nKey)
+    // t() returns the key itself if no translation found
+    if (translated !== i18nKey) return translated
+  }
+  // Fallback to backend-provided label (may be English)
+  return props.section.label
+})
 
 const activeNames = ref<string[]>(props.section.collapsed ? [] : [props.section.key])
 

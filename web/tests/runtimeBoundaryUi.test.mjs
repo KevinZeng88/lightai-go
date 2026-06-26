@@ -17,6 +17,7 @@ const files = [
   'src/api/runtimes.ts',
   'src/api/backends.ts',
   'src/api/configEdit.ts',
+  'src/utils/runtimeDisplay.ts',
 ]
 
 const sources = Object.fromEntries(files.map((file) => [file, fs.readFileSync(path.join(root, file), 'utf8')]))
@@ -84,6 +85,39 @@ check('DeploymentOverrideEditor uses ConfigEditView patch model', sources['src/c
 check('Config edit API client uses view/apply endpoints', sources['src/api/configEdit.ts'].includes('/config-edit/view') && sources['src/api/configEdit.ts'].includes('/config-edit/apply'))
 check('NodeRuntimeConfigWizard selector main title avoids raw id', !sources['src/components/deployments/NodeRuntimeConfigWizard.vue'].includes('runtime.id }}</div>'))
 check('BackendRuntime clone dialog passes display_name/name', sources['src/pages/BackendRuntimesPage.vue'].includes('cloneForm') && sources['src/pages/BackendRuntimesPage.vue'].includes('display_name') && sources['src/pages/BackendRuntimesPage.vue'].includes('name'))
+
+// -- Follow-up repair tests (2026-06-27) --
+
+// a. Section key i18n: ConfigSection maps keys to i18n, not raw English labels.
+const sectionSrc = sources['src/components/config/ConfigSection.vue']
+check('ConfigSection maps section.key to i18n (SECTION_I18N_MAP)', sectionSrc.includes('SECTION_I18N_MAP'))
+check('ConfigSection does not show raw section.label directly', !sectionSrc.includes('{{ section.label }}'))
+check('ConfigSection uses sectionI18nLabel computed', sectionSrc.includes('sectionI18nLabel'))
+check('ConfigSection advanced_raw tag uses i18n', sectionSrc.includes('configEdit.sections.advancedRaw'))
+
+// b. Field label i18n: ConfigField maps field.key to configEdit.labels.
+const fieldSrc = sources['src/components/config/ConfigField.vue']
+check('ConfigField has displayLabel computed with i18n mapping', fieldSrc.includes('displayLabel') && fieldSrc.includes('configEdit.labels'))
+check('ConfigField template uses displayLabel not field.label', fieldSrc.includes('{{ displayLabel }}'))
+
+// c. key_value_table has editable key column.
+check('key_value_table key column has el-input', fieldSrc.includes('key_value_table') && fieldSrc.includes('v-model="row.key"'))
+check('key_value_table filters empty keys on writeback', fieldSrc.includes('.filter((r') && fieldSrc.includes('r.key.trim()'))
+check('key_value_table has both key and value columns', fieldSrc.includes('v-model="row.key"') && fieldSrc.includes('v-model="row.value"'))
+
+// d. device_table editable columns.
+check('device_table host_path has el-input', fieldSrc.includes('device_table') && fieldSrc.includes('v-model="row.host_path"'))
+check('device_table container_path has el-input', fieldSrc.includes('v-model="row.container_path"'))
+check('device_table readonly has el-switch', fieldSrc.includes('row.readonly') && fieldSrc.includes('v-model="row.readonly"'))
+
+// e. optional_devices string array handling.
+check('device_table initDeviceRows handles string arrays (allStrings)', fieldSrc.includes('allStrings'))
+check('device_table onDeviceTableChange preserves readonly', fieldSrc.includes('d.readonly'))
+
+// f. runtimeDisplay uses is_editable for builtin version * detection.
+const rtSrc = sources['src/utils/runtimeDisplay.ts']
+check('runtimeDisplay extractVersion uses is_editable for builtin detection', rtSrc.includes('is_editable') && rtSrc.includes('is_builtin'))
+check('runtimeDisplay does not use source_type/managed_by for version detection', rtSrc.includes('is_builtin'))
 
 if (failed > 0) {
   console.error(`\n${failed} test(s) FAILED`)

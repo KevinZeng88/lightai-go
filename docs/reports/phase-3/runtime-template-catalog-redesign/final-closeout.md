@@ -432,6 +432,58 @@ All 18 UX issues listed above are FIXED. No undocumented problems remain. No pro
 
 Final status: **PASS**
 
+---
+
+## Post-closeout Runtime Template UX Follow-up Repair
+
+Date: 2026-06-27 (same day follow-up after commit `d914fba`)
+
+### Repaired Follow-up Issues
+
+| ID | Issue | Status | Evidence |
+| --- | --- | --- | --- |
+| FX-01 | ConfigSection showed raw English section labels ("Basic", "Model serving") | FIXED | `ConfigSection.vue` maps `section.key` to `configEdit.sections.*` i18n keys via `SECTION_I18N_MAP`. |
+| FX-02 | `advanced_raw` tag showed raw key text | FIXED | Tag uses `$t('configEdit.sections.advancedRaw')`. |
+| FX-03 | ConfigField showed backend-provided English labels ("Image", "Command") | FIXED | `ConfigField.vue` computes `displayLabel` from `configEdit.labels.{field.key}` i18n, falls back to `field.label`. |
+| FX-04 | 20 taxonomy field labels lacked i18n keys | FIXED | Added `configEdit.labels.*` in zh-CN.ts and en-US.ts covering all 20 taxonomy keys. |
+| FX-05 | `key_value_table` key column was read-only display | FIXED | Key column now has `el-input` with `v-model="row.key"`; `onKeyValueTableChange` filters empty keys. |
+| FX-06 | `device_table` host_path/container_path were read-only display | FIXED | Both columns now have `el-input` editors; readonly column uses `el-switch`. |
+| FX-07 | `optional_devices` string arrays (e.g. `["/dev/mem"]`) produced empty rows | FIXED | `initDeviceRows` detects all-string arrays and maps them to host_path=container_path=string. |
+| FX-08 | `extractVersion()` used `row.source_type`/`row.managed_by` (not in API response) | FIXED | Uses `row.is_builtin === true \|\| row.is_editable === false` which IS in the API list response. |
+
+### Code Change Files (This Follow-up)
+
+- `web/src/components/config/ConfigSection.vue` — Added `SECTION_I18N_MAP` and `sectionI18nLabel` computed; i18n advanced_raw tag
+- `web/src/components/config/ConfigField.vue` — Added `displayLabel` computed with `configEdit.labels.*` i18n; editable key_value_table key column with empty-key filtering; editable device_table with host_path/container_path inputs, readonly switch, string array handling
+- `web/src/utils/runtimeDisplay.ts` — `extractVersion` uses `is_builtin`/`is_editable` instead of `source_type`/`managed_by`
+- `web/src/locales/zh-CN.ts` — Added `configEdit.labels.*` (20 keys); total leaf keys: 1060
+- `web/src/locales/en-US.ts` — Added `configEdit.labels.*` (20 keys); total leaf keys: 1060
+- `web/tests/runtimeBoundaryUi.test.mjs` — Added `src/utils/runtimeDisplay.ts` to sources; 16 new assertions covering section i18n, field i18n, editable key/value columns, device_table edits, string array handling, is_builtin version detection
+
+### Test Results
+
+```bash
+go build ./cmd/server/...      # PASS
+go build ./cmd/agent/...       # PASS
+go test ./internal/server/...  # PASS (all packages)
+go test ./internal/agent/...   # PASS (all packages)
+cd web && npm run build        # PASS (Vite chunk warnings only)
+cd web && npm test             # PASS (all 7 suites, all assertions including 16 new ones)
+```
+
+### Remaining Blocked Items
+
+- RTC-BLOCKER-001: MetaX vLLM real hardware/image validation (DOCUMENTED_BLOCKER)
+- RTC-BLOCKER-002: Huawei vLLM real hardware/image validation (DOCUMENTED_BLOCKER)
+
+No new blockers introduced.
+
+### Problem Closure Status
+
+All 8 follow-up issues are FIXED. No undocumented problems remain.
+
+Follow-up status: **PASS**
+
 Push result: `git push` is required after this file is committed; final command output is recorded with the pushed HEAD.
 
 Expected final `git status --short` after commit and push:
