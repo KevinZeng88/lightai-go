@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -305,4 +307,127 @@ func TestCreateDeploymentRejectsBlockedNBR(t *testing.T) {
 	var errResp map[string]interface{}
 	createResp.Decode(t, &errResp)
 	t.Logf("Blocked NBR correctly rejected: %v", errResp["error"])
+}
+
+// TestCreateDeploymentRejectsModelLocationMissing verifies that POST /api/v1/deployments
+// rejects deployment creation when the artifact has no verified location on the NBR's node.
+func TestCreateDeploymentRejectsModelLocationMissing(t *testing.T) {
+	app := newWorkflowTestApp(t)
+	fakeAgent := newFakeAgent(t, fakeAgentScenario{
+		Images: []fakeAgentImage{
+			{Repository: "vllm/vllm-openai", Tag: "latest", ImageRef: "vllm/vllm-openai:latest", ImageID: "sha256:test-mlm", Size: 123},
+		},
+		Inspect: workflowInspectSuccess("vllm/vllm-openai:latest", "sha256:test-mlm"),
+	})
+	nodeID := app.InsertOnlineNode(t, "mlm-node", fakeAgent)
+	app.InsertGPU(t, nodeID, "nvidia")
+	app.Client.LoginAsAdmin(t)
+
+	runtimeID := app.FindBackendRuntimeID(t, "vllm", "nvidia")
+	enableResp := app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+nodeID+"/backend-runtimes/enable", map[string]interface{}{
+		"backend_runtime_id": runtimeID,
+		"image_ref":          "vllm/vllm-openai:latest",
+	}, http.StatusOK)
+	var enabled map[string]interface{}
+	enableResp.Decode(t, &enabled)
+	nbrID := workflowStringField(t, enabled, "id")
+
+	checkResp := app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+nodeID+"/backend-runtimes/"+nbrID+"/check-request", map[string]interface{}{}, http.StatusOK)
+	var check map[string]interface{}
+	checkResp.Decode(t, &check)
+	if !isNBRDeployable(workflowStringField(t, check, "status")) {
+		t.Fatalf("NBR not deployable after check-request: %v", check)
+	}
+
+	// Create artifact WITHOUT model location on this node
+	artifactResp := app.Client.JSON(t, http.MethodPost, "/api/v1/model-artifacts", map[string]interface{}{
+		"name":      "test-mlm-artifact",
+		"path":      "/tmp/no-location-model",
+		"format":    "huggingface",
+		"task_type": "chat",
+	}, http.StatusCreated)
+	var artifact map[string]interface{}
+	artifactResp.Decode(t, &artifact)
+	artifactID := workflowStringField(t, artifact, "id")
+
+	// Create deployment WITHOUT model location — should be rejected
+	createResp := app.Client.JSON(t, http.MethodPost, "/api/v1/deployments", map[string]interface{}{
+		"name":                    "test-mlm-deploy",
+		"model_artifact_id":       artifactID,
+		"node_backend_runtime_id": nbrID,
+		"service_json":            map[string]interface{}{"host_port": 8997},
+	}, http.StatusBadRequest)
+	var errResp2 map[string]interface{}
+	createResp.Decode(t, &errResp2)
+	errMsg := fmt.Sprint(errResp2["error"])
+	if !strings.Contains(errMsg, "model_location_missing") {
+		t.Errorf("expected model_location_missing in error, got: %s", errMsg)
+	}
+	t.Logf("Model location missing correctly rejected: %s", errMsg)
+}
+
+// TestCreateDeploymentAcceptsWithModelLocation verifies deployment creation
+// succeeds when model location is present on NBR node.
+func TestCreateDeploymentAcceptsWithModelLocation(t *testing.T) {
+	app := newWorkflowTestApp(t)
+	fakeAgent := newFakeAgent(t, fakeAgentScenario{
+		Images: []fakeAgentImage{
+			{Repository: "vllm/vllm-openai", Tag: "latest", ImageRef: "vllm/vllm-openai:latest", ImageID: "sha256:test-mlm-ok", Size: 123},
+		},
+		Inspect: workflowInspectSuccess("vllm/vllm-openai:latest", "sha256:test-mlm-ok"),
+	})
+	nodeID := app.InsertOnlineNode(t, "mlm-ok-node", fakeAgent)
+	app.InsertGPU(t, nodeID, "nvidia")
+	app.Client.LoginAsAdmin(t)
+
+	runtimeID := app.FindBackendRuntimeID(t, "vllm", "nvidia")
+	enableResp := app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+nodeID+"/backend-runtimes/enable", map[string]interface{}{
+		"backend_runtime_id": runtimeID,
+		"image_ref":          "vllm/vllm-openai:latest",
+	}, http.StatusOK)
+	var enabled map[string]interface{}
+	enableResp.Decode(t, &enabled)
+	nbrID := workflowStringField(t, enabled, "id")
+
+	checkResp := app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+nodeID+"/backend-runtimes/"+nbrID+"/check-request", map[string]interface{}{}, http.StatusOK)
+	var check map[string]interface{}
+	checkResp.Decode(t, &check)
+	if !isNBRDeployable(workflowStringField(t, check, "status")) {
+		t.Fatalf("NBR not deployable after check-request: %v", check)
+	}
+
+	artifactResp := app.Client.JSON(t, http.MethodPost, "/api/v1/model-artifacts", map[string]interface{}{
+		"name":      "test-mlm-ok-artifact",
+		"path":      "/tmp/has-location-model",
+		"format":    "huggingface",
+		"task_type": "chat",
+	}, http.StatusCreated)
+	var artifact map[string]interface{}
+	artifactResp.Decode(t, &artifact)
+	artifactID := workflowStringField(t, artifact, "id")
+
+	// Add model location
+	app.Client.JSON(t, http.MethodPost, "/api/v1/nodes/"+nodeID+"/model-roots", map[string]interface{}{
+		"path": "/tmp",
+	}, http.StatusCreated)
+	app.Client.JSON(t, http.MethodPost, "/api/v1/model-artifacts/"+artifactID+"/locations", map[string]interface{}{
+		"node_id":             nodeID,
+		"absolute_path":       "/tmp/has-location-model",
+		"path_type":           "directory",
+		"verification_status": "verified",
+		"match_status":        "exact_match",
+	}, http.StatusCreated)
+
+	createResp := app.Client.JSON(t, http.MethodPost, "/api/v1/deployments", map[string]interface{}{
+		"name":                    "test-mlm-ok-deploy",
+		"model_artifact_id":       artifactID,
+		"node_backend_runtime_id": nbrID,
+		"service_json":            map[string]interface{}{"host_port": 8996},
+	}, http.StatusCreated)
+	var deploy map[string]interface{}
+	createResp.Decode(t, &deploy)
+	if deploy["id"] == nil || deploy["id"] == "" {
+		t.Fatalf("deployment create failed with model location present: %#v", deploy)
+	}
+	t.Logf("Created deployment %v with model location present", deploy["id"])
 }

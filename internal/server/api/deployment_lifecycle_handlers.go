@@ -148,6 +148,22 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		}
 	}
 
+	// Validate model location matches NBR node (same check as preview/preflight/start).
+	if artifactID != "" && nbrNodeID != "" {
+		var mlID string
+		h.DB.QueryRow(`SELECT id FROM model_locations
+			WHERE model_artifact_id = ? AND node_id = ?
+			AND verification_status IN ('verified','warning','manually_accepted')
+			AND match_status IN ('exact_match','probable_match','manual_attested')
+			ORDER BY updated_at DESC LIMIT 1`,
+			artifactID, nbrNodeID).Scan(&mlID)
+		if mlID == "" {
+			writeError(w, http.StatusBadRequest,
+				"model_location_missing: selected model has no verified location on selected runtime node")
+			return
+		}
+	}
+
 	id := uuid.NewString()
 	tid := tenantID(r)
 	actorID := actorIDFromSession(r)
