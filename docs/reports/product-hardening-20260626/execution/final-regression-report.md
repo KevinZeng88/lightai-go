@@ -5,7 +5,7 @@ Timestamp: 2026-06-26 13:30 UTC | Evidence dir: `evidence/20260626133000/`
 ## Commit Range
 
 ```
-c13f91f → 3b2a6c5 (7 commits)
+c13f91f → 4f76792 (8 commits)
 ```
 
 | Commit | Workstream | Description |
@@ -15,7 +15,8 @@ c13f91f → 3b2a6c5 (7 commits)
 | 93bbd04 | C | Deployment wizard (6 Vue components) + ModelDeploymentsPage rewrite |
 | bfe7baf | D | Instance table: added started_at + restart_count columns |
 | ee53d67 | F | Naming cleanup: i18n labels + naming-dictionary.md |
-| 3b2a6c5 | E | Initial closeout (superseded — runtime smoke now completed) |
+| 3b2a6c5 | E | Initial closeout (runtime smoke deferred) |
+| 4f76792 | E | Runtime smoke evidence: vLLM / SGLang / llama.cpp PASS on NVIDIA RTX 5090 + Docker |
 | 545d4c6 / 7089787 | — | Guardrails + scope revision (documents only) |
 
 ## Test Results
