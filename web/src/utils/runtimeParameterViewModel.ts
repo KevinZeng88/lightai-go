@@ -39,7 +39,7 @@ const HUMAN_FIELDS: HumanRuntimeField[] = [
   {
     key: 'shm_size', label: 'Shared Memory', group: 'basic', type: 'string',
     placeholder: '16gb', help: 'Docker --shm-size for the container',
-    mapsTo: [{ internalKey: 'launcher.docker_options.shm_size', target: 'docker', transform: 'string' }],
+    mapsTo: [{ internalKey: 'shm_size', target: 'docker', transform: 'string' }],
   },
   {
     key: 'health_timeout', label: 'Health Check Timeout (s)', group: 'basic', type: 'number',

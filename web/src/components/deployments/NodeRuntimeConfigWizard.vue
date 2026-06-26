@@ -261,20 +261,29 @@ async function saveAndMaybeCheck(andCheck: boolean) {
   try {
     const payload: Record<string, any> = {
       backend_runtime_id: selectedRuntime.value.id,
-      display_name: form.display_name || undefined,
+      display_name: form.display_name || defaultConfigName.value,
       image_ref: form.image_ref || undefined,
     }
     // Apply human-readable parameter overrides to config_set
-    if (paramOverrides.value?.parameter_values?.length && selectedRuntime.value?.config_set) {
-      const cs = JSON.parse(JSON.stringify(selectedRuntime.value.config_set))
+    if (paramOverrides.value?.parameter_values?.length || paramOverrides.value?.docker_options) {
+      const cs = selectedRuntime.value?.config_set
+        ? JSON.parse(JSON.stringify(selectedRuntime.value.config_set))
+        : { items: {} }
       cs.items = cs.items || {}
-      for (const pv of paramOverrides.value.parameter_values) {
+      for (const pv of (paramOverrides.value.parameter_values || [])) {
         cs.items[pv.key] = { ...(cs.items[pv.key] || {}), value: pv.value, enabled: pv.enabled }
       }
+      // Merge docker_options into launcher.docker_options in config_set
+      if (paramOverrides.value.docker_options && Object.keys(paramOverrides.value.docker_options).length) {
+        const existingDocker = cs.items['launcher.docker_options']?.value || {}
+        const merged = { ...(typeof existingDocker === 'object' ? existingDocker : {}), ...paramOverrides.value.docker_options }
+        cs.items['launcher.docker_options'] = {
+          ...(cs.items['launcher.docker_options'] || {}),
+          category: 'launcher', kind: 'docker_options', type: 'object',
+          value: merged, enabled: true,
+        }
+      }
       payload.config_set = cs
-    }
-    if (paramOverrides.value?.docker_options && Object.keys(paramOverrides.value.docker_options).length) {
-      payload.docker_options = paramOverrides.value.docker_options
     }
     if (paramOverrides.value?.env && Object.keys(paramOverrides.value.env).length) {
       payload.env = paramOverrides.value.env

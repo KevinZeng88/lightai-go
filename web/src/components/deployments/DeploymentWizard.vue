@@ -70,6 +70,15 @@
       />
     </div>
 
+    <el-alert
+      v-if="compatibilityError"
+      type="error"
+      :title="compatibilityError"
+      show-icon
+      :closable="false"
+      style="margin-bottom:12px"
+    />
+
     <div class="wizard-footer">
       <el-button v-if="activeStep > 0" @click="activeStep--">{{ $t('common.prev') }}</el-button>
       <el-button v-if="activeStep < 4" type="primary" @click="nextStep">{{ $t('common.next') }}</el-button>
@@ -82,6 +91,7 @@
 
 <script setup lang="ts">
 import { computed, ref, reactive, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ModelSelector from './ModelSelector.vue'
 import NodeRuntimeSelector from './NodeRuntimeSelector.vue'
 import DeploymentServiceEditor from './DeploymentServiceEditor.vue'
@@ -89,9 +99,12 @@ import DeploymentOverrideEditor from './DeploymentOverrideEditor.vue'
 import DeploymentPreviewPanel from './DeploymentPreviewPanel.vue'
 import { previewDeployment, type PreviewResult } from '@/api/deployments'
 
+const { t } = useI18n()
+
 const props = defineProps<{
   artifacts: any[]
   nodeRuntimes: any[]
+  modelLocations?: any[]
   saving?: boolean
 }>()
 
@@ -146,12 +159,39 @@ function onNBRSelected(nbrID: string) {
   form.node_backend_runtime_id = nbrID
 }
 
+const compatibilityError = ref('')
+
+function checkNodeCompatibility(): boolean {
+  compatibilityError.value = ''
+  if (!form.model_artifact_id || !form.node_backend_runtime_id) return true
+
+  const nbr = selectedNBR.value
+  if (!nbr) return true
+
+  const nbrNodeId = nbr.node_id
+  const locs = (props.modelLocations || []).filter(
+    (l: any) => l.model_artifact_id === form.model_artifact_id
+  )
+  const hasLocationOnNode = locs.some(
+    (l: any) => l.node_id === nbrNodeId &&
+      (l.verification_status === 'verified' || l.verification_status === 'warning' || l.verification_status === 'manually_accepted')
+  )
+
+  if (!hasLocationOnNode) {
+    compatibilityError.value = t('deployments.nodeMismatch') ||
+      'This model has no verified location on the selected runtime node. Choose an NBR on the same node, or add a model location for this node.'
+    return false
+  }
+  return true
+}
+
 function nextStep() {
   const s = activeStep.value
   if (s === 0 && !form.model_artifact_id) return
   if (s === 1) {
     if (!form.node_backend_runtime_id) return
     if (!isNBRDeployable(selectedNBR.value)) return
+    if (!checkNodeCompatibility()) return
   }
   if (s === 3 && activeStep.value < 4) {
     doPreview()
@@ -161,6 +201,7 @@ function nextStep() {
 }
 
 async function doPreview() {
+  if (!checkNodeCompatibility()) return
   previewLoading.value = true
   try {
     previewData.value = await previewDeployment({
@@ -179,6 +220,10 @@ async function doPreview() {
 function buildPayload() {
   // Guard: reject non-deployable NBR
   if (!isNBRDeployable(selectedNBR.value)) {
+    return null
+  }
+  // Guard: reject node mismatch
+  if (!checkNodeCompatibility()) {
     return null
   }
   const overrides: Record<string, any> = { parameter_values: [] }

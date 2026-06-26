@@ -27,6 +27,7 @@
         ref="wizardRef"
         :artifacts="artifacts"
         :node-runtimes="nodeRuntimes"
+        :model-locations="modelLocations"
         :saving="saving"
         @save="createFromWizard"
         @refresh-data="load"
@@ -67,6 +68,7 @@ const wizardRef = ref<any>(null)
 const deployments = ref<any[]>([])
 const artifacts = ref<any[]>([])
 const nodeRuntimes = ref<any[]>([])
+const modelLocations = ref<any[]>([])
 const selected = ref<any | null>(null)
 const lastDryRun = ref<any | null>(null)
 
@@ -78,14 +80,16 @@ const detailVisible = computed({
 async function load() {
   loading.value = true
   try {
-    const [deploymentList, artifactList, runtimeList] = await Promise.all([
+    const [deploymentList, artifactList, runtimeList, locList] = await Promise.all([
       apiClient.get('/deployments'),
       apiClient.get('/model-artifacts'),
       apiClient.get('/nodes/backend-runtimes/all'),
+      apiClient.get('/model-locations'),
     ])
     deployments.value = Array.isArray(deploymentList) ? deploymentList : []
     artifacts.value = Array.isArray(artifactList) ? artifactList : []
     nodeRuntimes.value = Array.isArray(runtimeList) ? runtimeList : []
+    modelLocations.value = Array.isArray(locList) ? locList : []
   } finally {
     loading.value = false
   }
@@ -95,7 +99,7 @@ async function createFromWizard() {
   saving.value = true
   try {
     const payload = wizardRef.value?.buildPayload()
-    if (!payload) { ElMessage.error('Invalid payload'); return }
+    if (!payload) { ElMessage.error('Cannot create deployment: check the compatibility errors above'); return }
     await createDeployment(payload)
     createVisible.value = false
     ElMessage.success('Saved')
