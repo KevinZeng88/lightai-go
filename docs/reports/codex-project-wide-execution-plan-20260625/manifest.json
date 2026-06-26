@@ -1,0 +1,30 @@
+{
+  "title": "LightAI Go Claude AUTORUN Execution Plan 2026-06-25",
+  "executor": "Claude",
+  "codex_role": "plan review, plan revision, lightweight re-review only",
+  "authoritative_execution_prompt": "13-autonomous-claude-execution-prompt.md",
+  "repo": "https://github.com/KevinZeng88/lightai-go",
+  "target_repo_path": "/home/kzeng/projects/ai-platform-study/lightai-go",
+  "target_docs_dir": "docs/reports/codex-project-wide-execution-plan-20260625",
+  "review_dir": "docs/reports/codex-project-wide-review-20260625",
+  "files": [
+    "00-index.md",
+    "01-execution-policy-and-scope.md",
+    "02-risk-to-workstream-map.md",
+    "03-batch-0-baseline-and-inventory.md",
+    "04-batch-1-contract-readiness-hardening.md",
+    "05-batch-2-runplan-preflight-convergence.md",
+    "06-batch-3-e2e-openapi-documentation-convergence.md",
+    "07-batch-4-ui-workflow-repair.md",
+    "08-batch-5-security-tenant-hardening.md",
+    "09-batch-6-reliability-observability-scale.md",
+    "10-batch-7-performance-scalability-cleanup.md",
+    "11-batch-8-product-scope-and-gateway-boundaries.md",
+    "12-validation-matrix.md",
+    "13-autonomous-claude-execution-prompt.md",
+    "13-autonomous-codex-execution-prompt.md",
+    "14-closeout-template.md",
+    "15-runtime-smoke-plan.md",
+    "16-commit-and-push-strategy.md"
+  ]
+}

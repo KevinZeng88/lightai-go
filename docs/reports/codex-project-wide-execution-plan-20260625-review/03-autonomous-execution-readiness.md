@@ -1,0 +1,17 @@
+# Autonomous Execution Readiness
+
+| Area | Current Plan | Risk | Recommendation |
+| ---- | ------------ | ---- | -------------- |
+| Human confirmation | `01` and `13` say do not wait except external dependencies or destructive unknowns. | Good direction, but "破坏性数据操作无法安全判断" can stop execution during schema/token changes. | Add default: use temp DB for validation; never mutate user runtime DB during tests; if production-like DB migration is needed, document and stop before code execution. |
+| Mid-run blocking | Runtime smoke allows SKIP, Playwright can be blocked, Docker/GPU can be absent. | AUTORUN can finish with large runtime evidence gaps while still pushing. | Require SKIP evidence files and mark hardware-gated risks as not closed unless smoke passes. |
+| Failure handling | `01` says fix if possible, write `blocked-validation.md` for external failures. | Does not say whether failed batch may commit/push docs only. | Add rule: failed batch must not push implementation commits; only push a blocked-validation commit if explicitly documenting an external blocker and no code changes from failed attempt are included. |
+| Skip conditions | Smoke SKIP conditions are listed. | Browser, OpenAPI validation, and current API dry-run SKIP conditions are not equally precise. | Add per-validation SKIP table for browser, OpenAPI tooling, npm browser install, API dry-run server startup. |
+| Commit/push strategy | Every batch commits and pushes. | Current worktree is dirty with unrelated modified/untracked files; accidental inclusion is likely. | Add a pre-AUTORUN workspace gate: capture baseline, require pathspec-limited `git add`, and fail if commit would include unrelated baseline files. |
+| Rollback/backup | Plan mentions failure handling but not rollback/backup. | Batch 5 schema/token changes and runtime smoke can alter DB/process/container state. | Add backup rules: temp DB for tests, DB copy before migration smoke, Docker cleanup trap, process PID files, `git rev-parse` rollback target. |
+| Runtime smoke environment | `15` lists checks but not deterministic startup. | "启动 server/agent 或确认已运行" is too vague for unattended execution. | Add exact server/agent startup commands, temp paths, ports, readiness URLs, timeout, trap cleanup, and conflict handling. |
+| OpenAPI validation | Batch 3 updates OpenAPI. | No command proves OpenAPI reflects route samples. | Add `npx`/Python/YAML validation or a local script that validates sample payloads and checks stale paths absent. |
+| Browser validation | Batch 4 says run Playwright if available. | `web/package*.json` is already modified with Playwright in the dirty workspace; plan must decide if that is accepted. | Make Playwright required if dependency is present; otherwise add component tests and document exact browser install blocker. |
+| Security validation | Batch 5 adds policy/RBAC tests. | Tests are listed but role-policy matrix is not concrete enough. | Insert an explicit role x option x endpoint matrix and require negative assertions at save, preview, and start. |
+| Push credentials/network | Plan assumes push to GitHub. | AUTORUN may fail at push due credentials/network. | Add push failure handling: commit locally, record `git push` stderr, do not retry destructively, and final status `BLOCKED_BY_EXTERNAL_DEPENDENCY`. |
+
+Readiness conclusion: not ready for unattended AUTORUN until these recommendations are patched into the execution plan.

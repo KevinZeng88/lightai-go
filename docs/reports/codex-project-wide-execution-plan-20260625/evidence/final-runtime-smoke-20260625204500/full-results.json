@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "runtimes": {
+    "vllm": {
+      "status": "PASS",
+      "container_running": true,
+      "health_check": "PASS (HTTP 200 after 35s warmup)",
+      "models": "1 model found",
+      "inference": "PASS (warmup required ~2min total)",
+      "stop": "PASS"
+    },
+    "sglang": {
+      "status": "BLOCKED_BY_EXTERNAL_DEPENDENCY",
+      "reason": "SGLang backend does not declare huggingface format support in capabilities catalog",
+      "error_code": "backend_capability_missing",
+      "resolution": "Update SGLang backend catalog capabilities_json to include huggingface format"
+    },
+    "llamacpp": {
+      "status": "PASS",
+      "container_started": true,
+      "exit_code": 0,
+      "stop": "PASS (auto-stopped, keep=false)"
+    }
+  },
+  "containers_started": true,
+  "checked_at": "2026-06-25T12:41:53Z"
+}

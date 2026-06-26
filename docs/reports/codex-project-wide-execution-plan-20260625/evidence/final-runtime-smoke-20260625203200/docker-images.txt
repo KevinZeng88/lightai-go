@@ -1,0 +1,4 @@
+ghcr.io/ggml-org/llama.cpp:server-cuda13
+lmsysorg/sglang:latest
+vllm/vllm-openai:latest
+ghcr.io/ggml-org/llama.cpp:light

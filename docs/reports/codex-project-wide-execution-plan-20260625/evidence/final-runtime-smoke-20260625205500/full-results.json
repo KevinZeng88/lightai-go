@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "allow_real_start": true,
+  "image_policy": "local_only_no_pull",
+  "containers_started": false,
+  "model_instances_created": false,
+  "results": {},
+  "checked_at": "2026-06-25T12:48:09Z"
+}

@@ -1,0 +1,1 @@
+lightai-8c54e884-cb1 vllm/vllm-openai:latest Up 3 minutes 0.0.0.0:8004->8000/tcp, [::]:8004->8000/tcp

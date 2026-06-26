@@ -1,0 +1,10 @@
+ M web/package-lock.json
+ M web/package.json
+?? .mimocode/plans/1782215119986-calm-planet.md
+?? .mimocode/skills/
+?? docs/reports/codex-project-wide-execution-plan-20260625-final-review/
+?? docs/reports/codex-project-wide-execution-plan-20260625-review/
+?? docs/reports/codex-project-wide-execution-plan-20260625/00-index.md
+?? docs/reports/codex-project-wide-execution-plan-20260625/01-execution-policy-and-scope.md
+?? docs/reports/codex-project-wide-execution-plan-20260625/02-risk-to-workstream-map.md
+?? docs/reports/codex-project-wide-execution-plan-20260625/03-batch-0-baseline-and-inventory.md

@@ -1,0 +1,1 @@
+lightai-aeb213bb-89c: image=vllm/vllm-openai:latest state=running

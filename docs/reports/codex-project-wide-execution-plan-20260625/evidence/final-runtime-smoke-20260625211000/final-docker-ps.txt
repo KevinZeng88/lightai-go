@@ -1,0 +1,1 @@
+lightai-65cd61f3-af6 vllm/vllm-openai:latest Up 2 minutes

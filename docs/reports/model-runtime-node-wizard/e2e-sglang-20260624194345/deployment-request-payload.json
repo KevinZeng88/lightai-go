@@ -1,0 +1,1 @@
+{"name":"e2e-sglang-20260624194345-deploy","model_artifact_id":"b22546d1-ad45-472c-80fc-0a2044119346","node_backend_runtime_id":"node-70894186-093c-403d-87d1-08f17a690521:runtime.sglang.nvidia-docker","placement_json":{"node_id":"node-70894186-093c-403d-87d1-08f17a690521","accelerator_ids":["4bd5d15e-3e42-4a59-8aaa-b3484bac7577"]},"service_json":{"host_port":8005}}

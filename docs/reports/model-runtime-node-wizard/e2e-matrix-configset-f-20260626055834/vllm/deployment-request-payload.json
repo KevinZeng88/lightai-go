@@ -1,0 +1,1 @@
+{"name":"e2e-vllm-configset-f-20260626055834","model_artifact_id":"db255f0e-2155-4701-bc64-57dcc04256e5","node_backend_runtime_id":"node-70894186-093c-403d-87d1-08f17a690521:runtime.vllm.nvidia-docker","placement_json":{"node_id":"node-70894186-093c-403d-87d1-08f17a690521","accelerator_ids":["746735bd-fc17-43cf-b9fa-715913160801"]},"service_json":{"host_port":8004}}

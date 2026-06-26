@@ -1,0 +1,5 @@
+{
+  "name": "/lightai-ea36d4c7-dc6",
+  "image": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+  "ports": {}
+}

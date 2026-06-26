@@ -1,0 +1,1 @@
+lightai-50206186-50c vllm/vllm-openai:latest Up 3 minutes

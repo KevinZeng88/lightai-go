@@ -1,0 +1,11 @@
+lightai-aeb213bb-89c vllm/vllm-openai:latest Exited (0) 3 seconds ago
+lightai-ea36d4c7-dc6 ghcr.io/ggml-org/llama.cpp:server-cuda13 Exited (0) About a minute ago
+lightai-50206186-50c vllm/vllm-openai:latest Exited (0) 6 minutes ago
+lightai-80342bc9-441 vllm/vllm-openai:latest Exited (0) 6 hours ago
+lightai-f2b0f9e2-d38 ghcr.io/ggml-org/llama.cpp:server-cuda13 Exited (0) 6 hours ago
+lightai-4641981c-96f ghcr.io/ggml-org/llama.cpp:server-cuda13 Exited (0) 6 hours ago
+lightai-90672749-d0b ghcr.io/ggml-org/llama.cpp:server-cuda13 Exited (0) 6 hours ago
+lightai-cd56eeb3-1c4 ghcr.io/ggml-org/llama.cpp:server-cuda13 Exited (0) 6 hours ago
+lightai-6eec7501-348 bac58ba3e980 Exited (255) 12 hours ago
+lightai-43344ff5-bc9 lmsysorg/sglang:latest Exited (255) 12 hours ago
+lightai-8f469795-2be vllm/vllm-openai:latest Exited (255) 12 hours ago

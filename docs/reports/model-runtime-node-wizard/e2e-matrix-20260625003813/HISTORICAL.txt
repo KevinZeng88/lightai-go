@@ -1,0 +1,1 @@
+HISTORICAL EVIDENCE: Generated 2026-06-24. May contain legacy backend_runtime_id/parameters_json payload. NOT current contract validation evidence. See docs/testing/current-e2e-contract.md.

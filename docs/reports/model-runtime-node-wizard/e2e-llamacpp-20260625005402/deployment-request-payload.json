@@ -1,0 +1,1 @@
+{"name":"e2e-llamacpp-20260625005402-deploy","model_artifact_id":"6bb26d74-fc17-4bb2-a965-1e28318b0038","node_backend_runtime_id":"node-70894186-093c-403d-87d1-08f17a690521:runtime.llamacpp.nvidia-docker","placement_json":{"node_id":"node-70894186-093c-403d-87d1-08f17a690521","accelerator_ids":["4bd5d15e-3e42-4a59-8aaa-b3484bac7577"]},"service_json":{"host_port":8002}}

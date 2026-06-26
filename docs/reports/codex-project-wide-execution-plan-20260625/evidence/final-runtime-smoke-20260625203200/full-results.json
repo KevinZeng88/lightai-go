@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "runtimes": {
+    "vllm": {
+      "status": "PASS",
+      "instance_id": "50206186-50cb-48da-bd78-32556da2b1ad",
+      "node_run_plan_id": "cb1e3290-3e1d-4950-a649-321991aadf65",
+      "container_started": true,
+      "health_check": "PASS",
+      "inference": "PASS (warmup delay)",
+      "stop": "PASS"
+    },
+    "sglang": {
+      "status": "FAIL",
+      "instance_id": "",
+      "node_run_plan_id": "",
+      "container_started": false,
+      "health_check": "FAIL",
+      "inference": "NOT_RUN",
+      "stop": "FAIL"
+    },
+    "llamacpp": {
+      "status": "FAIL",
+      "instance_id": "",
+      "node_run_plan_id": "",
+      "container_started": false,
+      "health_check": "FAIL",
+      "inference": "NOT_RUN",
+      "stop": "FAIL"
+    }
+  },
+  "containers_started": true,
+  "checked_at": "2026-06-25T12:34:34Z"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "/lightai-aeb213bb-89c",
+  "image": "vllm/vllm-openai:latest",
+  "ports": {
+    "8000/tcp": [
+      {
+        "HostIp": "0.0.0.0",
+        "HostPort": "8004"
+      },
+      {
+        "HostIp": "::",
+        "HostPort": "8004"
+      }
+    ]
+  }
+}
