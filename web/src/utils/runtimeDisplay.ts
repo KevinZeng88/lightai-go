@@ -46,9 +46,9 @@ export function toRuntimeTemplateDisplay(row: any): RuntimeTemplateDisplay {
   const versionDisplay = version === '*' ? '*' : (version || '')
 
   // displayName priority:
-  // 1. row.display_name (user-specified, unless it starts with "runtime.")
+  // 1. row.display_name (user-specified), unless it looks like a tech slug
   // 2. Product-friendly: "vLLM / NVIDIA"
-  // 3. row.name (normalized: strip "runtime." prefix, humanize)
+  // 3. row.name (normalized), unless it looks like a tech slug
   // 4. row.id
   let displayName = ''
   const rawDisplay = row.display_name || ''
@@ -58,11 +58,17 @@ export function toRuntimeTemplateDisplay(row: any): RuntimeTemplateDisplay {
   const normalizedDisplay = rawDisplay.replace(/^runtime\./, '')
   const normalizedName = rawName.replace(/^runtime\./, '')
 
-  if (normalizedDisplay.trim()) {
+  // Detect tech slugs like "vllm.nvidia-docker", "sglang.metax-docker", "llamacpp.cpu-docker".
+  const techSlugPattern = /^[a-z]+\.[a-z]+[-.][a-z0-9]+/
+  const displayIsTechSlug = techSlugPattern.test(normalizedDisplay)
+  const nameIsTechSlug = techSlugPattern.test(normalizedName)
+
+  // User-configs with a real display_name: use it (unless it's a bare tech slug).
+  if (normalizedDisplay.trim() && !displayIsTechSlug) {
     displayName = normalizedDisplay.trim()
   } else if (backendDisplay && vendorDisplay) {
     displayName = `${backendDisplay} / ${vendorDisplay}`
-  } else if (normalizedName.trim()) {
+  } else if (normalizedName.trim() && !nameIsTechSlug) {
     displayName = normalizedName.trim()
   } else {
     displayName = row.id || ''

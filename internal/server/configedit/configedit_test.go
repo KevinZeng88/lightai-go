@@ -137,7 +137,6 @@ func TestApplyEditPatchToConfigSetMergesDockerOptionsAndForcesRequiredEnabled(t 
 		Fields: []EditFieldPatch{
 			{Key: "launcher.docker_options.shm_size", InternalKey: "launcher.docker_options", Path: []string{"shm_size"}, Value: "24gb", Enabled: boolPtr(true)},
 			{Key: "launcher.docker_options.privileged", InternalKey: "launcher.docker_options", Path: []string{"privileged"}, Value: true, Enabled: boolPtr(true)},
-			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "xyz", Enabled: boolPtr(true)},
 			{Key: "launcher.image", InternalKey: "launcher.image", Value: "vllm:changed", Enabled: boolPtr(false)},
 		},
 	}, "BackendRuntime", "rt-test")
@@ -153,9 +152,24 @@ func TestApplyEditPatchToConfigSetMergesDockerOptionsAndForcesRequiredEnabled(t 
 	if image["enabled"] != true {
 		t.Fatalf("required image enabled should be forced true: %#v", image)
 	}
+}
+
+func TestApplyEditPatchAllowsModelServingAtDeployment(t *testing.T) {
+	// Model serving params (backend.arg.*) allowed at deployment layer.
+	out, err := ApplyEditPatchToConfigSet(testConfigSet(), ConfigEditPatch{
+		Layer:    "deployment",
+		ObjectID: "dep-test",
+		Fields: []EditFieldPatch{
+			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "xyz", Enabled: boolPtr(true)},
+		},
+	}, "Deployment", "dep-test")
+	if err != nil {
+		t.Fatalf("apply patch at deployment: %v", err)
+	}
+	items := out["items"].(map[string]any)
 	param := items["backend.arg.fake_new_param"].(map[string]any)
 	if param["value"] != "xyz" || param["enabled"] != true {
-		t.Fatalf("param patch not applied: %#v", param)
+		t.Fatalf("param patch not applied at deployment: %#v", param)
 	}
 }
 
@@ -169,6 +183,78 @@ func TestValidateEditPatchRejectsDeploymentProtectedFields(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected deployment protected field validation error")
+	}
+}
+
+// --- Scope validation tests ---
+
+func TestValidateEditPatchRejectsModelServingAtBackendRuntime(t *testing.T) {
+	// backend.arg.* hidden at backend_runtime layer.
+	err := ValidateEditPatch(testConfigSet(), ConfigEditPatch{
+		Layer:    "backend_runtime",
+		ObjectID: "rt-test",
+		Fields: []EditFieldPatch{
+			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "xyz", Enabled: boolPtr(true)},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error: backend.arg.fake_new_param should be rejected at backend_runtime layer (hidden)")
+	}
+}
+
+func TestValidateEditPatchRejectsModelServingAtNodeBackendRuntime(t *testing.T) {
+	// backend.arg.* hidden at node_backend_runtime layer.
+	err := ValidateEditPatch(testConfigSet(), ConfigEditPatch{
+		Layer:    "node_backend_runtime",
+		ObjectID: "nbr-test",
+		Fields: []EditFieldPatch{
+			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "xyz", Enabled: boolPtr(true)},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error: backend.arg.fake_new_param should be rejected at node_backend_runtime layer (hidden)")
+	}
+}
+
+func TestValidateEditPatchAllowsModelServingAtDeployment(t *testing.T) {
+	// backend.arg.* allowed at deployment layer.
+	err := ValidateEditPatch(testConfigSet(), ConfigEditPatch{
+		Layer:    "deployment",
+		ObjectID: "dep-test",
+		Fields: []EditFieldPatch{
+			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "xyz", Enabled: boolPtr(true)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected success: backend.arg.fake_new_param should be allowed at deployment layer, got: %v", err)
+	}
+}
+
+func TestValidateEditPatchRejectsDockerOptionsAtDeployment(t *testing.T) {
+	// launcher.docker_options.shm_size hidden at deployment layer.
+	err := ValidateEditPatch(testConfigSet(), ConfigEditPatch{
+		Layer:    "deployment",
+		ObjectID: "dep-test",
+		Fields: []EditFieldPatch{
+			{Key: "launcher.docker_options.shm_size", InternalKey: "launcher.docker_options", Path: []string{"shm_size"}, Value: "4gb", Enabled: boolPtr(true)},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error: docker options should be rejected at deployment layer (hidden)")
+	}
+}
+
+func TestValidateEditPatchRejectsImageAtDeployment(t *testing.T) {
+	// launcher.image hidden at deployment layer via deploymentProtectedFields + hidden.
+	err := ValidateEditPatch(testConfigSet(), ConfigEditPatch{
+		Layer:    "deployment",
+		ObjectID: "dep-test",
+		Fields: []EditFieldPatch{
+			{Key: "launcher.image", InternalKey: "launcher.image", Value: "some-image"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error: launcher.image should be rejected at deployment layer")
 	}
 }
 

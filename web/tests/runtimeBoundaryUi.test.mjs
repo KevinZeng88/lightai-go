@@ -18,6 +18,7 @@ const files = [
   'src/api/backends.ts',
   'src/api/configEdit.ts',
   'src/utils/runtimeDisplay.ts',
+  'src/locales/zh-CN.ts',
 ]
 
 const sources = Object.fromEntries(files.map((file) => [file, fs.readFileSync(path.join(root, file), 'utf8')]))
@@ -143,6 +144,14 @@ check('BackendsPage Add Parameter has developer hint', beSrc.includes('addParame
 // k. Runtime name normalization.
 check('runtimeDisplay normalizes runtime.xxx prefix names', rtSrc.includes('normalizedDisplay'))
 check('runtimeDisplay has product-friendly backend/vendor maps', rtSrc.includes('BACKEND_DISPLAY') && rtSrc.includes('VENDOR_DISPLAY'))
+// k2. Tech slug detection for product-friendly names.
+check('runtimeDisplay detects tech slugs and uses product name', rtSrc.includes('techSlugPattern'))
+check('runtimeDisplay has displayIsTechSlug check', rtSrc.includes('displayIsTechSlug'))
+
+// l. Canonical alias i18n keys present in zh-CN.
+const zhSrc = sources['src/locales/zh-CN.ts']
+check('zh-CN has service.listen_host i18n', zhSrc.includes('service.listen_host'))
+check('zh-CN has service.container_port i18n', zhSrc.includes('service.listen_host') && zhSrc.includes('容器监听端口'))
 
 if (failed > 0) {
   console.error(`\n${failed} test(s) FAILED`)

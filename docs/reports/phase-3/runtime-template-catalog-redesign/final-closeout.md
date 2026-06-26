@@ -594,6 +594,57 @@ All 12 scope issues are FIXED. No undocumented problems remain.
 
 Status: **PASS**
 
+---
+
+## Config scope final tightening
+
+Date: 2026-06-27 (follow-up after commit `71e8236`)
+
+### Repaired Issues
+
+| ID | Issue | Status | Evidence |
+| --- | --- | --- | --- |
+| FT-01 | Canonical alias labels displayed English fallback ("Container listen host", "Container listen port") | FIXED | Added `configEdit.labels.service.listen_host` and `configEdit.labels.service.container_port` in zh-CN.ts and en-US.ts. |
+| FT-02 | Runtime template tech slugs shown as display names | FIXED | `runtimeDisplay.ts` detects tech slug patterns (e.g. `vllm.nvidia-docker`) and falls back to product-friendly `vLLM / NVIDIA`. |
+| FT-03 | ValidateEditPatch didn't enforce layer scope | FIXED | `ValidateEditPatch` now calls `isLayerHidden(field.Key, layer)`, `isLayerHidden(internal, layer)`, `isLayerReadonly(field.Key, layer)`, `isLayerReadonly(internal, layer)`. |
+| FT-04 | Missing scope validation tests | FIXED | 5 new Go tests: reject backend.arg at backend_runtime/NBR, allow at deployment, reject docker at deployment, reject image at deployment. |
+
+### Code Changes
+
+Backend:
+- `internal/server/configedit/validate.go` — Added layer scope checks in `ValidateEditPatch`: `isLayerHidden` and `isLayerReadonly` for both `field.Key` and `internal` before existing deployment-protected and item-readonly checks.
+- `internal/server/configedit/configedit_test.go` — Added 5 scope validation tests + 1 deployment apply test; separated model-serving patch from backend_runtime apply test.
+
+Web:
+- `web/src/utils/runtimeDisplay.ts` — Added `techSlugPattern` regex; `displayIsTechSlug`/`nameIsTechSlug` checks prevent tech slugs like `vllm.nvidia-docker` from being used as display names, falling back to product-friendly `vLLM / NVIDIA`.
+- `web/src/locales/zh-CN.ts` — Added `service.listen_host` (容器监听地址), `service.container_port` (容器监听端口); merged duplicate key.
+- `web/src/locales/en-US.ts` — Added `service.listen_host` (Container listen host), `service.container_port` (Container listen port); merged duplicate key.
+- `web/tests/runtimeBoundaryUi.test.mjs` — Added `zh-CN.ts` to sources; 4 new assertions: `service.listen_host` i18n, `service.container_port` i18n, `techSlugPattern` detection, `displayIsTechSlug` check.
+
+### Test Results
+
+```bash
+go build ./cmd/server/...      # PASS
+go build ./cmd/agent/...       # PASS
+go test ./internal/server/...  # PASS (all packages)
+go test ./internal/agent/...   # PASS (all packages)
+cd web && npm run build        # PASS
+cd web && npm test             # PASS (all 7 suites)
+```
+
+### Remaining Blocked Items
+
+- RTC-BLOCKER-001: MetaX vLLM real hardware/image validation (DOCUMENTED_BLOCKER)
+- RTC-BLOCKER-002: Huawei vLLM real hardware/image validation (DOCUMENTED_BLOCKER)
+
+No new blockers introduced.
+
+### Problem Closure Status
+
+All 4 tightening issues are FIXED. No undocumented problems remain.
+
+Status: **PASS**
+
 Push result: `git push` is required after this file is committed; final command output is recorded with the pushed HEAD.
 
 Expected final `git status --short` after commit and push:
