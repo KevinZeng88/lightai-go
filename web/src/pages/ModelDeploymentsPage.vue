@@ -80,16 +80,24 @@ const detailVisible = computed({
 async function load() {
   loading.value = true
   try {
-    const [deploymentList, artifactList, runtimeList, locList] = await Promise.all([
+    const [deploymentList, artifactList, runtimeList] = await Promise.all([
       apiClient.get('/deployments'),
       apiClient.get('/model-artifacts'),
       apiClient.get('/nodes/backend-runtimes/all'),
-      apiClient.get('/model-locations'),
     ])
     deployments.value = Array.isArray(deploymentList) ? deploymentList : []
     artifacts.value = Array.isArray(artifactList) ? artifactList : []
     nodeRuntimes.value = Array.isArray(runtimeList) ? runtimeList : []
-    modelLocations.value = Array.isArray(locList) ? locList : []
+    // Derive model locations from artifacts (each artifact includes .locations)
+    const locs: any[] = []
+    for (const a of artifacts.value) {
+      if (Array.isArray(a.locations)) {
+        for (const l of a.locations) {
+          locs.push({ ...l, model_artifact_id: a.id })
+        }
+      }
+    }
+    modelLocations.value = locs
   } finally {
     loading.value = false
   }
