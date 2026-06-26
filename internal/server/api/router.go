@@ -141,6 +141,10 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	// Parameter help documentation.
 	mux.Handle("GET /api/v1/backend-help", backendReadChain(http.HandlerFunc(HandleGetBackendHelp)))
 
+	// User-facing ConfigSet projection/apply API.
+	mux.Handle("POST /api/v1/config-edit/view", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleConfigEditView)))
+	mux.Handle("POST /api/v1/config-edit/apply", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleConfigEditApply)))
+
 	// BackendRuntimeTemplate (read-only from config files).
 	mux.Handle("GET /api/v1/backend-runtime-templates", backendReadChain(http.HandlerFunc(HandleListRuntimeTemplates)))
 	mux.Handle("GET /api/v1/backend-runtime-templates/{name}", backendReadChain(http.HandlerFunc(HandleGetRuntimeTemplate)))

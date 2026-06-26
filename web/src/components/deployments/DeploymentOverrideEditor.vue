@@ -3,13 +3,10 @@
     <el-alert type="info" :closable="false" style="margin-bottom:12px">
       {{ $t('deployments.overrideHint') || 'Edit deployment-level overrides. Inherited values from the node runtime config are shown for reference.' }}
     </el-alert>
-    <RuntimeParameterEditor
-      v-if="props.nbrConfigSet"
-      :model-value="editorModel"
-      :layer="'deployment'"
-      :show-source="true"
-      :show-advanced="true"
-      @update:model-value="onUpdate"
+    <ConfigEditView
+      v-if="editView"
+      :model-value="editView"
+      @update:patch="onUpdate"
     />
     <el-empty v-else :description="$t('common.noData') || 'Select a node runtime config first'" />
   </div>
@@ -17,24 +14,38 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
+import { getConfigEditView } from '@/api/configEdit'
+import ConfigEditView from '@/components/config/ConfigEditView.vue'
+import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 
 const props = defineProps<{
   nbrConfigSet: Record<string, any> | null
+  nbrId?: string
 }>()
 
-const emit = defineEmits<{ 'update:overrides': [value: Record<string, any>] }>()
+const emit = defineEmits<{
+  'update:overrides': [value: Record<string, any>]
+  'update:patch': [value: ConfigEditPatch | null]
+}>()
 
-const editorModel = ref<Record<string, any>>({ config_set: props.nbrConfigSet || {} })
+const editView = ref<ConfigEditViewModel | null>(null)
 
-watch(() => props.nbrConfigSet, (cs) => {
-  editorModel.value = { config_set: cs || {} }
-})
+watch(() => props.nbrId, loadView, { immediate: true })
 
-function onUpdate(val: Record<string, any>) {
-  editorModel.value = val
-  if (val.config_overrides) {
-    emit('update:overrides', val.config_overrides)
-  }
+async function loadView() {
+  editView.value = null
+  emit('update:patch', null)
+  if (!props.nbrId) return
+  editView.value = await getConfigEditView({
+    object_kind: 'node_backend_runtime',
+    object_id: props.nbrId,
+    layer: 'deployment',
+    mode: 'deployment_override',
+  })
+}
+
+function onUpdate(patch: ConfigEditPatch) {
+  emit('update:patch', patch)
+  emit('update:overrides', { editable_config_patch: patch })
 }
 </script>

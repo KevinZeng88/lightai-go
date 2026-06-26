@@ -8,9 +8,15 @@ const files = [
   'src/pages/ModelDeploymentsPage.vue',
   'src/pages/BackendsPage.vue',
   'src/components/common/RuntimeParameterEditor.vue',
+  'src/components/config/ConfigEditView.vue',
+  'src/components/config/ConfigSection.vue',
+  'src/components/config/ConfigField.vue',
+  'src/utils/configEditView.ts',
   'src/components/deployments/NodeRuntimeConfigWizard.vue',
+  'src/components/deployments/DeploymentOverrideEditor.vue',
   'src/api/runtimes.ts',
   'src/api/backends.ts',
+  'src/api/configEdit.ts',
 ]
 
 const sources = Object.fromEntries(files.map((file) => [file, fs.readFileSync(path.join(root, file), 'utf8')]))
@@ -64,6 +70,20 @@ check('Deployment create uses node_backend_runtime_id', sources['src/pages/Model
 check('Deployment create uses DeploymentWizard (with config_overrides)', sources['src/pages/ModelDeploymentsPage.vue'].includes('DeploymentWizard'))
 check('Deployment edit runtime selector is absent', !sources['src/pages/ModelDeploymentsPage.vue'].includes('editForm') && !sources['src/pages/ModelDeploymentsPage.vue'].includes('runtime selector'))
 check('Model deployment page does not import RuntimeParameterEditor', !sources['src/pages/ModelDeploymentsPage.vue'].includes('RuntimeParameterEditor'))
+check('ConfigEditView renders sections in order', sources['src/components/config/ConfigEditView.vue'].includes('sortedSections'))
+check('ConfigEditView required fields cannot be disabled', sources['src/components/config/ConfigField.vue'].includes('!field.required') && sources['src/components/config/ConfigField.vue'].includes('field.has_enable'))
+check('ConfigEditView optional fields show enabled checkbox', sources['src/components/config/ConfigField.vue'].includes('el-checkbox') && sources['src/components/config/ConfigField.vue'].includes('has_enable'))
+check('ConfigEditView disables input when field disabled', sources['src/components/config/ConfigField.vue'].includes('!field.enabled || readonly'))
+check('ConfigEditView has structured Docker widgets', sources['src/components/config/ConfigField.vue'].includes('string_list') && sources['src/components/config/ConfigField.vue'].includes('key_value_list') && sources['src/components/config/ConfigField.vue'].includes('device_list'))
+check('ConfigEditView ordinary rendering does not show launcher.docker_options label', !sources['src/components/config/ConfigField.vue'].includes('{{ field.internal_key }}') && !sources['src/components/config/ConfigField.vue'].includes('{{ field.key }}'))
+check('Advanced raw section defaults collapsed', sources['src/components/config/ConfigSection.vue'].includes('section.collapsed') && sources['src/components/config/ConfigSection.vue'].includes('advanced_raw'))
+check('BackendRuntimesPage uses ConfigEditView', sources['src/pages/BackendRuntimesPage.vue'].includes('ConfigEditView') && !sources['src/pages/BackendRuntimesPage.vue'].includes('RuntimeParameterEditor'))
+check('BackendsPage uses ConfigEditView for BackendVersion', sources['src/pages/BackendsPage.vue'].includes('ConfigEditView'))
+check('NodeRuntimeConfigWizard uses ConfigEditView', sources['src/components/deployments/NodeRuntimeConfigWizard.vue'].includes('ConfigEditView') && !sources['src/components/deployments/NodeRuntimeConfigWizard.vue'].includes('RuntimeParameterEditor'))
+check('DeploymentOverrideEditor uses ConfigEditView patch model', sources['src/components/deployments/DeploymentOverrideEditor.vue'].includes('ConfigEditView') && sources['src/components/deployments/DeploymentOverrideEditor.vue'].includes('editable_config_patch'))
+check('Config edit API client uses view/apply endpoints', sources['src/api/configEdit.ts'].includes('/config-edit/view') && sources['src/api/configEdit.ts'].includes('/config-edit/apply'))
+check('NodeRuntimeConfigWizard selector main title avoids raw id', !sources['src/components/deployments/NodeRuntimeConfigWizard.vue'].includes('runtime.id }}</div>'))
+check('BackendRuntime clone dialog passes display_name/name', sources['src/pages/BackendRuntimesPage.vue'].includes('cloneForm') && sources['src/pages/BackendRuntimesPage.vue'].includes('display_name') && sources['src/pages/BackendRuntimesPage.vue'].includes('name'))
 
 if (failed > 0) {
   console.error(`\n${failed} test(s) FAILED`)

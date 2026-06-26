@@ -33,8 +33,9 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 	}
 	newName := strings.TrimSpace(strVal(req, "name", ""))
 	if newName == "" {
-		newName = h.uniqueRuntimeName(tid, sourceName+"-copy")
+		newName = sourceName + "-copy"
 	}
+	newName = h.uniqueRuntimeName(tid, newName)
 	newDisplayName := strings.TrimSpace(strVal(req, "display_name", ""))
 	if newDisplayName == "" {
 		newDisplayName = newName

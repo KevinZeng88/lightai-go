@@ -58,7 +58,9 @@
       <DeploymentOverrideEditor
         v-if="activeStep === 3"
         :nbr-config-set="selectedNBRConfigSet"
+        :nbr-id="form.node_backend_runtime_id"
         @update:overrides="form.config_overrides = $event"
+        @update:patch="form.editable_config_patch = $event"
       />
 
       <!-- Step 4: Preview -->
@@ -98,6 +100,7 @@ import DeploymentServiceEditor from './DeploymentServiceEditor.vue'
 import DeploymentOverrideEditor from './DeploymentOverrideEditor.vue'
 import DeploymentPreviewPanel from './DeploymentPreviewPanel.vue'
 import { previewDeployment, type PreviewResult } from '@/api/deployments'
+import type { ConfigEditPatch } from '@/utils/configEditView'
 
 const { t } = useI18n()
 
@@ -126,6 +129,7 @@ const form = reactive({
   container_port: 8000,
   served_model_name: '',
   config_overrides: {} as Record<string, any>,
+  editable_config_patch: null as ConfigEditPatch | null,
 })
 
 const showAllRuntimes = ref(false)
@@ -210,6 +214,7 @@ async function doPreview() {
       node_backend_runtime_id: form.node_backend_runtime_id,
       service_json: { host_port: form.host_port, container_port: form.container_port, served_model_name: form.served_model_name },
       config_overrides: form.config_overrides,
+      editable_config_patch: form.editable_config_patch,
     })
     if (activeStep.value === 3) activeStep.value = 4
   } finally {
@@ -243,6 +248,7 @@ function buildPayload() {
     node_backend_runtime_id: form.node_backend_runtime_id,
     service_json: { host_port: form.host_port, container_port: form.container_port, served_model_name: form.served_model_name },
     config_overrides: overrides,
+    editable_config_patch: form.editable_config_patch,
   }
 }
 

@@ -894,7 +894,11 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		// First time: create a new NodeBackendRuntime.
 		// Capture a frozen ConfigSet from the BackendRuntime template and apply
 		// node/runtime explicit choices into the ConfigSet authority.
-		configSetJSONRaw := h.buildRuntimeConfigSnapshot(rt, runtimeID, imageRef, req)
+		configSetJSONRaw, buildErr := h.buildRuntimeConfigSnapshot(rt, runtimeID, imageRef, req)
+		if buildErr != nil {
+			writeError(w, http.StatusBadRequest, buildErr.Error())
+			return
+		}
 		sourceMetadata := map[string]interface{}{
 			"source_type":               "node_backend_runtime",
 			"source_backend_runtime_id": runtimeID,
@@ -946,7 +950,7 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 
 // buildRuntimeConfigSnapshot captures a frozen ConfigSet from a BackendRuntime.
 // This is called only at NodeBackendRuntime creation time (not on check/validate).
-func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID, imageRef string, req map[string]interface{}) string {
+func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID, imageRef string, req map[string]interface{}) (string, error) {
 	set := copyConfigSet(rawJSONString(rt["config_set_json"], "{}"))
 	if requestSet := mapFromAny(req["config_set"]); len(requestSet) > 0 {
 		set = copyConfigSet(jsonString(requestSet))
@@ -959,7 +963,11 @@ func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, run
 	if overrides := mapFromAny(req["config_overrides"]); len(overrides) > 0 {
 		applyConfigOverrides(set, overrides, "NodeBackendRuntime", runtimeID)
 	}
-	return configSetJSON(set)
+	patched, err := applyEditableConfigPatchIfPresent(set, req, "node_backend_runtime", runtimeID)
+	if err != nil {
+		return "", err
+	}
+	return configSetJSON(patched), nil
 }
 
 func (h *AgentHandler) evaluateNodeBackendRuntime(nodeID, vendor, imageRef string, imagePresent, dockerAvailable bool) (string, string) {

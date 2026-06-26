@@ -134,6 +134,13 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 	if overrides, ok := rawBody["config_overrides"].(map[string]interface{}); ok {
 		applyConfigOverrides(nbrConfigSet, overrides, "deployment", "preview")
 	}
+	var patchErr error
+	nbrConfigSet, patchErr = applyEditableConfigPatchIfPresent(nbrConfigSet, rawBody, "deployment", "preview")
+	if patchErr != nil {
+		errs = append(errs, errEntry("config_edit_patch_invalid", patchErr.Error(), "editable_config_patch", "error"))
+		writeJSON(w, http.StatusOK, previewResponse(false, nil, "", runplan.LintResult{Status: "ok"}, errs, warns))
+		return
+	}
 
 	// Get BackendRuntime for resolution.
 	rtRow := h.getBackendRuntimeJSON(nbrBackendRuntimeID)
@@ -151,11 +158,11 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 	paramVals := configSetParameterValues(nbrConfigSet)
 
 	nbrSnapshot := &runplan.NBRSnapshotInfo{
-		ArgsOverride:        configStringSlice(nbrConfigSet, "launcher.args_override"),
-		DefaultEnv:          configStringMapNBR(nbrConfigSet, "runtime.env"),
-		EntrypointOverride:  configStringSlice(nbrConfigSet, "launcher.entrypoint"),
-		ParameterSchema:     paramDefs,
-		ParameterValues:     paramVals,
+		ArgsOverride:       configStringSlice(nbrConfigSet, "launcher.args_override"),
+		DefaultEnv:         configStringMapNBR(nbrConfigSet, "runtime.env"),
+		EntrypointOverride: configStringSlice(nbrConfigSet, "launcher.entrypoint"),
+		ParameterSchema:    paramDefs,
+		ParameterValues:    paramVals,
 	}
 
 	// Placement — build GPUInfo list from accelerator_ids.
@@ -214,13 +221,13 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 		finalArgs = plan.Args
 		envMap = plan.Env
 		lintDockerSpec = &runplan.DockerSpecInfo{
-			Privileged:     plan.Privileged,
-			IPCMode:        plan.IPCMode,
+			Privileged:      plan.Privileged,
+			IPCMode:         plan.IPCMode,
 			SecurityOptions: plan.SecurityOptions,
 		}
 	}
 	lintInput := runplan.LintInput{
-		FinalArgs:          finalArgs,
+		FinalArgs:           finalArgs,
 		Env:                 envMap,
 		PlatformOwnedParams: runplan.DefaultLogicalParamSpecs(),
 		BackendName:         backendName,

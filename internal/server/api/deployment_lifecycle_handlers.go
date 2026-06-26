@@ -167,6 +167,12 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 	}
 	deploymentConfigSet := copyConfigSet(configSetRaw)
 	applyConfigOverrides(deploymentConfigSet, configOverrides, "Deployment", id)
+	var patchErr error
+	deploymentConfigSet, patchErr = applyEditableConfigPatchIfPresent(deploymentConfigSet, req, "deployment", id)
+	if patchErr != nil {
+		writeError(w, http.StatusBadRequest, patchErr.Error())
+		return
+	}
 	configSetRaw = configSetJSON(deploymentConfigSet)
 	sourceMetadata := map[string]interface{}{
 		"copy_semantics":                  "copy_on_create",

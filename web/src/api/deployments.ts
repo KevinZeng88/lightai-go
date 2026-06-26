@@ -28,6 +28,7 @@ export function previewDeployment(data: {
   model_artifact_id: string; node_backend_runtime_id: string
   placement_json?: Record<string, any>; service_json?: Record<string, any>
   config_overrides?: Record<string, any>
+  editable_config_patch?: Record<string, any> | null
 }): Promise<PreviewResult> {
   return apiClient.post('/deployments/preview', data)
 }

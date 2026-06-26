@@ -49,11 +49,10 @@
         <template v-if="selected.is_editable">
           <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
           <div style="margin-bottom:12px">
-            <RuntimeParameterEditor
-              v-model="editorModel"
-              :vendor="selected.vendor"
-              :layer="'backend_runtime'"
-              :show-advanced="true"
+            <ConfigEditView
+              :model-value="editView"
+              :readonly="!selected.is_editable"
+              @update:patch="editPatch = $event"
             />
           </div>
           <div style="margin-top: 12px; text-align: right">
@@ -69,19 +68,27 @@
         </template>
         <el-collapse style="margin-top:12px">
           <el-collapse-item :title="$t('runtimes.advancedDiagnostics') || 'Advanced Diagnostics'">
-            <RuntimeParameterEditor
-              :model-value="{ config_set: selected.config_set || {} }"
-              :readonly="true"
-              :vendor="selected.vendor"
-              :layer="'backend_runtime'"
-              :show-advanced="true"
-            />
             <JsonViewer :value="selected.config_set || {}" :title="$t('common.technicalConfig')" max-height="520px" :searchable="true" />
             <JsonViewer :value="selected.source_metadata || {}" title="Source Metadata" max-height="260px" :searchable="true" />
           </el-collapse-item>
         </el-collapse>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="cloneDialogVisible" title="Clone runtime" width="520px">
+      <el-form label-position="top">
+        <el-form-item label="Display Name">
+          <el-input v-model="cloneForm.display_name" />
+        </el-form-item>
+        <el-form-item label="Name">
+          <el-input v-model="cloneForm.name" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cloneDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="submitCloneRuntime">{{ $t('runtimes.clone') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -90,15 +97,21 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listRuntimes } from '@/api/runtimes'
 import { apiClient } from '@/api/client'
+import { applyConfigEditPatch, getConfigEditView } from '@/api/configEdit'
 import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/runtimeDisplay'
+import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 import JsonViewer from '@/components/common/JsonViewer.vue'
-import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
+import ConfigEditView from '@/components/config/ConfigEditView.vue'
 
 const loading = ref(false)
 const saving = ref(false)
 const runtimes = ref<any[]>([])
 const selected = ref<any | null>(null)
-const editorModel = ref<Record<string, any>>({ config_set: {} })
+const editView = ref<ConfigEditViewModel | null>(null)
+const editPatch = ref<ConfigEditPatch | null>(null)
+const cloneDialogVisible = ref(false)
+const cloneSource = ref<any | null>(null)
+const cloneForm = ref<Record<string, any>>({ display_name: '', name: '' })
 
 const displayRuntimes = computed(() => runtimes.value.map(toRuntimeTemplateDisplay))
 
@@ -109,19 +122,33 @@ const selectedDisplay = computed(() => {
 
 const detailVisible = computed({
   get: () => !!selected.value,
-  set: (value: boolean) => { if (!value) { selected.value = null; editorModel.value = { config_set: {} } } },
+  set: (value: boolean) => { if (!value) { selected.value = null; editView.value = null; editPatch.value = null } },
 })
 
-watch(selected, (value) => {
-  editorModel.value = { config_set: value?.config_set ? JSON.parse(JSON.stringify(value.config_set)) : {} }
+watch(selected, async (value) => {
+  editView.value = null
+  editPatch.value = null
+  if (!value?.id) return
+  editView.value = await getConfigEditView({
+    object_kind: 'backend_runtime',
+    object_id: value.id,
+    layer: 'backend_runtime',
+    mode: value.is_editable ? 'edit' : 'view',
+  })
 })
 
 async function saveEdit() {
   if (!selected.value) return
   saving.value = true
   try {
-    const patchPayload: Record<string, any> = { config_set: editorModel.value?.config_set || selected.value.config_set || { items: {} } }
-    await apiClient.patch(`/backend-runtimes/${selected.value.id}`, patchPayload)
+    if (editPatch.value) {
+      await applyConfigEditPatch({
+        object_kind: 'backend_runtime',
+        object_id: selected.value.id,
+        layer: 'backend_runtime',
+        patch: editPatch.value,
+      })
+    }
     ElMessage.success('Saved')
     await load()
     const updated = runtimes.value.find(r => r.id === selected.value?.id)
@@ -134,9 +161,23 @@ async function saveEdit() {
 }
 
 async function cloneRuntime(row: any) {
+  cloneSource.value = row
+  cloneForm.value = {
+    display_name: `${row.display_name || row.name || 'Runtime'} Copy`,
+    name: '',
+  }
+  cloneDialogVisible.value = true
+}
+
+async function submitCloneRuntime() {
+  if (!cloneSource.value) return
   try {
-    await apiClient.post(`/backend-runtimes/${row.id}/clone`)
+    await apiClient.post(`/backend-runtimes/${cloneSource.value.id}/clone`, {
+      display_name: cloneForm.value.display_name,
+      name: cloneForm.value.name,
+    })
     ElMessage.success('Cloned')
+    cloneDialogVisible.value = false
     await load()
   } catch (e: any) {
     ElMessage.error(e?.message || 'Clone failed')

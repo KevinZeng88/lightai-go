@@ -63,13 +63,10 @@
           </el-form-item>
         </el-form>
         <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
-        <RuntimeParameterEditor
-          v-if="runtimeConfigForEditor"
-          v-model="editorModel"
-          :vendor="selectedRuntime?.vendor || 'nvidia'"
-          :layer="'node_backend_runtime'"
-          :show-advanced="true"
-          @update:model-value="onSchemaParamOutput"
+        <ConfigEditView
+          v-if="runtimeEditView"
+          :model-value="runtimeEditView"
+          @update:patch="onSchemaParamOutput"
         />
         <el-empty v-else :description="$t('common.noData')" />
       </div>
@@ -136,9 +133,11 @@ import { useI18n } from 'vue-i18n'
 import { Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
+import { getConfigEditView } from '@/api/configEdit'
 import { listRuntimes } from '@/api/runtimes'
 import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
-import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
+import ConfigEditView from '@/components/config/ConfigEditView.vue'
+import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 
 const { t } = useI18n()
 
@@ -157,8 +156,8 @@ const nodes = ref<any[]>([])
 const runtimes = ref<any[]>([])
 const selectedNode = ref<any>(null)
 const selectedRuntime = ref<any>(null)
-const paramOverrides = ref<Record<string, any>>({})
-const editorModel = ref<Record<string, any>>({ config_set: {} })
+const paramOverrides = ref<ConfigEditPatch | null>(null)
+const runtimeEditView = ref<ConfigEditViewModel | null>(null)
 const checkResult = ref<any>(null)
 
 const form = reactive({
@@ -172,11 +171,6 @@ const defaultConfigName = computed(() => {
   const backend = selectedRuntime.value?.backend_id || ''
   const name = backend.replace(/^backend\./, '')
   return `${host} / ${vendor} / ${name}`
-})
-
-const runtimeConfigForEditor = computed(() => {
-  if (!selectedRuntime.value) return null
-  return { config_set: selectedRuntime.value.config_set || {} }
 })
 
 const canProceed = computed(() => {
@@ -199,8 +193,8 @@ function resetWizard() {
   selectedRuntime.value = null
   form.display_name = ''
   form.image_ref = ''
-  paramOverrides.value = {}
-  editorModel.value = { config_set: {} }
+  paramOverrides.value = null
+  runtimeEditView.value = null
   checkResult.value = null
   wizardError.value = ''
   savingState.value = 'idle'
@@ -216,11 +210,19 @@ function onRuntimeSelected(row: any) {
   form.image_ref = row.image_ref || ''
 }
 
-watch(selectedRuntime, (runtime) => {
-  editorModel.value = { config_set: runtime?.config_set ? JSON.parse(JSON.stringify(runtime.config_set)) : {} }
+watch(selectedRuntime, async (runtime) => {
+  paramOverrides.value = null
+  runtimeEditView.value = null
+  if (!runtime?.id) return
+  runtimeEditView.value = await getConfigEditView({
+    object_kind: 'backend_runtime',
+    object_id: runtime.id,
+    layer: 'node_backend_runtime',
+    mode: 'enable',
+  })
 })
 
-function onSchemaParamOutput(output: Record<string, any>) {
+function onSchemaParamOutput(output: ConfigEditPatch) {
   paramOverrides.value = output
 }
 
@@ -270,8 +272,8 @@ async function saveAndMaybeCheck(andCheck: boolean) {
       display_name: form.display_name || defaultConfigName.value,
       image_ref: form.image_ref || undefined,
     }
-    if (paramOverrides.value?.config_set) {
-      payload.config_set = paramOverrides.value.config_set
+    if (paramOverrides.value) {
+      payload.editable_config_patch = paramOverrides.value
     }
     const enableResp = await apiClient.post(`/nodes/${selectedNode.value.id}/backend-runtimes/enable`, payload)
     const nbrId = enableResp?.id

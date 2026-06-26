@@ -50,11 +50,11 @@
               <el-form-item label="Description">
                 <el-input v-model="versionForm.description" type="textarea" :rows="2" :disabled="versionReadonly" />
               </el-form-item>
-              <RuntimeParameterEditor
-                v-model="versionEditorModel"
+              <ConfigEditView
+                v-if="versionEditView"
+                :model-value="versionEditView"
                 :readonly="versionReadonly"
-                :layer="'backend_version'"
-                :show-advanced="true"
+                @update:patch="versionEditPatch = $event"
               />
               <el-collapse v-if="!versionReadonly" style="margin-top:12px">
                 <el-collapse-item title="Add Parameter" name="add-param">
@@ -97,8 +97,10 @@ import {
   listBackends,
   patchBackendVersion,
 } from '@/api/backends'
+import { applyConfigEditPatch, getConfigEditView } from '@/api/configEdit'
+import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 import JsonViewer from '@/components/common/JsonViewer.vue'
-import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
+import ConfigEditView from '@/components/config/ConfigEditView.vue'
 
 const loading = ref(false)
 const backends = ref<any[]>([])
@@ -107,6 +109,8 @@ const versions = ref<any[]>([])
 const versionsLoading = ref(false)
 const savingVersion = ref(false)
 const versionEditorModel = ref<Record<string, any>>({ config_set: {} })
+const versionEditView = ref<ConfigEditViewModel | null>(null)
+const versionEditPatch = ref<ConfigEditPatch | null>(null)
 const versionForm = reactive<Record<string, any>>({ id: '', creating: false, version: '', display_name: '', description: '', readonly: true })
 const newParam = reactive({
   code: 'backend.arg.fake_new_param',
@@ -154,9 +158,11 @@ async function loadVersions(backendId: string) {
 function resetVersionForm() {
   Object.assign(versionForm, { id: '', creating: false, version: '', display_name: '', description: '', readonly: true })
   versionEditorModel.value = { config_set: {} }
+  versionEditView.value = null
+  versionEditPatch.value = null
 }
 
-function selectVersion(row: any) {
+async function selectVersion(row: any) {
   Object.assign(versionForm, {
     id: row.id,
     creating: false,
@@ -166,6 +172,13 @@ function selectVersion(row: any) {
     readonly: Boolean(row.readonly),
   })
   versionEditorModel.value = { config_set: row.config_set ? JSON.parse(JSON.stringify(row.config_set)) : {} }
+  versionEditPatch.value = null
+  versionEditView.value = await getConfigEditView({
+    object_kind: 'backend_version',
+    object_id: row.id,
+    layer: 'backend_version',
+    mode: row.readonly ? 'view' : 'edit',
+  })
 }
 
 function newVersion() {
@@ -179,6 +192,8 @@ function newVersion() {
     readonly: false,
   })
   versionEditorModel.value = { config_set: selected.value.config_set ? JSON.parse(JSON.stringify(selected.value.config_set)) : { items: {} } }
+  versionEditView.value = null
+  versionEditPatch.value = null
 }
 
 async function cloneVersion(row: any) {
@@ -186,7 +201,7 @@ async function cloneVersion(row: any) {
     const cloned = await cloneBackendVersion(row.id)
     ElMessage.success('Cloned')
     if (selected.value?.id) await loadVersions(selected.value.id)
-    selectVersion(cloned)
+    await selectVersion(cloned)
   } catch (e: any) {
     ElMessage.error(e?.message || 'Clone failed')
   }
@@ -259,7 +274,15 @@ async function saveVersion() {
       : await patchBackendVersion(versionForm.id, payload)
     ElMessage.success('Saved')
     await loadVersions(selected.value.id)
-    selectVersion(saved)
+    if (!versionForm.creating && versionEditPatch.value) {
+      await applyConfigEditPatch({
+        object_kind: 'backend_version',
+        object_id: versionForm.id,
+        layer: 'backend_version',
+        patch: versionEditPatch.value,
+      })
+    }
+    await selectVersion(saved)
   } catch (e: any) {
     ElMessage.error(e?.message || 'Save failed')
   } finally {
