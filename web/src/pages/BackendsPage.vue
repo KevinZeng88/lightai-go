@@ -15,23 +15,23 @@
     <el-drawer v-model="detailVisible" :title="selected?.display_name || selected?.name || ''" size="72%">
       <template v-if="selected">
         <el-tabs>
-          <el-tab-pane label="Backend">
+          <el-tab-pane :label="$t('backends.title') || 'Backend'">
             <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
             <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="240px" :searchable="true" />
           </el-tab-pane>
-          <el-tab-pane label="Versions">
+          <el-tab-pane :label="$t('backends.versions') || 'Versions'">
             <div class="version-toolbar">
-              <el-button size="small" @click="loadVersions(selected.id)">Refresh</el-button>
-              <el-button size="small" type="primary" @click="newVersion">New Version</el-button>
+              <el-button size="small" @click="loadVersions(selected.id)">{{ $t('common.refresh') }}</el-button>
+              <el-button size="small" type="primary" @click="newVersion">{{ $t('backends.addVersion') || 'New Version' }}</el-button>
             </div>
             <el-table :data="versions" v-loading="versionsLoading" stripe highlight-current-row @row-click="selectVersion">
-              <el-table-column prop="display_name" label="Version" min-width="180" />
-              <el-table-column prop="version" label="Software" width="150" />
-              <el-table-column prop="managed_by" label="Managed By" width="120" />
-              <el-table-column label="Readonly" width="100">
-                <template #default="{ row }">{{ row.readonly ? 'yes' : 'no' }}</template>
+              <el-table-column prop="display_name" :label="$t('backends.versionName') || 'Version'" min-width="180" />
+              <el-table-column prop="version" :label="$t('backends.software') || 'Software'" width="150" />
+              <el-table-column prop="managed_by" :label="$t('runtimes.managedBy') || 'Managed By'" width="120" />
+              <el-table-column :label="$t('common.readonly')" width="100">
+                <template #default="{ row }">{{ row.readonly ? $t('common.yes') : $t('common.no') }}</template>
               </el-table-column>
-              <el-table-column label="Actions" width="170" fixed="right">
+              <el-table-column :label="$t('common.actions')" width="170" fixed="right">
                 <template #default="{ row }">
                   <el-button size="small" @click.stop="cloneVersion(row)">Clone</el-button>
                   <el-button v-if="!row.readonly" size="small" type="danger" @click.stop="removeVersion(row)">Delete</el-button>
@@ -39,15 +39,15 @@
               </el-table-column>
             </el-table>
 
-            <el-divider content-position="left">{{ versionForm.id ? 'Version Editor' : 'Select or create a version' }}</el-divider>
+            <el-divider content-position="left">{{ versionForm.id ? $t('backends.versionEditor') : $t('backends.selectOrCreateVersion') }}</el-divider>
             <el-form v-if="versionForm.id || versionForm.creating" label-position="top">
-              <el-form-item label="Version">
+              <el-form-item :label="$t('backends.versionName')">
                 <el-input v-model="versionForm.version" :disabled="versionReadonly" />
               </el-form-item>
-              <el-form-item label="Display Name">
+              <el-form-item :label="$t('backends.versionDisplayName') || $t('backends.displayName')">
                 <el-input v-model="versionForm.display_name" :disabled="versionReadonly" />
               </el-form-item>
-              <el-form-item label="Description">
+              <el-form-item :label="$t('backends.versionDescription') || $t('common.description')">
                 <el-input v-model="versionForm.description" type="textarea" :rows="2" :disabled="versionReadonly" />
               </el-form-item>
               <ConfigEditView
@@ -57,22 +57,25 @@
                 @update:patch="versionEditPatch = $event"
               />
               <el-collapse v-if="!versionReadonly" style="margin-top:12px">
-                <el-collapse-item title="Add Parameter" name="add-param">
+                <el-collapse-item :title="$t('backends.addParameter')" name="add-param">
+                  <el-alert type="info" :closable="false" style="margin-bottom:12px">
+                    {{ $t('backends.addParameterHint') || 'Developer parameter definition. Fields here define the schema and capabilities for this BackendVersion. These are not runtime configuration values.' }}
+                  </el-alert>
                   <el-form label-position="top" class="param-grid">
-                    <el-form-item label="Code"><el-input v-model="newParam.code" placeholder="backend.arg.fake_new_param" /></el-form-item>
-                    <el-form-item label="Label"><el-input v-model="newParam.label" /></el-form-item>
-                    <el-form-item label="Help"><el-input v-model="newParam.help" /></el-form-item>
-                    <el-form-item label="Category"><el-input v-model="newParam.category" /></el-form-item>
-                    <el-form-item label="Group"><el-input v-model="newParam.group" /></el-form-item>
-                    <el-form-item label="Kind"><el-input v-model="newParam.kind" /></el-form-item>
-                    <el-form-item label="Type"><el-input v-model="newParam.type" /></el-form-item>
-                    <el-form-item label="CLI Flag"><el-input v-model="newParam.flag" /></el-form-item>
-                    <el-form-item label="Default Value"><el-input v-model="newParam.value" /></el-form-item>
-                    <el-form-item label="Order"><el-input v-model.number="newParam.order" /></el-form-item>
-                    <el-form-item label="Enabled"><el-switch v-model="newParam.enabled" /></el-form-item>
-                    <el-form-item label="Required"><el-switch v-model="newParam.required" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramCode') || 'Code'"><el-input v-model="newParam.code" placeholder="backend.arg.fake_new_param" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramLabel') || 'Label'"><el-input v-model="newParam.label" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramHelp') || 'Help'"><el-input v-model="newParam.help" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramCategory') || 'Category'"><el-input v-model="newParam.category" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramGroup') || 'Group'"><el-input v-model="newParam.group" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramKind') || 'Kind'"><el-input v-model="newParam.kind" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramType') || 'Type'"><el-input v-model="newParam.type" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramFlag') || 'CLI Flag'"><el-input v-model="newParam.flag" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramDefaultValue') || 'Default Value'"><el-input v-model="newParam.value" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramOrder') || 'Order'"><el-input v-model.number="newParam.order" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramEnabled') || 'Enabled'"><el-switch v-model="newParam.enabled" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramRequired') || 'Required'"><el-switch v-model="newParam.required" /></el-form-item>
                   </el-form>
-                  <el-button size="small" @click="addParameter">Add Parameter</el-button>
+                  <el-button size="small" @click="addParameter">{{ $t('backends.addParameterButton') || 'Add Parameter' }}</el-button>
                 </el-collapse-item>
               </el-collapse>
               <div v-if="!versionReadonly" class="version-actions">

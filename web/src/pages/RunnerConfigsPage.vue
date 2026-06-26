@@ -8,7 +8,7 @@
       </div>
     </div>
 
-    <el-table :data="configs" v-loading="loading" stripe @row-click="selected = $event">
+    <el-table :data="configs" v-loading="loading" stripe @row-click="openDetail">
       <el-table-column prop="display_name" :label="$t('runnerConfigs.name')" min-width="220" />
       <el-table-column prop="node_id" :label="$t('deployments.node')" min-width="180" />
       <el-table-column :label="$t('deployments.runtime')" min-width="240">
@@ -42,15 +42,12 @@
           </el-descriptions-item>
         </el-descriptions>
         <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
-        <RuntimeParameterEditor
-          :model-value="nbrEditState"
-          :vendor="selected.backend_runtime?.vendor || 'nvidia'"
-          :layer="'node_backend_runtime'"
-          :base-values="baseParamValues"
-          :show-source="true"
-          :show-advanced="true"
-          @update:model-value="onNBREditUpdate"
+        <ConfigEditView
+          v-if="nbrEditView"
+          :model-value="nbrEditView"
+          @update:patch="onNBREditPatch"
         />
+        <el-empty v-else :description="$t('common.noData')" />
         <div style="margin-top:12px;text-align:right">
           <el-button type="primary" :loading="saving" @click="saveNBREdit">{{ $t('common.save') }}</el-button>
         </div>
@@ -63,52 +60,60 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
-import { listRuntimes } from '@/api/runtimes'
+import { getConfigEditView, applyConfigEditPatch } from '@/api/configEdit'
 import JsonViewer from '@/components/common/JsonViewer.vue'
-import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
+import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import NodeRuntimeConfigWizard from '@/components/deployments/NodeRuntimeConfigWizard.vue'
+import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 
 const loading = ref(false)
 const saving = ref(false)
 const createVisible = ref(false)
 const configs = ref<any[]>([])
-const nodes = ref<any[]>([])
-const runtimes = ref<any[]>([])
 const selected = ref<any | null>(null)
-const nbrEditState = ref<Record<string, any>>({})
+const nbrEditView = ref<ConfigEditViewModel | null>(null)
+const nbrEditPatch = ref<ConfigEditPatch | null>(null)
 
 const detailVisible = computed({
   get: () => !!selected.value,
-  set: (value: boolean) => { if (!value) { selected.value = null; nbrEditState.value = {} } },
+  set: (value: boolean) => { if (!value) { selected.value = null; nbrEditView.value = null; nbrEditPatch.value = null } },
 })
 
-const baseParamValues = computed(() => {
-  const rtId = selected.value?.backend_runtime_id
-  if (!rtId) return []
-  const rt = runtimes.value.find((r: any) => r.id === rtId)
-  if (rt?.config_set?.items) {
-    const items = rt.config_set.items
-    const vals: Record<string, any>[] = []
-    for (const [k, v] of Object.entries(items)) {
-      vals.push({ [k]: (v as any)?.value ?? (v as any)?.default_value })
-    }
-    return vals
-  }
-  return []
+function openDetail(row: any) {
+  selected.value = row
+}
+
+watch(selected, async (value) => {
+  nbrEditView.value = null
+  nbrEditPatch.value = null
+  if (!value?.id) return
+  nbrEditView.value = await getConfigEditView({
+    object_kind: 'node_backend_runtime',
+    object_id: value.id,
+    layer: 'node_backend_runtime',
+    mode: 'edit',
+  })
 })
 
-function onNBREditUpdate(val: Record<string, any>) {
-  nbrEditState.value = val
+function onNBREditPatch(patch: ConfigEditPatch) {
+  nbrEditPatch.value = patch
 }
 
 async function saveNBREdit() {
   if (!selected.value) return
   saving.value = true
   try {
-    await apiClient.patch(`/nodes/${selected.value.node_id}/backend-runtimes/${selected.value.id}`, nbrEditState.value)
+    if (nbrEditPatch.value) {
+      await applyConfigEditPatch({
+        object_kind: 'node_backend_runtime',
+        object_id: selected.value.id,
+        layer: 'node_backend_runtime',
+        patch: nbrEditPatch.value,
+      })
+    }
     ElMessage.success('Saved')
     await load()
   } catch (e: any) {
@@ -121,14 +126,7 @@ async function saveNBREdit() {
 async function load() {
   loading.value = true
   try {
-    const [nodeList, runtimeList, configList] = await Promise.all([
-      apiClient.get('/nodes'),
-      listRuntimes(),
-      apiClient.get('/nodes/backend-runtimes/all'),
-    ])
-    nodes.value = Array.isArray(nodeList) ? nodeList : []
-    runtimes.value = Array.isArray(runtimeList) ? runtimeList : []
-    configs.value = Array.isArray(configList) ? configList : []
+    configs.value = await apiClient.get('/nodes/backend-runtimes/all')
   } finally {
     loading.value = false
   }

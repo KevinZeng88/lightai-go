@@ -118,6 +118,31 @@ check('device_table onDeviceTableChange preserves readonly', fieldSrc.includes('
 const rtSrc = sources['src/utils/runtimeDisplay.ts']
 check('runtimeDisplay extractVersion uses is_editable for builtin detection', rtSrc.includes('is_editable') && rtSrc.includes('is_builtin'))
 check('runtimeDisplay does not use source_type/managed_by for version detection', rtSrc.includes('is_builtin'))
+// g. runtimeDisplay normalizes runtime.xxx prefix names.
+check('runtimeDisplay strips runtime. prefix from display_name', rtSrc.includes("replace(/^runtime\\./, '')"))
+check('runtimeDisplay strips runtime. prefix from name', rtSrc.includes('normalizedName'))
+
+// h. Config edit scope: RunnerConfigsPage migrated from RuntimeParameterEditor to ConfigEditView.
+const rcpSrc = sources['src/pages/RunnerConfigsPage.vue']
+check('RunnerConfigsPage uses ConfigEditView', rcpSrc.includes('ConfigEditView'))
+check('RunnerConfigsPage does NOT use RuntimeParameterEditor', !rcpSrc.includes('RuntimeParameterEditor'))
+check('RunnerConfigsPage applies editable_config_patch', rcpSrc.includes('applyConfigEditPatch'))
+check('RunnerConfigsPage uses node_backend_runtime layer', rcpSrc.includes('node_backend_runtime'))
+
+// i. NBR wizard has node image selector.
+const wizardSrc = sources['src/components/deployments/NodeRuntimeConfigWizard.vue']
+check('NodeRuntimeConfigWizard has image select with filterable+allow-create', wizardSrc.includes('filterable') && wizardSrc.includes('allow-create'))
+check('NodeRuntimeConfigWizard loads node docker images', wizardSrc.includes('loadNodeImages'))
+check('NodeRuntimeConfigWizard uses node_backend_runtime layer for ConfigEditView', wizardSrc.includes('node_backend_runtime'))
+
+// j. BackendsPage has developer i18n for Add Parameter.
+const beSrc = sources['src/pages/BackendsPage.vue']
+check('BackendsPage Add Parameter uses i18n title', beSrc.includes('addParameter'))
+check('BackendsPage Add Parameter has developer hint', beSrc.includes('addParameterHint'))
+
+// k. Runtime name normalization.
+check('runtimeDisplay normalizes runtime.xxx prefix names', rtSrc.includes('normalizedDisplay'))
+check('runtimeDisplay has product-friendly backend/vendor maps', rtSrc.includes('BACKEND_DISPLAY') && rtSrc.includes('VENDOR_DISPLAY'))
 
 if (failed > 0) {
   console.error(`\n${failed} test(s) FAILED`)

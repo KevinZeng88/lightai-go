@@ -63,19 +63,70 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 	requireField(t, fields, "launcher.docker_options.privileged", "launcher.docker_options", []string{"privileged"}, "container_resources")
 	requireField(t, fields, "launcher.docker_options.devices", "launcher.docker_options", []string{"devices"}, "devices_mounts")
 	requireField(t, fields, "launcher.docker_options.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
-	requireField(t, fields, "backend.arg.fake_new_param", "backend.arg.fake_new_param", nil, "model_serving")
+
+	// backend.arg.* fields are model-serving: hidden at backend_runtime layer.
+	if fieldExists(fields, "backend.arg.fake_new_param") {
+		t.Fatal("model-serving param should be hidden at backend_runtime layer")
+	}
 
 	requiredImage := requireField(t, fields, "launcher.image", "launcher.image", nil, "basic")
 	if requiredImage.HasEnable || !requiredImage.Enabled || !requiredImage.Required {
 		t.Fatalf("required image should be enabled without user-toggle: %#v", requiredImage)
 	}
-	optionalParam := requireField(t, fields, "backend.arg.fake_new_param", "backend.arg.fake_new_param", nil, "model_serving")
-	if !optionalParam.HasEnable || optionalParam.Enabled {
-		t.Fatalf("optional param should expose disabled enable checkbox: %#v", optionalParam)
-	}
+
 	internal := requireField(t, fields, "internal.checksum", "internal.checksum", nil, "advanced_raw")
 	if !internal.Advanced {
 		t.Fatalf("internal field should be advanced/raw only: %#v", internal)
+	}
+
+	// --- Deployment layer: model-serving params SHOULD appear. ---
+	depView, err := ProjectConfigSetToEditView(ProjectInput{
+		ConfigSet:   testConfigSet(),
+		Layer:       "deployment",
+		ObjectKind:  "deployment",
+		ObjectID:    "dep-test",
+		ObjectLabel: "Deployment Test",
+	})
+	if err != nil {
+		t.Fatalf("project deployment view: %v", err)
+	}
+	depFields := flattenFields(depView)
+	depParam := requireField(t, depFields, "backend.arg.fake_new_param", "backend.arg.fake_new_param", nil, "model_serving")
+	// Has non-empty value "abc" — should be enabled under new rules.
+	if !depParam.HasEnable || !depParam.Enabled {
+		t.Fatalf("deployment param with non-empty value should be enabled: %#v", depParam)
+	}
+
+	// Docker sub-fields hidden at deployment layer.
+	if fieldExists(depFields, "launcher.docker_options.shm_size") {
+		t.Fatal("docker options should be hidden at deployment layer")
+	}
+
+	// launcher.image hidden at deployment layer.
+	if fieldExists(depFields, "launcher.image") {
+		t.Fatal("image should be hidden at deployment layer")
+	}
+
+	// --- Test: optional empty field defaults disabled ---
+	// security_options is empty → should default disabled.
+	sec := requireField(t, fields, "launcher.docker_options.security_options", "launcher.docker_options", []string{"security_options"}, "container_resources")
+	if sec.Enabled {
+		t.Fatal("empty security_options should default disabled")
+	}
+	// shm_size has value "16gb" → should be enabled.
+	shm := requireField(t, fields, "launcher.docker_options.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
+	if !shm.Enabled {
+		t.Fatal("shm_size with value should be enabled")
+	}
+	// optional_devices is empty → should default disabled.
+	odev := requireField(t, fields, "launcher.docker_options.optional_devices", "launcher.docker_options", []string{"optional_devices"}, "devices_mounts")
+	if odev.Enabled {
+		t.Fatal("empty optional_devices should default disabled")
+	}
+	// group_add has value ["video"] → should be enabled.
+	ga := requireField(t, fields, "launcher.docker_options.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
+	if !ga.Enabled {
+		t.Fatal("group_add with value should be enabled")
 	}
 }
 
@@ -127,6 +178,15 @@ func flattenFields(view ConfigEditView) []EditField {
 		out = append(out, section.Fields...)
 	}
 	return out
+}
+
+func fieldExists(fields []EditField, key string) bool {
+	for _, f := range fields {
+		if f.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 func requireField(t *testing.T, fields []EditField, key, internal string, path []string, section string) EditField {

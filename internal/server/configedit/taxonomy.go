@@ -55,21 +55,21 @@ var taxonomyLabels = map[string]string{
 // capabilityLikeCodes are codes that contain capability/metadata information
 // that should be shown as readonly_summary in advanced_raw, not as editable fields.
 var capabilityLikeCodes = map[string]bool{
-	"backend.capabilities":            true,
-	"backend.supported_config_items":  true,
-	"backend.capability_profile":      true,
-	"backend.detected_capabilities":   true,
-	"capabilities":                    true,
-	"capabilities_detail":             true,
+	"backend.capabilities":           true,
+	"backend.supported_config_items": true,
+	"backend.capability_profile":     true,
+	"backend.detected_capabilities":  true,
+	"capabilities":                   true,
+	"capabilities_detail":            true,
 }
 
 // widgetOverrides maps internal keys to preferred widget types for structured display.
 var widgetOverrides = map[string]string{
-	"runtime.env":               "key_value_table",
-	"runtime.model_mount":       "mount_form",
-	"runtime.health":            "health_check_form",
-	"service.container_port":    "port_form",
-	"service.host_port":         "port_form",
+	"runtime.env":             "key_value_table",
+	"runtime.model_mount":     "mount_form",
+	"runtime.health":          "health_check_form",
+	"service.container_port":  "port_form",
+	"service.host_port":       "port_form",
 }
 
 var dockerFieldSpecs = []struct {
@@ -89,6 +89,163 @@ var dockerFieldSpecs = []struct {
 	{"devices", "devices_mounts", "array", "device_table", 10},
 	{"optional_devices", "devices_mounts", "array", "device_table", 20},
 	{"group_add", "devices_mounts", "array", "string_list", 30},
+}
+
+// ---------------------------------------------------------------------------
+// Canonical alias groups — duplicate fields merged into one canonical field.
+// ---------------------------------------------------------------------------
+
+type aliasGroup struct {
+	Canonical  string   // primary key shown in UI
+	Label      string   // display label for the canonical field
+	Aliases    []string // other keys folded into canonical
+	Section    string   // preferred section for canonical field
+	Widget     string   // preferred widget
+}
+
+var canonicalAliases = []aliasGroup{
+	{
+		Canonical: "service.listen_host",
+		Label:     "Container listen host",
+		Aliases:   []string{"backend.common.host", "launcher.listen_host"},
+		Section:   "service",
+		Widget:    "string",
+	},
+	{
+		Canonical: "service.container_port",
+		Label:     "Container listen port",
+		Aliases:   []string{"backend.common.port", "launcher.container_port"},
+		Section:   "service",
+		Widget:    "port_form",
+	},
+}
+
+// aliasCanonicalOf maps alias keys → canonical key for quick lookup.
+var aliasCanonicalOf = buildAliasMap()
+
+func buildAliasMap() map[string]string {
+	m := map[string]string{}
+	for _, g := range canonicalAliases {
+		for _, a := range g.Aliases {
+			m[a] = g.Canonical
+		}
+		m[g.Canonical] = g.Canonical // self-map
+	}
+	return m
+}
+
+// ---------------------------------------------------------------------------
+// Layer scope — which codes are hidden or readonly for specific layers.
+// ---------------------------------------------------------------------------
+
+// modelServingCodes are backend serving parameters that belong at Deployment
+// layer, not at BackendRuntime or NodeBackendRuntime.
+var modelServingCodes = map[string]bool{
+	"backend.arg.max_model_len":       true,
+	"backend.arg.max_num_seqs":        true,
+	"backend.arg.context_length":      true,
+	"backend.arg.gpu_memory_utilization": true,
+	"backend.arg.served_model_name":   true,
+	"backend.common.served_model_name": true,
+	"backend.arg.max_num_batched_tokens": true,
+	"backend.arg.tensor_parallel_size":   true,
+	"backend.arg.pipeline_parallel_size": true,
+	"backend.arg.enforce_eager":          true,
+	"backend.arg.trust_remote_code":      true,
+	"backend.arg.dtype":                  true,
+	"backend.arg.seed":                   true,
+	"backend.arg.temperature":            true,
+	"backend.arg.top_p":                  true,
+	"backend.arg.top_k":                  true,
+	"backend.arg.max_tokens":             true,
+	"backend.arg.repetition_penalty":     true,
+}
+
+// isModelServingCode checks if a code is a model-serving parameter (should only
+// appear at Deployment layer).
+func isModelServingCode(code string) bool {
+	if modelServingCodes[code] {
+		return true
+	}
+	// Also match pattern: backend.arg.max_*, backend.arg.context_*, etc.
+	if strings.HasPrefix(code, "backend.arg.") {
+		return true // all backend args are model serving
+	}
+	return false
+}
+
+// layerHiddenCodes defines codes hidden per layer.
+var layerHiddenCodes = map[string]map[string]bool{
+	"backend_runtime": {
+		"backend.capabilities":           true,
+		"backend.supported_config_items": true,
+	},
+	"node_backend_runtime": {
+		"backend.capabilities":           true,
+		"backend.supported_config_items": true,
+	},
+	"deployment": {
+		"launcher.image":                 true,
+		"backend.capabilities":           true,
+		"backend.supported_config_items": true,
+		"launcher.docker_options":        true, // docker sub-fields handled individually
+	},
+}
+
+// layerReadonlyCodes defines codes forced readonly per layer.
+var layerReadonlyCodes = map[string]map[string]bool{
+	"deployment": {
+		"launcher.command":    true,
+		"launcher.entrypoint": true,
+		"runtime.model_mount": true,
+	},
+}
+
+// isLayerHidden checks if a code should be hidden for the given layer.
+func isLayerHidden(code string, layer string) bool {
+	if hidden, ok := layerHiddenCodes[layer]; ok && hidden[code] {
+		return true
+	}
+	// Model serving codes hidden from non-deployment layers.
+	if layer != "deployment" && isModelServingCode(code) {
+		return true
+	}
+	// Docker sub-fields hidden from deployment (they're inherited from NBR).
+	if layer == "deployment" && strings.HasPrefix(code, "launcher.docker_options.") {
+		return true
+	}
+	return false
+}
+
+// isLayerReadonly checks if a code should be readonly for the given layer.
+func isLayerReadonly(code string, layer string) bool {
+	if ro, ok := layerReadonlyCodes[layer]; ok && ro[code] {
+		return true
+	}
+	return false
+}
+
+// emptyValue returns true if the field value is empty/nil/zero.
+func isEmptyValue(v any) bool {
+	if v == nil {
+		return true
+	}
+	switch val := v.(type) {
+	case string:
+		return val == ""
+	case []any:
+		return len(val) == 0
+	case map[string]any:
+		return len(val) == 0
+	case bool:
+		return false // boolean false is a valid value
+	case float64:
+		return val == 0
+	case int:
+		return val == 0
+	default:
+		return false
+	}
 }
 
 func sectionFor(code string, item map[string]any) string {
@@ -143,6 +300,14 @@ func fieldLabel(code string, item map[string]any) string {
 	}
 	if label := nestedString(item, "extensions", "label"); label != "" {
 		return label
+	}
+	// Check canonical alias label.
+	if canon, ok := aliasCanonicalOf[code]; ok && canon != code {
+		for _, g := range canonicalAliases {
+			if g.Canonical == canon {
+				return g.Label
+			}
+		}
 	}
 	if label, ok := taxonomyLabels[code]; ok {
 		return label

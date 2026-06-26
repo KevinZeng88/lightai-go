@@ -19,13 +19,51 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 	}
 
 	items := itemsMap(set)
+
+	// Track which canonical keys have been projected to avoid duplicates.
+	projectedCanonical := map[string]bool{}
+
 	for code, raw := range items {
 		item, _ := raw.(map[string]any)
 		if item == nil {
 			continue
 		}
+
+		// --- Canonical alias merge ---
+		// If this code is an alias for a canonical key, merge into canonical.
+		if canon, ok := aliasCanonicalOf[code]; ok && canon != code {
+			// Alias: only render if canonical hasn't been rendered yet.
+			if projectedCanonical[canon] {
+				continue // already projected via primary key
+			}
+			// Use the alias group's preferred section/widget, merge values.
+			canonItem := mergeCanonicalItem(code, canon, item, items)
+			projectedCanonical[canon] = true
+			field := projectItem(canon, canon, nil, canonItem, input)
+			sections[field.Section].Fields = append(sections[field.Section].Fields, field)
+			continue
+		}
+		if canon, ok := aliasCanonicalOf[code]; ok && canon == code {
+			if projectedCanonical[code] {
+				continue // already projected via alias
+			}
+			projectedCanonical[code] = true
+			canonItem := mergeCanonicalItem(code, code, item, items)
+			field := projectItem(code, code, nil, canonItem, input)
+			sections[field.Section].Fields = append(sections[field.Section].Fields, field)
+			continue
+		}
+
+		// --- Layer scope filter ---
+		if isLayerHidden(code, input.Layer) {
+			continue
+		}
+
 		if code == "launcher.docker_options" {
 			for _, field := range projectDockerOptions(item, input) {
+				if isLayerHidden(field.Key, input.Layer) {
+					continue
+				}
 				sections[field.Section].Fields = append(sections[field.Section].Fields, field)
 			}
 			continue
@@ -64,6 +102,65 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 	}, nil
 }
 
+// mergeCanonicalItem creates a merged item for a canonical key by combining
+// values from the primary key and all its aliases.
+func mergeCanonicalItem(code, canon string, item map[string]any, items map[string]any) map[string]any {
+	out := cloneMap(item)
+	if out == nil {
+		out = map[string]any{}
+	}
+	out["code"] = canon
+
+	// Resolve value: primary key value takes precedence, then first alias with value.
+	currentValue := item["value"]
+	if isEmptyValue(currentValue) {
+		for _, g := range canonicalAliases {
+			if g.Canonical != canon {
+				continue
+			}
+			for _, alias := range g.Aliases {
+				aliasItem, _ := items[alias].(map[string]any)
+				if aliasItem == nil {
+					continue
+				}
+				av := aliasItem["value"]
+				if !isEmptyValue(av) {
+					currentValue = av
+					break
+				}
+			}
+		}
+	}
+	out["value"] = currentValue
+
+	// Resolve label per canonical group.
+	for _, g := range canonicalAliases {
+		if g.Canonical == canon {
+			if g.Label != "" {
+				if out["render"] == nil {
+					out["render"] = map[string]any{}
+				}
+				nestedMap(out, "render")["label"] = g.Label
+			}
+			if g.Section != "" {
+				if out["render"] == nil {
+					out["render"] = map[string]any{}
+				}
+				nestedMap(out, "render")["section"] = g.Section
+			}
+			if g.Widget != "" {
+				if out["render"] == nil {
+					out["render"] = map[string]any{}
+				}
+				nestedMap(out, "render")["widget"] = g.Widget
+			}
+			break
+		}
+	}
+
+	return out
+}
+
 func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 	value := valueMap(item)
 	var fields []EditField
@@ -73,6 +170,8 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 		dockerItem["type"] = spec.Type
 		dockerItem["value"] = value[spec.Path]
 		dockerItem["required"] = false
+		// Docker sub-fields default to disabled if their value is empty.
+		dockerItem["enabled"] = hasValue(value, spec.Path) && !isEmptyValue(value[spec.Path])
 		field := projectItem(code, "launcher.docker_options", []string{spec.Path}, dockerItem, input)
 		field.Section = spec.Section
 		field.Widget = spec.Widget
@@ -85,13 +184,30 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 
 func projectItem(key, internalKey string, path []string, item map[string]any, input ProjectInput) EditField {
 	required := boolValue(item["required"])
-	enabled := true
-	if hasValue(item, "enabled") {
-		enabled = boolValue(item["enabled"])
-	}
+
+	// --- Enabled default logic ---
+	// required → always enabled
+	// has non-empty value → enabled
+	// has default_value that is meaningful → enabled
+	// optional empty → disabled
+	enabled := false
 	if required {
 		enabled = true
+	} else if !isEmptyValue(item["value"]) {
+		enabled = true
+	} else if !isEmptyValue(item["default_value"]) {
+		enabled = true
+	} else if hasValue(item, "enabled") {
+		// Respect explicit enabled toggle from stored item.
+		enabled = boolValue(item["enabled"])
 	}
+	// For boolean widgets, default_value of false is a valid default.
+	if widgetFor(item) == "boolean" && !required && isEmptyValue(item["value"]) {
+		if hasValue(item, "default_value") {
+			enabled = true // boolean switches are always meaningful
+		}
+	}
+
 	// Determine if this is a capability/internal field that should be forced to readonly summary.
 	isCapability := capabilityLikeCodes[key] || strings.Contains(key, "capabilities") || strings.Contains(key, "supported_config")
 	isInternalMeta := strings.HasPrefix(key, "internal.") || strings.HasPrefix(key, "source_metadata.") || strings.HasPrefix(key, "resolver.")
@@ -102,7 +218,16 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	if advanced {
 		section = "advanced_raw"
 	}
-	readonly := input.Readonly || boolValue(item["readonly"]) || isCapability || visibility == "readonly" || visibility == "internal" || (input.Layer == "deployment" && deploymentProtectedFields[internalKey])
+
+	// Readonly from input, item config, layer scope, or capability status.
+	readonly := input.Readonly || boolValue(item["readonly"]) || isCapability || visibility == "readonly" || visibility == "internal"
+	if isLayerReadonly(key, input.Layer) {
+		readonly = true
+	}
+	// Deployment protected fields (image/command/entrypoint/model_mount) handled separately.
+	if input.Layer == "deployment" && deploymentProtectedFields[internalKey] {
+		readonly = true
+	}
 
 	// Determine widget, forcing readonly_summary for capability fields.
 	widget := widgetFor(item)

@@ -46,17 +46,26 @@ export function toRuntimeTemplateDisplay(row: any): RuntimeTemplateDisplay {
   const versionDisplay = version === '*' ? '*' : (version || '')
 
   // displayName priority:
-  // 1. row.display_name (user-specified)
+  // 1. row.display_name (user-specified, unless it starts with "runtime.")
   // 2. Product-friendly: "vLLM / NVIDIA"
-  // 3. row.name
+  // 3. row.name (normalized: strip "runtime." prefix, humanize)
   // 4. row.id
   let displayName = ''
-  if (row.display_name && row.display_name.trim()) {
-    displayName = row.display_name.trim()
+  const rawDisplay = row.display_name || ''
+  const rawName = row.name || ''
+
+  // Normalize: strip "runtime." prefix from display_name and name.
+  const normalizedDisplay = rawDisplay.replace(/^runtime\./, '')
+  const normalizedName = rawName.replace(/^runtime\./, '')
+
+  if (normalizedDisplay.trim()) {
+    displayName = normalizedDisplay.trim()
   } else if (backendDisplay && vendorDisplay) {
     displayName = `${backendDisplay} / ${vendorDisplay}`
+  } else if (normalizedName.trim()) {
+    displayName = normalizedName.trim()
   } else {
-    displayName = row.name || row.id || ''
+    displayName = row.id || ''
   }
 
   // Source type and label.

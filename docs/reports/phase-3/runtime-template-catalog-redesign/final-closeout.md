@@ -484,6 +484,116 @@ All 8 follow-up issues are FIXED. No undocumented problems remain.
 
 Follow-up status: **PASS**
 
+---
+
+## Config scope and input boundary repair
+
+Date: 2026-06-27 (follow-up after commit `dcf9ead`)
+
+### Configuration Layer Scope Matrix
+
+| Layer | Shows | Hidden | Editable |
+| --- | --- | --- | --- |
+| `backend_version` | Schema/capability definition, parameter schema items | -- | Only user versions |
+| `backend_runtime` | Image, docker options, devices, env, health, backend runtime args | Model serving params (`backend.arg.*`), capabilities, docker raw | User runtimes |
+| `node_backend_runtime` | Same as backend_runtime + node-specific | Model serving params, capabilities | Yes |
+| `deployment` | Model serving params (`backend.arg.*`), service, overrides | Base image, docker options, capabilities, backend metadata | Yes |
+
+### Repaired Issues
+
+| ID | Issue | Status | Evidence |
+| --- | --- | --- | --- |
+| SC-01 | Model serving params shown in BackendRuntime/NBR views | FIXED | `isModelServingCode` hides all `backend.arg.*` codes from non-deployment layers. |
+| SC-02 | BackendRuntime detail showed "Backend common host/port" as separate English fields | FIXED | `canonicalAliases` merges `backend.common.host` + `listen_host` → `service.listen_host`, and `backend.common.port` + `container_port` → `service.container_port`. |
+| SC-03 | Optional empty docker fields defaulted enabled | FIXED | `projectItem` defaults optional empty fields to `enabled=false`; docker sub-fields check `isEmptyValue(value)` independently. |
+| SC-04 | RunnerConfigsPage used RuntimeParameterEditor | FIXED | Migrated to `ConfigEditView` with `object_kind=node_backend_runtime`, `layer=node_backend_runtime`, `mode=edit`; saves via `applyConfigEditPatch`. |
+| SC-05 | NodeRuntimeConfigWizard lacked node image selector | FIXED | Step 2 now has `el-select` with `filterable` + `allow-create`, loads node Docker images via `/nodes/{id}/docker-images` API. |
+| SC-06 | BackendsPage Add Parameter had English hardcoded labels | FIXED | All 14 form labels use i18n keys; added `addParameterHint` developer notice. |
+| SC-07 | Runtime template names showed `runtime.xxx` prefix | FIXED | `runtimeDisplay.ts` strips `runtime.` prefix from both `display_name` and `name` before display. |
+| SC-08 | `backend.arg.*` codes appeared in every layer | FIXED | `isLayerHidden` checks `isModelServingCode` for non-deployment layers. |
+| SC-09 | No canonical field merging for duplicate params | FIXED | `canonicalAliases` groups define primary+alias merging; `ProjectConfigSetToEditView` deduplicates via `projectedCanonical` map. |
+| SC-10 | Docker sub-fields leaked to deployment layer | FIXED | `launcher.docker_options.*` hidden from deployment via `isLayerHidden`. |
+| SC-11 | `launcher.image` appeared in deployment editor | FIXED | Hidden at deployment layer; deployment inherits image from NBR. |
+| SC-12 | BackendsPage tabs used raw English labels | FIXED | Tab labels, column headers, action buttons use i18n keys. |
+
+### Alias Merge Rules
+
+Two canonical groups defined in `configedit.taxonomy.go`:
+
+| Canonical Key | Display Label | Aliases Merged |
+| --- | --- | --- |
+| `service.listen_host` | Container listen host | `backend.common.host`, `launcher.listen_host` |
+| `service.container_port` | Container listen port | `backend.common.port`, `launcher.container_port` |
+
+- Primary key value takes precedence; first alias with value used as fallback.
+- Only canonical field appears in UI; aliases are hidden.
+- Canonical group sets preferred section and widget.
+
+### Enabled Default Rules
+
+```
+required=true              → enabled=true, no user toggle
+has non-empty value        → enabled=true
+has non-empty default_value → enabled=true
+boolean with explicit default → enabled=true
+optional + empty           → enabled=false, user can enable
+```
+
+Docker options sub-fields (devices, group_add, security_options, optional_devices, ulimits):
+- Enabled based on whether their value is non-empty in the docker_options.value map.
+- Empty arrays/objects → disabled by default.
+- Has values (e.g., `devices: ["/dev/nvidia0"]`) → enabled.
+
+### Node Image Selector Recovery
+
+`NodeRuntimeConfigWizard.vue` Step 2:
+- `el-select` with `filterable` and `allow-create` for combo-box behavior
+- Loads node Docker images on focus via `GET /nodes/{nodeId}/docker-images`
+- Displays `repoTags[0]` or `ref` with size info
+- Allows manual entry of any image reference
+- Defaults to runtime template's `image_ref`
+- Check uses the user-selected `image_ref`
+
+### Code Change Files (This Repair)
+
+Backend:
+- `internal/server/configedit/taxonomy.go` — Added `canonicalAliases`, `isModelServingCode`, `isLayerHidden`, `isLayerReadonly`, `isEmptyValue`, `layerHiddenCodes`, `layerReadonlyCodes`, `modelServingCodes`
+- `internal/server/configedit/project.go` — Added canonical alias merging (`mergeCanonicalItem`, `projectedCanonical`), layer filtering, enabled default logic rework, docker option enabled independence
+- `internal/server/configedit/configedit_test.go` — Updated tests for layer scope, added deployment view test, optional empty disabled test, docker sub-field visibility test
+
+Web:
+- `web/src/pages/RunnerConfigsPage.vue` — Replaced `RuntimeParameterEditor` with `ConfigEditView`; uses `getConfigEditView`/`applyConfigEditPatch` with `node_backend_runtime` layer
+- `web/src/components/deployments/NodeRuntimeConfigWizard.vue` — Added node Docker image selector (el-select+filterable+allow-create), image loading API call, size formatting
+- `web/src/pages/BackendsPage.vue` — i18n for Add Parameter (14 form labels), developer hint alert, tab/column/button i18n
+- `web/src/utils/runtimeDisplay.ts` — Strips `runtime.` prefix from display names, normalizes for product display
+- `web/src/locales/zh-CN.ts` — Added 20 `backends.*` i18n keys; total 1080 keys
+- `web/src/locales/en-US.ts` — Added 20 `backends.*` i18n keys; total 1080 keys
+- `web/tests/runtimeBoundaryUi.test.mjs` — 11 new assertions covering scope, migration, image selector, name normalization
+
+### Test Results
+
+```bash
+go build ./cmd/server/...      # PASS
+go build ./cmd/agent/...       # PASS
+go test ./internal/server/...  # PASS (all packages, 0 failures)
+go test ./internal/agent/...   # PASS (all packages, 0 failures)
+cd web && npm run build        # PASS (Vite chunk warnings only)
+cd web && npm test             # PASS (7 suites, all assertions pass)
+```
+
+### Remaining Blocked Items
+
+- RTC-BLOCKER-001: MetaX vLLM real hardware/image validation (DOCUMENTED_BLOCKER)
+- RTC-BLOCKER-002: Huawei vLLM real hardware/image validation (DOCUMENTED_BLOCKER)
+
+No new blockers introduced.
+
+### Problem Closure Status
+
+All 12 scope issues are FIXED. No undocumented problems remain.
+
+Status: **PASS**
+
 Push result: `git push` is required after this file is committed; final command output is recorded with the pushed HEAD.
 
 Expected final `git status --short` after commit and push:
