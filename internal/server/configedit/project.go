@@ -3,6 +3,8 @@ package configedit
 import (
 	"sort"
 	"strings"
+
+	"lightai-go/internal/server/semanticconfig"
 )
 
 func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
@@ -183,6 +185,15 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 }
 
 func projectItem(key, internalKey string, path []string, item map[string]any, input ProjectInput) EditField {
+	registry := semanticconfig.DefaultRegistry()
+	semanticKey := key
+	def, hasDef := registry.Get(key)
+	if !hasDef {
+		if canonical, ok := registry.CanonicalKey(key); ok {
+			semanticKey = canonical
+			def, hasDef = registry.Get(canonical)
+		}
+	}
 	required := boolValue(item["required"])
 
 	// --- Enabled default logic ---
@@ -241,30 +252,44 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		readonly = true
 	}
 
-	return EditField{
-		Key:          key,
-		InternalKey:  internalKey,
-		ParentKey:    parentKey(internalKey, path),
-		Path:         path,
-		Label:        fieldLabel(key, item),
-		Help:         firstString(nestedString(item, "render", "help"), nestedString(item, "extensions", "help")),
-		Section:      section,
-		Group:        firstString(nestedString(item, "render", "group"), nestedString(item, "extensions", "group")),
-		Order:        intValue(item["order"]),
-		Type:         firstString(stringValue(item["type"]), "string"),
-		Widget:       widget,
-		Value:        value,
-		DefaultValue: item["default_value"],
-		Enabled:      enabled,
-		HasEnable:    !required && !readonly,
-		Required:     required,
-		Readonly:     readonly,
-		Advanced:     advanced || section == "advanced_raw",
-		Visibility:   visibility,
-		Options:      optionsFor(item),
-		Constraints:  nestedMap(item, "constraints"),
-		Source:       nestedMap(item, "source"),
+	warnings, _ := item["warnings"].([]any)
+	field := EditField{
+		Key:             key,
+		InternalKey:     internalKey,
+		SemanticKey:     semanticKey,
+		ParentKey:       parentKey(internalKey, path),
+		Path:            path,
+		Label:           fieldLabel(key, item),
+		Help:            firstString(nestedString(item, "render", "help"), nestedString(item, "extensions", "help")),
+		Section:         section,
+		Group:           firstString(nestedString(item, "render", "group"), nestedString(item, "extensions", "group")),
+		Order:           intValue(item["order"]),
+		Type:            firstString(stringValue(item["type"]), "string"),
+		Widget:          widget,
+		Value:           value,
+		DefaultValue:    item["default_value"],
+		Enabled:         enabled,
+		HasEnable:       !required && !readonly,
+		Required:        required,
+		Readonly:        readonly,
+		Advanced:        advanced || section == "advanced_raw",
+		Visibility:      visibility,
+		Options:         optionsFor(item),
+		Constraints:     nestedMap(item, "constraints"),
+		Source:          nestedMap(item, "source"),
+		CopiedFrom:      firstString(stringValue(item["copied_from"]), stringValue(item["copiedFrom"])),
+		Dirty:           boolValue(item["dirty"]),
+		Warnings:        warnings,
+		Diagnostic:      advanced || visibility == "internal" || visibility == "hidden",
+		OriginalValue:   value,
+		OriginalEnabled: enabled,
 	}
+	if hasDef {
+		field.Owner = string(def.Owner)
+		field.Tier = string(def.DisplayTier)
+		field.Label = firstString(def.Label, field.Label)
+	}
+	return field
 }
 
 func parentKey(internalKey string, path []string) string {

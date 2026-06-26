@@ -65,11 +65,11 @@ var capabilityLikeCodes = map[string]bool{
 
 // widgetOverrides maps internal keys to preferred widget types for structured display.
 var widgetOverrides = map[string]string{
-	"runtime.env":             "key_value_table",
-	"runtime.model_mount":     "mount_form",
-	"runtime.health":          "health_check_form",
-	"service.container_port":  "port_form",
-	"service.host_port":       "port_form",
+	"runtime.env":            "key_value_table",
+	"runtime.model_mount":    "mount_form",
+	"runtime.health":         "health_check_form",
+	"service.container_port": "port_form",
+	"service.host_port":      "port_form",
 }
 
 var dockerFieldSpecs = []struct {
@@ -96,11 +96,11 @@ var dockerFieldSpecs = []struct {
 // ---------------------------------------------------------------------------
 
 type aliasGroup struct {
-	Canonical  string   // primary key shown in UI
-	Label      string   // display label for the canonical field
-	Aliases    []string // other keys folded into canonical
-	Section    string   // preferred section for canonical field
-	Widget     string   // preferred widget
+	Canonical string   // primary key shown in UI
+	Label     string   // display label for the canonical field
+	Aliases   []string // other keys folded into canonical
+	Section   string   // preferred section for canonical field
+	Widget    string   // preferred widget
 }
 
 var canonicalAliases = []aliasGroup{
@@ -141,12 +141,12 @@ func buildAliasMap() map[string]string {
 // modelServingCodes are backend serving parameters that belong at Deployment
 // layer, not at BackendRuntime or NodeBackendRuntime.
 var modelServingCodes = map[string]bool{
-	"backend.arg.max_model_len":       true,
-	"backend.arg.max_num_seqs":        true,
-	"backend.arg.context_length":      true,
+	"backend.arg.max_model_len":          true,
+	"backend.arg.max_num_seqs":           true,
+	"backend.arg.context_length":         true,
 	"backend.arg.gpu_memory_utilization": true,
-	"backend.arg.served_model_name":   true,
-	"backend.common.served_model_name": true,
+	"backend.arg.served_model_name":      true,
+	"backend.common.served_model_name":   true,
 	"backend.arg.max_num_batched_tokens": true,
 	"backend.arg.tensor_parallel_size":   true,
 	"backend.arg.pipeline_parallel_size": true,

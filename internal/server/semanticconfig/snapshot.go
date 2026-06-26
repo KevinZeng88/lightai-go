@@ -98,7 +98,7 @@ func ApplyPatch(reg *Registry, snapshot Snapshot, fields []PatchField) (Snapshot
 	for _, field := range fields {
 		keys = append(keys, field.Key)
 	}
-	if err := ValidatePatchKeys(reg, keys); err != nil {
+	if err := ValidateSnapshotPatch(reg, snapshot, fields); err != nil {
 		return Snapshot{}, err
 	}
 	out := cloneSnapshot(snapshot)

@@ -21,6 +21,9 @@ export type ConfigEditSection = {
 export type ConfigEditField = {
   key: string
   internal_key: string
+  semantic_key?: string
+  owner?: string
+  tier?: string
   parent_key?: string
   path?: string[]
   label: string
@@ -41,6 +44,12 @@ export type ConfigEditField = {
   options?: Array<{ label: string, value: any }>
   constraints?: Record<string, any>
   source?: Record<string, any>
+  copied_from?: string
+  dirty?: boolean
+  warnings?: any[]
+  diagnostic?: boolean
+  original_value?: any
+  original_enabled?: boolean
 }
 
 export type ConfigEditPatch = {
@@ -66,12 +75,17 @@ export function buildConfigEditPatch(view: ConfigEditView): ConfigEditPatch {
   for (const section of sortedSections(view)) {
     for (const field of sortedFields(section)) {
       if (field.readonly) continue
+      const nextEnabled = field.required ? true : field.enabled
+      const originalEnabled = field.original_enabled ?? nextEnabled
+      const hasOriginalValue = Object.prototype.hasOwnProperty.call(field, 'original_value')
+      const originalValue = hasOriginalValue ? field.original_value : field.value
+      if (stableJSON(field.value) === stableJSON(originalValue) && nextEnabled === originalEnabled) continue
       fields.push({
-        key: field.key,
+        key: field.semantic_key || field.key,
         internal_key: field.internal_key,
         path: field.path || [],
         value: field.value,
-        enabled: field.required ? true : field.enabled,
+        enabled: nextEnabled,
       })
     }
   }
@@ -80,6 +94,10 @@ export function buildConfigEditPatch(view: ConfigEditView): ConfigEditPatch {
     object_id: view.object_id,
     fields,
   }
+}
+
+function stableJSON(value: any): string {
+  return JSON.stringify(value ?? null)
 }
 
 export function sortedSections(view: ConfigEditView): ConfigEditSection[] {
