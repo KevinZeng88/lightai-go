@@ -63,13 +63,12 @@
           </el-form-item>
         </el-form>
         <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
-        <RuntimeParameterEditor
+        <HumanRuntimeParameterForm
           v-if="runtimeConfigForEditor"
-          :model-value="runtimeConfigForEditor"
+          :config-set="selectedRuntime?.config_set || null"
+          :backend-name="selectedRuntime?.backend_id"
           :vendor="selectedRuntime?.vendor || 'nvidia'"
-          :layer="'node_backend_runtime'"
-          :show-advanced="true"
-          @update:model-value="onParamUpdate"
+          @update:output="onHumanParamOutput"
         />
         <el-empty v-else :description="$t('common.noData')" />
       </div>
@@ -138,7 +137,8 @@ import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { listRuntimes } from '@/api/runtimes'
 import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
-import RuntimeParameterEditor from '@/components/common/RuntimeParameterEditor.vue'
+import HumanRuntimeParameterForm from '@/components/runtime/HumanRuntimeParameterForm.vue'
+import type { RuntimeParamFormOutput } from '@/utils/runtimeParameterViewModel'
 
 const { t } = useI18n()
 
@@ -157,7 +157,7 @@ const nodes = ref<any[]>([])
 const runtimes = ref<any[]>([])
 const selectedNode = ref<any>(null)
 const selectedRuntime = ref<any>(null)
-const paramOverrides = ref<Record<string, any>>({})
+const paramOverrides = ref<RuntimeParamFormOutput>({})
 const checkResult = ref<any>(null)
 
 const form = reactive({
@@ -198,7 +198,7 @@ function resetWizard() {
   selectedRuntime.value = null
   form.display_name = ''
   form.image_ref = ''
-  paramOverrides.value = {}
+  paramOverrides.value = {} as RuntimeParamFormOutput
   checkResult.value = null
   wizardError.value = ''
   savingState.value = 'idle'
@@ -214,8 +214,8 @@ function onRuntimeSelected(row: any) {
   form.image_ref = row.image_ref || ''
 }
 
-function onParamUpdate(val: Record<string, any>) {
-  paramOverrides.value = val
+function onHumanParamOutput(output: RuntimeParamFormOutput) {
+  paramOverrides.value = output
 }
 
 function nextStep() {
@@ -264,8 +264,20 @@ async function saveAndMaybeCheck(andCheck: boolean) {
       display_name: form.display_name || undefined,
       image_ref: form.image_ref || undefined,
     }
-    if (paramOverrides.value?.config_set) {
-      payload.config_set = paramOverrides.value.config_set
+    // Apply human-readable parameter overrides to config_set
+    if (paramOverrides.value?.parameter_values?.length && selectedRuntime.value?.config_set) {
+      const cs = JSON.parse(JSON.stringify(selectedRuntime.value.config_set))
+      cs.items = cs.items || {}
+      for (const pv of paramOverrides.value.parameter_values) {
+        cs.items[pv.key] = { ...(cs.items[pv.key] || {}), value: pv.value, enabled: pv.enabled }
+      }
+      payload.config_set = cs
+    }
+    if (paramOverrides.value?.docker_options && Object.keys(paramOverrides.value.docker_options).length) {
+      payload.docker_options = paramOverrides.value.docker_options
+    }
+    if (paramOverrides.value?.env && Object.keys(paramOverrides.value.env).length) {
+      payload.env = paramOverrides.value.env
     }
     const enableResp = await apiClient.post(`/nodes/${selectedNode.value.id}/backend-runtimes/enable`, payload)
     const nbrId = enableResp?.id
