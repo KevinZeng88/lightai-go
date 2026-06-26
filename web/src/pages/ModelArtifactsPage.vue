@@ -229,9 +229,15 @@
       </el-steps>
       <!-- Step 1: Select node -->
       <div v-if="wizardStep === 0">
-        <el-select v-model="wizardNodeId" :placeholder="$t('modelWizard.selectNode')" style="width:100%" filterable @change="onWizAutoNext">
-          <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
-        </el-select>
+        <NodeSelectorTable
+          :nodes="wizardNodes"
+          :loading="wizardNodesLoading"
+          :error="wizardNodesError"
+          :label="$t('nodeSelector.selectModelNode')"
+          :hide-refresh="false"
+          @select="onWizNodeSelect"
+          @refresh="loadWizardNodes"
+        />
         <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizardNodeId" @click="wizardStep=1">{{ $t('common.next') }}</el-button></div>
       </div>
       <!-- Step 2: File browser -->
@@ -333,7 +339,7 @@
     <!-- Add Location Dialog -->
     <el-dialog v-model="addLocVisible" :title="$t('modelLocations.addLocation')" width="600px">
       <el-select v-model="addLocNodeId" :placeholder="$t('modelWizard.selectNode')" style="width:100%;margin-bottom:8px" filterable>
-        <el-option v-for="n in nodeItems" :key="n.id" :label="n.label" :value="n.id" />
+        <el-option v-for="n in nodeLabelItems" :key="n.id" :label="n.label" :value="n.id" />
       </el-select>
       <RemoteFileBrowser v-if="addLocNodeId" :node-id="addLocNodeId" @select="(e:any) => { addLocPath = e.relative_path; addLocSelected = e }" />
       <template #footer>
@@ -353,7 +359,8 @@ import { useNodeLabels } from '@/composables/useNodeLabels'
 import RemoteFileBrowser from '@/components/RemoteFileBrowser.vue'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 import { capabilityLabel, inferModelCapabilities, recommendedTestMode, testModeLabel } from '@/utils/modelCapabilities.js'
-const { loadNodes, nodes: nodeItems, nodeLabel } = useNodeLabels()
+import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
+const { loadNodes: loadNodeLabels, nodes: nodeLabelItems, nodeLabel } = useNodeLabels()
 const { t, locale } = useI18n()
 
 const loading = ref(false); const saving = ref(false)
@@ -364,12 +371,29 @@ let editingId = ''
 // Wizard state
 const wizardVisible = ref(false); const wizardStep = ref(0)
 const wizardNodeId = ref(''); const wizardSelectedEntry = ref<any>(null)
+const wizardNodes = ref<any[]>([]); const wizardNodesLoading = ref(false); const wizardNodesError = ref('')
 const wizardScanning = ref(false); const wizardSaving = ref(false)
 const scanResult = ref<any>(null); const wizardModelName = ref(''); const wizardDisplayName = ref('')
 const selectedCandidateIdx = ref(0)
 const activeCandidate = ref<any>(null)
 
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () => { wizardStep.value++ })
+
+async function loadWizardNodes() {
+  wizardNodesLoading.value = true
+  wizardNodesError.value = ''
+  try {
+    wizardNodes.value = await apiClient.get('/nodes')
+  } catch (e: any) {
+    wizardNodesError.value = e?.message || 'Failed to load nodes'
+  } finally {
+    wizardNodesLoading.value = false
+  }
+}
+
+function onWizNodeSelect(node: any) {
+  if (node) wizardNodeId.value = node.id
+}
 
 // Add location state
 const addLocVisible = ref(false); const addLocNodeId = ref(''); const addLocPath = ref(''); const addLocSelected = ref<any>(null); const addLocSaving = ref(false)
@@ -523,14 +547,14 @@ function recommendedEndpoint(model: any): string {
   return t('artifacts.endpointAuto')
 }
 
-onMounted(async () => { await refresh(); loadNodes() })
+onMounted(async () => { await refresh(); loadNodeLabels() })
 
 async function refresh() {
   loading.value = true
   try { items.value = await apiClient.get('/api/v1/model-artifacts') } catch (e: any) { console.error(e) }
   loading.value = false
 }
-async function loadNodesLocal() { loadNodes() }
+async function loadNodesLocal() { loadNodeLabels() }
 
 function showCreate() { editingId = ''; form.value = { name: '', path: '', format: 'custom', task_type: 'chat', architecture: 'custom', size_label: '', quantization: 'unknown', source_type: 'local_path', display_name: '' }; editCapabilities.value = []; editDefaultTestMode.value = 'auto'; editTaskType.value = 'chat'; parameterDefaultsText.value = ''; dialogVisible.value = true }
 function showEdit(row: any) {
@@ -586,7 +610,7 @@ async function showDetail(row: any) {
 }
 
 // ---- Wizard ----
-function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardNodeId.value = ''; wizardSelectedEntry.value = null; scanResult.value = null; wizardModelName.value = ''; wizardDisplayName.value = ''; selectedCandidateIdx.value = 0; activeCandidate.value = null }
+function startWizard() { wizardVisible.value = true; wizardStep.value = 0; wizardNodeId.value = ''; wizardSelectedEntry.value = null; scanResult.value = null; wizardModelName.value = ''; wizardDisplayName.value = ''; selectedCandidateIdx.value = 0; activeCandidate.value = null; loadWizardNodes() }
 function onFileSelect(entry: any) {
   wizardSelectedEntry.value = entry
   wizardModelName.value = entry.name
