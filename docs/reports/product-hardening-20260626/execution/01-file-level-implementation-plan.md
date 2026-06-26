@@ -37,6 +37,8 @@ Rationale:
 
 OpenAI Gateway (API keys, usage, `/v1/models`, `/v1/chat/completions`, billing) is **deferred** — see `future-openai-gateway-notes.md`.
 
+**⚠️ Before implementation, Claude must read and follow `03-implementation-guardrails.md`. These guardrails override any conflicting wording in this plan.**
+
 ---
 
 ## 3. Workstream B — Runtime Config / NBR Parameter Completeness

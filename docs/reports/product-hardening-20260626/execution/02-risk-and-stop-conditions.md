@@ -112,6 +112,12 @@ Before each commit:
 - [ ] No raw `NBR` in i18n display values (Workstream F)
 - [ ] No raw UUIDs as primary table column values (Workstream F)
 - [ ] `node_backend_runtime_id` used in deployment create payload, not `backend_runtime_id` (Workstream C)
+- [ ] `03-implementation-guardrails.md` reviewed before implementation
+- [ ] Workstream closeout includes Guardrail confirmation section
+- [ ] BackendRuntime clone route verified against `router.go` before implementation
+- [ ] RunPlan remains visible as "运行计划 / Run Plan" in UI
+- [ ] ModelArtifact fields do not enter runtime args / RunPlan resolver
+- [ ] No Gateway/API Key/Usage DB/API/UI code added in this round
 
 ## 7. Revised DB Impact
 
