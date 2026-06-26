@@ -54,7 +54,17 @@ if kill -0 "$PID" 2>/dev/null; then
   echo "  Agent stdout log: logs/agent-stdout.log"
   echo "  Agent main log:   logs/lightai-agent.log"
 else
-  echo "Agent failed to start. Check logs/agent-stdout.log"
+  echo "Agent failed to start."
+  echo ""
+  echo "--- Diagnostic information ---"
+  echo "Working directory: $(pwd)"
+  echo "Config path:       $CONFIG"
+  echo ""
+  echo "--- Last 80 lines of logs/agent-stdout.log ---"
+  tail -80 logs/agent-stdout.log 2>/dev/null | grep -viE "password|token|cookie|csrf|secret|key" || echo "  (empty or not found)"
+  echo ""
+  echo "--- Last 80 lines of logs/lightai-agent.log ---"
+  tail -80 logs/lightai-agent.log 2>/dev/null | grep -viE "password|token|cookie|csrf|secret|key" || echo "  (empty or not found)"
   rm -f run/agent.pid
   exit 1
 fi

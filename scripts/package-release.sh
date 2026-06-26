@@ -240,6 +240,8 @@ cp -r configs/backend-catalog/* "$BUILD_DIR/configs/backend-catalog/"
 # Copy optional catalog overrides if present.
 mkdir -p "$BUILD_DIR/configs/backend-catalog.d"
 cp -r configs/backend-catalog.d/* "$BUILD_DIR/configs/backend-catalog.d/" 2>/dev/null || true
+	# Copy config-registry (config item definitions — required for seed/migration).
+	cp -r configs/config-registry "$BUILD_DIR/configs/"
 # Copy bootstrap tooling (scripts, profiles, export helper, docs).
 cp scripts/lightai-bootstrap.sh "$BUILD_DIR/scripts/"
 mkdir -p "$BUILD_DIR/scripts/lib"
@@ -251,6 +253,37 @@ cp docs/engineering/bootstrap/lightai-bootstrap.md "$BUILD_DIR/docs/engineering/
 chmod +x "$BUILD_DIR"/scripts/*.sh
 echo "  OK"
 
+
+# --- Step 5b: Fail-fast validation of release directory ---
+echo "[5b/8] Validating release directory..."
+FAIL_FAST=false
+check_file() {
+  if [ ! -e "$BUILD_DIR/$1" ]; then
+    echo "  ERROR: missing required file/dir: $1" >&2
+    FAIL_FAST=true
+  fi
+}
+check_dir() {
+  if [ ! -d "$BUILD_DIR/$1" ]; then
+    echo "  ERROR: missing required directory: $1" >&2
+    FAIL_FAST=true
+  fi
+}
+check_file "bin/lightai-server"
+check_file "bin/lightai-agent"
+check_file "configs/server.release.yaml"
+check_file "configs/agent.yaml"
+check_dir  "configs/config-registry"
+check_dir  "configs/backend-catalog"
+check_file "scripts/start-all.sh"
+check_file "scripts/start-server.sh"
+check_file "scripts/start-agent.sh"
+check_file "scripts/lightai-bootstrap.sh"
+if $FAIL_FAST; then
+  echo "  FAIL: release directory validation failed. Aborting." >&2
+  exit 1
+fi
+echo "  OK"
 # --- Step 6: Copy README and licenses ---
 echo "[6/8] Copying docs..."
 cp README-RELEASE.md "$BUILD_DIR/"

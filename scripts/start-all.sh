@@ -33,8 +33,29 @@ done
 # Detect source tree vs release directory.
 if [ -f "$PROJECT_DIR/cmd/server/main.go" ]; then
   MODE="source"
+  # Source mode: verify Go toolchain available, build binaries if missing.
+  if ! command -v go >/dev/null 2>&1; then
+    echo "[start-all] ERROR: source mode requires Go toolchain. Install Go or use a release package." >&2
+    exit 1
+  fi
+  if [ ! -f "$PROJECT_DIR/bin/lightai-server" ] || [ ! -f "$PROJECT_DIR/bin/lightai-agent" ]; then
+    echo "[start-all] Source mode: building binaries..."
+    (cd "$PROJECT_DIR" && go build -tags web -o bin/lightai-server ./cmd/server && go build -o bin/lightai-agent ./cmd/agent) || {
+      echo "[start-all] ERROR: build failed. Run: go build -tags web -o bin/lightai-server ./cmd/server && go build -o bin/lightai-agent ./cmd/agent" >&2
+      exit 1
+    }
+  fi
 else
   MODE="release"
+  # Release mode: verify binaries exist.
+  if [ ! -x "$PROJECT_DIR/bin/lightai-server" ]; then
+    echo "[start-all] ERROR: release mode requires bin/lightai-server. Package may be incomplete." >&2
+    exit 1
+  fi
+  if [ ! -x "$PROJECT_DIR/bin/lightai-agent" ]; then
+    echo "[start-all] ERROR: release mode requires bin/lightai-agent. Package may be incomplete." >&2
+    exit 1
+  fi
 fi
 
 log()  { echo "[start-all] $*"; }

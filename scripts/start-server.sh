@@ -52,7 +52,20 @@ if kill -0 "$PID" 2>/dev/null; then
     echo "  Initial credentials: runtime/initial-credentials.txt"
   fi
 else
-  echo "Server failed to start. Check logs/server-stdout.log"
+	echo "Server failed to start."
+	echo ""
+	echo "--- Diagnostic information ---"
+	echo "Working directory: $(pwd)"
+	echo "Config path:       $CONFIG"
+	echo "Server binary:     $(test -x bin/lightai-server && echo bin/lightai-server || echo "not found")"
+	echo "Configs tree:"
+	find configs -maxdepth 3 -type d 2>/dev/null | sort | sed "s/^/  /" || echo "  (no configs directory)"
+	echo ""
+	echo "--- Last 80 lines of logs/server-stdout.log ---"
+	tail -80 logs/server-stdout.log 2>/dev/null | grep -viE "password|token|cookie|csrf|secret|key" || echo "  (empty or not found)"
+	echo ""
+	echo "--- Last 80 lines of logs/lightai-server.log ---"
+	tail -80 logs/lightai-server.log 2>/dev/null | grep -viE "password|token|cookie|csrf|secret|key" || echo "  (empty or not found)"
   rm -f run/server.pid
   exit 1
 fi
