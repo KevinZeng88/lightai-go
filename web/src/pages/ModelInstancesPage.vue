@@ -21,6 +21,12 @@
       <el-table-column prop="node_id" :label="t('instances.node')" width="160" />
       <el-table-column prop="container_id" :label="t('instances.container')" width="180" show-overflow-tooltip />
       <el-table-column prop="host_port" :label="t('instances.port')" width="90" />
+      <el-table-column :label="t('instances.startedAt')" width="150">
+        <template #default="{ row }">{{ row.started_at || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="'Restarts'" width="80">
+        <template #default="{ row }">{{ row.restart_count ?? 0 }}</template>
+      </el-table-column>
       <el-table-column prop="endpoint_url" :label="t('instances.endpoint')" min-width="200" show-overflow-tooltip />
       <el-table-column :label="t('common.actions')" width="420" fixed="right">
         <template #default="{ row }">
