@@ -1,6 +1,6 @@
 <template>
   <div>
-    <el-table :data="props.nodeRuntimes" highlight-current-row @current-change="onSelect" max-height="400">
+    <el-table :data="props.nodeRuntimes" highlight-current-row @current-change="onSelect" max-height="400" :row-class-name="rowClass">
       <el-table-column :label="$t('deployments.runtime')" min-width="200">
         <template #default="{ row }">{{ row.display_name || row.backend_runtime?.display_name || row.backend_runtime?.name || row.id }}</template>
       </el-table-column>
@@ -25,6 +25,9 @@
           <div v-if="row.warnings?.length && !row.disabled_reason" style="font-size:11px;color:var(--el-color-warning);margin-top:2px">
             {{ row.warnings[0] }}
           </div>
+          <div v-if="!isNBRDeployable(row)" style="font-size:11px;color:var(--el-color-danger);margin-top:2px">
+            {{ $t('runnerConfigs.needsCheckFirst') || 'Run check-request first' }}
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -42,6 +45,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
+function isNBRDeployable(row: any): boolean {
+  if (row.deployable === true) return true
+  if (row.status === 'ready' || row.status === 'ready_with_warnings') return true
+  return false
+}
+
 function statusTagType(row: any): string {
   if (row.status === 'ready') return 'success'
   if (row.status === 'ready_with_warnings') return 'warning'
@@ -50,7 +59,24 @@ function statusTagType(row: any): string {
   return 'info'
 }
 
+function rowClass({ row }: { row: any }): string {
+  if (row && !isNBRDeployable(row)) return 'nbr-row--disabled'
+  return ''
+}
+
 function onSelect(row: any) {
-  if (row) emit('update:modelValue', row.id)
+  if (!row) return
+  if (!isNBRDeployable(row)) {
+    // Silently reject non-deployable rows — do not emit id.
+    return
+  }
+  emit('update:modelValue', row.id)
 }
 </script>
+
+<style scoped>
+:deep(.nbr-row--disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+</style>

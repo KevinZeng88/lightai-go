@@ -127,9 +127,19 @@ const deployableRuntimes = computed(() => {
 const hasArtifacts = computed(() => props.artifacts && props.artifacts.length > 0)
 const hasRuntimes = computed(() => props.nodeRuntimes && props.nodeRuntimes.length > 0)
 
+function isNBRDeployable(nbr: any): boolean {
+  if (!nbr) return false
+  if (nbr.deployable === true) return true
+  if (nbr.status === 'ready' || nbr.status === 'ready_with_warnings') return true
+  return false
+}
+
+const selectedNBR = computed(() =>
+  props.nodeRuntimes.find((r: any) => r.id === form.node_backend_runtime_id)
+)
+
 const selectedNBRConfigSet = computed(() => {
-  const nbr = props.nodeRuntimes.find((r: any) => r.id === form.node_backend_runtime_id)
-  return nbr?.config_set || null
+  return selectedNBR.value?.config_set || null
 })
 
 function onNBRSelected(nbrID: string) {
@@ -139,7 +149,10 @@ function onNBRSelected(nbrID: string) {
 function nextStep() {
   const s = activeStep.value
   if (s === 0 && !form.model_artifact_id) return
-  if (s === 1 && !form.node_backend_runtime_id) return
+  if (s === 1) {
+    if (!form.node_backend_runtime_id) return
+    if (!isNBRDeployable(selectedNBR.value)) return
+  }
   if (s === 3 && activeStep.value < 4) {
     doPreview()
     return
@@ -164,6 +177,10 @@ async function doPreview() {
 }
 
 function buildPayload() {
+  // Guard: reject non-deployable NBR
+  if (!isNBRDeployable(selectedNBR.value)) {
+    return null
+  }
   const overrides: Record<string, any> = { parameter_values: [] }
   if (form.config_overrides?.parameter_values) {
     overrides.parameter_values = form.config_overrides.parameter_values
