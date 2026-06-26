@@ -238,6 +238,50 @@ func TestResolveRendersConfigSetParameterStyles(t *testing.T) {
 	}
 }
 
+func TestResolveDoesNotFallbackToLiveBackendVersionParameterSchema(t *testing.T) {
+	in := makeTestInput()
+	in.NBRConfigSnapshot.ParameterSchema = nil
+	in.NBRConfigSnapshot.ArgsOverride = []string{"{{model_container_path}}"}
+	in.NBRConfigSnapshot.ParameterValues = nil
+	in.Deployment.ParameterValues = nil
+	in.BackendVersion.ParameterDefs = []ParameterDef{
+		{Name: "live_required_after_snapshot", CliName: "--live-required-after-snapshot", Required: true},
+	}
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("BackendVersion ParameterDefs affected snapshot-only RunPlan: %v", errs)
+	}
+	if plan == nil {
+		t.Fatal("plan is nil")
+	}
+	if strings.Contains(strings.Join(plan.Args, " "), "--live-required-after-snapshot") {
+		t.Fatalf("live BackendVersion ParameterDefs leaked into args: %v", plan.Args)
+	}
+}
+
+func TestResolveDoesNotUseLiveBackendVersionVendorOptionsResourceControls(t *testing.T) {
+	in := makeTestInput()
+	in.NBRConfigSnapshot.ArgsOverride = []string{"{{model_container_path}}"}
+	in.NBRConfigSnapshot.ParameterSchema = nil
+	in.NBRConfigSnapshot.ParameterValues = nil
+	in.Deployment.ParameterValues = nil
+	in.Deployment.Parameters = map[string]interface{}{"max_model_len": float64(12345)}
+	in.BackendVersion.VendorOptionsJSON = vllmVendorOptionsJSON
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan == nil {
+		t.Fatal("plan is nil")
+	}
+	args := strings.Join(plan.Args, " ")
+	if strings.Contains(args, "--max-model-len") || strings.Contains(args, "12345") {
+		t.Fatalf("live BackendVersion VendorOptionsJSON resource_controls leaked into args: %s", args)
+	}
+}
+
 func TestResolveArgs(t *testing.T) {
 	plan, _, _ := Resolve(makeTestInput())
 
@@ -646,7 +690,7 @@ func TestVLLMRunPlanRendersHostPortFlags(t *testing.T) {
 	}
 }
 
-// --- resource_controls integration tests ---
+// --- resource_controls fixtures ---
 
 const vllmVendorOptionsJSON = `{
 	"resource_controls": {
@@ -695,153 +739,6 @@ const llamacppVendorOptionsJSON = `{
 		"batch_size": {"arg": "--batch-size", "type": "int"}
 	}
 }`
-
-func TestResolveVLLMResourceControlsGPUFraction(t *testing.T) {
-	input := makeTestInput()
-	input.BackendVersion.VendorOptionsJSON = vllmVendorOptionsJSON
-	input.Deployment.Parameters = map[string]interface{}{
-		"served_model_name":   "qwen3-32b",
-		"gpu_memory_fraction": 0.7,
-	}
-	input.BackendVersion.ParameterDefs = []ParameterDef{
-		{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: true},
-	}
-
-	plan, errors, _ := Resolve(input)
-	if len(errors) > 0 {
-		t.Fatalf("unexpected errors: %v", errors)
-	}
-	argsStr := strings.Join(plan.Args, " ")
-	if !strings.Contains(argsStr, "--gpu-memory-utilization") {
-		t.Errorf("expected --gpu-memory-utilization in args, got: %s", argsStr)
-	}
-	// Find the value after --gpu-memory-utilization
-	idx := strings.Index(argsStr, "--gpu-memory-utilization")
-	if idx >= 0 {
-		after := strings.TrimSpace(argsStr[idx+len("--gpu-memory-utilization"):])
-		if !strings.HasPrefix(after, "0.7") {
-			t.Errorf("expected 0.7 after --gpu-memory-utilization, got: %s", after)
-		}
-	}
-}
-
-func TestResolveVLLMResourceControlsMaxNumSeqs(t *testing.T) {
-	input := makeTestInput()
-	input.BackendVersion.VendorOptionsJSON = vllmVendorOptionsJSON
-	input.Deployment.Parameters = map[string]interface{}{
-		"served_model_name": "qwen3-32b",
-		"max_num_seqs":      16.0,
-	}
-	input.BackendVersion.ParameterDefs = []ParameterDef{
-		{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: true},
-	}
-
-	plan, errors, _ := Resolve(input)
-	if len(errors) > 0 {
-		t.Fatalf("unexpected errors: %v", errors)
-	}
-	argsStr := strings.Join(plan.Args, " ")
-	if !strings.Contains(argsStr, "--max-num-seqs") {
-		t.Errorf("expected --max-num-seqs in args, got: %s", argsStr)
-	}
-	if !strings.Contains(argsStr, "16") {
-		t.Errorf("expected 16 in args, got: %s", argsStr)
-	}
-}
-
-func TestResolveSGLangResourceControlsMemFraction(t *testing.T) {
-	input := makeTestInput()
-	input.Backend.Name = "sglang"
-	input.BackendVersion.VendorOptionsJSON = sglangVendorOptionsJSON
-	input.Deployment.Parameters = map[string]interface{}{
-		"gpu_memory_fraction": 0.65,
-	}
-	input.BackendVersion.ParameterDefs = nil
-
-	plan, errors, _ := Resolve(input)
-	if len(errors) > 0 {
-		t.Fatalf("unexpected errors: %v", errors)
-	}
-	argsStr := strings.Join(plan.Args, " ")
-	if !strings.Contains(argsStr, "--mem-fraction-static") {
-		t.Errorf("expected --mem-fraction-static in args, got: %s", argsStr)
-	}
-	if !strings.Contains(argsStr, "0.65") {
-		t.Errorf("expected 0.65 in args, got: %s", argsStr)
-	}
-}
-
-func TestResolveSGLangResourceControlsAttentionBackend(t *testing.T) {
-	input := makeTestInput()
-	input.Backend.Name = "sglang"
-	input.BackendVersion.VendorOptionsJSON = sglangVendorOptionsJSON
-	input.Deployment.Parameters = map[string]interface{}{
-		"attention_backend": "triton",
-	}
-	input.BackendVersion.ParameterDefs = nil
-
-	plan, errors, _ := Resolve(input)
-	if len(errors) > 0 {
-		t.Fatalf("unexpected errors: %v", errors)
-	}
-	argsStr := strings.Join(plan.Args, " ")
-	if !strings.Contains(argsStr, "--attention-backend") {
-		t.Errorf("expected --attention-backend in args, got: %s", argsStr)
-	}
-	if !strings.Contains(argsStr, "triton") {
-		t.Errorf("expected triton in args, got: %s", argsStr)
-	}
-}
-
-func TestResolveLlamaCppNoFakeMemoryFraction(t *testing.T) {
-	input := makeTestInput()
-	input.Backend.Name = "llamacpp"
-	input.BackendVersion.VendorOptionsJSON = llamacppVendorOptionsJSON
-	input.Deployment.Parameters = map[string]interface{}{
-		"gpu_memory_fraction": 0.8,
-		"ctx_size":            4096.0,
-	}
-	input.BackendVersion.ParameterDefs = nil
-
-	plan, errors, _ := Resolve(input)
-	if len(errors) > 0 {
-		t.Fatalf("unexpected errors: %v", errors)
-	}
-	argsStr := strings.Join(plan.Args, " ")
-	// gpu_memory_fraction should NOT generate any arg for llama.cpp (supported=false)
-	if strings.Contains(argsStr, "--gpu-memory-utilization") {
-		t.Errorf("llama.cpp should NOT have --gpu-memory-utilization, got: %s", argsStr)
-	}
-	if strings.Contains(argsStr, "--mem-fraction-static") {
-		t.Errorf("llama.cpp should NOT have --mem-fraction-static, got: %s", argsStr)
-	}
-	// ctx_size should be mapped
-	if !strings.Contains(argsStr, "--ctx-size") {
-		t.Errorf("expected --ctx-size in args, got: %s", argsStr)
-	}
-	if !strings.Contains(argsStr, "4096") {
-		t.Errorf("expected 4096 in args, got: %s", argsStr)
-	}
-}
-
-func TestResolveLlamaCppResourceControlsGpuLayers(t *testing.T) {
-	input := makeTestInput()
-	input.Backend.Name = "llamacpp"
-	input.BackendVersion.VendorOptionsJSON = llamacppVendorOptionsJSON
-	input.Deployment.Parameters = map[string]interface{}{
-		"gpu_layers": 99.0,
-	}
-	input.BackendVersion.ParameterDefs = nil
-
-	plan, errors, _ := Resolve(input)
-	if len(errors) > 0 {
-		t.Fatalf("unexpected errors: %v", errors)
-	}
-	argsStr := strings.Join(plan.Args, " ")
-	if !strings.Contains(argsStr, "--n-gpu-layers") {
-		t.Errorf("expected --n-gpu-layers in args, got: %s", argsStr)
-	}
-}
 
 func TestRequiredParamFromDefaultArgs(t *testing.T) {
 	// Scenario: llama.cpp catalog has "-m" (alias "--model") as required.
@@ -1199,17 +1096,15 @@ func TestCollectExistingFlags(t *testing.T) {
 }
 
 func TestResolveResourceControlsNoDuplicateWithParameterDefs(t *testing.T) {
-	// max_model_len is in BOTH ParameterDefs and resource_controls.
-	// ParameterDefs maps "max_model_len" → "--max-model-len".
-	// resource_controls maps "max_model_len" → "--max-model-len".
-	// Should NOT produce duplicate --max-model-len.
+	// max_model_len is present in the NBR snapshot schema. A later live
+	// BackendVersion resource_controls edit must not generate a second arg.
 	input := makeTestInput()
 	input.BackendVersion.VendorOptionsJSON = vllmVendorOptionsJSON
 	input.Deployment.Parameters = map[string]interface{}{
 		"served_model_name": "qwen3-32b",
 		"max_model_len":     16384.0,
 	}
-	input.BackendVersion.ParameterDefs = []ParameterDef{
+	input.NBRConfigSnapshot.ParameterSchema = []ParameterDef{
 		{Name: "served_model_name", CliName: "--served-model-name", Type: "string", Required: true},
 		{Name: "max_model_len", CliName: "--max-model-len", Type: "integer"},
 	}

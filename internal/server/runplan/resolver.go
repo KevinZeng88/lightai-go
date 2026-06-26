@@ -481,9 +481,6 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 	// Check required parameters from NBR schema
 	existingFlags := collectExistingFlags(args)
 	paramDefs := in.NBRConfigSnapshot.ParameterSchema
-	if len(paramDefs) == 0 {
-		paramDefs = in.BackendVersion.ParameterDefs
-	}
 	for _, def := range paramDefs {
 		if !def.Required {
 			continue
@@ -500,26 +497,6 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 			continue
 		}
 		errors = append(errors, fmt.Errorf("required parameter %q missing", def.Name))
-	}
-
-	// Layer 4b: resource_controls from vendor_options_json
-	// Maps resource control parameters (e.g. gpu_memory_fraction) to backend-specific CLI args.
-	// Only adds args not already present from ParameterDefs to avoid duplicates.
-	if in.BackendVersion.VendorOptionsJSON != "" {
-		rcm := ParseResourceControls(in.BackendVersion.VendorOptionsJSON)
-		rcArgs := BuildResourceControlArgs(in.Deployment.Parameters, rcm)
-		// Only add args whose flags are not already in the args list.
-		existingFlags := make(map[string]bool)
-		for _, a := range args {
-			if strings.HasPrefix(a, "-") {
-				existingFlags[a] = true
-			}
-		}
-		for i := 0; i < len(rcArgs); i += 2 {
-			if i+1 < len(rcArgs) && !existingFlags[rcArgs[i]] {
-				args = append(args, rcArgs[i], rcArgs[i+1])
-			}
-		}
 	}
 
 	// Deduplicate: remove duplicate consecutive flag-value pairs

@@ -894,13 +894,14 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 		// First time: create a new NodeBackendRuntime.
 		// Capture a frozen ConfigSet from the BackendRuntime template and apply
 		// node/runtime explicit choices into the ConfigSet authority.
-		configSetJSONRaw := h.buildRuntimeConfigSnapshot(rt, runtimeID, imageRef)
+		configSetJSONRaw := h.buildRuntimeConfigSnapshot(rt, runtimeID, imageRef, req)
 		sourceMetadata := map[string]interface{}{
 			"source_type":               "node_backend_runtime",
 			"source_backend_runtime_id": runtimeID,
 			"source_runtime_name":       strVal(rt, "name", ""),
 			"source_runtime_revision":   strVal(rt, "updated_at", ""),
 			"copy_semantics":            "copy_on_create",
+			"copy_boundary":             "detached_after_create",
 		}
 		_, err := h.DB.Exec(`INSERT INTO node_backend_runtimes
 			(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, driver_version, toolkit_version, device_check_json, status, status_reason, last_checked_at, config_set_json, source_metadata_json, tenant_id, created_at, updated_at)
@@ -945,10 +946,18 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 
 // buildRuntimeConfigSnapshot captures a frozen ConfigSet from a BackendRuntime.
 // This is called only at NodeBackendRuntime creation time (not on check/validate).
-func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID, imageRef string) string {
+func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID, imageRef string, req map[string]interface{}) string {
 	set := copyConfigSet(rawJSONString(rt["config_set_json"], "{}"))
+	if requestSet := mapFromAny(req["config_set"]); len(requestSet) > 0 {
+		set = copyConfigSet(jsonString(requestSet))
+	} else if requestSet := mapFromAny(req["config_set_json"]); len(requestSet) > 0 {
+		set = copyConfigSet(jsonString(requestSet))
+	}
 	if imageRef != "" {
 		setConfigValue(set, "launcher.image", imageRef, "NodeBackendRuntime", runtimeID, "explicit_node_runtime_image")
+	}
+	if overrides := mapFromAny(req["config_overrides"]); len(overrides) > 0 {
+		applyConfigOverrides(set, overrides, "NodeBackendRuntime", runtimeID)
 	}
 	return configSetJSON(set)
 }

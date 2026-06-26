@@ -6,6 +6,11 @@ Date: 2026-06-26
 
 Implemented strict ConfigSet snapshot flow for BackendVersion, BackendRuntime, NodeBackendRuntime, and Deployment. Added BackendVersion UI management in the Backends page, moved runtime/NBR parameter editing to schema-driven `config_set.items`, cleaned ordinary runtime template selection with visibility/support metadata, and removed RunPlan fallback to BackendVersion images.
 
+Post-closeout repair on 2026-06-26 tightened two remaining snapshot boundaries:
+
+- NodeBackendRuntime create now starts from the BackendRuntime ConfigSet snapshot, applies request `config_set` as the node-local edited snapshot when present, and applies request `config_overrides` before persisting `node_backend_runtimes.config_set_json`.
+- RunPlan no longer falls back from the NBR snapshot parameter schema to live `BackendVersion.ParameterDefs`, and no longer reads live `BackendVersion.VendorOptionsJSON/resource_controls` to generate args.
+
 ## Fixed Issues
 
 | Requirement / Finding | Status | Evidence |
@@ -21,6 +26,9 @@ Implemented strict ConfigSet snapshot flow for BackendVersion, BackendRuntime, N
 | Deployment fallback to BackendRuntime | FIXED | `TestCreateDeploymentRejectsMissingNodeRuntimeSnapshot`; create fails if NBR snapshot is missing. |
 | RunPlan snapshot-only image | FIXED | `TestResolveImagePriority` now asserts BackendVersion-only image fails. |
 | ConfigSet env extraction bug | FIXED | `configSetParameterValues()` supports env items with `render.env_name` and does not convert map-valued `runtime.env` into CLI args. |
+| NodeBackendRuntime create ignored request ConfigSet | FIXED | `TestCreateNodeBackendRuntimeAppliesRequestConfigSetSnapshot` creates NBR with `fake_new_param` value/enabled and verifies persisted `config_set_json`. |
+| RunPlan used live BackendVersion parameter schema fallback | FIXED | `TestResolveDoesNotFallbackToLiveBackendVersionParameterSchema` verifies subsequent live `ParameterDefs` edits do not affect an existing NBR snapshot RunPlan. |
+| RunPlan used live BackendVersion vendor resource controls | FIXED | `TestResolveDoesNotUseLiveBackendVersionVendorOptionsResourceControls` verifies subsequent live `VendorOptionsJSON/resource_controls` edits do not affect an existing NBR/Deployment RunPlan. |
 
 ## Code Change Files
 
@@ -149,17 +157,18 @@ NodeBackendRuntime config_set -> Deployment config_set
 Evidence:
 
 ```bash
-go test ./internal/server/api -run 'TestCreateBackendRuntimeCopiesBackendVersionSnapshot|TestNodeBackendRuntimeCopiesTemplateSnapshotAndTemplateEditDoesNotChangeIt|TestWorkflowDeploymentRunPlanPreservesNBRSnapshot'
+go test ./internal/server/api -run 'TestCreateBackendRuntimeCopiesBackendVersionSnapshot|TestNodeBackendRuntimeCopiesTemplateSnapshotAndTemplateEditDoesNotChangeIt|TestCreateNodeBackendRuntimeAppliesRequestConfigSetSnapshot|TestWorkflowDeploymentRunPlanPreservesNBRSnapshot'
 ```
 
 ## RunPlan Snapshot-Only Evidence
 
-RunPlan no longer reads BackendVersion default images as fallback. Deployment creation rejects missing NBR ConfigSet snapshots.
+RunPlan no longer reads BackendVersion default images as fallback. RunPlan also no longer reads live BackendVersion parameter schema or live BackendVersion vendor resource controls after NBR/Deployment snapshots exist. Deployment creation rejects missing NBR ConfigSet snapshots.
 
 Evidence:
 
 ```bash
 go test ./internal/server/runplan -run TestResolveImagePriority
+go test ./internal/server/runplan -run 'TestResolveDoesNotFallbackToLiveBackendVersionParameterSchema|TestResolveDoesNotUseLiveBackendVersionVendorOptionsResourceControls'
 go test ./internal/server/api -run TestCreateDeploymentRejectsMissingNodeRuntimeSnapshot
 ```
 
@@ -197,32 +206,14 @@ All discovered fixable problems are FIXED. External validation problems are DOCU
 
 ## Commit / Push / Git Status
 
-Commit id: assigned after this file is committed; exact pushed commit id is recorded in the final response.
+Implementation commit id before post-closeout repair: `6686003`.
 
-Push result: assigned after `git push`; exact result is recorded in the final response.
+Post-closeout repair commit id: recorded by the final pushed repository HEAD for this closeout update.
 
-`git status --short` before closeout:
+Push result: `git push` is required after this file is committed; final command output is recorded with the pushed HEAD.
+
+Expected final `git status --short` after commit and push:
 
 ```text
- M configs/backend-catalog/runtimes/vllm/huawei-docker.yaml
- M configs/backend-catalog/runtimes/vllm/metax-docker.yaml
- M internal/server/api/backend_handlers.go
- M internal/server/api/configset_helpers.go
- M internal/server/api/deployment_lifecycle_handlers.go
- M internal/server/api/runtime_boundary_test.go
- M internal/server/api/runtime_handlers.go
- M internal/server/catalog/loader.go
- M internal/server/catalog/types.go
- M internal/server/db/db.go
- M internal/server/runplan/llamacpp_nvidia_test.go
- M internal/server/runplan/metax_huawei_test.go
- M internal/server/runplan/resolver.go
- M internal/server/runplan/resolver_test.go
- M internal/server/runplan/vllm_sglang_nvidia_test.go
- M web/src/components/common/RuntimeParameterEditor.vue
- M web/src/components/deployments/NodeRuntimeConfigWizard.vue
- M web/src/pages/BackendRuntimesPage.vue
- M web/src/pages/BackendsPage.vue
- M web/tests/runtimeBoundaryUi.test.mjs
-?? docs/reports/phase-3/runtime-template-catalog-redesign/
+clean
 ```
