@@ -47,8 +47,8 @@ func ValidateEditPatch(set map[string]any, patch ConfigEditPatch) error {
 		if item == nil {
 			return fmt.Errorf("unknown config field %q", internal)
 		}
-		visibility := stringValue(item["visibility"])
-		if boolValue(item["readonly"]) || visibility == "internal" || visibility == "hidden" {
+		visibility := itemVisibility(item)
+		if itemReadonly(item) || visibility == "internal" || visibility == "hidden" {
 			return fmt.Errorf("field %q is readonly", internal)
 		}
 	}

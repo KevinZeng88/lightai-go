@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
 	"gopkg.in/yaml.v3"
 )
 
@@ -69,7 +68,7 @@ func ValidateRegistry(registry *Registry) error {
 	allowedKind := map[string]bool{"cli_arg": true, "cli_args": true, "env": true, "env_lines": true, "port": true, "volume": true, "device": true, "health_check": true, "launcher_option": true}
 	allowedType := map[string]bool{"string": true, "integer": true, "number": true, "boolean": true, "array": true, "object": true, "lines": true}
 	allowedSupport := map[string]bool{"verified": true, "documented": true, "experimental": true}
-	registry.byCode = map[string]ConfigItem{}
+	registry.byCode = map[string]RegistryItem{}
 	for _, item := range registry.Items {
 		if item.Code == "" {
 			return fmt.Errorf("config registry item has empty code")
@@ -156,16 +155,11 @@ func ValidateCatalog(catalog *BackendCatalog) error {
 
 func MaterializeBackend(registry *Registry, backend BackendDoc) ConfigSet {
 	items := registry.MaterializeBase("Backend", backend.ID)
-	setItem(items, "runtime.health", backend.DefaultHealthCheck, backend.DefaultHealthCheck, true, "Backend", backend.ID)
-	addDynamic(items, "backend.capabilities", "model_runtime", "object", map[string]any{
+	setItemTiered(items, "runtime.health", backend.DefaultHealthCheck, backend.DefaultHealthCheck, true, "Backend", backend.ID)
+	addDynamicTiered(items, "backend.capabilities", "model_runtime", "object", map[string]any{
 		"supported_formats": backend.SupportedModelFormats,
 		"protocols":         backend.Protocols,
 	}, "Backend", backend.ID, 5)
-	// Align tiers for dynamic items too
-	for k, item := range items {
-		item.AlignTiers()
-		items[k] = item
-	}
 	return ConfigSet{
 		SchemaVersion: 1,
 		ConfigSetKey:  "BackendConfigSet",
@@ -185,20 +179,15 @@ func MaterializeBackendVersion(registry *Registry, backend BackendDoc, version V
 	if len(args) == 0 {
 		args = version.DefaultCommand
 	}
-	setItem(items, "launcher.entrypoint", version.DefaultEntrypoint, version.DefaultEntrypoint, len(version.DefaultEntrypoint) > 0, "BackendVersion", version.ID)
-	setItem(items, "launcher.command", args, args, len(args) > 0, "BackendVersion", version.ID)
-	setItem(items, "service.listen_host", nonEmpty(version.DefaultHost, "0.0.0.0"), nonEmpty(version.DefaultHost, "0.0.0.0"), true, "BackendVersion", version.ID)
-	setItem(items, "service.container_port", nonZero(version.DefaultPort, 8000), nonZero(version.DefaultPort, 8000), true, "BackendVersion", version.ID)
-	setItem(items, "runtime.model_mount", version.DefaultModelMount, version.DefaultModelMount, len(version.DefaultModelMount) > 0, "BackendVersion", version.ID)
-	setItem(items, "runtime.health", version.HealthCheck, version.HealthCheck, len(version.HealthCheck) > 0, "BackendVersion", version.ID)
-	addDynamic(items, "backend.capabilities", "model_runtime", "object", normalizedCapabilities(backend, version), "BackendVersion", version.ID, 5)
-	addDynamic(items, "backend.supported_config_items", "model_runtime", "array", configCodesFromArgs(version.DefaultArgsSchema), "BackendVersion", version.ID, 6)
-	addArgConfigItems(items, version.DefaultArgsSchema, "BackendVersion", version.ID)
-	// Align tiers for all items
-	for k, item := range items {
-		item.AlignTiers()
-		items[k] = item
-	}
+	setItemTiered(items, "launcher.entrypoint", version.DefaultEntrypoint, version.DefaultEntrypoint, len(version.DefaultEntrypoint) > 0, "BackendVersion", version.ID)
+	setItemTiered(items, "launcher.command", args, args, len(args) > 0, "BackendVersion", version.ID)
+	setItemTiered(items, "service.listen_host", nonEmpty(version.DefaultHost, "0.0.0.0"), nonEmpty(version.DefaultHost, "0.0.0.0"), true, "BackendVersion", version.ID)
+	setItemTiered(items, "service.container_port", nonZero(version.DefaultPort, 8000), nonZero(version.DefaultPort, 8000), true, "BackendVersion", version.ID)
+	setItemTiered(items, "runtime.model_mount", version.DefaultModelMount, version.DefaultModelMount, len(version.DefaultModelMount) > 0, "BackendVersion", version.ID)
+	setItemTiered(items, "runtime.health", version.HealthCheck, version.HealthCheck, len(version.HealthCheck) > 0, "BackendVersion", version.ID)
+	addDynamicTiered(items, "backend.capabilities", "model_runtime", "object", normalizedCapabilities(backend, version), "BackendVersion", version.ID, 5)
+	addDynamicTiered(items, "backend.supported_config_items", "model_runtime", "array", configCodesFromArgs(version.DefaultArgsSchema), "BackendVersion", version.ID, 6)
+	addArgConfigItemsTiered(items, version.DefaultArgsSchema, "BackendVersion", version.ID)
 	return ConfigSet{
 		SchemaVersion: 1,
 		ConfigSetKey:  "BackendVersionConfigSet",
@@ -213,7 +202,7 @@ func MaterializeBackendVersion(registry *Registry, backend BackendDoc, version V
 	}
 }
 
-func addArgConfigItems(items map[string]ConfigItem, args []map[string]any, layer, ref string) {
+func addArgConfigItemsTiered(items map[string]ConfigItem, args []map[string]any, layer, ref string) {
 	for idx, arg := range args {
 		name := strings.TrimSpace(fmt.Sprint(arg["name"]))
 		if name == "" || name == "{{MODEL_CONTAINER_PATH}}" {
@@ -234,25 +223,24 @@ func addArgConfigItems(items map[string]ConfigItem, args []map[string]any, layer
 		required := boolFromAny(arg["required"])
 		enabled := required
 		item := ConfigItem{
-			Code:         code,
-			Category:     "model_runtime",
-			Kind:         "cli_arg",
-			Type:         normalizeConfigType(typ),
-			Required:     required,
-			Value:        defaultValue,
-			DefaultValue: defaultValue,
-			Enabled:      enabled,
-			Render: map[string]any{
-				"target": "cli",
-				"flag":   name,
-				"style":  renderStyleForArgType(typ),
+			Schema: ConfigItemSchema{
+				Key: code, Category: "model_runtime", Kind: "cli_arg", Type: normalizeConfigType(typ),
+				Required: required, SupportLevel: "documented", DisplayOrder: 300 + idx,
+				Target:  "cli",
+				ArgName: name,
 			},
-			Order:        300 + idx,
-			SupportLevel: "documented",
-			Source:       map[string]string{"layer": layer, "ref": ref, "reason": "default_args_schema"},
+			Value_: ConfigItemValue{
+				DefaultValue: defaultValue, EffectiveValue: defaultValue,
+			},
+			State_: ConfigItemState{Enabled: enabled, Checked: enabled, Editable: true, Visible: true, Valid: true},
+			Provenance_: ConfigItemProvenance{
+				ValueSource: layer, LastValueLayer: layer, LastValueOwnerID: ref,
+			},
+			Presentation: ConfigItemPresentation{Priority: 300 + idx},
 		}
 		if label := strings.TrimSpace(fmt.Sprint(arg["label"])); label != "" && label != "<nil>" {
-			item.Extensions = map[string]interface{}{"label": label, "group": strings.TrimSpace(fmt.Sprint(arg["group"]))}
+			item.Schema.Label = label
+			item.Presentation.Group = strings.TrimSpace(fmt.Sprint(arg["group"]))
 		}
 		items[code] = item
 	}
@@ -264,21 +252,16 @@ func MaterializeBackendRuntime(registry *Registry, versionSet ConfigSet, runtime
 	if image == "" && len(runtime.ImageCandidates) > 0 {
 		image = runtime.ImageCandidates[0]
 	}
-	setItem(items, "launcher.kind", nonEmpty(runtime.RunnerType, "docker"), nonEmpty(runtime.RunnerType, "docker"), true, "BackendRuntime", runtime.ID)
-	setItem(items, "launcher.image", image, image, image != "", "BackendRuntime", runtime.ID)
-	setItem(items, "launcher.entrypoint", runtime.Entrypoint, runtime.Entrypoint, len(runtime.Entrypoint) > 0, "BackendRuntime", runtime.ID)
-	setItem(items, "launcher.command", runtime.Args, runtime.Args, len(runtime.Args) > 0, "BackendRuntime", runtime.ID)
-	setItem(items, "launcher.docker_options", normalizeDockerOptions(runtime), normalizeDockerOptions(runtime), true, "BackendRuntime", runtime.ID)
-	setItem(items, "runtime.env", runtime.Env, runtime.Env, len(runtime.Env) > 0, "BackendRuntime", runtime.ID)
-	setItem(items, "runtime.model_mount", runtime.ModelMount, runtime.ModelMount, len(runtime.ModelMount) > 0, "BackendRuntime", runtime.ID)
-	setItem(items, "runtime.health", runtime.HealthCheck, runtime.HealthCheck, len(runtime.HealthCheck) > 0, "BackendRuntime", runtime.ID)
+	setItemTiered(items, "launcher.kind", nonEmpty(runtime.RunnerType, "docker"), nonEmpty(runtime.RunnerType, "docker"), true, "BackendRuntime", runtime.ID)
+	setItemTiered(items, "launcher.image", image, image, image != "", "BackendRuntime", runtime.ID)
+	setItemTiered(items, "launcher.entrypoint", runtime.Entrypoint, runtime.Entrypoint, len(runtime.Entrypoint) > 0, "BackendRuntime", runtime.ID)
+	setItemTiered(items, "launcher.command", runtime.Args, runtime.Args, len(runtime.Args) > 0, "BackendRuntime", runtime.ID)
+	setItemTiered(items, "launcher.docker_options", normalizeDockerOptions(runtime), normalizeDockerOptions(runtime), true, "BackendRuntime", runtime.ID)
+	setItemTiered(items, "runtime.env", runtime.Env, runtime.Env, len(runtime.Env) > 0, "BackendRuntime", runtime.ID)
+	setItemTiered(items, "runtime.model_mount", runtime.ModelMount, runtime.ModelMount, len(runtime.ModelMount) > 0, "BackendRuntime", runtime.ID)
+	setItemTiered(items, "runtime.health", runtime.HealthCheck, runtime.HealthCheck, len(runtime.HealthCheck) > 0, "BackendRuntime", runtime.ID)
 	if len(runtime.Ports) > 0 {
-		setItem(items, "launcher.ports", runtime.Ports, runtime.Ports, true, "BackendRuntime", runtime.ID)
-	}
-	// Align tiers for all items (including inherited from versionSet and newly set)
-	for k, item := range items {
-		item.AlignTiers()
-		items[k] = item
+		setItemTiered(items, "launcher.ports", runtime.Ports, runtime.Ports, true, "BackendRuntime", runtime.ID)
 	}
 	return ConfigSet{
 		SchemaVersion: 1,
@@ -388,6 +371,63 @@ func SeedCatalog(db *sql.DB, registryDir, catalogRoot string) error {
 	return nil
 }
 
+// === Tiered-field helpers (replace old setItem / addDynamic) ===
+
+func setItemTiered(items map[string]ConfigItem, code string, value, defaultValue any, enabled bool, layer, ref string) {
+	item := items[code]
+	if item.Schema.Key == "" {
+		item.Schema.Key = code
+		item.Schema.SupportLevel = "documented"
+	}
+	if value != nil {
+		item.Value_.LocalValue = value
+		if enabled {
+			item.Value_.EffectiveValue = value
+		}
+	} else if defaultValue != nil {
+		item.Value_.EffectiveValue = defaultValue
+	}
+	item.Value_.DefaultValue = defaultValue
+	item.State_.Enabled = enabled
+	item.State_.Checked = enabled
+	if item.State_.Editable == false && !item.Schema.ReadOnly {
+		item.State_.Editable = true
+	}
+	if item.State_.Visible == false {
+		item.State_.Visible = true
+	}
+	item.State_.Valid = true
+	item.Provenance_.LastValueLayer = layer
+	item.Provenance_.LastValueOwnerID = ref
+	item.Provenance_.ValueSource = layer
+	items[code] = item
+}
+
+func addDynamicTiered(items map[string]ConfigItem, code, category, typ string, value any, layer, ref string, order int) {
+	items[code] = ConfigItem{
+		Schema: ConfigItemSchema{
+			Key: code, Category: category, Kind: "launcher_option", Type: typ,
+			DisplayOrder: order, SupportLevel: "documented",
+		},
+		Value_: ConfigItemValue{DefaultValue: value, EffectiveValue: value},
+		State_: ConfigItemState{Enabled: true, Checked: false, Editable: true, Visible: true, Valid: true},
+		Provenance_: ConfigItemProvenance{
+			ValueSource: layer, LastValueLayer: layer, LastValueOwnerID: ref,
+		},
+		Presentation: ConfigItemPresentation{Priority: order},
+	}
+}
+
+func cloneItems(in map[string]ConfigItem) map[string]ConfigItem {
+	out := make(map[string]ConfigItem, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+// === Utility functions (unchanged) ===
+
 func loadDocs[T any](pattern string, out *[]T) error {
 	files, err := filepath.Glob(pattern)
 	if err != nil {
@@ -442,41 +482,6 @@ func findRepoPath(rel string) (string, error) {
 		wd = parent
 	}
 	return "", fmt.Errorf("could not locate %s from current directory", rel)
-}
-
-func cloneItems(in map[string]ConfigItem) map[string]ConfigItem {
-	out := make(map[string]ConfigItem, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
-
-func setItem(items map[string]ConfigItem, code string, value, defaultValue any, enabled bool, layer, ref string) {
-	item := items[code]
-	if item.Code == "" {
-		item = ConfigItem{Code: code, SupportLevel: "documented"}
-	}
-	item.Value = value
-	item.DefaultValue = defaultValue
-	item.Enabled = enabled
-	item.LastModified = map[string]string{"layer": layer, "ref": ref, "operation": "materialize"}
-	items[code] = item
-}
-
-func addDynamic(items map[string]ConfigItem, code, category, typ string, value any, layer, ref string, order int) {
-	items[code] = ConfigItem{
-		Code:         code,
-		Category:     category,
-		Kind:         "launcher_option",
-		Type:         typ,
-		Value:        value,
-		DefaultValue: value,
-		Enabled:      true,
-		Order:        order,
-		SupportLevel: "documented",
-		Source:       map[string]string{"layer": layer, "ref": ref, "reason": "catalog_materialized"},
-	}
 }
 
 func sourceMetadata(path, hash, parentRef, kind string) map[string]interface{} {
@@ -588,13 +593,6 @@ func normalizeConfigType(typ string) string {
 	}
 }
 
-func renderStyleForArgType(typ string) string {
-	if normalizeConfigType(typ) == "boolean" {
-		return "flag_if_true"
-	}
-	return "flag_space_value"
-}
-
 func boolFromAny(v any) bool {
 	b, _ := v.(bool)
 	return b
@@ -667,13 +665,6 @@ func nonZero(v, fallback int) int {
 		return v
 	}
 	return fallback
-}
-
-func firstNonEmptySlice(a, b []string) []string {
-	if len(a) > 0 {
-		return a
-	}
-	return b
 }
 
 func boolInt(v bool) int {

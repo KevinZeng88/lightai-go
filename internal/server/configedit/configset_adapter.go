@@ -44,12 +44,24 @@ func itemMap(items map[string]any, key string) map[string]any {
 }
 
 func valueMap(item map[string]any) map[string]any {
-	value, _ := item["value"].(map[string]any)
-	if value == nil {
-		value = map[string]any{}
-		item["value"] = value
+	// Tiered: item["value"] may already be the ConfigItemValue wrapper.
+	// Navigate to effective_value for the actual value map.
+	if vt, ok := item["value"].(map[string]any); ok {
+		// Check if this is a tiered wrapper (has effective_value key)
+		if ev, ok := vt["effective_value"]; ok {
+			if evMap, ok := ev.(map[string]any); ok {
+				return evMap
+			}
+			// effective_value is not a map — return nil so caller can't mutate
+			return nil
+		}
+		// Flat shape — return as-is
+		return vt
 	}
-	return value
+	// No value — create tiered structure
+	vt := map[string]any{}
+	item["value"] = map[string]any{"effective_value": vt}
+	return vt
 }
 
 func boolValue(v any) bool {
@@ -96,4 +108,123 @@ func nestedMap(item map[string]any, key string) map[string]any {
 func hasValue(item map[string]any, key string) bool {
 	_, ok := item[key]
 	return ok
+}
+
+// itemEffectiveValue returns the effective value from tiered or flat shape.
+func itemEffectiveValue(item map[string]any) any {
+	if item == nil {
+		return nil
+	}
+	if v, ok := item["value"].(map[string]any); ok {
+		if ev, ok := v["effective_value"]; ok && ev != nil {
+			return ev
+		}
+		if dv, ok := v["default_value"]; ok {
+			return dv
+		}
+	}
+	return item["value"]
+}
+
+// itemEnabled returns enabled from state tier or flat compat.
+func itemEnabled(item map[string]any) bool {
+	if item == nil {
+		return false
+	}
+	if state, ok := item["state"].(map[string]any); ok {
+		if en, ok := state["enabled"].(bool); ok {
+			return en
+		}
+	}
+	return boolValue(item["enabled"])
+}
+
+// itemRequired returns required from schema tier or flat compat.
+func itemRequired(item map[string]any) bool {
+	if item == nil {
+		return false
+	}
+	if schema, ok := item["schema"].(map[string]any); ok {
+		if r, ok := schema["required"].(bool); ok {
+			return r
+		}
+	}
+	return boolValue(item["required"])
+}
+
+// itemReadonly returns readonly from schema tier or flat compat.
+func itemReadonly(item map[string]any) bool {
+	if item == nil {
+		return false
+	}
+	if schema, ok := item["schema"].(map[string]any); ok {
+		if r, ok := schema["read_only"].(bool); ok {
+			return r
+		}
+	}
+	return boolValue(item["readonly"])
+}
+
+// itemVisibility returns visibility from schema tier or flat compat.
+func itemVisibility(item map[string]any) string {
+	if item == nil {
+		return ""
+	}
+	if schema, ok := item["schema"].(map[string]any); ok {
+		if v, ok := schema["visibility"].(string); ok {
+			return v
+		}
+	}
+	return stringValue(item["visibility"])
+}
+
+// itemCategory returns category from schema tier or flat compat.
+func itemCategory(item map[string]any) string {
+	if item == nil {
+		return ""
+	}
+	if schema, ok := item["schema"].(map[string]any); ok {
+		if c, ok := schema["category"].(string); ok {
+			return c
+		}
+	}
+	return stringValue(item["category"])
+}
+
+// itemLabel returns label from schema tier or flat compat.
+func itemLabel(item map[string]any) string {
+	if item == nil {
+		return ""
+	}
+	if schema, ok := item["schema"].(map[string]any); ok {
+		if l, ok := schema["label"].(string); ok {
+			return l
+		}
+	}
+	if render, ok := item["render"].(map[string]any); ok {
+		return stringValue(render["label"])
+	}
+	return ""
+}
+
+// tieredStringField reads a string field from a tiered sub-object, with flat fallback.
+func tieredStringField(item map[string]any, tierKey, fieldKey string) string {
+	if item == nil {
+		return ""
+	}
+	if tier, ok := item[tierKey].(map[string]any); ok {
+		return stringValue(tier[fieldKey])
+	}
+	return stringValue(item[fieldKey])
+}
+
+// tieredBoolField reads a bool field from a tiered sub-object, with flat fallback.
+func tieredBoolField(item map[string]any, tierKey, fieldKey string) bool {
+	if item == nil {
+		return false
+	}
+	if tier, ok := item[tierKey].(map[string]any); ok {
+		return boolValue(tier[fieldKey])
+	}
+	return boolValue(item[fieldKey])
 }

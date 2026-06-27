@@ -117,14 +117,14 @@ func hideFromOrdinaryFlow(key string, item map[string]any, layer string) bool {
 	if layer != "node_backend_runtime" && layer != "deployment" {
 		return false
 	}
-	visibility := stringValue(item["visibility"])
+	visibility := itemVisibility(item)
 	if visibility == "internal" || visibility == "hidden" || visibility == "deprecated" {
 		return true
 	}
-	if boolValue(item["deprecated"]) {
+	if tieredBoolField(item, "state", "deprecated") {
 		return true
 	}
-	category := stringValue(item["category"])
+	category := itemCategory(item)
 	if category == "internal" || category == "debug" || strings.HasPrefix(key, "internal.") || strings.HasPrefix(key, "source_metadata.") || strings.HasPrefix(key, "resolver.") {
 		return true
 	}
@@ -141,7 +141,7 @@ func mergeCanonicalItem(code, canon string, item map[string]any, items map[strin
 	out["code"] = canon
 
 	// Resolve value: primary key value takes precedence, then first alias with value.
-	currentValue := item["value"]
+	currentValue := itemEffectiveValue(item)
 	if isEmptyValue(currentValue) {
 		for _, g := range canonicalAliases {
 			if g.Canonical != canon {
@@ -228,13 +228,13 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	if hasDef && semanticKey != "" {
 		displayKey = semanticKey
 	}
-	required := boolValue(item["required"])
+	required := itemRequired(item)
 
 	// Enabled is an explicit saved toggle. Defaults/values/tier/visibility only
 	// prefill or organize UI fields; they must not opt parameters into RunPlan.
 	enabled := false
 	if hasValue(item, "enabled") {
-		enabled = boolValue(item["enabled"])
+		enabled = boolValue(itemEnabled(item))
 	}
 	if required {
 		enabled = true
@@ -244,11 +244,11 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	isCapability := capabilityLikeCodes[key] || strings.Contains(key, "capabilities") || strings.Contains(key, "supported_config")
 	isInternalMeta := strings.HasPrefix(key, "internal.") || strings.HasPrefix(key, "source_metadata.") || strings.HasPrefix(key, "resolver.")
 
-	visibility := stringValue(item["visibility"])
-	deprecated := boolValue(item["deprecated"]) || visibility == "deprecated"
-	debugLike := stringValue(item["category"]) == "debug" || strings.Contains(key, "debug") || strings.Contains(key, "profile")
+	visibility := itemVisibility(item)
+	deprecated := tieredBoolField(item, "state", "deprecated") || visibility == "deprecated"
+	debugLike := itemCategory(item) == "debug" || strings.Contains(key, "debug") || strings.Contains(key, "profile")
 	tier := displayTierFor(displayKey, item, hasDef, string(def.DisplayTier))
-	advanced := boolValue(item["advanced"]) || tier == "advanced" || tier == "expert" || isCapability || isInternalMeta || visibility == "internal" || visibility == "hidden" || deprecated || debugLike
+	advanced := tieredBoolField(item, "schema", "advanced") || tier == "advanced" || tier == "expert" || isCapability || isInternalMeta || visibility == "internal" || visibility == "hidden" || deprecated || debugLike
 	section := sectionFor(displayKey, item)
 	if input.Mode != "advanced" && (deprecated || debugLike || visibility == "internal" || visibility == "hidden") {
 		section = "advanced_raw"
@@ -270,7 +270,7 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	}
 
 	// Readonly from input, item config, layer scope, or capability status.
-	readonly := input.Readonly || boolValue(item["readonly"]) || isCapability || visibility == "readonly" || visibility == "internal"
+	readonly := input.Readonly || itemReadonly(item) || isCapability || visibility == "readonly" || visibility == "internal"
 	if isLayerReadonly(key, input.Layer) {
 		readonly = true
 	}
@@ -410,10 +410,20 @@ func widgetFor(item map[string]any) string {
 }
 
 func valueOrDefault(item map[string]any) any {
-	if v, ok := item["value"]; ok {
+	v := itemEffectiveValue(item)
+	if v != nil {
 		return v
 	}
-	return item["default_value"]
+	if schema, ok := item["schema"].(map[string]any); ok {
+		if dv, ok := schema["default_value"]; ok {
+			return dv
+		}
+	}
+	// Flat compat
+	if dv := item["default_value"]; dv != nil {
+		return dv
+	}
+	return nil
 }
 
 func optionsFor(item map[string]any) []EditOption {

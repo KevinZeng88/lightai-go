@@ -53,11 +53,11 @@ func TestMaterializeConfigSetsPreservesRuntimeRequirements(t *testing.T) {
 				t.Fatalf("%s materialized empty config set", id)
 			}
 			item := set.Items["launcher.docker_options"]
-			if item.Code == "" || item.Value == nil {
+			if item.Schema.Key == "" || item.Value_.EffectiveValue == nil {
 				t.Fatalf("%s missing launcher.docker_options", id)
 			}
-			if wantDevice != "" && !containsString(mustJSON(item.Value), wantDevice) {
-				t.Fatalf("%s docker options did not preserve %s: %s", id, wantDevice, mustJSON(item.Value))
+			if wantDevice != "" && !containsString(mustJSON(item.Value_.EffectiveValue), wantDevice) {
+				t.Fatalf("%s docker options did not preserve %s: %s", id, wantDevice, mustJSON(item.Value_.EffectiveValue))
 			}
 			return
 		}
@@ -119,18 +119,18 @@ func TestMaterializeBackendVersionDoesNotAutoEnableOptionalDefaults(t *testing.T
 
 	set := MaterializeBackendVersion(registry, backend, version)
 	optional := set.Items["model_runtime.optional_with_default"]
-	if optional.Code == "" {
+	if optional.Schema.Key == "" {
 		t.Fatalf("optional arg was not materialized: %#v", set.Items)
 	}
-	if optional.Enabled {
+	if optional.State_.Enabled {
 		t.Fatalf("optional default arg must not be enabled by default: %#v", optional)
 	}
-	if optional.Value != "prefilled" || optional.DefaultValue != "prefilled" {
+	if optional.Value_.EffectiveValue != "prefilled" || optional.Value_.DefaultValue != "prefilled" {
 		t.Fatalf("optional default value should still prefill value/default: %#v", optional)
 	}
 
 	required := set.Items["model_runtime.required_with_default"]
-	if !required.Required || !required.Enabled {
+	if !required.Schema.Required || !required.State_.Enabled {
 		t.Fatalf("required arg should remain required and enabled: %#v", required)
 	}
 }

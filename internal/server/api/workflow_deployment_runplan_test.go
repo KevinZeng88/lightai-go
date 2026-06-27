@@ -367,14 +367,15 @@ func workflowAssertDeploymentSnapshot(t *testing.T, deployment map[string]interf
 	configSet := workflowMapField(t, deployment, "config_set")
 	items := workflowMapField(t, configSet, "items")
 	launcherImage := workflowMapField(t, items, "launcher.image")
-	if launcherImage["value"] == nil || launcherImage["value"] != "workflow/frozen-"+strings.TrimPrefix(workflowStringField(t, deployment, "name"), "workflow-deployment-")+":latest" {
+	imgVal := workflowEffectiveValue(t, launcherImage)
+	if imgVal == nil || imgVal != "workflow/frozen-"+strings.TrimPrefix(workflowStringField(t, deployment, "name"), "workflow-deployment-")+":latest" {
 		t.Fatalf("deployment config set missing frozen launcher.image: %#v", configSet)
 	}
 	if deployment["source_node_backend_runtime_id"] != fixture.NBRID {
 		t.Fatalf("deployment source_node_backend_runtime_id=%#v want %#v deployment=%#v", deployment["source_node_backend_runtime_id"], fixture.NBRID, deployment)
 	}
 	dockerItem := workflowMapField(t, items, "launcher.docker_options")
-	docker := workflowMapField(t, dockerItem, "value")
+	docker := workflowEffectiveMap(t, dockerItem)
 	if _, ok := docker["devices"].([]interface{}); !ok {
 		t.Fatalf("deployment snapshot docker devices missing: %#v", docker)
 	}
@@ -382,16 +383,39 @@ func workflowAssertDeploymentSnapshot(t *testing.T, deployment map[string]interf
 		t.Fatalf("deployment snapshot docker fields missing: %#v", docker)
 	}
 	envItem := workflowMapField(t, items, "runtime.env")
-	env := workflowMapField(t, envItem, "value")
+	env := workflowEffectiveMap(t, envItem)
 	if env["LIGHTAI_RUNTIME_WORKFLOW"] == nil {
 		t.Fatalf("deployment snapshot env missing workflow key: %#v", env)
 	}
 	workflowMapField(t, items, "runtime.health")
 	workflowMapField(t, items, "runtime.model_mount")
 	commandItem := workflowMapField(t, items, "launcher.command")
-	if _, ok := commandItem["value"].([]interface{}); !ok {
+	cmdVal := workflowEffectiveValue(t, commandItem)
+	if _, ok := cmdVal.([]interface{}); !ok {
 		t.Fatalf("deployment config set launcher.command missing or wrong type: %#v", commandItem)
 	}
+}
+
+// workflowEffectiveValue extracts effective_value from the new tiered ConfigItem JSON shape.
+// Falls back to flat "value" field for backward compatibility.
+func workflowEffectiveValue(t *testing.T, item map[string]interface{}) interface{} {
+	t.Helper()
+	if v, ok := item["value"].(map[string]interface{}); ok {
+		if ev, ok := v["effective_value"]; ok {
+			return ev
+		}
+	}
+	return item["value"]
+}
+
+// workflowEffectiveMap extracts effective_value as map from the new tiered ConfigItem JSON shape.
+func workflowEffectiveMap(t *testing.T, item map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	val := workflowEffectiveValue(t, item)
+	if m, ok := val.(map[string]interface{}); ok {
+		return m
+	}
+	return map[string]interface{}{}
 }
 
 func workflowAssertDeploymentListDetailConsistent(t *testing.T, app *workflowTestApp, deployment map[string]interface{}) {

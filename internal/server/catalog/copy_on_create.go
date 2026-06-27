@@ -52,8 +52,7 @@ func CreateNextLayerBundle(parent ConfigSetBundle, ownSets []ConfigSet, layer, i
 	// Preserve inherited schema.owner and snapshot in own set items
 	for i, set := range ownSets {
 		for k, item := range set.Items {
-			item.AlignTiers() // ensure tiered fields are populated from flat fields
-			if inherited, exists := inheritedKeys[k]; exists {
+		if inherited, exists := inheritedKeys[k]; exists {
 				// Inherited item: preserve schema.owner and snapshot
 				if item.Schema.Owner == "" || item.Schema.Owner != inherited.Schema.Owner {
 					item.Schema.Owner = inherited.Schema.Owner
@@ -212,7 +211,6 @@ func (b *ConfigSetBundle) AddOwnSet(cs ConfigSet) {
 	}
 
 	for k, item := range cs.Items {
-		item.AlignTiers()
 		// If this item is inherited, preserve schema owner and snapshot from inheritance
 		if inherited, exists := inheritedItems[k]; exists {
 			if item.Schema.Owner == "" || item.Schema.Owner != inherited.Schema.Owner {

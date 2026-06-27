@@ -32,11 +32,24 @@ func configItem(set map[string]interface{}, code string) map[string]interface{} 
 	return item
 }
 
+// configValue returns the effective value of a ConfigItem.
+// New shape: item["value"]["effective_value"] (tiered)
+// Falls back to old shape: item["value"] (flat) for backward compat during migration.
 func configValue(set map[string]interface{}, code string, def interface{}) interface{} {
 	item := configItem(set, code)
 	if item == nil {
 		return def
 	}
+	// New tiered shape: item.value.effective_value
+	if v, ok := item["value"].(map[string]interface{}); ok {
+		if ev, ok := v["effective_value"]; ok && ev != nil {
+			return ev
+		}
+		if dv, ok := v["default_value"]; ok && dv != nil {
+			return dv
+		}
+	}
+	// Fallback: old flat shape item.value
 	if v, ok := item["value"]; ok && v != nil {
 		return v
 	}
@@ -137,6 +150,34 @@ func configArray(set map[string]interface{}, code string) []interface{} {
 	return []interface{}{}
 }
 
+// configItemEnabled returns the enabled state from the new tiered shape.
+func configItemEnabled(item map[string]interface{}) bool {
+	if item == nil {
+		return false
+	}
+	if state, ok := item["state"].(map[string]interface{}); ok {
+		if en, ok := state["enabled"].(bool); ok {
+			return en
+		}
+	}
+	// Fallback: old flat shape
+	if en, ok := item["enabled"].(bool); ok {
+		return en
+	}
+	return false
+}
+
+// configItemSchemaField returns a string field from the schema tier.
+func configItemSchemaField(item map[string]interface{}, field string) string {
+	if item == nil {
+		return ""
+	}
+	if schema, ok := item["schema"].(map[string]interface{}); ok {
+		return strings.TrimSpace(fmt.Sprint(schema[field]))
+	}
+	return strings.TrimSpace(fmt.Sprint(item[field]))
+}
+
 func configSetParameterDefs(set map[string]interface{}) []runplan.ParameterDef {
 	items := configSetItems(set)
 	out := make([]runplan.ParameterDef, 0, len(items))
@@ -145,19 +186,28 @@ func configSetParameterDefs(set map[string]interface{}) []runplan.ParameterDef {
 		if item == nil {
 			continue
 		}
-		if strings.TrimSpace(fmt.Sprint(item["kind"])) != "cli_arg" {
+		kind := configItemSchemaField(item, "kind")
+		if kind != "cli_arg" {
 			continue
 		}
-		render, _ := item["render"].(map[string]interface{})
+		var render map[string]interface{}
+		if r, ok := item["render"].(map[string]interface{}); ok {
+			render = r
+		}
 		flag := strings.TrimSpace(fmt.Sprint(render["flag"]))
 		if flag == "" {
-			flag = strings.TrimSpace(fmt.Sprint(item["cli_name"]))
+			flag = configItemSchemaField(item, "arg_name")
+		}
+		if flag == "" {
+			if s, ok := item["cli_name"]; ok {
+				flag = strings.TrimSpace(fmt.Sprint(s))
+			}
 		}
 		def := runplan.ParameterDef{
-			Name:    strings.TrimSpace(fmt.Sprint(item["name"])),
+			Name:    configItemSchemaField(item, "key"),
 			CliName: flag,
-			Type:    strings.TrimSpace(fmt.Sprint(item["type"])),
-			Default: item["default_value"],
+			Type:    configItemSchemaField(item, "type"),
+			Default: defaultValueFromItem(item),
 		}
 		if def.Name == "" {
 			def.Name = code
@@ -165,6 +215,13 @@ func configSetParameterDefs(set map[string]interface{}) []runplan.ParameterDef {
 		out = append(out, def)
 	}
 	return out
+}
+
+func defaultValueFromItem(item map[string]interface{}) interface{} {
+	if v, ok := item["value"].(map[string]interface{}); ok {
+		return v["default_value"]
+	}
+	return item["default_value"]
 }
 
 func configSetParameterValues(set map[string]interface{}) []runplan.ParameterValue {
@@ -175,33 +232,46 @@ func configSetParameterValues(set map[string]interface{}) []runplan.ParameterVal
 		if item == nil {
 			continue
 		}
-		kind := strings.TrimSpace(fmt.Sprint(item["kind"]))
+		kind := configItemSchemaField(item, "kind")
 		if kind != "cli_arg" && kind != "cli_args" && kind != "env" {
 			continue
 		}
-		render, _ := item["render"].(map[string]interface{})
-		target := strings.TrimSpace(fmt.Sprint(render["target"]))
-		flag := strings.TrimSpace(fmt.Sprint(render["flag"]))
-		envName := strings.TrimSpace(fmt.Sprint(render["env_name"]))
+
+		var render map[string]interface{}
+		if r, ok := item["render"].(map[string]interface{}); ok {
+			render = r
+		}
+		target := configItemSchemaField(item, "target")
+		if target == "" {
+			target = strings.TrimSpace(fmt.Sprint(render["target"]))
+		}
+		flag := configItemSchemaField(item, "arg_name")
+		if flag == "" {
+			flag = strings.TrimSpace(fmt.Sprint(render["flag"]))
+		}
+		envName := configItemSchemaField(item, "env_name")
+		if envName == "" {
+			envName = strings.TrimSpace(fmt.Sprint(render["env_name"]))
+		}
 		style := strings.TrimSpace(fmt.Sprint(render["style"]))
 		if kind == "env" && envName == "" {
 			continue
 		}
-		enabled, _ := item["enabled"].(bool)
-		value := configValue(set, code, item["default_value"])
+		enabled := configItemEnabled(item)
+		value := configValue(set, code, defaultValueFromItem(item))
 		if kind == "cli_args" && strings.TrimSpace(fmt.Sprint(value)) == "" {
 			continue
 		}
 		pv := runplan.ParameterValue{
 			Key:         code,
-			Type:        strings.TrimSpace(fmt.Sprint(item["type"])),
+			Type:        configItemSchemaField(item, "type"),
 			Target:      target,
 			CliName:     flag,
 			EnvName:     envName,
 			RenderStyle: style,
 			Enabled:     enabled,
 			Value:       value,
-			Default:     item["default_value"],
+			Default:     defaultValueFromItem(item),
 			Source:      "config_set",
 		}
 		if kind == "cli_args" && pv.RenderStyle == "" {
@@ -218,15 +288,60 @@ func configSetParameterValues(set map[string]interface{}) []runplan.ParameterVal
 	return out
 }
 
+// setConfigValueTiered writes value into the tiered shape AND flat compat.
+func setConfigValueTiered(item map[string]interface{}, value interface{}) {
+	if item == nil {
+		return
+	}
+	valueTier, _ := item["value"].(map[string]interface{})
+	if valueTier == nil {
+		valueTier = map[string]interface{}{}
+		item["value"] = valueTier
+	}
+	valueTier["effective_value"] = value
+	// Flat compat: for non-map values, also set item["value"] directly
+	if _, isMap := value.(map[string]interface{}); !isMap {
+		item["value"] = value
+	}
+}
+
+// setConfigEnabledTiered writes enabled into the tiered shape: item["state"]["enabled"]
+func setConfigEnabledTiered(item map[string]interface{}, enabled bool) {
+	if item == nil {
+		return
+	}
+	state, _ := item["state"].(map[string]interface{})
+	if state == nil {
+		state = map[string]interface{}{}
+		item["state"] = state
+	}
+	state["enabled"] = enabled
+}
+
 func setConfigValue(set map[string]interface{}, code string, value interface{}, layer, ref, reason string) {
 	items := configSetItems(set)
 	item, _ := items[code].(map[string]interface{})
 	if item == nil {
-		item = map[string]interface{}{"code": code}
+		item = map[string]interface{}{}
 	}
-	item["value"] = value
-	item["enabled"] = true
-	item["source"] = map[string]string{"layer": layer, "ref": ref, "reason": reason}
+	// Write ONLY to tiered shape — do NOT overwrite item["value"] which
+	// would destroy the tiered ConfigItemValue structure.
+	setConfigValueTiered(item, value)
+	setConfigEnabledTiered(item, true)
+	// Also set provenance in the tiered provenance field
+	if prov, _ := item["provenance"].(map[string]interface{}); prov != nil {
+		prov["value_source"] = layer
+		prov["last_value_layer"] = layer
+		prov["last_value_owner_id"] = ref
+	} else {
+		item["provenance"] = map[string]interface{}{
+			"value_source":      layer,
+			"last_value_layer":  layer,
+			"last_value_owner_id": ref,
+		}
+	}
+	// Also write layer/ref to flat source for compat
+	item["source"] = map[string]interface{}{"layer": layer, "ref": ref, "reason": reason}
 	items[code] = item
 	set["items"] = items
 }
@@ -235,10 +350,9 @@ func setConfigEnabled(set map[string]interface{}, code string, enabled bool, lay
 	items := configSetItems(set)
 	item, _ := items[code].(map[string]interface{})
 	if item == nil {
-		item = map[string]interface{}{"code": code}
+		item = map[string]interface{}{}
 	}
-	item["enabled"] = enabled
-	item["source"] = map[string]string{"layer": layer, "ref": ref, "reason": reason}
+	setConfigEnabledTiered(item, enabled)
 	items[code] = item
 	set["items"] = items
 }

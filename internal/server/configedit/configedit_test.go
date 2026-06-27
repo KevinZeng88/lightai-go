@@ -240,16 +240,22 @@ func TestApplyEditPatchToConfigSetKeepsDisabledValueAndHiddenItems(t *testing.T)
 	if err != nil {
 		t.Fatalf("apply patch: %v", err)
 	}
-	outItems := out["items"].(map[string]any)
-	edited := outItems["backend.arg.fake_new_param"].(map[string]any)
-	if edited["value"] != "edited-while-disabled" || edited["enabled"] != false {
-		t.Fatalf("disabled value/enabled not preserved separately: %#v", edited)
+		outItems := out["items"].(map[string]any)
+		edited := outItems["backend.arg.fake_new_param"].(map[string]any)
+		if vt, ok := edited["value"].(map[string]any); ok && vt["effective_value"] != "edited-while-disabled" {
+			t.Fatalf("disabled effective_value not preserved: %#v", edited)
+		}
+		if st, ok := edited["state"].(map[string]any); ok && st["enabled"] != false {
+			t.Fatalf("disabled state.enabled not false: %#v", edited)
+		}
+		hidden := outItems["backend.arg.hidden_existing"].(map[string]any)
+		if vt, ok := hidden["value"].(map[string]any); ok && vt["effective_value"] != "keep-me" {
+			t.Fatalf("hidden existing item value not preserved: %#v", hidden)
+		}
+		if st, ok := hidden["state"].(map[string]any); ok && st["enabled"] != true {
+			t.Fatalf("hidden existing item state.enabled not true: %#v", hidden)
+		}
 	}
-	hidden := outItems["backend.arg.hidden_existing"].(map[string]any)
-	if hidden["value"] != "keep-me" || hidden["enabled"] != true {
-		t.Fatalf("hidden existing item was not preserved: %#v", hidden)
-	}
-}
 
 func TestApplyEditPatchOrdinaryEnabledRoundTripsThroughProjection(t *testing.T) {
 	set := testConfigSet()

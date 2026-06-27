@@ -97,152 +97,100 @@ type ConfigItemPresentation struct {
 //	Provenance_  — source tracking; updated on local edit
 //	Snapshot_    — copy-on-create origin; readonly after copy
 //	Presentation — display hints; not part of RunPlan semantics
-//
-// Legacy flat fields (Code, Category, Kind, Type, Required, Value, DefaultValue,
-// Enabled, Render, Order, etc.) are kept as convenience accessors during migration
-// batches and will be removed in the final cleanup batch.
 type ConfigItem struct {
-	Schema       ConfigItemSchema       `json:"config_item_schema"`
-	Value_       ConfigItemValue        `json:"config_item_value"`
-	State_       ConfigItemState        `json:"config_item_state"`
-	Provenance_  ConfigItemProvenance   `json:"config_item_provenance"`
-	Snapshot_    ConfigItemSnapshot     `json:"config_item_snapshot"`
-	Presentation ConfigItemPresentation `json:"config_item_presentation"`
-
-	// === Legacy flat fields (present during migration; removed in Batch 6) ===
-	Code         string                 `json:"code" yaml:"code"`
-	Category     string                 `json:"category" yaml:"category"`
-	Kind         string                 `json:"kind" yaml:"kind"`
-	Type         string                 `json:"type" yaml:"type"`
-	Required     bool                   `json:"required" yaml:"required"`
-	Visibility   string                 `json:"visibility,omitempty" yaml:"visibility"`
-	Readonly     bool                   `json:"readonly,omitempty" yaml:"readonly"`
-	Advanced     bool                   `json:"advanced,omitempty" yaml:"advanced"`
-	Value        any                    `json:"value" yaml:"value"`
-	DefaultValue any                    `json:"default_value" yaml:"default_value"`
-	Enabled      bool                   `json:"enabled" yaml:"enabled"`
-	Render       map[string]any         `json:"render,omitempty" yaml:"render"`
-	Order        int                    `json:"order" yaml:"order"`
-	Constraints  map[string]any         `json:"constraints,omitempty" yaml:"constraints"`
-	SupportLevel string                 `json:"support_level" yaml:"support_level"`
-	Source       map[string]string      `json:"source,omitempty" yaml:"source"`
-	LastModified map[string]string      `json:"last_modified,omitempty" yaml:"last_modified"`
-	Extensions   map[string]interface{} `json:"extensions,omitempty" yaml:"extensions"`
+	Schema       ConfigItemSchema       `json:"schema"`
+	Value_       ConfigItemValue        `json:"value"`
+	State_       ConfigItemState        `json:"state"`
+	Provenance_  ConfigItemProvenance   `json:"provenance"`
+	Snapshot_    ConfigItemSnapshot     `json:"snapshot"`
+	Presentation ConfigItemPresentation `json:"presentation"`
 }
 
-// AlignTiers populates the tiered fields from legacy flat fields.
-// Call this after materializing a ConfigItem from catalog YAML or registry defaults.
-//
-// IMPORTANT: tiered fields that already have non-zero values are NOT overwritten.
-// This prevents EffectiveSnapshot/merge operations from reverting local edits.
-func (ci *ConfigItem) AlignTiers() {
-	if ci == nil {
-		return
+// RegistryItem is the YAML shape from configs/config-registry/items.yaml.
+// It is converted to a ConfigItem with tiered fields during MaterializeBase.
+type RegistryItem struct {
+	Code         string                 `yaml:"code"`
+	Category     string                 `yaml:"category"`
+	Kind         string                 `yaml:"kind"`
+	Type         string                 `yaml:"type"`
+	Required     bool                   `yaml:"required"`
+	Visibility   string                 `yaml:"visibility"`
+	Readonly     bool                   `yaml:"readonly"`
+	Advanced     bool                   `yaml:"advanced"`
+	Value        any                    `yaml:"value"`
+	DefaultValue any                    `yaml:"default_value"`
+	Enabled      bool                   `yaml:"enabled"`
+	Render       map[string]any         `yaml:"render"`
+	Order        int                    `yaml:"order"`
+	Constraints  map[string]any         `yaml:"constraints"`
+	SupportLevel string                 `yaml:"support_level"`
+	Source       map[string]string      `yaml:"source"`
+	LastModified map[string]string      `yaml:"last_modified"`
+	Extensions   map[string]interface{} `yaml:"extensions"`
+}
+
+// ToConfigItem converts a YAML registry item into a tiered ConfigItem.
+func (ri RegistryItem) ToConfigItem() ConfigItem {
+	ci := ConfigItem{
+		Schema: ConfigItemSchema{
+			Key:          ri.Code,
+			Category:     ri.Category,
+			Kind:         ri.Kind,
+			Type:         ri.Type,
+			Required:     ri.Required,
+			Advanced:     ri.Advanced,
+			ReadOnly:     ri.Readonly,
+			DisplayOrder: ri.Order,
+			SupportLevel: ri.SupportLevel,
+			Constraints:  ri.Constraints,
+			ConfigSetKey: "",
+			Owner:        "",
+			OwnerLayer:   "",
+		},
+		Value_: ConfigItemValue{
+			DefaultValue: ri.DefaultValue,
+		},
+		State_: ConfigItemState{
+			Enabled:  ri.Enabled,
+			Checked:  ri.Enabled,
+			Editable: !ri.Readonly,
+			Visible:  ri.Visibility != "hidden",
+			Valid:    true,
+		},
 	}
-	// Schema — only populate from flat fields when tiered field is zero-value
-	if ci.Schema.Key == "" {
-		ci.Schema.Key = ci.Code
+
+	if ri.Render != nil {
+		ci.Schema.Target = strVal(ri.Render["target"])
+		ci.Schema.ArgName = strVal(ri.Render["flag"])
+		ci.Schema.EnvName = strVal(ri.Render["env_name"])
 	}
-	if ci.Schema.Category == "" {
-		ci.Schema.Category = ci.Category
-	}
-	if ci.Schema.Kind == "" {
-		ci.Schema.Kind = ci.Kind
-	}
-	if ci.Schema.Type == "" {
-		ci.Schema.Type = ci.Type
-	}
-	if !ci.Schema.Required && ci.Required {
-		ci.Schema.Required = ci.Required
-	}
-	if !ci.Schema.Advanced && ci.Advanced {
-		ci.Schema.Advanced = ci.Advanced
-	}
-	if !ci.Schema.ReadOnly && ci.Readonly {
-		ci.Schema.ReadOnly = ci.Readonly
-	}
-	if ci.Schema.DisplayOrder == 0 {
-		ci.Schema.DisplayOrder = ci.Order
-	}
-	if ci.Schema.SupportLevel == "" {
-		ci.Schema.SupportLevel = ci.SupportLevel
-	}
-	if ci.Schema.Constraints == nil {
-		ci.Schema.Constraints = ci.Constraints
-	}
-	if ci.Render != nil {
-		if ci.Schema.Target == "" {
-			ci.Schema.Target = strVal(ci.Render["target"])
+	if ri.Extensions != nil {
+		if l, ok := ri.Extensions["label"].(string); ok {
+			ci.Schema.Label = l
 		}
-		if ci.Schema.ArgName == "" {
-			ci.Schema.ArgName = strVal(ci.Render["flag"])
-		}
-		if ci.Schema.EnvName == "" {
-			ci.Schema.EnvName = strVal(ci.Render["env_name"])
-		}
-	}
-	if ci.Extensions != nil {
-		if ci.Schema.Label == "" {
-			if l, ok := ci.Extensions["label"].(string); ok {
-				ci.Schema.Label = l
-			}
-		}
-		if ci.Presentation.Group == "" {
-			if g, ok := ci.Extensions["group"].(string); ok {
-				ci.Presentation.Group = g
-			}
+		if g, ok := ri.Extensions["group"].(string); ok {
+			ci.Presentation.Group = g
 		}
 	}
 
-	// Value — only set from flat fields if tiered EffectiveValue is nil
-	if ci.Value_.EffectiveValue == nil {
-		ci.Value_.DefaultValue = ci.DefaultValue
-		if ci.Value != nil {
-			if ci.Enabled {
-				ci.Value_.LocalValue = ci.Value
-			} else {
-				ci.Value_.InheritedValue = ci.Value
-			}
-			ci.Value_.EffectiveValue = ci.Value
+	// Value: apply flat value into tiered
+	if ri.Value != nil {
+		if ri.Enabled {
+			ci.Value_.LocalValue = ri.Value
+			ci.Value_.EffectiveValue = ri.Value
 		} else {
-			ci.Value_.EffectiveValue = ci.DefaultValue
+			ci.Value_.InheritedValue = ri.Value
+			ci.Value_.EffectiveValue = ri.Value
 		}
+	} else {
+		ci.Value_.EffectiveValue = ri.DefaultValue
 	}
 
-	// State — only set from flat fields if not explicitly set
-	if !ci.State_.Enabled && ci.Enabled {
-		ci.State_.Enabled = ci.Enabled
-	}
-	if !ci.State_.Checked && ci.Enabled && ci.Value_.LocalValue != nil {
-		ci.State_.Checked = ci.Enabled
-	}
-	if !ci.State_.Editable && !ci.Readonly {
-		ci.State_.Editable = !ci.Readonly
-	}
-	if ci.State_.Visible == false && ci.Visibility == "" {
-		ci.State_.Visible = ci.Visibility != "hidden"
-	}
-	if !ci.State_.Valid {
-		ci.State_.Valid = true
-	}
-
-	// Provenance — only populate if ValueSource is empty
-	if ci.Provenance_.ValueSource == "" {
-		if ci.Source != nil {
-			ci.Provenance_.ValueSource = ci.Source["layer"]
-			ci.Provenance_.LastValueLayer = ci.Source["layer"]
-			ci.Provenance_.LastValueOwnerID = ci.Source["ref"]
-		}
-		if ci.LastModified != nil {
-			ci.Provenance_.LastValueLayer = ci.LastModified["layer"]
-			ci.Provenance_.LastValueOwnerID = ci.LastModified["ref"]
-		}
-	}
-
-	// Presentation
 	if ci.Presentation.Priority == 0 {
-		ci.Presentation.Priority = ci.Order
+		ci.Presentation.Priority = ri.Order
 	}
+
+	return ci
 }
 
 func strVal(v interface{}) string {
@@ -353,7 +301,6 @@ func (b *ConfigSetBundle) EffectiveSnapshot() ConfigSet {
 	// Layer 1: apply inherited snapshots
 	for _, snap := range b.InheritedBundleSnapshots {
 		for k, v := range snap.Items {
-			v.AlignTiers()
 			merged.Items[k] = v
 		}
 	}
@@ -361,7 +308,6 @@ func (b *ConfigSetBundle) EffectiveSnapshot() ConfigSet {
 	// Layer 2: apply own sets (overwrite inherited by key)
 	for _, set := range b.OwnSets {
 		for k, v := range set.Items {
-			v.AlignTiers()
 			merged.Items[k] = v
 		}
 	}
@@ -413,14 +359,14 @@ func (b *ConfigSetBundle) DeepCopySnapshot(layer, id string) ConfigSet {
 }
 
 type Registry struct {
-	SchemaVersion int          `yaml:"schema_version"`
-	Items         []ConfigItem `yaml:"items"`
-	byCode        map[string]ConfigItem
+	SchemaVersion int            `yaml:"schema_version"`
+	Items         []RegistryItem `yaml:"items"`
+	byCode        map[string]RegistryItem
 }
 
-func (r *Registry) Item(code string) (ConfigItem, bool) {
+func (r *Registry) Item(code string) (RegistryItem, bool) {
 	if r == nil {
-		return ConfigItem{}, false
+		return RegistryItem{}, false
 	}
 	item, ok := r.byCode[code]
 	return item, ok
@@ -429,14 +375,13 @@ func (r *Registry) Item(code string) (ConfigItem, bool) {
 func (r *Registry) MaterializeBase(layer, ref string) map[string]ConfigItem {
 	items := make(map[string]ConfigItem, len(r.Items))
 	for _, item := range r.Items {
-		copied := item
-		copied.Source = map[string]string{
-			"layer":  layer,
-			"ref":    ref,
-			"reason": "registry_default",
+		ci := item.ToConfigItem()
+		ci.Provenance_ = ConfigItemProvenance{
+			ValueSource:    layer,
+			LastValueLayer: layer,
+			LastValueOwnerID: ref,
 		}
-		copied.AlignTiers()
-		items[item.Code] = copied
+		items[item.Code] = ci
 	}
 	return items
 }
