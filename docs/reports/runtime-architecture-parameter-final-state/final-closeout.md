@@ -61,12 +61,15 @@ Evidence: docs/reports/runtime-architecture-parameter-final-state/evidence/web-b
 ## 6. Commits
 
 ```
+393c891 fix: final repair redo — remove all flat fallbacks, fix tiered value structure
+8f3f86e fix: final repair — remove flat fallbacks, fix setConfigValueTiered, strengthen SourceMap
+c082d49 feat: OI-10 add node_backend_runtime_id column to model_deployments
+95156ce docs: update final closeout — OI-10 fully resolved
+05671a5 docs: final closeout — configset-bundle final-state implementation complete
 b6d6b6c feat: OI-02 wire ConfigView into config-edit API response
 45f3d74 feat: OI-05+07 remove legacy RuntimeParameterEditor and HumanRuntimeParameterForm
 3911175 feat: OI-03+04 integrate SourceMapBuilder into RunPlan resolver
 fc12301 feat: OI-01+05+08+09 remove legacy flat fields, update to tiered-only ConfigItem
-beff997 docs: batch-6 final closeout for configset-bundle final-state implementation (v1)
-bbd43fc docs: batch-5 api-first e2e evidence
 90a1ff5 feat(runplan): batch-4 shared RunPlan builder and parameter source map
 4c5d952 feat(configset): batch-3 ConfigView/ConfigPanel presentation
 c97de2a feat(configset): batch-2 copy-on-create and local edits with owner preservation
@@ -79,16 +82,11 @@ c97de2a feat(configset): batch-2 copy-on-create and local edits with owner prese
 ```
 docs/reports/runtime-architecture-parameter-final-state/evidence/
 ├── batch-0-inventory.txt
-└── batch-5-e2e-test-results.txt
-
-Tests:
-internal/server/catalog/bundle_types_test.go (14 tests)
-internal/server/catalog/copy_on_create_test.go (11 tests)
-internal/server/catalog/config_view_test.go (9 tests)
-internal/server/catalog/tiered_roundtrip_test.go (2 tests)
-internal/server/runplan/source_map_test.go (4 tests)
-web/tests/configEditContract.test.mjs
-web/tests/runtimeBoundaryUi.test.mjs
+├── batch-5-e2e-test-results.txt
+├── final-repair-self-audit-before.txt
+├── final-repair-self-audit-after.txt
+├── web-test-output.txt
+└── web-build-output.txt
 ```
 
 ## 8. Push Result
