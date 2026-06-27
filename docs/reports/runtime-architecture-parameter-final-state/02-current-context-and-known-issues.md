@@ -1,221 +1,207 @@
 # Current Context and Known Issues
 
-## 1. 项目背景
+## 1. 当前上下文
 
-LightAI Go 是面向中小客户 GPU 服务器场景的轻量化 GPU 与模型运行管理平台。平台需要统一管理 GPU 资源、模型运行配置、后端运行模板、节点运行配置、模型部署、实例生命周期、日志和 API 入口。
+LightAI Go 当前 Runtime 架构已引入 Backend、BackendVersion、BackendRuntime、NodeBackendRuntime、ModelArtifact、ModelLocation、Deployment、RunPlan、NodeRunPlan、DeviceBinding 等概念。近期修复已经覆盖若干运行链路问题，但 Runtime 架构与参数体系仍需要最终收敛。
 
-当前 Runtime 主线已经形成以下核心对象：
+本专题不以局部 UI 修复为目标，而是要求把领域边界、参数属主、参数定义、运行要求、能力定义、预检、RunPlan、UI/API、E2E 统一起来。
 
-1. Backend；
-2. BackendVersion；
-3. BackendRuntime；
-4. NodeBackendRuntime；
-5. ModelArtifact；
-6. ModelLocation；
-7. Deployment；
-8. ModelInstance；
-9. RunPlan / NodeRunPlan；
-10. Agent Docker runtime；
-11. Preflight；
-12. HealthCheck；
-13. RuntimeParameterEditor。
+## 2. 已知问题总览
 
-本阶段目标是继续收敛这些对象的边界和实现。
+需要重点核查和修复的问题组：
 
-## 2. 需要读取的已有材料
+1. 模型 metadata 与本机模型路径混淆；
+2. RuntimeRequirements 定义和使用链路不清；
+3. BackendCapabilityProfile 定义和 RuntimeRequirements 边界不清；
+4. 参数 owner、schema、value、override、source 边界不清；
+5. 参数展示层级不清；
+6. enabled / checked / default / required 语义混淆；
+7. copy-on-create 快照链不完整或不可验证；
+8. UI 参数编辑器存在历史问题；
+9. RunPlan preview 与实际 Docker spec 存在分裂风险；
+10. Preflight / check-request evidence 不完整；
+11. API-first E2E 证据不足。
 
-如果仓库中存在以下文档，Claude 必须先读取并核对：
+## 3. discovered_metadata_json 边界问题
 
-```text
-docs/reports/phase-3/runtime-architecture-and-parameter-current-gap-review.md
-docs/reports/phase-3/runtime-architecture-and-parameter-repair-plan.md
-```
+必须检查：
 
-这些文档只作为历史输入材料。本阶段新输出进入：
+1. `discovered_metadata_json` 是否写入具体本机模型路径；
+2. catalog / seed / tests / docs 中是否存在 `/home/kzeng/models/...` 被当成通用定义；
+3. 模型类别信息是否与模型实例路径混在一起；
+4. 模型扫描结果是否被错误沉淀为通用模板；
+5. RunPlan / Preflight / UI 是否依赖错误 metadata。
 
-```text
-docs/reports/runtime-architecture-parameter-final-state/
-```
+最终要求：
 
-还应检索以下关键词，寻找相关设计与修复记录：
+1. 模型类别信息归模型 metadata；
+2. 模型实例路径归 ModelLocation；
+3. 运行能力归 BackendCapabilityProfile；
+4. 运行要求归 RuntimeRequirements；
+5. 节点运行状态归 NodeBackendRuntime；
+6. 部署覆盖归 Deployment；
+7. 最终执行归 ResolvedRunPlan。
 
-```bash
-grep -R "RuntimeParameterEditor" -n docs internal web cmd || true
-grep -R "RuntimeRequirements" -n docs internal web cmd || true
-grep -R "BackendCapabilityProfile" -n docs internal web cmd || true
-grep -R "discovered_metadata_json" -n docs internal web cmd || true
-grep -R "parameter_schema_json" -n docs internal web cmd || true
-grep -R "parameter_values_json" -n docs internal web cmd || true
-grep -R "RunPlan" -n docs internal web cmd || true
-grep -R "Preflight" -n docs internal web cmd || true
-```
+## 4. RuntimeRequirements 已知风险
 
-## 3. 已知重点问题
+需要检查 RuntimeRequirements 是否只是说明性字段。它必须能被翻译为：
 
-### 3.1 discovered_metadata_json 边界错误
-
-`discovered_metadata_json` 应描述模型类别、模型格式、模型家族、模型能力等稳定信息。它不应包含某个本机模型路径。
-
-需要检查是否存在如下路径进入通用 catalog 或模板：
-
-```text
-/home/kzeng/models/bge-small-zh-v1.5
-/home/kzeng/models/Qwen3-0.6B-Instruct-2512
-/home/kzeng/models/Qwen3.5-9B-Q4/Qwen3.5-9B-Q4_K_M.gguf
-```
-
-如果存在，需要判断字段归属：
-
-1. 模型路径归 ModelLocation；
-2. 模型实例扫描结果归 ModelArtifact / ModelLocation；
-3. 模型类别能力归 model metadata；
-4. 后端能力归 BackendCapabilityProfile；
-5. 运行需求归 RuntimeRequirements；
-6. 最终执行归 ResolvedRunPlan。
-
-### 3.2 RuntimeRequirements 定义不清
-
-RuntimeRequirements 需要成为可执行契约，不能只作为说明性 JSON。
-
-需要检查它是否能驱动：
-
-1. UI 提示；
+1. 前端提示；
 2. API 校验；
-3. Preflight；
-4. Agent environment check；
-5. RunPlan；
+3. Preflight 检查；
+4. Agent 环境检查；
+5. RunPlan 构造；
 6. E2E 断言。
 
 必须覆盖：
 
-1. image；
-2. docker runtime；
-3. accelerator；
+1. container image；
+2. Docker runtime；
+3. GPU / accelerator；
 4. device binding；
-5. model path；
-6. model format；
-7. required files；
-8. ports；
-9. mounts；
-10. env；
-11. args；
-12. health check；
-13. resource controls；
-14. endpoint protocol；
-15. warning/blocking error。
+5. mounts；
+6. ports；
+7. env；
+8. health check；
+9. model format；
+10. model path；
+11. required files；
+12. backend-specific args；
+13. OpenAI compatible endpoint；
+14. resource controls；
+15. warning 与 blocking error。
 
-### 3.3 BackendCapabilityProfile 定义不清
+## 5. BackendCapabilityProfile 已知风险
 
-BackendCapabilityProfile 应描述后端能力，不能承载节点状态或部署实例状态。
+BackendCapabilityProfile 应描述后端能力，不描述节点状态或部署状态。必须检查是否混入：
 
-需要检查并定义：
+1. 某个节点的 Docker image 检测结果；
+2. 某个本机模型路径；
+3. 某个部署的临时参数；
+4. GPU vendor 的具体设备文件；
+5. NodeBackendRuntime 的 check evidence。
 
-1. supported model formats；
-2. supported protocols；
-3. endpoint paths；
-4. parameter schema；
-5. resource controls；
-6. health check modes；
-7. device binding modes；
-8. accelerator abstraction；
-9. runtime limitations；
-10. warning capabilities。
+BackendCapabilityProfile 应描述：
 
-### 3.4 参数体系边界不清
+1. 支持的模型格式；
+2. 支持的服务协议；
+3. OpenAI compatible endpoint；
+4. 参数能力；
+5. 资源控制能力；
+6. 健康检查能力；
+7. 设备绑定能力抽象；
+8. warning 场景。
 
-需要检查参数在以下层级是否混乱：
+## 6. 参数 owner / schema / override 问题
 
-1. Model / ModelArtifact；
-2. Backend；
-3. BackendVersion；
-4. BackendRuntime；
-5. NodeBackendRuntime；
-6. Deployment；
-7. ResolvedRunPlan。
+必须审查并修复以下风险：
 
-已知风险：
+1. 参数可能被多个层级重复定义；
+2. 同名参数在 BackendRuntime、NodeBackendRuntime、Deployment 各自复制 schema；
+3. UI 为了展示复制一份 schema；
+4. Deployment 覆盖参数时重新定义 schema；
+5. owner + key 没有作为 override 引用；
+6. 参数 source 无法追踪；
+7. RunPlan 无 parameter_source_map；
+8. clone 可能扩大 checked 范围；
+9. copy-on-create 快照链不清；
+10. 上层变更可能污染已有下层对象；
+11. 下层变更可能反向污染上层对象。
 
-1. schema/value 未完整保存；
-2. clone 后参数丢失；
-3. refresh 后参数丢失；
-4. enabled 和 value 混在一起；
-5. disabled input 不显示；
-6. 未 enabled 参数错误进入 Docker args；
-7. required/default 参数没有统一规则；
-8. vLLM/SGLang/llama.cpp 参数覆盖不完整；
-9. resource_controls 与 args 没有一致映射。
+最终原则：
 
-### 3.5 RuntimeParameterEditor / RunnerConfigsPage 问题
+1. 一个参数只有一个 owner；
+2. 一个参数只有一个 schema 定义位置；
+3. 其他层级只保存 override value；
+4. 每一层创建时 copy-on-create 上一层当时的有效视图；
+5. 每一层只叠加自己这一层的 owner 数据或 override；
+6. 只有 ResolvedRunPlan 合成全部参数。
 
-需要重点检查：
+## 7. 参数展示和 checked 语义问题
 
-1. RunnerConfigsPage 是否存在双入口；
-2. legacy Docker editor 是否仍与 RuntimeParameterEditor 并存；
-3. RuntimeParameterEditor 是否未 populate 数据；
-4. watch → emit 是否可能循环；
-5. 页面是否只显示勾选框；
-6. disabled input 是否保留值展示；
-7. enabled 后是否可编辑；
-8. 保存后刷新是否造成 OOM；
-9. schema/value 是否能 round-trip；
-10. clone 是否保留 enabled + value。
+必须审查并修复以下风险：
 
-### 3.6 RunPlan preview 与实际执行不一致
+1. 每个页面展示全部参数；
+2. 参数没有分类；
+3. 所有参数默认 checked；
+4. 有 default value 的参数全部 checked；
+5. required 参数被显示成用户 checked；
+6. optional 参数默认进入 args；
+7. advanced 参数默认展开；
+8. disabled input 不显示值；
+9. Model 页面展示 Docker 参数；
+10. BackendRuntime / NodeBackendRuntime / Deployment 参数边界混乱；
+11. RunPlan preview 看不到参数来源；
+12. Deployment 页面覆盖参数时复制 schema。
 
-需要检查：
+最终要求：
 
-1. preview command 与 Agent Docker create spec 是否一致；
+1. 参数按 category 分组；
+2. 不同页面只展示当前层级拥有或允许覆盖的内容；
+3. default value 不等于 enabled；
+4. required 不等于用户 checked；
+5. optional 默认不 checked；
+6. advanced 默认折叠；
+7. disabled input 仍显示当前值；
+8. RunPlan preview 展示最终值和来源。
+
+## 8. UI/API 已知问题
+
+必须检查：
+
+1. RunnerConfigsPage 双入口；
+2. legacy Docker editor 与 RuntimeParameterEditor 并存；
+3. RuntimeParameterEditor 数据未 populate；
+4. watch → emit 循环导致 OOM；
+5. 只显示勾选框、不显示 disabled input；
+6. 保存后 schema / value / enabled 丢失；
+7. clone 后参数丢失或 checked 扩大；
+8. Deployment 页面无法覆盖运行参数；
+9. Deployment 页面端口、卷、健康检查配置不足；
+10. Model 页面展示 Docker 参数；
+11. Instance 状态刷新不准确；
+12. Logs 自动刷新不足；
+13. container id 与 instance id 混用；
+14. ready_with_warnings 可部署口径不一致。
+
+## 9. RunPlan / Preflight 已知问题
+
+必须检查：
+
+1. RunPlan preview 与实际 Docker create spec 是否一致；
 2. env 是否混入 capabilities_json；
 3. args 是否重复；
-4. GPU/device binding 是否一致；
-5. ports 与 health check 是否一致；
-6. mounts 是否一致；
-7. resource controls 是否进入 args；
-8. deployment override 是否生效；
-9. NBR snapshot 与 deployment snapshot 边界是否清楚。
+4. unchecked optional 参数是否进入 args；
+5. resource controls 是否正确进入 args；
+6. health check 与端口映射是否一致；
+7. Docker image inspect 是否仍信任 client image_present；
+8. check-request 是否由 Server 代理 Agent 获取 evidence；
+9. errors/warnings 是否可断言；
+10. API 和 UI 错误口径是否一致。
 
-### 3.7 NodeBackendRuntime 部署入口约束
+## 10. API-first E2E 缺口
 
-需要确认：
+最终验收需要覆盖：
 
-1. Deployment 只接受 `node_backend_runtime_id`；
-2. Deployment 拒绝 `backend_runtime_id`；
-3. UI 只选择 ready / ready_with_warnings 的 NBR；
-4. needs_check、missing_image、failed、disabled 不可部署；
-5. check-request 由 Server 代理 Agent；
-6. image inspect 为权威；
-7. 不自动创建 NBR。
-
-### 3.8 日志与状态问题
-
-需要检查：
-
-1. instance id 与 container id 是否混用；
-2. container logs 是否使用正确 container id；
-3. container 退出后状态是否更新；
-4. health check 是否驱动 running；
-5. stop 后实例列表策略是否明确；
-6. 前端是否自动刷新；
-7. API 是否返回可读错误；
-8. operation_id 是否贯通。
-
-## 4. 必须产出的复核文档
-
-Claude 执行 Batch 0 后必须生成：
-
-```text
-docs/reports/runtime-architecture-parameter-final-state/00-existing-docs-and-code-reconciliation.md
-```
-
-该文档必须包含：
-
-1. 已读取的历史文档；
-2. 历史文档结论是否仍成立；
-3. 当前代码已解决的问题；
-4. 当前代码仍存在的问题；
-5. 历史文档遗漏的问题；
-6. 当前新增问题；
-7. 需要修复的 P0/P1/P2 清单；
-8. 每个问题的代码路径；
-9. 每个问题的验证方式；
-10. 无法验证项及原因。
+1. fresh DB；
+2. server / agent start；
+3. login / CSRF；
+4. BackendRuntime；
+5. NodeBackendRuntime enable；
+6. check-request；
+7. model scan；
+8. ModelArtifact / ModelLocation；
+9. Deployment；
+10. Preflight；
+11. RunPlan preview；
+12. start；
+13. health check；
+14. logs；
+15. stop；
+16. final state；
+17. vLLM；
+18. SGLang；
+19. llama.cpp；
+20. NVIDIA real smoke；
+21. MetaX dry-run / structure check；
+22. 参数 owner/source/checked/default/override 行为断言。

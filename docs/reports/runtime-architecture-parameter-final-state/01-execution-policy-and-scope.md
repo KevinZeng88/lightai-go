@@ -1,175 +1,164 @@
 # Execution Policy and Scope
 
-## 1. 本阶段定位
+## 1. 执行定位
 
-本阶段聚焦 Runtime 架构和参数体系的最终收敛。目标是把模型、后端、运行模板、节点运行配置、部署、RunPlan、Preflight、实例生命周期和 UI/API 展示统一到清晰、干净、可验证的主线。
+本专题用于指导 Runtime 架构与参数体系最终收敛。执行端需要以当前代码和本专题文档为依据，完成文档复核、代码修复、API-first 验收、证据沉淀、最终 closeout。
 
-自动化执行、无人干预、API-first E2E 是本阶段验收方式。自动化要求服务于架构收敛，避免把自动化脚本本身变成孤立目标。
+主线目标包括：
 
-## 2. 范围内工作
+1. Runtime 领域模型边界收敛；
+2. 模型 metadata 与模型实例路径边界收敛；
+3. RuntimeRequirements 与 BackendCapabilityProfile 定义收敛；
+4. 参数体系收敛；
+5. RunPlan / Preflight 收敛；
+6. UI/API 行为收敛；
+7. 自动化验收链路收敛。
 
-### 2.1 领域模型收敛
+自动化运行是验收要求。它用于证明架构和参数体系已经形成可执行闭环。
 
-必须重新核对并收敛：
+## 2. 工作目录
 
-1. Backend；
-2. BackendVersion；
-3. BackendRuntime；
-4. NodeBackendRuntime；
-5. ModelArtifact；
-6. ModelLocation；
-7. RuntimeRequirements；
-8. BackendCapabilityProfile；
-9. RuntimeParameterSchema；
-10. RuntimeParameterValues；
-11. Deployment；
-12. ResolvedRunPlan；
-13. DeviceBinding；
-14. HealthCheck；
-15. ModelInstance lifecycle。
-
-### 2.2 参数体系收敛
-
-必须明确参数在不同层级的职责：
-
-1. 模型参数；
-2. 后端能力参数；
-3. 运行模板参数；
-4. 节点运行参数；
-5. 部署覆盖参数；
-6. 最终 Docker args；
-7. 最终 env；
-8. 最终 mounts；
-9. 最终 ports；
-10. 最终 device bindings；
-11. 健康检查参数；
-12. UI 展示参数；
-13. API 返回参数；
-14. E2E 断言参数。
-
-### 2.3 Preflight 和 RunPlan 收敛
-
-必须保证：
-
-1. Preflight 使用 RuntimeRequirements 和 BackendCapabilityProfile；
-2. RunPlan 使用同一套输入和合并规则；
-3. RunPlan preview 与实际 Docker create spec 一致；
-4. errors/warnings 语义清楚；
-5. API 和 UI 展示同口径；
-6. E2E 能断言关键字段。
-
-### 2.4 UI/API 链路修复
-
-必须覆盖：
-
-1. 模型管理页面；
-2. 运行配置页面；
-3. 节点运行配置页面；
-4. 部署创建页面；
-5. RunPlan 预览；
-6. 模型实例页面；
-7. 日志页面；
-8. 状态提示；
-9. 参数编辑器；
-10. clone / save / refresh 行为。
-
-### 2.5 API-first 自动化验收
-
-必须提供自动化验收能力，覆盖：
-
-1. fresh DB；
-2. server / agent 启动；
-3. 登录与 CSRF；
-4. BackendRuntime；
-5. NodeBackendRuntime enable；
-6. check-request；
-7. model scan；
-8. ModelArtifact / ModelLocation；
-9. Deployment；
-10. Preflight；
-11. RunPlan preview；
-12. start；
-13. health check；
-14. logs；
-15. stop；
-16. final state；
-17. evidence；
-18. non-zero failure。
-
-## 3. 范围外工作
-
-以下事项本阶段只做边界预留或文档记录，除非代码中已经存在可修复缺陷：
-
-1. 多节点高级调度；
-2. 多副本编排；
-3. 租户级计费结算；
-4. 生产级审计报表；
-5. 真实 MetaX/Huawei 硬件运行验证；
-6. 大规模压力测试；
-7. UI 全量 Playwright 覆盖；
-8. OpenAI compatible gateway 的完整计费闭环。
-
-## 4. 强制原则
-
-### 4.1 干净主线
-
-1. 不做历史兼容迁移。
-2. 表结构变化允许重建数据库。
-3. 旧字段、旧接口、旧模板、旧 snapshot fallback 应删除。
-4. 旧流程导致分裂时，保留当前正确模型。
-5. 文档、API、UI、测试必须同口径。
-
-### 4.2 部署入口
-
-1. NodeBackendRuntime 是唯一部署入口。
-2. Deployment 只接受 `node_backend_runtime_id`。
-3. Deployment 拒绝 `backend_runtime_id`。
-4. 不自动创建 NodeBackendRuntime。
-5. NodeBackendRuntime 必须显式 enable。
-6. check-request 必须通过 Server 代理 Agent 获取真实证据。
-7. ready 和 ready_with_warnings 可部署。
-8. needs_check、missing_image、failed、disabled 不可部署。
-
-### 4.3 Backend / BackendVersion 硬件无关
-
-Backend 和 BackendVersion 只表达推理后端和后端版本能力。
-
-GPU vendor、Docker runtime、设备文件、驱动、节点硬件差异属于：
-
-1. BackendRuntime；
-2. NodeBackendRuntime；
-3. Node；
-4. Accelerator；
-5. DeviceBinding；
-6. RunPlan。
-
-### 4.4 自动化验收
-
-1. 不依赖人工手工执行 Docker 命令判断结果。
-2. 不依赖前端传入的 `image_present` 作为权威。
-3. 不依赖 UI 手工刷新判断状态。
-4. API-first 脚本必须输出结构化证据。
-5. 失败必须退出非零。
-6. E2E evidence 必须可复核。
-
-## 5. 工作区和提交策略
-
-执行前必须确认：
+仓库路径：
 
 ```bash
-pwd
-git status --short
-git branch --show-current
-git log --oneline -15
+cd /home/kzeng/projects/ai-platform-study/lightai-go
 ```
 
-默认在当前分支继续，不新建分支。
+专题目录：
 
-如存在用户未说明的修改：
+```text
+docs/reports/runtime-architecture-parameter-final-state/
+```
 
-1. 先记录文件清单；
-2. 判断是否为当前任务相关；
-3. 不覆盖用户改动；
-4. 在输出中说明处理方式。
+历史报告可作为输入材料读取。新增审查、计划、证据、closeout 不写入历史阶段目录。
 
-每个可独立验证的批次可以单独 commit。最终 closeout 必须列出 commit list、push result、git status。
+## 3. 分工策略
+
+### 3.1 ChatGPT
+
+负责：
+
+1. 制定目标和设计文档；
+2. 审核 Codex review；
+3. 判断哪些建议接受、部分接受或驳回；
+4. 生成最终 Claude 执行口径；
+5. 协助用户验收结果。
+
+### 3.2 Codex
+
+负责：
+
+1. 审核本专题文档和当前代码现实是否一致；
+2. 输出 `13-codex-review.md`；
+3. 提交并推送 review 文档；
+4. 不修改功能代码。
+
+### 3.3 Claude
+
+负责：
+
+1. 按最终文档执行代码修复；
+2. 运行测试和 E2E；
+3. 生成证据；
+4. 提交并推送；
+5. 输出 final closeout。
+
+## 4. 非兼容策略
+
+1. 不保留旧配置兼容逻辑。
+2. 不保留旧模板 fallback。
+3. 不为了旧 DB 数据保留复杂迁移分支。
+4. 表结构变化允许重建数据库。
+5. 旧字段、旧接口、旧流程如果与最终设计冲突，应删除。
+6. 发现真实问题时优先修复、验证、提交、推送。
+
+## 5. 架构硬约束
+
+### 5.1 NodeBackendRuntime 部署入口
+
+1. Deployment 只接受 `node_backend_runtime_id`。
+2. Deployment 拒绝 `backend_runtime_id`。
+3. 系统不自动创建 NodeBackendRuntime。
+4. NodeBackendRuntime 必须显式 enable。
+5. check-request 必须由 Server 代理 Agent 获取 evidence。
+6. ready 和 ready_with_warnings 可部署。
+7. needs_check、missing_image、failed、disabled 不可部署。
+8. UI 与 API 对可部署状态保持一致。
+
+### 5.2 Backend / BackendVersion 硬件无关
+
+1. Backend / BackendVersion 表达推理后端和后端版本能力。
+2. GPU vendor、设备文件、Docker runtime、硬件绑定逻辑不写入 Backend / BackendVersion。
+3. GPU/vendor/hardware 相关内容放入 BackendRuntime、NodeBackendRuntime、Node、Accelerator、DeviceBinding、RunPlan。
+
+### 5.3 模型 metadata 边界
+
+1. 模型 metadata 描述模型本身。
+2. 模型实例路径归 ModelLocation。
+3. 通用 catalog、Backend、BackendVersion、RuntimeRequirements、BackendCapabilityProfile 不写入 `/home/kzeng/models/...` 这类本机路径。
+4. discovered_metadata_json 不沉淀本机具体模型路径为通用定义。
+
+## 6. 参数体系硬约束
+
+### 6.1 单一属主
+
+1. 一个参数只能有一个 owner。
+2. owner 可以是 Model / ModelArtifact、Backend / BackendVersion、BackendRuntime、NodeBackendRuntime、Deployment 或系统生成项。
+3. owner 决定 schema 定义位置。
+4. 其他层级不能重新定义该参数 schema。
+
+### 6.2 单一定义
+
+1. 一个参数只有一个 schema 定义位置。
+2. UI 展示不能复制 schema。
+3. Deployment 覆盖不能复制 schema。
+4. NodeBackendRuntime 覆盖不能复制 schema。
+5. 克隆对象时不能扩大 schema 所属范围。
+
+### 6.3 分层快照和 copy-on-create
+
+1. 每一层创建时拷贝上一层当时的有效视图。
+2. 每一层在快照基础上叠加自己拥有的数据或 override。
+3. 后续上一层变更不反向污染已经创建的下一层。
+4. 下一层后续变更不反向污染上一层。
+5. copy-on-create 保存的是快照和 override 边界，不是把所有 schema 改成当前层 owner。
+
+### 6.4 分层展示
+
+1. 每个页面只展示自己拥有或允许覆盖的内容。
+2. Model 页面只展示模型 metadata、格式、能力、上下文、量化、模型文件信息。
+3. Backend / BackendVersion 页面只展示后端能力和版本能力。
+4. BackendRuntime 页面只展示运行模板自己的参数和默认运行配置。
+5. NodeBackendRuntime 页面只展示节点运行环境配置、节点覆盖参数、check-request evidence。
+6. Deployment 页面展示部署可覆盖参数、部署覆盖值、最终 RunPlan preview。
+7. Instance 页面展示运行结果、状态、日志、健康检查、实际 Docker spec 摘要。
+8. Instance 页面不编辑运行参数。
+
+### 6.5 enabled / checked 语义
+
+1. enabled=true 只表示用户在当前层级显式启用或覆盖。
+2. default value 不等于 enabled。
+3. required 不等于用户 checked。
+4. required/default-applied 参数可以在最终 RunPlan 生效，但 UI 不把它显示成用户 checked。
+5. optional 参数默认不 checked。
+6. advanced 参数默认折叠、不 checked。
+7. disabled input 仍显示当前值、默认值或继承值。
+8. 未 enabled 的 optional 参数不进入当前层级 override。
+
+## 7. RunPlan 硬约束
+
+1. ResolvedRunPlan 是唯一最终运行权威。
+2. 参数合成只在 RunPlan resolver 中完成。
+3. RunPlan preview 必须展示最终生效值和来源。
+4. 实际 Docker create spec 必须来自同一个 ResolvedRunPlan。
+5. RunPlan preview 与实际 Docker spec 不一致时测试失败。
+6. 每个最终参数必须带 source。
+7. source 至少区分 default、model、backend_version、backend_runtime、node_backend_runtime、deployment_override、system_generated、runtime_detected。
+
+## 8. 文档和提交约束
+
+1. Codex review 必须提交并推送。
+2. Claude 执行结果必须提交并推送。
+3. 每次提交前检查 `git status --short`。
+4. 文档提交和功能代码提交应尽量分离。
+5. closeout 必须记录 commit id、push result、测试结果、evidence 路径、git status。

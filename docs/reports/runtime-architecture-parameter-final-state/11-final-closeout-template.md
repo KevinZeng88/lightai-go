@@ -1,173 +1,199 @@
-# Runtime Architecture & Parameter Final-State Closeout
+# Runtime Architecture and Parameter Final-State Closeout
 
 ## 1. Final Status
 
-```text
-Status:
-Date:
-Branch:
-Final commit:
-Push result:
-Git status:
-```
+- Status:
+- Final commit:
+- Push result:
+- git status:
 
-## 2. Completed Batches
+## 2. Scope Completed
 
-| Batch | Status | Evidence |
-|---|---:|---|
-| Batch 0 — Baseline and Reconciliation |  |  |
-| Batch 1 — Domain Contract Alignment |  |  |
-| Batch 2 — RuntimeRequirements and CapabilityProfile |  |  |
-| Batch 3 — Parameter System |  |  |
-| Batch 4 — UI/API Wiring |  |  |
-| Batch 5 — RunPlan and Preflight |  |  |
-| Batch 6 — API-first E2E |  |  |
-| Batch 7 — Cleanup and Closeout |  |  |
+- Runtime domain contract:
+- Parameter ownership:
+- Copy-on-create snapshot chain:
+- RuntimeRequirements:
+- BackendCapabilityProfile:
+- RunPlan / Preflight:
+- UI/API:
+- API-first E2E:
 
 ## 3. Runtime Domain Contract Result
 
-说明最终对象边界：
+记录：
 
-1. Backend；
-2. BackendVersion；
-3. BackendRuntime；
-4. NodeBackendRuntime；
-5. ModelArtifact；
-6. ModelLocation；
-7. Deployment；
-8. ResolvedRunPlan；
-9. ModelInstance；
-10. DeviceBinding。
+1. Backend / BackendVersion 硬件无关结果；
+2. ModelArtifact / ModelLocation 边界；
+3. BackendRuntime / NodeBackendRuntime 边界；
+4. Deployment 边界；
+5. Instance 运行事实边界；
+6. NodeBackendRuntime 唯一部署入口验证。
 
-## 4. Parameter Contract Result
+## 4. Parameter Ownership Final Checklist
 
-说明：
+必须逐项填写结果和证据：
 
-1. schema 结构；
-2. value 结构；
-3. enabled/value 分离；
-4. required/default/optional；
-5. clone；
-6. refresh；
-7. deployment override；
-8. RunPlan binding；
-9. UI rendering；
-10. API response。
+| Item | Result | Evidence |
+|---|---|---|
+| 一个参数只有一个 owner |  |  |
+| 一个参数只有一个 schema 定义位置 |  |  |
+| Override 引用 definition |  |  |
+| Deployment 只保存 override |  |  |
+| UI 不复制 schema |  |  |
+| copy-on-create 上层到下层 |  |  |
+| 上层修改不污染已有下层 |  |  |
+| 下层修改不污染上层 |  |  |
+| clone 不扩大 checked |  |  |
+| RunPlan source map 存在 |  |  |
 
-## 5. RuntimeRequirements Result
+## 5. Parameter Display Checklist
 
-说明最终定义和代码落点：
+| Item | Result | Evidence |
+|---|---|---|
+| Model 页面不展示 Docker 参数 |  |  |
+| Backend 页面不展示节点状态 |  |  |
+| BackendRuntime 页面只展示模板参数 |  |  |
+| NodeBackendRuntime 页面只展示节点运行环境和 evidence |  |  |
+| Deployment 页面展示 override 和 RunPlan preview |  |  |
+| Instance 页面只展示运行事实 |  |  |
+| 参数按 category 分组 |  |  |
+| advanced 默认折叠 |  |  |
+| disabled input 显示值 |  |  |
 
-1. image；
-2. docker；
-3. accelerator；
-4. model path；
-5. model format；
-6. ports；
-7. mounts；
-8. env；
-9. args；
-10. health check；
-11. warnings/errors。
+## 6. checked / enabled Checklist
 
-## 6. BackendCapabilityProfile Result
+| Item | Result | Evidence |
+|---|---|---|
+| default value 不等于 enabled |  |  |
+| required 不等于用户 checked |  |  |
+| optional 默认不 checked |  |  |
+| advanced 默认不 checked |  |  |
+| unchecked optional 不进入 override |  |  |
+| unchecked optional 不进入 final args |  |  |
+| current-layer override 才 checked |  |  |
 
-说明最终定义和代码落点：
+## 7. RuntimeRequirements Result
+
+记录：
+
+1. image requirements；
+2. Docker runtime requirements；
+3. model path requirements；
+4. device binding requirements；
+5. port/mount/env requirements；
+6. health check requirements；
+7. warning/blocking error；
+8. vLLM/SGLang/llama.cpp coverage。
+
+## 8. BackendCapabilityProfile Result
+
+记录：
 
 1. model formats；
 2. protocols；
 3. endpoints；
-4. parameter groups；
+4. parameter capabilities；
 5. resource controls；
 6. health checks；
-7. device binding modes；
-8. backend-specific capability。
+7. device binding abstraction；
+8. NVIDIA/MetaX/Huawei boundary。
 
-## 7. RunPlan / Preflight Result
+## 9. RunPlan / Preflight Result
 
-说明：
+记录：
 
-1. Preflight inputs；
-2. Preflight errors/warnings；
-3. RunPlan inputs；
-4. RunPlan output；
-5. source map；
-6. Docker spec conversion；
-7. RunPlan/Docker diff evidence。
+1. Preflight errors/warnings；
+2. check-request evidence；
+3. parameter_source_map；
+4. final args/env/mounts/ports/devices；
+5. preview 与 Docker spec 对比；
+6. health check 与端口一致性；
+7. vLLM/SGLang/llama.cpp mapping。
 
-## 8. UI/API Result
+## 10. UI/API Result
 
-说明修复情况：
+记录：
 
-1. RuntimeParameterEditor；
-2. RunnerConfigsPage；
-3. BackendRuntime page；
-4. NodeBackendRuntime page；
-5. Deployment page；
-6. Instance page；
-7. Logs page；
-8. ready_with_warnings；
-9. missing_image / needs_check / failed；
-10. i18n。
+1. changed pages/components；
+2. API response changes；
+3. RuntimeParameterEditor behavior；
+4. RunnerConfigsPage cleanup；
+5. Deployment page behavior；
+6. Instance logs/status behavior。
 
-## 9. API-first E2E Evidence
+## 11. API-first E2E Evidence
 
-| Scenario | Status | Evidence Path |
-|---|---:|---|
-| vLLM full-chain |  |  |
-| SGLang full-chain |  |  |
-| llama.cpp full-chain |  |  |
-| missing image |  |  |
-| missing model path |  |  |
-| invalid parameter |  |  |
-| ready_with_warnings |  |  |
-| RunPlan/Docker diff |  |  |
-
-## 10. Test Results
-
-| Command | Result |
-|---|---:|
-| `go test ./internal/server/...` |  |
-| `go test ./internal/agent/...` |  |
-| `go build ./cmd/server/...` |  |
-| `go build ./cmd/agent/...` |  |
-| `cd web && npm run build` |  |
-| `cd web && npm test` |  |
-| API-first E2E |  |
-
-## 11. Commit List
+Evidence directory:
 
 ```text
+docs/reports/runtime-architecture-parameter-final-state/evidence/
 ```
 
-## 12. Push Result
+Files:
 
 ```text
+server.log
+agent.log
+api-requests.jsonl
+api-responses.jsonl
+preflight.json
+check-request.json
+runplan-preview.json
+docker-create-spec.json
+parameter-source-map.json
+health-check.json
+instance-final.json
+container-logs.txt
+summary.md
 ```
 
-## 13. Git Status
+## 12. Test Results
 
-```text
+Commands and results:
+
+```bash
+go test ./internal/server/...
+go test ./internal/agent/...
+go build ./cmd/server/...
+go build ./cmd/agent/...
+cd web && npm run build
+cd web && npm test
 ```
+
+E2E commands:
+
+```bash
+# fill actual commands
+```
+
+## 13. Deleted Legacy Logic
+
+List removed fields, compatibility branches, old UI entry points, old fallback logic.
 
 ## 14. Open Issues
 
-| Issue | Reason Not Closed | Impact | Next Verification Condition |
-|---|---|---|---|
-|  |  |  |  |
+Only include issues that are currently not verifiable or out of scope due to external dependencies.
 
-## 15. Final Conclusion
+Each item must include:
 
-填写最终结论：
+1. issue；
+2. reason not fixed；
+3. impact；
+4. verification condition；
+5. suggested next action。
 
-```text
-RUNTIME_ARCHITECTURE_PARAMETER_FINAL_STATE_CLOSED
-```
-
-或：
+## 15. Commits
 
 ```text
-RUNTIME_ARCHITECTURE_PARAMETER_FINAL_STATE_PARTIAL
+<commit> <message>
 ```
 
-如果是 PARTIAL，必须说明阻塞原因和下一步验证条件。
+## 16. Final git status
+
+```bash
+git status --short
+```
+
+## 17. Final Conclusion
+
+State whether Runtime architecture and parameter final-state is closed.

@@ -1,26 +1,87 @@
 {
-  "name": "runtime-architecture-parameter-final-state-docs",
-  "version": "1.0.0",
-  "created_for": "LightAI Go Runtime architecture and parameter final-state next stage",
-  "target_directory": "docs/reports/runtime-architecture-parameter-final-state/",
-  "contains_phase_directory": false,
+  "name": "runtime-architecture-parameter-final-state",
+  "directory": "docs/reports/runtime-architecture-parameter-final-state/",
+  "version": "2026-06-27-revised-parameter-ownership-copy-on-create",
+  "purpose": "Guide final convergence of Runtime architecture, parameter ownership, copy-on-create snapshots, layered presentation, RunPlan/Preflight, UI/API, and API-first E2E.",
   "documents": [
-    "00-index.md",
-    "01-execution-policy-and-scope.md",
-    "02-current-context-and-known-issues.md",
-    "03-final-runtime-domain-contract.md",
-    "04-final-parameter-contract.md",
-    "05-runtime-requirements-and-capability-profile-design.md",
-    "06-runplan-and-preflight-contract.md",
-    "07-ui-and-api-contract.md",
-    "08-api-first-e2e-and-automation-requirements.md",
-    "09-implementation-plan.md",
-    "10-claude-execution-prompt.md",
-    "11-final-closeout-template.md"
+    {
+      "file": "00-index.md",
+      "role": "index"
+    },
+    {
+      "file": "01-execution-policy-and-scope.md",
+      "role": "execution_policy"
+    },
+    {
+      "file": "02-current-context-and-known-issues.md",
+      "role": "known_issues"
+    },
+    {
+      "file": "03-final-runtime-domain-contract.md",
+      "role": "domain_contract"
+    },
+    {
+      "file": "04-final-parameter-contract.md",
+      "role": "parameter_contract"
+    },
+    {
+      "file": "04a-parameter-ownership-and-layered-presentation-contract.md",
+      "role": "parameter_ownership_copy_on_create_contract"
+    },
+    {
+      "file": "05-runtime-requirements-and-capability-profile-design.md",
+      "role": "requirements_capability_design"
+    },
+    {
+      "file": "06-runplan-and-preflight-contract.md",
+      "role": "runplan_preflight_contract"
+    },
+    {
+      "file": "07-ui-and-api-contract.md",
+      "role": "ui_api_contract"
+    },
+    {
+      "file": "08-api-first-e2e-and-automation-requirements.md",
+      "role": "e2e_requirements"
+    },
+    {
+      "file": "09-implementation-plan.md",
+      "role": "implementation_plan"
+    },
+    {
+      "file": "10-claude-execution-prompt.md",
+      "role": "claude_prompt"
+    },
+    {
+      "file": "11-final-closeout-template.md",
+      "role": "closeout_template"
+    },
+    {
+      "file": "12-codex-review-instructions.md",
+      "role": "codex_review_instructions"
+    }
   ],
-  "install_commands": [
-    "cd /home/kzeng/projects/ai-platform-study/lightai-go",
-    "unzip -o /tmp/runtime-architecture-parameter-final-state-docs.zip",
-    "find docs/reports/runtime-architecture-parameter-final-state -maxdepth 2 -type f | sort"
-  ]
+  "expected_generated_documents": [
+    {
+      "file": "13-codex-review.md",
+      "generated_by": "Codex",
+      "required_before_claude_autorun": true
+    }
+  ],
+  "hard_contracts": [
+    "single_parameter_owner",
+    "single_schema_definition",
+    "override_references_definition",
+    "copy_on_create_snapshot_chain",
+    "layered_presentation",
+    "resolved_runplan_final_merge",
+    "source_map_required",
+    "default_not_enabled",
+    "required_not_user_checked",
+    "optional_not_checked_by_default"
+  ],
+  "forbidden_new_directory_patterns": [
+    "docs/reports/phase-*/runtime-architecture-parameter-final-state"
+  ],
+  "evidence_directory": "docs/reports/runtime-architecture-parameter-final-state/evidence/"
 }

@@ -1,238 +1,214 @@
 # Implementation Plan
 
-## Batch 0 — Baseline and Reconciliation
+## 1. 执行策略
 
-### 目标
+先文档与代码现实复核，再按批次修复。每个批次必须有验证命令、证据和结论。
 
-建立当前代码、文档、测试基线，生成复核文档。
+执行前必须阅读本专题全部文档。Codex 先审核文档并生成 `13-codex-review.md`；用户和 ChatGPT 接受或修订后，Claude 再执行代码修复。
 
-### 执行命令
+## 2. Batch 0 — Baseline and Reconciliation
+
+目标：建立当前状态基线，确认本专题文档与当前代码现实的差距。
+
+命令：
 
 ```bash
 pwd
 git status --short
 git branch --show-current
 git log --oneline -15
-
-go version
-node -v
-npm -v
-docker version || true
-docker ps || true
-
-find docs -maxdepth 4 -type f | sort
-find internal cmd web -type f | sort
+find docs/reports/runtime-architecture-parameter-final-state -maxdepth 3 -type f | sort
+find internal cmd web scripts docs -type f | sort
 ```
 
-### 必须读取
+输出：
 
 ```text
-docs/reports/runtime-architecture-parameter-final-state/*.md
+docs/reports/runtime-architecture-parameter-final-state/evidence/batch-0-baseline-summary.md
 ```
 
-如果历史报告存在，也读取作为输入。
+要求：
 
-### 输出
+1. 读取历史相关文档；
+2. 对比本专题要求；
+3. 列出必须修复问题；
+4. 不直接跳过设计边界问题。
 
-```text
-docs/reports/runtime-architecture-parameter-final-state/00-existing-docs-and-code-reconciliation.md
-```
+## 3. Batch 1 — Runtime Domain Contract Alignment
 
-### 验收
+目标：落实领域边界。
 
-复核文档必须列出：
-
-1. 已读文档；
-2. 已查代码路径；
-3. 当前 P0/P1/P2 问题；
-4. 已解决项；
-5. 待修复项；
-6. 无法验证项。
-
-## Batch 1 — Domain Contract Alignment
-
-### 目标
-
-让代码中的领域模型与最终契约一致。
-
-### 修改范围
-
-重点检查：
-
-```text
-internal/server
-internal/agent
-cmd/server
-cmd/agent
-web/src
-```
-
-### 重点
+重点：
 
 1. Backend / BackendVersion 硬件无关；
-2. NodeBackendRuntime 是唯一部署入口；
-3. ModelArtifact / ModelLocation 边界清楚；
-4. RuntimeRequirements 与 CapabilityProfile 字段位置正确；
-5. Deployment snapshot 边界清楚；
-6. ResolvedRunPlan 作为最终执行权威。
+2. Model metadata 与 ModelLocation 分离；
+3. RuntimeRequirements / BackendCapabilityProfile 边界；
+4. NodeBackendRuntime 唯一部署入口；
+5. Deployment snapshot 边界；
+6. Instance 运行事实边界。
 
-### 验收
+验收：
 
 ```bash
-grep -R "backend_runtime_id" -n internal cmd web | head -100
 grep -R "/home/kzeng/models" -n internal cmd web docs || true
+grep -R "backend_runtime_id" -n internal cmd web | head -100
 go test ./internal/server/...
 go test ./internal/agent/...
 ```
 
-## Batch 2 — RuntimeRequirements and CapabilityProfile
+## 4. Batch 2 — RuntimeRequirements and BackendCapabilityProfile
 
-### 目标
+目标：让运行要求和后端能力能驱动 Preflight、RunPlan、UI、E2E。
 
-实现可被 Preflight、RunPlan、UI、E2E 使用的 RuntimeRequirements 和 BackendCapabilityProfile。
+重点：
 
-### 重点
+1. vLLM capability/requirements；
+2. SGLang capability/requirements；
+3. llama.cpp capability/requirements；
+4. resource controls；
+5. health check；
+6. model format；
+7. device binding abstraction；
+8. warning/blocking error。
+
+验收：
+
+```bash
+go test ./internal/server/... -run 'RuntimeRequirements|Capability|Preflight|RunPlan'
+go test ./internal/agent/... -run 'Docker|Runtime|Device|Health'
+```
+
+## 5. Batch 2A — Parameter Ownership and Layered Presentation
+
+目标：落实参数单一属主、单一定义、分层展示、copy-on-create、最终 RunPlan 合成。
+
+重点：
+
+1. ParameterDefinition 只有一个 owner；
+2. ParameterOverride 引用 definition；
+3. 其他层级不复制 schema；
+4. copy-on-create 层级快照链；
+5. 每一层只叠加自己这一层数据；
+6. default/required/optional/enabled/checked 语义；
+7. category 分组；
+8. source map；
+9. clone 不扩大 checked；
+10. Deployment override 不重定义 schema。
+
+验收：
+
+```bash
+go test ./internal/server/... -run 'Parameter|Ownership|Override|Snapshot|RunPlan'
+cd web && npm test && npm run build
+```
+
+必须新增测试断言：
+
+1. default 不导致 enabled；
+2. required 不显示成用户 checked；
+3. optional 默认不 checked；
+4. Deployment override 不复制 schema；
+5. copy-on-create 后上下层互不污染；
+6. RunPlan source map 存在。
+
+## 6. Batch 3 — Parameter Persistence and API
+
+目标：修复 schema/value/enabled/source 保存、刷新、clone、API 返回。
+
+重点：
+
+1. BackendRuntime 参数保存；
+2. NodeBackendRuntime 参数保存；
+3. Deployment 参数覆盖；
+4. clone 参数复制；
+5. refresh 后不丢；
+6. API 支持 UI 分层展示；
+7. API 支持 source map。
+
+验收：
+
+```bash
+go test ./internal/server/... -run 'Parameter|Runtime|Deployment|Snapshot|Clone'
+```
+
+## 7. Batch 4 — UI Layered Presentation
+
+目标：修复 UI 分层展示和参数编辑体验。
+
+重点：
+
+1. RunnerConfigsPage；
+2. RuntimeParameterEditor；
+3. Model 页面；
+4. BackendRuntime 页面；
+5. NodeBackendRuntime 页面；
+6. Deployment 页面；
+7. Instance 页面；
+8. category 分组；
+9. advanced 折叠；
+10. disabled input 显示；
+11. no OOM；
+12. no all checked。
+
+验收：
+
+```bash
+cd web
+npm test
+npm run build
+cd ..
+```
+
+## 8. Batch 5 — RunPlan and Preflight
+
+目标：RunPlan 成为最终执行权威，Preflight 与 RunPlan 共享规则。
+
+重点：
+
+1. preview 与 Docker spec 一致；
+2. parameter_source_map；
+3. unchecked optional 不进入 args；
+4. resource controls；
+5. health check；
+6. DeviceBinding；
+7. errors/warnings；
+8. check-request evidence。
+
+验收：
+
+```bash
+go test ./internal/server/... -run 'RunPlan|Preflight|Deployment|ParameterSource'
+go test ./internal/agent/... -run 'Docker|Runtime|Device|Health'
+```
+
+## 9. Batch 6 — API-first E2E
+
+目标：通过 API-first 自动化证明全链路正确。
+
+至少覆盖：
 
 1. vLLM；
 2. SGLang；
 3. llama.cpp；
-4. NVIDIA；
-5. MetaX structure；
-6. Huawei extension placeholder；
-7. model format；
-8. health check；
-9. endpoint；
-10. resource controls。
+4. parameter ownership；
+5. copy-on-create；
+6. source map；
+7. RunPlan preview/spec consistency；
+8. missing image；
+9. missing model path；
+10. ready_with_warnings。
 
-### 验收
+证据目录：
 
-```bash
-go test ./internal/server/... -run 'RuntimeRequirements|Capability|Preflight|RunPlan'
-go test ./internal/agent/... -run 'Docker|Image|Device|Runtime'
+```text
+docs/reports/runtime-architecture-parameter-final-state/evidence/
 ```
 
-## Batch 3 — Parameter System
+## 10. Batch 7 — Cleanup and Closeout
 
-### 目标
+目标：清理旧逻辑并生成最终 closeout。
 
-修复参数 schema/value/enabled/default/override/copy-on-create 全链路。
-
-### 重点
-
-1. BackendRuntime 参数；
-2. NodeBackendRuntime 参数；
-3. Deployment 参数；
-4. schema round-trip；
-5. values round-trip；
-6. enabled/value 分离；
-7. disabled input；
-8. clone；
-9. refresh；
-10. RunPlan binding。
-
-### 验收
-
-```bash
-go test ./internal/server/... -run 'Parameter|Runtime|Deployment|RunPlan'
-cd web
-npm test
-npm run build
-cd ..
-```
-
-## Batch 4 — UI/API Wiring
-
-### 目标
-
-修复用户可见页面和 API 行为。
-
-### 重点
-
-1. RunnerConfigsPage；
-2. RuntimeParameterEditor；
-3. BackendRuntime page；
-4. NodeBackendRuntime page；
-5. Deployment page；
-6. RunPlan preview；
-7. Instance page；
-8. Logs page；
-9. i18n；
-10. status display。
-
-### 验收
-
-```bash
-cd web
-npm test
-npm run build
-cd ..
-go test ./internal/server/...
-```
-
-## Batch 5 — RunPlan and Preflight
-
-### 目标
-
-保证 Preflight 判断和 RunPlan 执行一致。
-
-### 重点
-
-1. RunPlan preview；
-2. Docker create spec；
-3. source map；
-4. errors；
-5. warnings；
-6. health check；
-7. device binding；
-8. resource controls；
-9. args/env/mounts/ports 去重；
-10. Agent execution evidence。
-
-### 验收
-
-```bash
-go test ./internal/server/... -run 'RunPlan|Preflight|Deployment'
-go test ./internal/agent/... -run 'Docker|Runtime|Device|Health'
-```
-
-## Batch 6 — API-first E2E
-
-### 目标
-
-建立自动化验收闭环。
-
-### 重点
-
-1. vLLM full-chain；
-2. SGLang full-chain 或失败 evidence；
-3. llama.cpp full-chain；
-4. negative cases；
-5. ready_with_warnings；
-6. RunPlan/Docker diff；
-7. evidence。
-
-### 验收
-
-```bash
-find scripts/e2e -type f -name '*runtime*' | sort
-bash scripts/e2e/e2e-runtime-architecture-parameter-full-chain.sh
-```
-
-如脚本按后端拆分：
-
-```bash
-bash scripts/e2e/e2e-runtime-parameter-vllm.sh
-bash scripts/e2e/e2e-runtime-parameter-llamacpp.sh
-bash scripts/e2e/e2e-runtime-parameter-sglang.sh
-```
-
-## Batch 7 — Cleanup and Closeout
-
-### 目标
-
-清理旧逻辑，完成最终收口。
-
-### 检查
+检查：
 
 ```bash
 grep -R "parameters_json" -n internal cmd web docs || true
@@ -242,47 +218,25 @@ grep -R "TODO" -n internal cmd web docs || true
 grep -R "FIXME" -n internal cmd web docs || true
 ```
 
-### 最终测试
+最终测试：
 
 ```bash
 gofmt -w cmd internal
-
 go test ./internal/server/...
 go test ./internal/agent/...
 go build ./cmd/server/...
 go build ./cmd/agent/...
-
-cd web
-npm run build
-npm test
-cd ..
-
-git status --short
-git log --oneline -15
+cd web && npm run build
+cd web && npm test
 ```
 
-### 输出
+输出 closeout。
 
-```text
-docs/reports/runtime-architecture-parameter-final-state/07-final-closeout.md
-```
+## 11. Commit 策略
 
-## Commit 策略
-
-建议按批次提交：
-
-1. `docs: add runtime architecture parameter final-state plan`
-2. `runtime: align requirements and capability profile`
-3. `runtime: fix parameter schema and value flow`
-4. `web: fix runtime parameter editing and deployment preview`
-5. `runtime: align preflight runplan and docker execution`
-6. `test: add runtime architecture parameter e2e`
-7. `docs: close runtime architecture parameter final-state`
-
-最终 push 后 closeout 记录：
-
-1. commit list；
-2. push result；
-3. git status；
-4. test results；
-5. evidence paths。
+1. 文档修订单独提交；
+2. Codex review 单独提交；
+3. Claude 功能修复按逻辑分批提交；
+4. 最终 closeout 单独提交；
+5. 所有提交必须 push；
+6. closeout 记录 commit list 和 git status。

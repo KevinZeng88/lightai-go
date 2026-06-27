@@ -1,103 +1,147 @@
 # Claude Execution Prompt
 
-请在 LightAI Go 仓库中执行 Runtime 架构与参数体系最终收敛任务。
+请在当前仓库继续执行，不新建分支。
 
-## 1. 项目路径
-
-默认项目路径：
+工作目录：
 
 ```bash
 cd /home/kzeng/projects/ai-platform-study/lightai-go
 ```
 
-执行前确认：
+先完整阅读：
+
+```text
+docs/reports/runtime-architecture-parameter-final-state/
+```
+
+阅读顺序：
+
+1. 00-index.md
+2. 01-execution-policy-and-scope.md
+3. 02-current-context-and-known-issues.md
+4. 03-final-runtime-domain-contract.md
+5. 04-final-parameter-contract.md
+6. 04a-parameter-ownership-and-layered-presentation-contract.md
+7. 05-runtime-requirements-and-capability-profile-design.md
+8. 06-runplan-and-preflight-contract.md
+9. 07-ui-and-api-contract.md
+10. 08-api-first-e2e-and-automation-requirements.md
+11. 09-implementation-plan.md
+12. 11-final-closeout-template.md
+13. 13-codex-review.md，如果该文件已经由 Codex 生成
+
+## 阶段主目标
+
+完成 LightAI Go Runtime 架构、模型元数据、运行能力定义、RuntimeRequirements、BackendCapabilityProfile、参数体系、RunPlan、Preflight、UI/API 行为的最终收敛。
+
+自动化运行、API-first E2E、无人干预是验收要求。
+
+## 核心硬约束
+
+### Runtime 架构
+
+1. NodeBackendRuntime 是唯一部署入口。
+2. Deployment 只接受 `node_backend_runtime_id`。
+3. Deployment 拒绝 `backend_runtime_id`。
+4. 不自动创建 NodeBackendRuntime。
+5. Backend / BackendVersion 保持硬件无关。
+6. GPU/vendor/hardware 逻辑放在 BackendRuntime / NodeBackendRuntime / DeviceBinding / RunPlan / Agent。
+7. 具体模型路径只属于 ModelLocation，不写入通用 catalog / metadata。
+8. discovered_metadata_json 不保存本机路径作为通用定义。
+
+### 参数体系
+
+1. 一个参数只有一个 owner。
+2. 一个参数只有一个 schema 定义位置。
+3. 其他层级只能保存 override value。
+4. override 必须引用原始 owner + key 或 definition id。
+5. override 不能重新定义 schema。
+6. UI 不能为了展示复制 schema。
+7. Deployment 可以覆盖最终运行参数，但不能定义 schema。
+8. 每一层创建时 copy-on-create 上一层当时有效视图。
+9. 每一层只叠加自己拥有的数据或 override。
+10. 上层后续修改不反向污染已有下层。
+11. 下层修改不反向污染上层。
+12. 只有 ResolvedRunPlan 阶段合成全部参数。
+13. RunPlan preview 必须显示最终值和来源。
+
+### 参数展示
+
+1. 每个页面只展示自己拥有或允许覆盖的内容。
+2. Model 页面只展示模型 metadata、格式、能力、上下文、量化、模型文件信息。
+3. Model 页面不展示 Docker args、Docker env、容器镜像、GPU runtime、节点运行环境参数。
+4. Backend / BackendVersion 页面展示后端能力和版本能力。
+5. BackendRuntime 页面展示运行模板自己的参数和默认运行配置。
+6. NodeBackendRuntime 页面展示节点运行环境配置、节点覆盖参数、check-request evidence。
+7. Deployment 页面展示部署 override、最终有效参数预览、RunPlan preview。
+8. Instance 页面只展示运行事实、状态、日志、健康检查、实际 Docker spec 摘要。
+9. Instance 页面不编辑运行参数。
+
+### checked / enabled
+
+1. enabled=true 只表示当前层级显式启用或覆盖。
+2. default value 不等于 enabled。
+3. required 不等于用户 checked。
+4. required/default-applied 参数可以最终生效，但 UI 不显示成用户 checked。
+5. optional 参数默认不 checked。
+6. advanced 参数默认折叠、不 checked。
+7. disabled input 仍显示当前值、默认值或继承值。
+8. 未 enabled 的 optional 参数不进入当前层级 override。
+9. clone 不扩大 checked 范围。
+10. 保存、刷新、clone 后 category、value、enabled、source 不丢失。
+
+## 执行步骤
+
+### 1. Baseline
+
+执行：
 
 ```bash
 pwd
 git status --short
 git branch --show-current
 git log --oneline -15
+find docs/reports/runtime-architecture-parameter-final-state -maxdepth 3 -type f | sort
 ```
 
-## 2. 本阶段文档目录
+### 2. Reconciliation
 
-本阶段所有新增文档、证据和 closeout 统一写入：
+读取历史相关文档和当前代码，生成当前差距审查。重点确认：
 
-```text
-docs/reports/runtime-architecture-parameter-final-state/
+1. Codex review 中哪些建议必须采纳；
+2. 哪些代码问题仍存在；
+3. 哪些文档要求已覆盖；
+4. 哪些问题必须本阶段修复。
+
+### 3. 按 09-implementation-plan.md 执行
+
+从 Batch 0 到 Batch 7 连续推进。发现可定位、可修复、可验证的问题，直接修复、验证、提交、推送。
+
+## 验收要求
+
+必须通过：
+
+```bash
+go test ./internal/server/...
+go test ./internal/agent/...
+go build ./cmd/server/...
+go build ./cmd/agent/...
+cd web && npm run build
+cd web && npm test
 ```
 
-证据写入：
+必须补充 API-first E2E 证据，尤其是：
 
-```text
-docs/reports/runtime-architecture-parameter-final-state/evidence/
-```
+1. parameter ownership；
+2. copy-on-create；
+3. checked/default/required/optional；
+4. Deployment override；
+5. RunPlan source map；
+6. preview 与 Docker spec 一致。
 
-## 3. 本阶段主目标
+## 输出要求
 
-完成 Runtime 架构、模型元数据、运行能力定义、运行要求定义、参数体系、RunPlan、Preflight、UI/API 行为的最终收敛。
-
-自动化运行是验收要求：用户预设模型、运行配置、节点运行配置、部署参数后，系统通过 API 和状态机自动完成检查、预检、RunPlan 生成、启动、健康检查、日志采集、状态判断和失败归因。
-
-## 4. 必须遵守的架构原则
-
-1. Backend / BackendVersion 硬件无关。
-2. GPU vendor、设备文件、Docker runtime、节点差异放在 BackendRuntime、NodeBackendRuntime、Node、Accelerator、DeviceBinding、RunPlan。
-3. NodeBackendRuntime 是唯一部署入口。
-4. Deployment 只接受 `node_backend_runtime_id`。
-5. Deployment 拒绝 `backend_runtime_id`。
-6. 不自动创建 NodeBackendRuntime。
-7. NodeBackendRuntime 必须显式 enable。
-8. check-request 必须通过 Server 代理 Agent 获取真实 evidence。
-9. ready 和 ready_with_warnings 可部署。
-10. needs_check、missing_image、failed、disabled 不可部署。
-11. RunPlan preview 必须与实际 Docker create spec 一致。
-12. Preflight 与 RunPlan 使用同一套 RuntimeRequirements 和 BackendCapabilityProfile。
-13. 不把具体模型路径写入通用 metadata/catalog。
-14. 不把 env、capabilities_json、metadata_json 混入错误字段。
-15. 不保留历史兼容逻辑。
-16. 不新建分支。
-
-## 5. 先读文档
-
-按顺序读取：
-
-```text
-docs/reports/runtime-architecture-parameter-final-state/00-index.md
-docs/reports/runtime-architecture-parameter-final-state/01-execution-policy-and-scope.md
-docs/reports/runtime-architecture-parameter-final-state/02-current-context-and-known-issues.md
-docs/reports/runtime-architecture-parameter-final-state/03-final-runtime-domain-contract.md
-docs/reports/runtime-architecture-parameter-final-state/04-final-parameter-contract.md
-docs/reports/runtime-architecture-parameter-final-state/05-runtime-requirements-and-capability-profile-design.md
-docs/reports/runtime-architecture-parameter-final-state/06-runplan-and-preflight-contract.md
-docs/reports/runtime-architecture-parameter-final-state/07-ui-and-api-contract.md
-docs/reports/runtime-architecture-parameter-final-state/08-api-first-e2e-and-automation-requirements.md
-docs/reports/runtime-architecture-parameter-final-state/09-implementation-plan.md
-```
-
-如存在历史报告，读取并核对：
-
-```text
-docs/reports/phase-3/runtime-architecture-and-parameter-current-gap-review.md
-docs/reports/phase-3/runtime-architecture-and-parameter-repair-plan.md
-```
-
-历史报告只作为输入材料。本阶段新输出进入专题目录。
-
-## 6. 执行批次
-
-按以下批次连续执行：
-
-1. Batch 0 — Baseline and Reconciliation；
-2. Batch 1 — Domain Contract Alignment；
-3. Batch 2 — RuntimeRequirements and CapabilityProfile；
-4. Batch 3 — Parameter System；
-5. Batch 4 — UI/API Wiring；
-6. Batch 5 — RunPlan and Preflight；
-7. Batch 6 — API-first E2E；
-8. Batch 7 — Cleanup and Closeout。
-
-每个批次完成后输出：
+每个 Batch 输出：
 
 ```text
 Batch:
@@ -111,160 +155,41 @@ Commit id if committed:
 Remaining issues:
 ```
 
-## 7. 必须重点检查的问题
-
-### 7.1 discovered_metadata_json
-
-检查：
-
-```bash
-grep -R "discovered_metadata_json" -n internal cmd web docs || true
-grep -R "/home/kzeng/models" -n internal cmd web docs || true
-```
-
-要求：
-
-1. 模型路径归 ModelLocation；
-2. 模型类别 metadata 归 ModelArtifact；
-3. 运行能力归 BackendCapabilityProfile；
-4. 运行要求归 RuntimeRequirements；
-5. 运行结果归 ResolvedRunPlan。
-
-### 7.2 RuntimeRequirements / BackendCapabilityProfile
-
-检查：
-
-```bash
-grep -R "RuntimeRequirements" -n internal cmd web docs || true
-grep -R "BackendCapabilityProfile" -n internal cmd web docs || true
-```
-
-要求：
-
-1. CapabilityProfile 表达后端能力；
-2. RuntimeRequirements 表达运行条件；
-3. Preflight 使用二者；
-4. RunPlan 使用二者；
-5. UI 使用二者渲染参数和提示。
-
-### 7.3 参数体系
-
-检查：
-
-```bash
-grep -R "parameter_schema_json" -n internal cmd web docs || true
-grep -R "parameter_values_json" -n internal cmd web docs || true
-grep -R "parameters_json" -n internal cmd web docs || true
-```
-
-要求：
-
-1. schema/value 完整保存；
-2. enabled/value 分离；
-3. disabled input 显示 value；
-4. clone 保留 enabled + value；
-5. refresh 不丢参数；
-6. deployment override 生效；
-7. optional 未 enabled 不进入 args；
-8. required/default 规则清楚。
-
-### 7.4 UI
-
-重点检查：
-
-1. RunnerConfigsPage；
-2. RuntimeParameterEditor；
-3. BackendRuntime 页面；
-4. NodeBackendRuntime 页面；
-5. Deployment 页面；
-6. RunPlan preview；
-7. Instance 页面；
-8. Logs 页面。
-
-### 7.5 RunPlan / Preflight
-
-要求：
-
-1. preview 与 Docker create spec 一致；
-2. args 不重复；
-3. env 不污染；
-4. ports 与 health check 一致；
-5. device binding 一致；
-6. errors/warnings 可断言；
-7. evidence 可复核。
-
-## 8. 验收命令
-
-基础验收：
-
-```bash
-go test ./internal/server/...
-go test ./internal/agent/...
-go build ./cmd/server/...
-go build ./cmd/agent/...
-
-cd web
-npm run build
-npm test
-cd ..
-```
-
-专题验收：
-
-```bash
-go test ./internal/server/... -run 'Runtime|Parameter|RunPlan|Preflight|Deployment'
-go test ./internal/agent/... -run 'Docker|Runtime|Device|Health'
-```
-
-E2E 验收：
-
-```bash
-bash scripts/e2e/e2e-runtime-architecture-parameter-full-chain.sh
-```
-
-如果脚本拆分：
-
-```bash
-bash scripts/e2e/e2e-runtime-parameter-vllm.sh
-bash scripts/e2e/e2e-runtime-parameter-llamacpp.sh
-bash scripts/e2e/e2e-runtime-parameter-sglang.sh
-```
-
-## 9. 最终 closeout
-
-最终生成：
+最终输出：
 
 ```text
-docs/reports/runtime-architecture-parameter-final-state/07-final-closeout.md
+Runtime Architecture and Parameter Final-State Report
+
+1. Final status
+2. Completed batches
+3. Runtime domain contract result
+4. Parameter ownership result
+5. Copy-on-create result
+6. Parameter display result
+7. RuntimeRequirements result
+8. BackendCapabilityProfile result
+9. RunPlan / Preflight result
+10. UI/API result
+11. API-first E2E evidence
+12. Test results
+13. Commit list
+14. Push result
+15. git status
+16. Open issues
 ```
 
-closeout 必须包含：
+## 禁止事项
 
-1. Final status；
-2. Completed batches；
-3. Runtime domain contract result；
-4. Parameter contract result；
-5. RuntimeRequirements result；
-6. BackendCapabilityProfile result；
-7. RunPlan / Preflight result；
-8. UI/API result；
-9. API-first E2E evidence；
-10. Test results；
-11. Commit list；
-12. Push result；
-13. git status；
-14. Open issues。
-
-## 10. 最终提交
-
-最终执行：
-
-```bash
-git status --short
-git add .
-git commit -m "runtime: align architecture and parameter final state"
-git push
-git status --short
-```
-
-如分多次 commit，在 closeout 中列出全部 commit。
+1. 不新建分支；
+2. 不保留历史兼容逻辑；
+3. 不为了旧数据保留复杂 fallback；
+4. 不自动创建 NodeBackendRuntime；
+5. 不把 GPU/vendor 写入 Backend / BackendVersion；
+6. 不把具体模型路径写入通用 metadata/catalog；
+7. 不让 RunPlan preview 与实际 Docker spec 分裂；
+8. 不把 default value 当 checked；
+9. 不让所有参数默认 checked；
+10. 不让 Deployment 重新定义 schema；
+11. 不让 UI 复制 schema；
+12. 不让 Instance 页面编辑运行参数；
+13. 不把无法验证的问题静默留在代码或文档外。
