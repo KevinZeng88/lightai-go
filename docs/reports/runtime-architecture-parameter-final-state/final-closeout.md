@@ -61,6 +61,7 @@ Evidence: docs/reports/runtime-architecture-parameter-final-state/evidence/web-b
 ## 6. Commits
 
 ```
+d958f02 fix: targeted reaudit blocker fix — BackendVersion raw config_set rejection
 1428308 fix: codex final audit blocker fix — semanticconfig normalizer + NBR config_set rejection
 393c891 fix: final repair redo — remove all flat fallbacks, fix tiered value structure
 8f3f86e fix: final repair — remove flat fallbacks, fix setConfigValueTiered, strengthen SourceMap
