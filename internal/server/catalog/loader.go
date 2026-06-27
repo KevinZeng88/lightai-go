@@ -161,8 +161,14 @@ func MaterializeBackend(registry *Registry, backend BackendDoc) ConfigSet {
 		"supported_formats": backend.SupportedModelFormats,
 		"protocols":         backend.Protocols,
 	}, "Backend", backend.ID, 5)
+	// Align tiers for dynamic items too
+	for k, item := range items {
+		item.AlignTiers()
+		items[k] = item
+	}
 	return ConfigSet{
 		SchemaVersion: 1,
+		ConfigSetKey:  "BackendConfigSet",
 		Context: map[string]string{
 			"backend":       backend.Slug,
 			"backend_id":    backend.ID,
@@ -188,8 +194,14 @@ func MaterializeBackendVersion(registry *Registry, backend BackendDoc, version V
 	addDynamic(items, "backend.capabilities", "model_runtime", "object", normalizedCapabilities(backend, version), "BackendVersion", version.ID, 5)
 	addDynamic(items, "backend.supported_config_items", "model_runtime", "array", configCodesFromArgs(version.DefaultArgsSchema), "BackendVersion", version.ID, 6)
 	addArgConfigItems(items, version.DefaultArgsSchema, "BackendVersion", version.ID)
+	// Align tiers for all items
+	for k, item := range items {
+		item.AlignTiers()
+		items[k] = item
+	}
 	return ConfigSet{
 		SchemaVersion: 1,
+		ConfigSetKey:  "BackendVersionConfigSet",
 		Context: map[string]string{
 			"backend":         backend.Slug,
 			"backend_id":      version.BackendID,
@@ -263,8 +275,14 @@ func MaterializeBackendRuntime(registry *Registry, versionSet ConfigSet, runtime
 	if len(runtime.Ports) > 0 {
 		setItem(items, "launcher.ports", runtime.Ports, runtime.Ports, true, "BackendRuntime", runtime.ID)
 	}
+	// Align tiers for all items (including inherited from versionSet and newly set)
+	for k, item := range items {
+		item.AlignTiers()
+		items[k] = item
+	}
 	return ConfigSet{
 		SchemaVersion: 1,
+		ConfigSetKey:  "BackendRuntimeConfigSet",
 		Context: map[string]string{
 			"backend_id":      runtime.BackendID,
 			"backend_version": runtime.BackendVersionID,

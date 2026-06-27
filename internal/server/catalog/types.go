@@ -2,7 +2,114 @@ package catalog
 
 import "encoding/json"
 
+// ============================================================================
+// ConfigItem — final field-tier model (schema / value / state / provenance / snapshot / presentation)
+// ============================================================================
+
+// ConfigItemSchema holds immutable definition fields. After copy-on-create, inherited
+// items retain their original Schema values; the current layer must not modify them.
+type ConfigItemSchema struct {
+	Key          string         `json:"key"`
+	Owner        string         `json:"owner"`
+	OwnerLayer   string         `json:"owner_layer"`
+	ConfigSetKey string         `json:"config_set_key"`
+	Category     string         `json:"category"`
+	Label        string         `json:"label"`
+	Description  string         `json:"description,omitempty"`
+	Type         string         `json:"type"`
+	Kind         string         `json:"kind"`
+	Target       string         `json:"target,omitempty"`
+	ArgName      string         `json:"arg_name,omitempty"`
+	EnvName      string         `json:"env_name,omitempty"`
+	MountTarget  string         `json:"mount_target,omitempty"`
+	PortTarget   string         `json:"port_target,omitempty"`
+	Constraints  map[string]any `json:"constraints,omitempty"`
+	Choices      []any          `json:"choices,omitempty"`
+	Required     bool           `json:"required"`
+	Advanced     bool           `json:"advanced"`
+	DisplayOrder int            `json:"display_order"`
+	ReadOnly     bool           `json:"read_only"`
+	HelpText     string         `json:"help_text,omitempty"`
+	SupportLevel string         `json:"support_level"`
+}
+
+// ConfigItemValue holds value fields that the current layer may modify.
+type ConfigItemValue struct {
+	DefaultValue   any `json:"default_value"`
+	InheritedValue any `json:"inherited_value,omitempty"`
+	LocalValue     any `json:"local_value,omitempty"`
+	EffectiveValue any `json:"effective_value"`
+}
+
+// ConfigItemState holds UI and resolution state that the current layer may modify.
+type ConfigItemState struct {
+	Enabled         bool   `json:"enabled"`
+	Checked         bool   `json:"checked"`
+	Editable        bool   `json:"editable"`
+	Visible         bool   `json:"visible"`
+	Valid           bool   `json:"valid"`
+	ValidationError string `json:"validation_error,omitempty"`
+}
+
+// SourceChainEntry records one step in the value provenance chain.
+type SourceChainEntry struct {
+	Layer  string `json:"layer"`
+	Value  any    `json:"value"`
+	Reason string `json:"reason"`
+}
+
+// ConfigItemProvenance records where the current value came from and the full source chain.
+type ConfigItemProvenance struct {
+	ValueSource      string             `json:"value_source"`
+	LastValueLayer   string             `json:"last_value_layer"`
+	LastValueOwnerID string             `json:"last_value_owner_id,omitempty"`
+	SourceChain      []SourceChainEntry `json:"source_chain,omitempty"`
+}
+
+// ConfigItemSnapshot records the copy-on-create source of this item.
+type ConfigItemSnapshot struct {
+	FromLayer string `json:"snapshot_from_layer"`
+	FromID    string `json:"snapshot_from_id"`
+	Version   int    `json:"snapshot_version"`
+	CopiedAt  string `json:"snapshot_at"`
+}
+
+// ConfigItemPresentation holds display hints for UI rendering.
+type ConfigItemPresentation struct {
+	Section         string `json:"section,omitempty"`
+	Group           string `json:"group,omitempty"`
+	Priority        int    `json:"priority"`
+	DisplayMode     string `json:"display_mode,omitempty"`
+	Placeholder     string `json:"placeholder,omitempty"`
+	SummaryPriority int    `json:"summary_priority"`
+	HideWhenEmpty   bool   `json:"hide_when_empty"`
+	DefaultExpanded bool   `json:"default_expanded"`
+	Sensitive       bool   `json:"sensitive"`
+}
+
+// ConfigItem is the minimum configuration atom inside a ConfigSet.
+//
+// Field tiers (see docs/reports/runtime-architecture-parameter-final-state/04-final-parameter-contract.md):
+//
+//	Schema       — definition fields; readonly after copy-on-create
+//	Value_       — value fields; current layer may modify
+//	State_       — UI / resolution state; current layer may modify
+//	Provenance_  — source tracking; updated on local edit
+//	Snapshot_    — copy-on-create origin; readonly after copy
+//	Presentation — display hints; not part of RunPlan semantics
+//
+// Legacy flat fields (Code, Category, Kind, Type, Required, Value, DefaultValue,
+// Enabled, Render, Order, etc.) are kept as convenience accessors during migration
+// batches and will be removed in the final cleanup batch.
 type ConfigItem struct {
+	Schema       ConfigItemSchema       `json:"config_item_schema"`
+	Value_       ConfigItemValue        `json:"config_item_value"`
+	State_       ConfigItemState        `json:"config_item_state"`
+	Provenance_  ConfigItemProvenance   `json:"config_item_provenance"`
+	Snapshot_    ConfigItemSnapshot     `json:"config_item_snapshot"`
+	Presentation ConfigItemPresentation `json:"config_item_presentation"`
+
+	// === Legacy flat fields (present during migration; removed in Batch 6) ===
 	Code         string                 `json:"code" yaml:"code"`
 	Category     string                 `json:"category" yaml:"category"`
 	Kind         string                 `json:"kind" yaml:"kind"`
@@ -23,11 +130,238 @@ type ConfigItem struct {
 	Extensions   map[string]interface{} `json:"extensions,omitempty" yaml:"extensions"`
 }
 
+// AlignTiers populates the tiered fields from legacy flat fields.
+// Call this after materializing a ConfigItem from catalog YAML or registry defaults.
+func (ci *ConfigItem) AlignTiers() {
+	if ci == nil {
+		return
+	}
+	// Schema
+	ci.Schema.Key = ci.Code
+	ci.Schema.Category = ci.Category
+	ci.Schema.Kind = ci.Kind
+	ci.Schema.Type = ci.Type
+	ci.Schema.Required = ci.Required
+	ci.Schema.Advanced = ci.Advanced
+	ci.Schema.ReadOnly = ci.Readonly
+	ci.Schema.DisplayOrder = ci.Order
+	ci.Schema.SupportLevel = ci.SupportLevel
+	ci.Schema.Constraints = ci.Constraints
+	if ci.Render != nil {
+		ci.Schema.Target = strVal(ci.Render["target"])
+		ci.Schema.ArgName = strVal(ci.Render["flag"])
+		ci.Schema.EnvName = strVal(ci.Render["env_name"])
+	}
+	if ci.Extensions != nil {
+		if l, ok := ci.Extensions["label"].(string); ok {
+			ci.Schema.Label = l
+		}
+		if g, ok := ci.Extensions["group"].(string); ok {
+			ci.Presentation.Group = g
+		}
+	}
+
+	// Value
+	ci.Value_.DefaultValue = ci.DefaultValue
+	if ci.Value != nil {
+		if ci.Enabled {
+			ci.Value_.LocalValue = ci.Value
+		} else {
+			ci.Value_.InheritedValue = ci.Value
+		}
+		ci.Value_.EffectiveValue = ci.Value
+	} else {
+		ci.Value_.EffectiveValue = ci.DefaultValue
+	}
+
+	// State
+	ci.State_.Enabled = ci.Enabled
+	ci.State_.Checked = ci.Enabled // current-layer local edit => checked
+	ci.State_.Editable = !ci.Readonly
+	ci.State_.Visible = ci.Visibility != "hidden"
+	ci.State_.Valid = true
+
+	// Provenance
+	if ci.Source != nil {
+		ci.Provenance_.ValueSource = ci.Source["layer"]
+		ci.Provenance_.LastValueLayer = ci.Source["layer"]
+		ci.Provenance_.LastValueOwnerID = ci.Source["ref"]
+	}
+	if ci.LastModified != nil {
+		ci.Provenance_.LastValueLayer = ci.LastModified["layer"]
+		ci.Provenance_.LastValueOwnerID = ci.LastModified["ref"]
+	}
+
+	// Snapshot — populated during copy-on-create by the bundle layer
+	// Presentation
+	if ci.Presentation.Priority == 0 {
+		ci.Presentation.Priority = ci.Order
+	}
+}
+
+func strVal(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+
+// ConfigSet is a self-describing, self-presenting, composable configuration unit.
+//
+// A ConfigSet:
+//   - Owns its ConfigItems (schema owner)
+//   - May contain child ConfigSets (nested composition)
+//   - Defines own_sections for item grouping (required / common / advanced / local_edits)
+//   - Defines child_slots for child placement and display mode
+//   - Can generate summary_view, edit_view, preview_view, effective_view
+//   - Participates in RunPlan resolution through item target fields
+//
+// Child ConfigSets are stored as items under "child_sets" JSON key within the items map.
 type ConfigSet struct {
 	SchemaVersion  int                    `json:"schema_version"`
+	ConfigSetKey   string                 `json:"config_set_key"`
+	Title          string                 `json:"title,omitempty"`
+	Description    string                 `json:"description,omitempty"`
 	Context        map[string]string      `json:"context"`
 	Items          map[string]ConfigItem  `json:"items"`
+	ChildSets      map[string]ConfigSet   `json:"child_sets,omitempty"`
+	OwnSections    []ConfigSection        `json:"own_sections,omitempty"`
+	ChildSlots     []ConfigChildSlot      `json:"child_slots,omitempty"`
 	SourceMetadata map[string]interface{} `json:"source_metadata"`
+}
+
+// ConfigSection defines how a ConfigSet groups its own items for display.
+type ConfigSection struct {
+	Key             string         `json:"key"`
+	Title           string         `json:"title"`
+	Match           map[string]any `json:"match,omitempty"`
+	DefaultExpanded bool           `json:"default_expanded"`
+	Priority        int            `json:"priority"`
+}
+
+// ConfigChildSlot defines where and how a child ConfigSet appears in the parent view.
+type ConfigChildSlot struct {
+	Slot              string `json:"slot"`
+	ChildConfigSetKey string `json:"child_config_set_key"`
+	Title             string `json:"title"`
+	View              string `json:"view"`       // summary, summary_then_edit, edit, preview
+	DisplayMode       string `json:"display_mode"` // panel, card, inline
+	DefaultExpanded   bool   `json:"default_expanded"`
+	Order             int    `json:"order"`
+}
+
+// ============================================================================
+// ConfigSetBundle — per-layer composition of inherited snapshots, own sets, local edits, and effective view
+// ============================================================================
+
+// ConfigSetBundle is owned by every domain layer (BackendVersion, BackendRuntime,
+// NodeBackendRuntime, Deployment). It captures the full parameter snapshot chain.
+//
+//	ConfigSetBundle = inherited_bundle_snapshots[] + own_sets[] + local_edits[] + effective_view
+//
+// On copy-on-create:
+//
+//	next_layer_bundle = deep_copy(parent.effective_bundle_snapshot)
+//	                  + next_layer_own_sets
+//	                  + next_layer_local_edits
+//
+// The effective_view is materialized on read and is not independently persisted.
+type ConfigSetBundle struct {
+	// InheritedBundleSnapshots are deep copies of parent effective bundles at creation time.
+	// Read-only; used for provenance display and copy-on-create ancestry.
+	InheritedBundleSnapshots []ConfigSet `json:"inherited_bundle_snapshots"`
+
+	// OwnSets are ConfigSets defined by this layer.
+	OwnSets []ConfigSet `json:"own_sets"`
+
+	// LocalEdits are value/state overrides applied by this layer on inherited items.
+	// Keyed by ConfigSetKey then ItemKey. Only modified items appear here.
+	LocalEdits map[string]map[string]ConfigItemLocalEdit `json:"local_edits"`
+
+	// EffectiveView is materialized at read time and is not independently serialized.
+	EffectiveView *ConfigSet `json:"effective_view,omitempty"`
+}
+
+// ConfigItemLocalEdit records a single value/state override applied at the current layer.
+type ConfigItemLocalEdit struct {
+	ConfigSetKey string `json:"config_set_key"`
+	ItemKey      string `json:"item_key"`
+	LocalValue   any    `json:"local_value,omitempty"`
+	Enabled      *bool  `json:"enabled,omitempty"`
+	Checked      *bool  `json:"checked,omitempty"`
+	Reason       string `json:"reason"`
+	EditedAt     string `json:"edited_at"`
+	EditedBy     string `json:"edited_by,omitempty"`
+}
+
+// EffectiveSnapshot returns a deep-merged ConfigSet representing the union of
+// inherited snapshots, own sets, and local edits at this layer.
+// This is what the next layer copies on create.
+func (b *ConfigSetBundle) EffectiveSnapshot() ConfigSet {
+	merged := ConfigSet{
+		SchemaVersion: 1,
+		Items:         make(map[string]ConfigItem),
+	}
+
+	// Layer 1: apply inherited snapshots
+	for _, snap := range b.InheritedBundleSnapshots {
+		for k, v := range snap.Items {
+			merged.Items[k] = v
+		}
+	}
+
+	// Layer 2: apply own sets (overwrite inherited by key)
+	for _, set := range b.OwnSets {
+		for k, v := range set.Items {
+			merged.Items[k] = v
+		}
+	}
+
+	// Layer 3: apply local edits
+	for _, edits := range b.LocalEdits {
+		for itemKey, edit := range edits {
+			if existing, ok := merged.Items[itemKey]; ok {
+				if edit.LocalValue != nil {
+					existing.Value_.LocalValue = edit.LocalValue
+					existing.Value_.EffectiveValue = edit.LocalValue
+				}
+				if edit.Enabled != nil {
+					existing.State_.Enabled = *edit.Enabled
+				}
+				if edit.Checked != nil {
+					existing.State_.Checked = *edit.Checked
+				}
+				existing.Provenance_.ValueSource = "local_edit"
+				existing.Provenance_.LastValueLayer = "current"
+				merged.Items[itemKey] = existing
+			}
+		}
+	}
+
+	return merged
+}
+
+// DeepCopySnapshot returns a deep copy of the effective snapshot suitable for
+// passing to the next layer on copy-on-create.
+func (b *ConfigSetBundle) DeepCopySnapshot(layer, id string) ConfigSet {
+	snap := b.EffectiveSnapshot()
+	// Stamp snapshot provenance on every item
+	now := "" // filled by caller or DB trigger
+	items := make(map[string]ConfigItem, len(snap.Items))
+	for k, v := range snap.Items {
+		v.Snapshot_ = ConfigItemSnapshot{
+			FromLayer: layer,
+			FromID:    id,
+			Version:   1,
+			CopiedAt:  now,
+		}
+		// Inherited items retain their schema owner; schema/snapshot fields are readonly
+		// at the child layer.
+		items[k] = v
+	}
+	snap.Items = items
+	return snap
 }
 
 type Registry struct {
@@ -53,6 +387,7 @@ func (r *Registry) MaterializeBase(layer, ref string) map[string]ConfigItem {
 			"ref":    ref,
 			"reason": "registry_default",
 		}
+		copied.AlignTiers()
 		items[item.Code] = copied
 	}
 	return items
