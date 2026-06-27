@@ -1,8 +1,8 @@
 {
   "name": "runtime-architecture-parameter-final-state",
   "directory": "docs/reports/runtime-architecture-parameter-final-state/",
-  "version": "2026-06-27-revised-parameter-ownership-copy-on-create",
-  "purpose": "Guide final convergence of Runtime architecture, parameter ownership, copy-on-create snapshots, layered presentation, RunPlan/Preflight, UI/API, and API-first E2E.",
+  "version": "2026-06-27-configset-bundle-composition-and-presentation",
+  "purpose": "Guide final convergence of Runtime architecture, ConfigSetBundle parameter model, copy-on-create snapshots, self-describing presentation, RunPlan/Preflight, UI/API, and API-first E2E.",
   "documents": [
     {
       "file": "00-index.md",
@@ -31,6 +31,10 @@
     {
       "file": "05-runtime-requirements-and-capability-profile-design.md",
       "role": "requirements_capability_design"
+    },
+    {
+      "file": "05a-configset-bundle-composition-and-presentation-contract.md",
+      "role": "configset_bundle_composition_presentation_contract"
     },
     {
       "file": "06-runplan-and-preflight-contract.md",
@@ -63,6 +67,14 @@
     {
       "file": "13-codex-review.md",
       "role": "codex_review"
+    },
+    {
+      "file": "14-codex-review-fix-plan.md",
+      "role": "codex_review_fix_plan"
+    },
+    {
+      "file": "15-codex-second-review-instructions.md",
+      "role": "codex_second_review_instructions"
     }
   ],
   "expected_generated_documents": [
@@ -71,22 +83,47 @@
       "generated_by": "Codex",
       "required_before_claude_autorun": true,
       "status": "generated"
+    },
+    {
+      "file": "16-codex-second-review.md",
+      "generated_by": "Codex",
+      "required_before_claude_autorun": true,
+      "status": "pending"
     }
   ],
   "hard_contracts": [
-    "single_parameter_owner",
-    "single_schema_definition",
-    "override_references_definition",
-    "copy_on_create_snapshot_chain",
-    "layered_presentation",
+    "no_legacy_compatibility",
+    "fresh_db_rebuild_allowed",
+    "configset_is_final_domain_concept",
+    "configsetbundle_per_domain_layer",
+    "copy_on_create_effective_bundle_snapshot",
+    "configitem_field_tiers",
+    "schema_snapshot_readonly_after_copy",
+    "value_state_editable_at_current_layer",
+    "owner_unchanged_after_copy",
+    "no_core_overridable_at",
+    "self_describing_configset",
+    "self_presenting_configview",
+    "parent_child_slots",
+    "child_configset_self_rendering",
+    "generic_configset_renderer",
     "resolved_runplan_final_merge",
+    "shared_runplan_builder",
     "source_map_required",
+    "source_chain_required",
     "default_not_enabled",
     "required_not_user_checked",
-    "optional_not_checked_by_default"
+    "inherited_not_user_checked",
+    "optional_not_checked_by_default",
+    "docker_options_as_configitems"
   ],
   "forbidden_new_directory_patterns": [
     "docs/reports/phase-*/runtime-architecture-parameter-final-state"
   ],
-  "evidence_directory": "docs/reports/runtime-architecture-parameter-final-state/evidence/"
+  "evidence_directory": "docs/reports/runtime-architecture-parameter-final-state/evidence/",
+  "notes": [
+    "13-codex-review.md is not overwritten by this revision package.",
+    "Second review should generate 16-codex-second-review.md before Claude implementation.",
+    "Unrelated working tree file deploy/observability/grafana/provisioning/dashboards/dashboards.yaml must not be included unless explicitly in scope."
+  ]
 }

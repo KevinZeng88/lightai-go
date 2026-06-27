@@ -1,6 +1,4 @@
-# LightAI Go - Grafana Dashboard Provisioning
 apiVersion: 1
-
 providers:
   - name: LightAI
     orgId: 1
@@ -9,4 +7,4 @@ providers:
     disableDeletion: true
     editable: true
     options:
-      path: ../../dashboards
+      path: /home/kzeng/projects/ai-platform-study/lightai-go/deploy/observability/grafana/dashboards
