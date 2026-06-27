@@ -453,6 +453,60 @@ func configSourceMetadata(raw string) map[string]interface{} {
 	return out
 }
 
+// validateTieredConfigSet checks that a caller-provided ConfigSet map has strict tiered
+// shape. Returns nil if valid, or an error describing the first violation found.
+// Requirements for every item:
+//   - must have "schema" (map) with at least "key"
+//   - must have "value" (map)
+//   - must have "state" (map)
+//   - must NOT have top-level "code", "value" scalar, "enabled", "default_value", "required"
+//   - must NOT have "enabled_fields"
+func validateTieredConfigSet(set map[string]interface{}) error {
+	if set == nil || len(set) == 0 {
+		return nil
+	}
+	items, _ := set["items"].(map[string]interface{})
+	for code, raw := range items {
+		item, _ := raw.(map[string]interface{})
+		if item == nil {
+			return fmt.Errorf("config_set item %q is not a valid object", code)
+		}
+		// Reject old flat top-level fields
+		if _, ok := item["code"]; ok {
+			return fmt.Errorf("config_set item %q has flat \"code\" field; items must use {\"schema\":{\"key\":...}} (tiered shape)", code)
+		}
+		if _, ok := item["enabled"]; ok {
+			return fmt.Errorf("config_set item %q has flat \"enabled\" field; items must use {\"state\":{\"enabled\":...}} (tiered shape)", code)
+		}
+		if _, ok := item["default_value"]; ok {
+			return fmt.Errorf("config_set item %q has flat \"default_value\" field; items must use {\"value\":{\"default_value\":...}} (tiered shape)", code)
+		}
+		if _, ok := item["required"]; ok {
+			return fmt.Errorf("config_set item %q has flat \"required\" field; items must use {\"schema\":{\"required\":...}} (tiered shape)", code)
+		}
+		if _, ok := item["enabled_fields"]; ok {
+			return fmt.Errorf("config_set item %q has legacy \"enabled_fields\" field; not accepted in final tiered shape", code)
+		}
+		// Reject scalar "value" — must be a map (the tiered wrapper)
+		if v, ok := item["value"]; ok {
+			if _, isMap := v.(map[string]interface{}); !isMap {
+				return fmt.Errorf("config_set item %q has scalar \"value\" field; items must use {\"value\":{\"effective_value\":...}} (tiered shape)", code)
+			}
+		}
+		// Require schema, value, state tiers
+		if _, ok := item["schema"].(map[string]interface{}); !ok {
+			return fmt.Errorf("config_set item %q is missing \"schema\" tier (tiered shape required)", code)
+		}
+		if _, ok := item["value"].(map[string]interface{}); !ok {
+			return fmt.Errorf("config_set item %q is missing \"value\" tier (tiered shape required)", code)
+		}
+		if _, ok := item["state"].(map[string]interface{}); !ok {
+			return fmt.Errorf("config_set item %q is missing \"state\" tier (tiered shape required)", code)
+		}
+	}
+	return nil
+}
+
 func mapFromAny(v interface{}) map[string]interface{} {
 	switch t := v.(type) {
 	case map[string]interface{}:

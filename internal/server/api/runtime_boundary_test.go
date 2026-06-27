@@ -37,7 +37,7 @@ func TestCreateBackendRuntimeCopiesBackendVersionSnapshot(t *testing.T) {
 
 	vw := httptest.NewRecorder()
 	h.HandleCreateBackendVersion(vw, newReq("POST", "/x",
-		`{"id":"backend-version.user.snapshot","version":"snapshot-v1","display_name":"Snapshot V1","config_set":{"schema_version":1,"items":{"backend.arg.fake_new_param":{"code":"backend.arg.fake_new_param","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"from-version","default_value":"from-version","render":{"flag":"--fake-new-param","label":"Fake New Param","group":"Test Params"},"order":340}}}}`,
+		`{"id":"backend-version.user.snapshot","version":"snapshot-v1","display_name":"Snapshot V1","config_set":{"schema_version":1,"items":{"backend.arg.fake_new_param":{"schema":{"key":"backend.arg.fake_new_param","category":"model_runtime","kind":"cli_arg","type":"string"},"state":{"enabled":true,"checked":true},"value":{"default_value":"from-version","effective_value":"from-version"},"render":{"flag":"--fake-new-param","label":"Fake New Param","group":"Test Params"},"order":340}}}}`,
 		adminSession(), map[string]string{"id": "backend.vllm"}))
 	if vw.Code != 201 {
 		t.Fatalf("create version code=%d body=%s", vw.Code, vw.Body.String())
@@ -67,7 +67,7 @@ func TestCreateBackendRuntimeCopiesBackendVersionSnapshot(t *testing.T) {
 
 	pw := httptest.NewRecorder()
 	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x",
-		`{"config_set":{"schema_version":1,"items":{"backend.arg.fake_new_param":{"code":"backend.arg.fake_new_param","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"changed-version","default_value":"changed-version","render":{"flag":"--fake-new-param"},"order":340},"backend.arg.after_runtime":{"code":"backend.arg.after_runtime","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"after","render":{"flag":"--after-runtime"}}}}}`,
+		`{"config_set":{"schema_version":1,"items":{"backend.arg.fake_new_param":{"schema":{"key":"backend.arg.fake_new_param","category":"model_runtime","kind":"cli_arg","type":"string"},"state":{"enabled":true,"checked":true},"value":{"default_value":"changed-version","effective_value":"changed-version"},"render":{"flag":"--fake-new-param"},"order":340},"backend.arg.after_runtime":{"schema":{"key":"backend.arg.after_runtime","category":"model_runtime","kind":"cli_arg","type":"string"},"state":{"enabled":true,"checked":true},"value":{"effective_value":"after"},"render":{"flag":"--after-runtime"}}}}}`,
 		adminSession(), map[string]string{"version_id": "backend-version.user.snapshot"}))
 	if pw.Code != 200 {
 		t.Fatalf("patch version code=%d body=%s", pw.Code, pw.Body.String())
@@ -399,7 +399,7 @@ func TestBackendVersionCreatePatchAndReloadUserCatalog(t *testing.T) {
 
 	db := setupTestDB(t)
 	h := NewAgentHandler(db, nil)
-	body := `{"version":"user-v1","display_name":"User V1","description":"custom","config_set":{"schema_version":1,"items":{"backend.arg.user_param":{"code":"backend.arg.user_param","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"user-v1","default_value":"user-v1","render":{"flag":"--user-param","label":"User Param"},"order":350}}}}`
+	body := `{"version":"user-v1","display_name":"User V1","description":"custom","config_set":{"schema_version":1,"items":{"backend.arg.user_param":{"schema":{"key":"backend.arg.user_param","category":"model_runtime","kind":"cli_arg","type":"string"},"state":{"enabled":true,"checked":true},"value":{"default_value":"user-v1","effective_value":"user-v1"},"render":{"flag":"--user-param","label":"User Param"},"order":350}}}}`
 	w := httptest.NewRecorder()
 	h.HandleCreateBackendVersion(w, newReq("POST", "/x", body, adminSession(), map[string]string{"id": "backend.vllm"}))
 	if w.Code != 201 {
@@ -414,7 +414,7 @@ func TestBackendVersionCreatePatchAndReloadUserCatalog(t *testing.T) {
 		t.Fatalf("readonly=%v, want false", created["readonly"])
 	}
 	pw := httptest.NewRecorder()
-	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"display_name":"User V1 patched","config_set":{"schema_version":1,"items":{"backend.arg.user_param":{"code":"backend.arg.user_param","category":"model_runtime","kind":"cli_arg","type":"string","enabled":true,"value":"user-v2","default_value":"user-v1","render":{"flag":"--user-param","label":"User Param"},"order":350}}}}`, adminSession(), map[string]string{"version_id": created["id"].(string)}))
+	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", `{"display_name":"User V1 patched","config_set":{"schema_version":1,"items":{"backend.arg.user_param":{"schema":{"key":"backend.arg.user_param","category":"model_runtime","kind":"cli_arg","type":"string"},"state":{"enabled":true,"checked":true},"value":{"default_value":"user-v1","effective_value":"user-v2"},"render":{"flag":"--user-param","label":"User Param"},"order":350}}}}`, adminSession(), map[string]string{"version_id": created["id"].(string)}))
 	if pw.Code != 200 {
 		t.Fatalf("patch version code=%d body=%s", pw.Code, pw.Body.String())
 	}
@@ -2352,3 +2352,66 @@ func TestPostProbeMissingImageOnlyFromInspectNotFound(t *testing.T) {
 	t.Logf("POST /probe regression: status=%s reason=%s image_present=%v (not missing_image)",
 		status, resp["status_reason"], resp["image_present"])
 }
+
+// TestBackendVersionCreateRejectsFlatConfigSet verifies that a BackendVersion
+// create with flat config_set items returns 400.
+func TestBackendVersionCreateRejectsFlatConfigSet(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	// Flat item with "code", "enabled", "value" (scalar), "default_value"
+	body := `{"id":"bv-flat-test","version":"flat-v1","backend_id":"backend.vllm","display_name":"Flat Test","config_set":{"schema_version":1,"items":{"flat.param":{"code":"flat.param","type":"string","enabled":true,"value":"flat-val","default_value":"flat-def"}}}}`
+	w := httptest.NewRecorder()
+	h.HandleCreateBackendVersion(w, newReq("POST", "/x", body, adminSession(), map[string]string{"id": "backend.vllm"}))
+	if w.Code != 400 {
+		t.Fatalf("expected 400 for flat config_set, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "flat \"code\"") && !strings.Contains(w.Body.String(), "tiered shape") {
+		t.Errorf("error should mention tiered shape requirement: %s", w.Body.String())
+	}
+}
+
+// TestBackendVersionCreateAcceptsTieredConfigSet verifies that a BackendVersion
+// create with strict tiered config_set items succeeds.
+func TestBackendVersionCreateAcceptsTieredConfigSet(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	body := `{"id":"bv-tiered-test","version":"tiered-v1","backend_id":"backend.vllm","display_name":"Tiered Test","config_set":{"schema_version":1,"items":{"tiered.param":{"schema":{"key":"tiered.param","type":"string"},"state":{"enabled":true},"value":{"default_value":"tv","effective_value":"tv"}}}}}`
+	w := httptest.NewRecorder()
+	h.HandleCreateBackendVersion(w, newReq("POST", "/x", body, adminSession(), map[string]string{"id": "backend.vllm"}))
+	if w.Code != 201 {
+		t.Fatalf("expected 201 for tiered config_set, got %d body=%s", w.Code, w.Body.String())
+	}
+	var created map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &created)
+	t.Logf("tiered BackendVersion created: id=%v", created["id"])
+}
+
+// TestBackendVersionPatchRejectsFlatConfigSet verifies that a BackendVersion
+// patch with flat config_set returns 400.
+func TestBackendVersionPatchRejectsFlatConfigSet(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	// First create a tiered version
+	createBody := `{"id":"bv-patch-flat-test","version":"patch-flat-v1","backend_id":"backend.vllm","display_name":"Patch Flat Test","config_set":{"schema_version":1,"items":{"patch.param":{"schema":{"key":"patch.param","type":"string"},"state":{"enabled":true},"value":{"default_value":"orig","effective_value":"orig"}}}}}`
+	cw := httptest.NewRecorder()
+	h.HandleCreateBackendVersion(cw, newReq("POST", "/x", createBody, adminSession(), map[string]string{"id": "backend.vllm"}))
+	if cw.Code != 201 {
+		t.Fatalf("create for patch test failed: %d %s", cw.Code, cw.Body.String())
+	}
+	var created map[string]interface{}
+	json.Unmarshal(cw.Body.Bytes(), &created)
+	versionID := created["id"].(string)
+
+	// Now patch with flat config_set — should fail
+	patchBody := `{"config_set":{"schema_version":1,"items":{"flat.patch":{"code":"flat.patch","type":"string","enabled":true,"value":"flat-patched"}}}}`
+	pw := httptest.NewRecorder()
+	h.HandlePatchBackendVersion(pw, newReq("PATCH", "/x", patchBody, adminSession(), map[string]string{"version_id": versionID}))
+	if pw.Code != 400 {
+		t.Fatalf("expected 400 for flat config_set patch, got %d body=%s", pw.Code, pw.Body.String())
+	}
+}
+
+

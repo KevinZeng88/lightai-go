@@ -1,0 +1,53 @@
+CODEX TARGETED REAUDIT BLOCKER FIX EVIDENCE
+============================================
+
+Re-audit: 18-codex-targeted-blocker-reaudit.md
+Verdict: REJECT_WITH_BLOCKERS
+Audited HEAD: afcf19d
+
+BLOCKER 1 — BackendVersion API raw flat config_set/config_set_json (FIXED)
+-------------------------------------------------------------------------
+File: internal/server/api/backend_handlers.go
+File: internal/server/api/configset_helpers.go
+
+Changes:
+- Added validateTieredConfigSet() in configset_helpers.go
+  Rejects ConfigSet items with: flat "code", flat "enabled", flat "default_value",
+  flat "required", legacy "enabled_fields", scalar "value" (not tiered map).
+  Requires every item to have schema/value/state maps.
+- upsertBackendVersionFromRequest() now validates caller-provided config_set/config_set_json
+  before persisting. Internal sources (existing DB, backend config) bypass validation.
+- backendVersionUpsertStatus() maps tiered validation errors to HTTP 400.
+
+BLOCKER 2 — runtime_boundary_test flat BackendVersion fixtures (FIXED)
+----------------------------------------------------------------------
+File: internal/server/api/runtime_boundary_test.go
+
+Changes:
+- Converted 4 flat BackendVersion fixtures (create/patch) to strict tiered format
+  (schema/value/state tiers, no flat code/enabled/value/default_value fields)
+- Added 3 new tests:
+  * TestBackendVersionCreateRejectsFlatConfigSet — flat items return 400
+  * TestBackendVersionCreateAcceptsTieredConfigSet — tiered items succeed (201)
+  * TestBackendVersionPatchRejectsFlatConfigSet — flat patch returns 400
+
+BLOCKER 3 — final-closeout.md update (DONE)
+-------------------------------------------
+Updated in this commit with re-audit commit 4ea556a and blocker fix commit.
+Evidence list includes all required files.
+
+GREP RESULTS (post-fix)
+-----------------------
+No flat scalar item["value"] or item["enabled"] or item["default_value"] reads
+in BackendVersion/Runtime/NBR production snapshot paths. All remaining hits are
+tiered-structure reads, request payload parsing, or UI editing paths.
+
+TEST RESULTS
+------------
+go test ./... -count=1: 18/18 PASS
+cd web && npm test -- --run: All PASS
+cd web && npm run build: built in 3.61s
+
+REMAINING BLOCKERS
+------------------
+OI-06: DOCUMENTED_BLOCKER (external hardware — NVIDIA/MetaX GPU not available)

@@ -377,19 +377,27 @@ func (h *AgentHandler) upsertBackendVersionFromRequest(id, backendID string, req
 		revision = checksumString(id + version + now)
 	}
 	configSet := mapFromAny(req["config_set"])
-	if len(configSet) == 0 {
+	callerProvided := len(configSet) > 0
+	if !callerProvided {
 		configSet = mapFromAny(req["config_set_json"])
+		callerProvided = len(configSet) > 0
 	}
-	if len(configSet) == 0 && current != nil {
-		configSet = mapFromAny(current["config_set"])
-	}
-	if len(configSet) == 0 {
-		var backendConfigRaw string
-		if err := h.DB.QueryRow(`SELECT config_set_json FROM inference_backends WHERE id=?`, backendID).Scan(&backendConfigRaw); err != nil {
-			return fmt.Errorf("read backend config set: %w", err)
+	// Validate caller-provided ConfigSet: must be strict tiered shape
+	if callerProvided {
+		if err := validateTieredConfigSet(configSet); err != nil {
+			return err
 		}
-		configSet = copyConfigSet(backendConfigRaw)
 	}
+		if len(configSet) == 0 && current != nil {
+			configSet = mapFromAny(current["config_set"])
+		}
+		if len(configSet) == 0 {
+			var backendConfigRaw string
+			if err := h.DB.QueryRow(`SELECT config_set_json FROM inference_backends WHERE id=?`, backendID).Scan(&backendConfigRaw); err != nil {
+				return fmt.Errorf("read backend config set: %w", err)
+			}
+			configSet = copyConfigSet(backendConfigRaw)
+		}
 	if health, ok := req["health_check"]; ok {
 		setConfigValue(configSet, "runtime.health", health, "BackendVersion", id, "api_request")
 	}
@@ -424,11 +432,13 @@ func backendVersionUpsertStatus(err error) int {
 		return http.StatusOK
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "belongs to BackendRuntime") ||
-		strings.Contains(msg, "required") ||
-		strings.Contains(msg, "not found") {
-		return http.StatusBadRequest
-	}
+		if strings.Contains(msg, "belongs to BackendRuntime") ||
+			strings.Contains(msg, "required") ||
+			strings.Contains(msg, "not found") ||
+			strings.Contains(msg, "tiered shape") ||
+			strings.Contains(msg, "flat \"") {
+			return http.StatusBadRequest
+		}
 	return http.StatusInternalServerError
 }
 
