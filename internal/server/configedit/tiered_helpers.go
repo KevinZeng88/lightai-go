@@ -1,25 +1,22 @@
 package configedit
 
-// setItemEffectiveValue writes to both the tiered value structure and flat compat.
+// setItemEffectiveValue writes to the tiered ConfigItemValue structure.
+// item["value"] must remain {default_value, inherited_value, local_value, effective_value}.
+// Updates local_value and effective_value. NEVER overwrites item["value"] with a scalar.
 func setItemEffectiveValue(item map[string]any, value any) {
 	if item == nil {
 		return
 	}
-	// Tiered write: item["value"]["effective_value"]
 	valueTier, _ := item["value"].(map[string]any)
 	if valueTier == nil {
 		valueTier = map[string]any{}
 		item["value"] = valueTier
 	}
+	valueTier["local_value"] = value
 	valueTier["effective_value"] = value
-	// Flat compat: for non-map values, also set item["value"] directly
-	// so that old code reading item["value"] gets the scalar.
-	if _, isMap := value.(map[string]any); !isMap {
-		item["value"] = value
-	}
 }
 
-// setItemStateEnabled writes to the tiered state structure AND flat compat.
+// setItemStateEnabled writes to the tiered state structure only.
 func setItemStateEnabled(item map[string]any, enabled bool) {
 	if item == nil {
 		return
@@ -30,16 +27,14 @@ func setItemStateEnabled(item map[string]any, enabled bool) {
 		item["state"] = state
 	}
 	state["enabled"] = enabled
-	// Flat compat
-	item["enabled"] = enabled
+	state["checked"] = enabled
 }
 
-// getItemEffectiveValue reads from tiered value, with flat compat fallback.
+// getItemEffectiveValue reads from tiered value structure only.
 func getItemEffectiveValue(item map[string]any) (any, bool) {
 	if item == nil {
 		return nil, false
 	}
-	// Tiered: item["value"]["effective_value"]
 	if v, ok := item["value"].(map[string]any); ok {
 		if ev, ok := v["effective_value"]; ok {
 			return ev, true
@@ -48,16 +43,10 @@ func getItemEffectiveValue(item map[string]any) (any, bool) {
 			return dv, true
 		}
 	}
-	// Flat compat: item["value"] (only if it's not a map — a map means tiered)
-	if v, ok := item["value"]; ok {
-		if _, isMap := v.(map[string]any); !isMap {
-			return v, true
-		}
-	}
-	return item["value"], item["value"] != nil
+	return nil, false
 }
 
-// getItemStateEnabled reads from tiered state, with flat compat fallback.
+// getItemStateEnabled reads from tiered state structure only.
 func getItemStateEnabled(item map[string]any) bool {
 	if item == nil {
 		return false
@@ -66,9 +55,6 @@ func getItemStateEnabled(item map[string]any) bool {
 		if en, ok := state["enabled"].(bool); ok {
 			return en
 		}
-	}
-	if en, ok := item["enabled"].(bool); ok {
-		return en
 	}
 	return false
 }

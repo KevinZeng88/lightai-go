@@ -198,12 +198,23 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 		code := "launcher.docker_options." + spec.Path
 		dockerItem := cloneMap(item)
 		dockerItem["type"] = spec.Type
-		dockerItem["value"] = value[spec.Path]
+			subVal := value[spec.Path]
+			// Write to tiered value structure, not flat scalar
+			if vt, ok := dockerItem["value"].(map[string]any); ok {
+				vt["effective_value"] = subVal
+				vt["local_value"] = subVal
+			} else {
+				dockerItem["value"] = map[string]any{"effective_value": subVal, "local_value": subVal}
+			}
 		dockerItem["required"] = false
 		// Docker sub-fields keep value and enabled state independently. The
 		// parent object stores values under value and per-subfield toggles under
 		// enabled_fields to avoid inferring activation from a prefilled value.
 		dockerItem["enabled"] = boolValue(enabledFields[spec.Path])
+			// Also update state tier for tiered-only reading
+			if st, ok := dockerItem["state"].(map[string]any); ok {
+				st["enabled"] = boolValue(enabledFields[spec.Path])
+			}
 		field := projectItem(code, "launcher.docker_options", []string{spec.Path}, dockerItem, input)
 		field.Section = spec.Section
 		field.Widget = spec.Widget
@@ -230,12 +241,8 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	}
 	required := itemRequired(item)
 
-	// Enabled is an explicit saved toggle. Defaults/values/tier/visibility only
-	// prefill or organize UI fields; they must not opt parameters into RunPlan.
-	enabled := false
-	if hasValue(item, "enabled") {
-		enabled = boolValue(itemEnabled(item))
-	}
+		// Enabled: read from tiered state only.
+		enabled := itemEnabled(item)
 	if required {
 		enabled = true
 	}
@@ -346,7 +353,7 @@ func displayTierFor(key string, item map[string]any, hasDef bool, registryTier s
 	if boolValue(item["dangerous"]) || expertRuntimeArgs[key] {
 		return "expert"
 	}
-	if commonRuntimeArgs[key] || boolValue(item["visible_by_default"]) {
+	if commonRuntimeArgs[key] || tieredBoolField(item, "schema", "visible_by_default") {
 		return "common"
 	}
 	if hasDef {

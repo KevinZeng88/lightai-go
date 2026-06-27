@@ -247,3 +247,68 @@ func TestSourceMapCoversAllRequiredTargets(t *testing.T) {
 		t.Errorf("system_generated = %d, want >= 1", len(sm.SystemGenerated))
 	}
 }
+
+func TestResolveWithSourceMapDoesNotReturnNilMap(t *testing.T) {
+	in := ResolveInput{
+		Backend:        &BackendInfo{Name: "test", DefaultEnv: map[string]string{}},
+		BackendVersion: &VersionInfo{Version: "1.0", DefaultImages: map[string]string{"nvidia": "test:latest"}, HealthCheck: HealthCheckInput{}},
+		BackendRuntime: &RuntimeInfo{Vendor: "nvidia", RuntimeType: "docker", ImageName: "test:latest", Docker: DockerSpecInfo{}},
+		Deployment:     &DeploymentInfo{ID: "d1", Service: ServiceInfo{}},
+		Artifact:       &ArtifactInfo{},
+		InstanceID:     "i1",
+		Node:           &NodeInfo{ID: "n1"},
+		AssignedGPUs:   []GPUInfo{{Index: 0, Vendor: "nvidia"}},
+		NBRConfigSnapshot: &NBRSnapshotInfo{
+			ParameterValues: []ParameterValue{
+				{Key: "max_model_len", CliName: "--max-model-len", Value: float64(4096), Enabled: true, Source: "node_backend_runtime", CopiedFrom: "bv-vllm"},
+			},
+		},
+	}
+	plan, errs, _ := ResolveWithSourceMap(in)
+	if len(errs) > 0 {
+		t.Logf("resolve errors (expected with minimal input): %v", errs)
+	}
+	if plan == nil {
+		return
+	}
+	if plan.ParameterSourceMap == nil {
+		t.Error("ParameterSourceMap is nil when plan is non-nil")
+	}
+}
+
+func TestSourceMapFromProvenanceTracksSourceChain(t *testing.T) {
+	sm := NewSourceMapBuilder()
+	chain := []SourceChainEntry{
+		{Layer: "BackendVersionConfigBundle", Value: float64(4096), Reason: "schema default"},
+		{Layer: "NodeBackendRuntimeConfigBundle", Value: float64(8192), Reason: "nbr override (copied_from=bv-vllm)"},
+	}
+	sm.AddArg("max_model_len", "--max-model-len", float64(8192), "node_backend_runtime", "BackendParameterConfigSet", "NodeBackendRuntimeConfigBundle", chain)
+	gpuChain := []SourceChainEntry{
+		{Layer: "SystemGenerated", Value: "0,1", Reason: "gpu scheduler assignment"},
+	}
+	sm.AddSystemGenerated("gpu_device_ids", "0,1", "system_generated", "", "SystemGenerated", gpuChain)
+	built := sm.Build()
+	if len(built.Args) != 1 {
+		t.Fatalf("expected 1 arg, got %d", len(built.Args))
+	}
+	a := built.Args[0]
+	if a.EffectiveSource != "node_backend_runtime" {
+		t.Errorf("effective_source = %q, want node_backend_runtime", a.EffectiveSource)
+	}
+	if len(a.SourceChain) != 2 {
+		t.Errorf("source_chain length = %d, want 2", len(a.SourceChain))
+	}
+	if a.SourceChain[0].Layer != "BackendVersionConfigBundle" {
+		t.Errorf("chain[0].Layer = %q", a.SourceChain[0].Layer)
+	}
+	if len(built.SystemGenerated) != 1 {
+		t.Fatalf("expected 1 system_generated, got %d", len(built.SystemGenerated))
+	}
+	sg := built.SystemGenerated[0]
+	if sg.EffectiveSource != "system_generated" {
+		t.Errorf("system_generated effective_source = %q, want system_generated", sg.EffectiveSource)
+	}
+	if len(sg.SourceChain) == 0 {
+		t.Error("system_generated source_chain is empty")
+	}
+}

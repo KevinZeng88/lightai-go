@@ -7,32 +7,35 @@ func testConfigSet() map[string]any {
 		"schema_version": 1,
 		"items": map[string]any{
 			"launcher.image": map[string]any{
-				"code": "launcher.image", "category": "launcher", "kind": "image", "type": "string",
-				"value": "vllm:test", "enabled": true, "required": true,
+				"schema": map[string]any{"key": "launcher.image", "category": "launcher", "kind": "image", "type": "string", "required": true},
+				"state":  map[string]any{"enabled": true, "checked": true, "editable": true, "visible": true},
+				"value":  map[string]any{"effective_value": "vllm:test", "default_value": "vllm:test"},
 			},
 			"launcher.docker_options": map[string]any{
-				"code": "launcher.docker_options", "category": "launcher", "kind": "docker_options", "type": "object",
-				"enabled": true,
-				"value": map[string]any{
+				"schema": map[string]any{"key": "launcher.docker_options", "category": "launcher", "kind": "docker_options", "type": "object"},
+				"state":  map[string]any{"enabled": true, "checked": true, "editable": true, "visible": true},
+				"value":  map[string]any{"effective_value": map[string]any{
 					"shm_size":   "16gb",
 					"privileged": false,
 					"devices":    []any{"/dev/nvidia0"},
 					"group_add":  []any{"video"},
-				},
+				}},
 			},
 			"runtime.env": map[string]any{
-				"code": "runtime.env", "category": "runtime", "kind": "env", "type": "object",
-				"enabled": true,
-				"value":   map[string]any{"HF_HOME": "/cache/hf"},
+				"schema": map[string]any{"key": "runtime.env", "category": "runtime", "kind": "env", "type": "object"},
+				"state":  map[string]any{"enabled": true, "checked": true, "editable": true, "visible": true},
+				"value":  map[string]any{"effective_value": map[string]any{"HF_HOME": "/cache/hf"}},
 			},
 			"backend.arg.fake_new_param": map[string]any{
-				"code": "backend.arg.fake_new_param", "category": "model_runtime", "kind": "cli_arg", "type": "string",
-				"value": "abc", "enabled": false,
+				"schema": map[string]any{"key": "backend.arg.fake_new_param", "category": "model_runtime", "kind": "cli_arg", "type": "string"},
+				"state":  map[string]any{"enabled": false, "checked": false, "editable": true, "visible": true},
+				"value":  map[string]any{"effective_value": "abc", "default_value": "abc"},
 				"render": map[string]any{"flag": "--fake-new-param"},
 			},
 			"internal.checksum": map[string]any{
-				"code": "internal.checksum", "category": "internal", "kind": "metadata", "type": "string",
-				"value": "sha", "enabled": true,
+				"schema": map[string]any{"key": "internal.checksum", "category": "internal", "kind": "metadata", "type": "string"},
+				"state":  map[string]any{"enabled": true, "checked": true, "editable": true, "visible": true},
+				"value":  map[string]any{"effective_value": "sha", "default_value": "sha"},
 			},
 		},
 	}
@@ -133,18 +136,21 @@ func TestProjectConfigSetToEditViewDoesNotInferEnabledFromDefaultOrVisibility(t 
 	set := testConfigSet()
 	items := set["items"].(map[string]any)
 	items["backend.arg.default_common"] = map[string]any{
-		"code": "backend.arg.default_common", "category": "model_runtime", "kind": "cli_arg", "type": "string",
-		"default_value": "prefilled", "visible_by_default": true, "tier": "common",
+		"schema": map[string]any{"key": "backend.arg.default_common", "category": "model_runtime", "kind": "cli_arg", "type": "string", "visible_by_default": true},
+		"state":  map[string]any{"enabled": false, "editable": true, "visible": true},
+		"value":  map[string]any{"default_value": "prefilled", "effective_value": "prefilled"},
 		"render": map[string]any{"flag": "--default-common", "label": "Default Common"},
 	}
 	items["backend.arg.boolean_default"] = map[string]any{
-		"code": "backend.arg.boolean_default", "category": "model_runtime", "kind": "cli_arg", "type": "boolean",
-		"default_value": false, "visible_by_default": true,
+		"schema": map[string]any{"key": "backend.arg.boolean_default", "category": "model_runtime", "kind": "cli_arg", "type": "boolean", "visible_by_default": true},
+		"state":  map[string]any{"enabled": false, "editable": true, "visible": true},
+		"value":  map[string]any{"default_value": false, "effective_value": false},
 		"render": map[string]any{"flag": "--boolean-default", "label": "Boolean Default"},
 	}
 	items["backend.arg.required_default"] = map[string]any{
-		"code": "backend.arg.required_default", "category": "model_runtime", "kind": "cli_arg", "type": "string",
-		"default_value": "required-value", "required": true,
+		"schema": map[string]any{"key": "backend.arg.required_default", "category": "model_runtime", "kind": "cli_arg", "type": "string", "required": true},
+		"state":  map[string]any{"enabled": false, "editable": true, "visible": true},
+		"value":  map[string]any{"default_value": "required-value", "effective_value": "required-value"},
 		"render": map[string]any{"flag": "--required-default", "label": "Required Default"},
 	}
 
@@ -177,8 +183,10 @@ func TestProjectConfigSetToEditViewNodeRuntimeShowsCommonAndFoldsAdvanced(t *tes
 	set := testConfigSet()
 	items := set["items"].(map[string]any)
 	items["backend.arg.gpu_memory_utilization"] = map[string]any{
-		"code": "backend.arg.gpu_memory_utilization", "category": "model_runtime", "kind": "cli_arg", "type": "number",
-		"value": 0.9, "enabled": true, "render": map[string]any{"flag": "--gpu-memory-utilization", "label": "GPU Memory Utilization"},
+		"schema": map[string]any{"key": "backend.arg.gpu_memory_utilization", "category": "model_runtime", "kind": "cli_arg", "type": "number"},
+		"state":  map[string]any{"enabled": true, "checked": true, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": 0.9, "default_value": 0.9},
+		"render": map[string]any{"flag": "--gpu-memory-utilization", "label": "GPU Memory Utilization"},
 	}
 	items["backend.arg.scheduler"] = map[string]any{
 		"code": "backend.arg.scheduler", "category": "model_runtime", "kind": "cli_arg", "type": "string",
@@ -189,8 +197,10 @@ func TestProjectConfigSetToEditViewNodeRuntimeShowsCommonAndFoldsAdvanced(t *tes
 		"value": false, "enabled": false, "dangerous": true, "render": map[string]any{"flag": "--trust-remote-code", "label": "Trust Remote Code"},
 	}
 	items["backend.arg.debug_profile"] = map[string]any{
-		"code": "backend.arg.debug_profile", "category": "debug", "kind": "cli_arg", "type": "boolean",
-		"value": true, "enabled": false, "render": map[string]any{"flag": "--debug-profile", "label": "Debug Profile"},
+		"schema": map[string]any{"key": "backend.arg.debug_profile", "category": "debug", "kind": "cli_arg", "type": "boolean"},
+		"state":  map[string]any{"enabled": false, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": true, "default_value": true},
+		"render": map[string]any{"flag": "--debug-profile", "label": "Debug Profile"},
 	}
 
 	view, err := ProjectConfigSetToEditView(ProjectInput{
@@ -226,8 +236,10 @@ func TestApplyEditPatchToConfigSetKeepsDisabledValueAndHiddenItems(t *testing.T)
 	set := testConfigSet()
 	items := set["items"].(map[string]any)
 	items["backend.arg.hidden_existing"] = map[string]any{
-		"code": "backend.arg.hidden_existing", "category": "model_runtime", "kind": "cli_arg", "type": "string",
-		"value": "keep-me", "enabled": true, "visibility": "internal", "render": map[string]any{"flag": "--hidden-existing"},
+		"schema": map[string]any{"key": "backend.arg.hidden_existing", "category": "model_runtime", "kind": "cli_arg", "type": "string", "visibility": "internal"},
+		"state":  map[string]any{"enabled": true, "editable": true, "visible": false},
+		"value":  map[string]any{"effective_value": "keep-me", "default_value": "keep-me"},
+		"render": map[string]any{"flag": "--hidden-existing"},
 	}
 	disabled := false
 	out, err := ApplyEditPatchToConfigSet(set, ConfigEditPatch{
@@ -261,8 +273,9 @@ func TestApplyEditPatchOrdinaryEnabledRoundTripsThroughProjection(t *testing.T) 
 	set := testConfigSet()
 	items := set["items"].(map[string]any)
 	items["backend.arg.round_trip"] = map[string]any{
-		"code": "backend.arg.round_trip", "category": "model_runtime", "kind": "cli_arg", "type": "string",
-		"value": "keep-me", "enabled": false,
+		"schema": map[string]any{"key": "backend.arg.round_trip", "category": "model_runtime", "kind": "cli_arg", "type": "string"},
+		"state":  map[string]any{"enabled": false, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": "keep-me", "default_value": "keep-me"},
 		"render": map[string]any{"flag": "--round-trip", "label": "Round Trip"},
 	}
 
@@ -347,16 +360,17 @@ func TestApplyEditPatchToConfigSetMergesDockerOptionsAndForcesRequiredEnabled(t 
 	if err != nil {
 		t.Fatalf("apply patch: %v", err)
 	}
-	items := out["items"].(map[string]any)
-	docker := items["launcher.docker_options"].(map[string]any)["value"].(map[string]any)
-	if docker["shm_size"] != "24gb" || docker["privileged"] != true {
-		t.Fatalf("docker options not merged: %#v", docker)
+		items := out["items"].(map[string]any)
+		dockerVal := items["launcher.docker_options"].(map[string]any)["value"].(map[string]any)
+		docker := dockerVal["effective_value"].(map[string]any)
+		if docker["shm_size"] != "24gb" || docker["privileged"] != true {
+			t.Fatalf("docker options not merged: %#v", docker)
+		}
+		image := items["launcher.image"].(map[string]any)
+		if st, ok := image["state"].(map[string]any); !ok || st["enabled"] != true {
+			t.Fatalf("required image enabled should be forced true: %#v", image)
+		}
 	}
-	image := items["launcher.image"].(map[string]any)
-	if image["enabled"] != true {
-		t.Fatalf("required image enabled should be forced true: %#v", image)
-	}
-}
 
 func TestApplyEditPatchRejectsDirectLegacyModelServingAtDeployment(t *testing.T) {
 	_, err := ApplyEditPatchToConfigSet(testConfigSet(), ConfigEditPatch{

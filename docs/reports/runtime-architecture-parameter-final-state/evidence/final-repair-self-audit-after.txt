@@ -1,0 +1,12 @@
+FINAL-REPAIR SELF-AUDIT AFTER
+=============================
+
+=== Flat fallback patterns ===
+internal/server/catalog/tiered_roundtrip_test.go:86:	// Also verify launcher.image survived (as flat compat)
+internal/server/catalog/tiered_roundtrip_test.go:97:	// This test demonstrates the bug: setConfigValue's flat compat write
+internal/server/catalog/tiered_roundtrip_test.go:110:	// Simulate setConfigValue's flat compat path
+=== item["value"] = value scalar overwrite ===
+=== item["enabled"] flat fallback in configset_helpers ===
+internal/server/api/configset_helpers.go:375:				if enabled, ok := item["enabled"].(bool); ok {
+=== item["default_value"] flat fallback ===
+=== item[field] flat fallback ===

@@ -32,15 +32,13 @@ func configItem(set map[string]interface{}, code string) map[string]interface{} 
 	return item
 }
 
-// configValue returns the effective value of a ConfigItem.
-// New shape: item["value"]["effective_value"] (tiered)
-// Falls back to old shape: item["value"] (flat) for backward compat during migration.
+// configValue returns the effective value from the tiered ConfigItemValue structure.
+// No flat fallback — data must be in tiered shape.
 func configValue(set map[string]interface{}, code string, def interface{}) interface{} {
 	item := configItem(set, code)
 	if item == nil {
 		return def
 	}
-	// New tiered shape: item.value.effective_value
 	if v, ok := item["value"].(map[string]interface{}); ok {
 		if ev, ok := v["effective_value"]; ok && ev != nil {
 			return ev
@@ -48,13 +46,6 @@ func configValue(set map[string]interface{}, code string, def interface{}) inter
 		if dv, ok := v["default_value"]; ok && dv != nil {
 			return dv
 		}
-	}
-	// Fallback: old flat shape item.value
-	if v, ok := item["value"]; ok && v != nil {
-		return v
-	}
-	if v, ok := item["default_value"]; ok && v != nil {
-		return v
 	}
 	return def
 }
@@ -150,7 +141,7 @@ func configArray(set map[string]interface{}, code string) []interface{} {
 	return []interface{}{}
 }
 
-// configItemEnabled returns the enabled state from the new tiered shape.
+// configItemEnabled returns the enabled state from the tiered state structure.
 func configItemEnabled(item map[string]interface{}) bool {
 	if item == nil {
 		return false
@@ -159,10 +150,6 @@ func configItemEnabled(item map[string]interface{}) bool {
 		if en, ok := state["enabled"].(bool); ok {
 			return en
 		}
-	}
-	// Fallback: old flat shape
-	if en, ok := item["enabled"].(bool); ok {
-		return en
 	}
 	return false
 }
@@ -175,7 +162,7 @@ func configItemSchemaField(item map[string]interface{}, field string) string {
 	if schema, ok := item["schema"].(map[string]interface{}); ok {
 		return strings.TrimSpace(fmt.Sprint(schema[field]))
 	}
-	return strings.TrimSpace(fmt.Sprint(item[field]))
+	return ""
 }
 
 func configSetParameterDefs(set map[string]interface{}) []runplan.ParameterDef {
@@ -221,7 +208,7 @@ func defaultValueFromItem(item map[string]interface{}) interface{} {
 	if v, ok := item["value"].(map[string]interface{}); ok {
 		return v["default_value"]
 	}
-	return item["default_value"]
+	return nil
 }
 
 func configSetParameterValues(set map[string]interface{}) []runplan.ParameterValue {
@@ -288,7 +275,10 @@ func configSetParameterValues(set map[string]interface{}) []runplan.ParameterVal
 	return out
 }
 
-// setConfigValueTiered writes value into the tiered shape AND flat compat.
+// setConfigValueTiered writes to the tiered ConfigItemValue structure.
+// item["value"] must remain {default_value, inherited_value, local_value, effective_value}.
+// This function updates local_value and effective_value. It NEVER overwrites
+// item["value"] with a scalar.
 func setConfigValueTiered(item map[string]interface{}, value interface{}) {
 	if item == nil {
 		return
@@ -298,11 +288,8 @@ func setConfigValueTiered(item map[string]interface{}, value interface{}) {
 		valueTier = map[string]interface{}{}
 		item["value"] = valueTier
 	}
+	valueTier["local_value"] = value
 	valueTier["effective_value"] = value
-	// Flat compat: for non-map values, also set item["value"] directly
-	if _, isMap := value.(map[string]interface{}); !isMap {
-		item["value"] = value
-	}
 }
 
 // setConfigEnabledTiered writes enabled into the tiered shape: item["state"]["enabled"]
@@ -323,25 +310,24 @@ func setConfigValue(set map[string]interface{}, code string, value interface{}, 
 	item, _ := items[code].(map[string]interface{})
 	if item == nil {
 		item = map[string]interface{}{}
+		item["schema"] = map[string]interface{}{"key": code}
+		item["value"] = map[string]interface{}{}
+		item["state"] = map[string]interface{}{}
 	}
-	// Write ONLY to tiered shape — do NOT overwrite item["value"] which
-	// would destroy the tiered ConfigItemValue structure.
 	setConfigValueTiered(item, value)
 	setConfigEnabledTiered(item, true)
-	// Also set provenance in the tiered provenance field
+	// Write provenance to tiered provenance structure only
 	if prov, _ := item["provenance"].(map[string]interface{}); prov != nil {
 		prov["value_source"] = layer
 		prov["last_value_layer"] = layer
 		prov["last_value_owner_id"] = ref
 	} else {
 		item["provenance"] = map[string]interface{}{
-			"value_source":      layer,
-			"last_value_layer":  layer,
+			"value_source":       layer,
+			"last_value_layer":   layer,
 			"last_value_owner_id": ref,
 		}
 	}
-	// Also write layer/ref to flat source for compat
-	item["source"] = map[string]interface{}{"layer": layer, "ref": ref, "reason": reason}
 	items[code] = item
 	set["items"] = items
 }

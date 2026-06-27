@@ -27,7 +27,7 @@ func ApplyEditPatchToConfigSet(set map[string]any, patch ConfigEditPatch, layer,
 		} else {
 			setItemEffectiveValue(item, field.Value)
 		}
-		required := boolValue(item["required"])
+		required := itemRequired(item)
 		if required {
 			setItemStateEnabled(item, true)
 		} else if field.Enabled != nil && len(field.Path) == 0 {
@@ -42,7 +42,7 @@ func ApplyEditPatchToConfigSet(set map[string]any, patch ConfigEditPatch, layer,
 	}
 	for _, raw := range items {
 		item, _ := raw.(map[string]any)
-		if item == nil || !boolValue(item["required"]) {
+		if item == nil || !itemRequired(item) {
 			continue
 		}
 		setItemStateEnabled(item, true)

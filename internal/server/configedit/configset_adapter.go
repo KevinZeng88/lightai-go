@@ -126,7 +126,7 @@ func itemEffectiveValue(item map[string]any) any {
 	return item["value"]
 }
 
-// itemEnabled returns enabled from state tier or flat compat.
+// itemEnabled returns enabled from state tier only.
 func itemEnabled(item map[string]any) bool {
 	if item == nil {
 		return false
@@ -136,10 +136,10 @@ func itemEnabled(item map[string]any) bool {
 			return en
 		}
 	}
-	return boolValue(item["enabled"])
+	return false
 }
 
-// itemRequired returns required from schema tier or flat compat.
+// itemRequired returns required from schema tier only.
 func itemRequired(item map[string]any) bool {
 	if item == nil {
 		return false
@@ -149,10 +149,10 @@ func itemRequired(item map[string]any) bool {
 			return r
 		}
 	}
-	return boolValue(item["required"])
+	return false
 }
 
-// itemReadonly returns readonly from schema tier or flat compat.
+// itemReadonly returns readonly from schema tier only.
 func itemReadonly(item map[string]any) bool {
 	if item == nil {
 		return false
@@ -162,10 +162,10 @@ func itemReadonly(item map[string]any) bool {
 			return r
 		}
 	}
-	return boolValue(item["readonly"])
+	return false
 }
 
-// itemVisibility returns visibility from schema tier or flat compat.
+// itemVisibility returns visibility from schema tier only.
 func itemVisibility(item map[string]any) string {
 	if item == nil {
 		return ""
@@ -175,10 +175,10 @@ func itemVisibility(item map[string]any) string {
 			return v
 		}
 	}
-	return stringValue(item["visibility"])
+	return ""
 }
 
-// itemCategory returns category from schema tier or flat compat.
+// itemCategory returns category from schema tier only.
 func itemCategory(item map[string]any) string {
 	if item == nil {
 		return ""
@@ -188,10 +188,10 @@ func itemCategory(item map[string]any) string {
 			return c
 		}
 	}
-	return stringValue(item["category"])
+	return ""
 }
 
-// itemLabel returns label from schema tier or flat compat.
+// itemLabel returns label from schema tier only.
 func itemLabel(item map[string]any) string {
 	if item == nil {
 		return ""
@@ -200,9 +200,6 @@ func itemLabel(item map[string]any) string {
 		if l, ok := schema["label"].(string); ok {
 			return l
 		}
-	}
-	if render, ok := item["render"].(map[string]any); ok {
-		return stringValue(render["label"])
 	}
 	return ""
 }

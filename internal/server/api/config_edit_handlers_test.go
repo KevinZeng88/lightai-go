@@ -80,15 +80,11 @@ func TestDeploymentCreateAppliesEditableConfigPatchToSnapshot(t *testing.T) {
 	}
 	rtSet := copyConfigSet(rtSetRaw)
 	items := configSetItems(rtSet)
-	items["model_runtime.max_model_len"] = map[string]interface{}{
-		"code":     "model_runtime.max_model_len",
-		"category": "model_runtime",
-		"kind":     "cli_arg",
-		"type":     "integer",
-		"enabled":  false,
-		"value":    2048,
-		"render":   map[string]interface{}{"label": "Max model length"},
-	}
+		items["model_runtime.max_model_len"] = map[string]interface{}{
+			"schema": map[string]interface{}{"key": "model_runtime.max_model_len", "category": "model_runtime", "kind": "cli_arg", "type": "integer"},
+			"state":  map[string]interface{}{"enabled": false, "checked": false},
+			"value":  map[string]interface{}{"default_value": float64(2048), "effective_value": float64(2048)},
+		}
 	if _, err := db.Exec(`UPDATE backend_runtimes SET config_set_json=? WHERE id='rt-config-edit-dep'`, configSetJSON(rtSet)); err != nil {
 		t.Fatalf("update runtime config set: %v", err)
 	}
@@ -117,11 +113,14 @@ func TestDeploymentCreateAppliesEditableConfigPatchToSnapshot(t *testing.T) {
 		t.Fatalf("decode deployment: %v", err)
 	}
 	set, _ := resp["config_set"].(map[string]any)
-	item, _ := configSetItems(set)["model_runtime.max_model_len"].(map[string]any)
-	if item == nil || item["value"] != float64(4096) || item["enabled"] != true {
-		t.Fatalf("deployment editable_config_patch not in snapshot: %#v", resp["config_set"])
+		item, _ := configSetItems(set)["model_runtime.max_model_len"].(map[string]interface{})
+		if item == nil || !configItemEnabled(item) {
+		t.Fatalf("deployment editable_config_patch enabled not set: %s", configSetJSON(set))
+		}
+		if vt, ok := item["value"].(map[string]interface{}); !ok || vt["effective_value"] != float64(4096) {
+		t.Fatalf("deployment editable_config_patch value not in snapshot: %s", configSetJSON(set))
+		}
 	}
-}
 
 func insertDeploymentArtifactLocation(t *testing.T, db *db.DB, artifactID, nodeID string) {
 	t.Helper()

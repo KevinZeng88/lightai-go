@@ -1,0 +1,38 @@
+FINAL-REPAIR SELF-AUDIT BEFORE
+==============================
+
+Commit being audited: 8f3f86e
+Files changed: web-build-output.txt, web-test-output.txt, final-closeout.md ONLY
+Code files (configset_helpers.go, tiered_helpers.go, etc.) were NOT in this commit.
+
+=== Flat fallback patterns in current code ===
+internal/server/api/configset_helpers.go:37:// Falls back to old shape: item["value"] (flat) for backward compat during migration.
+internal/server/api/configset_helpers.go:52:	// Fallback: old flat shape item.value
+internal/server/api/configset_helpers.go:163:	// Fallback: old flat shape
+internal/server/api/configset_helpers.go:291:// setConfigValueTiered writes value into the tiered shape AND flat compat.
+internal/server/catalog/tiered_roundtrip_test.go:86:	// Also verify launcher.image survived (as flat compat)
+internal/server/catalog/tiered_roundtrip_test.go:97:	// This test demonstrates the bug: setConfigValue's flat compat write
+internal/server/catalog/tiered_roundtrip_test.go:110:	// Simulate setConfigValue's flat compat path
+internal/server/configedit/configset_adapter.go:129:// itemEnabled returns enabled from state tier or flat compat.
+internal/server/configedit/configset_adapter.go:142:// itemRequired returns required from schema tier or flat compat.
+internal/server/configedit/configset_adapter.go:155:// itemReadonly returns readonly from schema tier or flat compat.
+internal/server/configedit/configset_adapter.go:168:// itemVisibility returns visibility from schema tier or flat compat.
+internal/server/configedit/configset_adapter.go:181:// itemCategory returns category from schema tier or flat compat.
+internal/server/configedit/configset_adapter.go:194:// itemLabel returns label from schema tier or flat compat.
+internal/server/configedit/tiered_helpers.go:3:// setItemEffectiveValue writes to both the tiered value structure and flat compat.
+internal/server/configedit/tiered_helpers.go:22:// setItemStateEnabled writes to the tiered state structure AND flat compat.
+internal/server/configedit/tiered_helpers.go:37:// getItemEffectiveValue reads from tiered value, with flat compat fallback.
+internal/server/configedit/tiered_helpers.go:60:// getItemStateEnabled reads from tiered state, with flat compat fallback.
+=== item["value"] = value pattern ===
+internal/server/api/configset_helpers.go:299:		item["value"] = valueTier
+internal/server/api/configset_helpers.go:304:		item["value"] = value
+internal/server/configedit/tiered_helpers.go:12:		item["value"] = valueTier
+internal/server/configedit/tiered_helpers.go:18:		item["value"] = value
+=== item["enabled"] flat fallback pattern ===
+internal/server/api/configset_helpers.go:164:	if en, ok := item["enabled"].(bool); ok {
+internal/server/api/configset_helpers.go:389:				if enabled, ok := item["enabled"].(bool); ok {
+=== item["default_value"] flat fallback pattern ===
+internal/server/api/configset_helpers.go:56:	if v, ok := item["default_value"]; ok && v != nil {
+internal/server/api/configset_helpers.go:224:	return item["default_value"]
+=== item[field] flat fallback in configItemSchemaField ===
+internal/server/api/configset_helpers.go:178:	return strings.TrimSpace(fmt.Sprint(item[field]))
