@@ -105,6 +105,36 @@ func TestMaterializeConfigSetsUseCanonicalSemanticKeys(t *testing.T) {
 	}
 }
 
+func TestMaterializeBackendVersionDoesNotAutoEnableOptionalDefaults(t *testing.T) {
+	registry := &Registry{}
+	backend := BackendDoc{ID: "backend.test", Slug: "test", Name: "Test"}
+	version := VersionDoc{
+		ID:        "version.test",
+		BackendID: "backend.test",
+		DefaultArgsSchema: []map[string]any{
+			{"name": "--optional-with-default", "type": "string", "default": "prefilled"},
+			{"name": "--required-with-default", "type": "string", "default": "required", "required": true},
+		},
+	}
+
+	set := MaterializeBackendVersion(registry, backend, version)
+	optional := set.Items["model_runtime.optional_with_default"]
+	if optional.Code == "" {
+		t.Fatalf("optional arg was not materialized: %#v", set.Items)
+	}
+	if optional.Enabled {
+		t.Fatalf("optional default arg must not be enabled by default: %#v", optional)
+	}
+	if optional.Value != "prefilled" || optional.DefaultValue != "prefilled" {
+		t.Fatalf("optional default value should still prefill value/default: %#v", optional)
+	}
+
+	required := set.Items["model_runtime.required_with_default"]
+	if !required.Required || !required.Enabled {
+		t.Fatalf("required arg should remain required and enabled: %#v", required)
+	}
+}
+
 func containsString(haystack, needle string) bool {
 	for i := 0; i+len(needle) <= len(haystack); i++ {
 		if haystack[i:i+len(needle)] == needle {

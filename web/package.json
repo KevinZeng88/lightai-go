@@ -8,7 +8,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "vue-tsc --noEmit",
-    "test": "node tests/apiClientPaths.test.mjs && node tests/formatters.test.mjs && node tests/i18nKeys.test.mjs && node tests/i18nMissingKeys.test.mjs && node tests/noHardcodedCredentials.test.mjs && node tests/runtimeBoundaryUi.test.mjs && node tests/modelCapabilities.test.mjs",
+    "test": "node tests/apiClientPaths.test.mjs && node tests/formatters.test.mjs && node tests/i18nKeys.test.mjs && node tests/i18nMissingKeys.test.mjs && node tests/noHardcodedCredentials.test.mjs && node tests/runtimeBoundaryUi.test.mjs && node tests/modelCapabilities.test.mjs && node tests/configEditContract.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",

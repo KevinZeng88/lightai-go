@@ -1,5 +1,12 @@
 <template>
-  <div v-if="localView" class="config-edit-view">
+  <div
+    v-if="localView"
+    class="config-edit-view"
+    data-testid="config-edit-view"
+    :data-object-kind="localView.object_kind"
+    :data-layer="localView.layer"
+    :data-object-id="localView.object_id"
+  >
     <ConfigSection
       v-for="section in sortedSections(localView)"
       :key="section.key"

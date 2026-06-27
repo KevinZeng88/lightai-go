@@ -219,12 +219,14 @@ func addArgConfigItems(items map[string]ConfigItem, args []map[string]any, layer
 		if defaultValue == nil {
 			defaultValue = arg["value"]
 		}
-		enabled := boolFromAny(arg["required"]) || defaultValue != nil
+		required := boolFromAny(arg["required"])
+		enabled := required
 		item := ConfigItem{
 			Code:         code,
 			Category:     "model_runtime",
 			Kind:         "cli_arg",
 			Type:         normalizeConfigType(typ),
+			Required:     required,
 			Value:        defaultValue,
 			DefaultValue: defaultValue,
 			Enabled:      enabled,

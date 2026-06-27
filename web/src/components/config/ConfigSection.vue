@@ -1,5 +1,10 @@
 <template>
-  <el-collapse :model-value="activeNames" @update:model-value="activeNames = normalizeActive($event)">
+  <el-collapse
+    :model-value="activeNames"
+    data-testid="config-edit-section"
+    :data-section-key="section.key"
+    @update:model-value="activeNames = normalizeActive($event)"
+  >
     <el-collapse-item :name="section.key">
       <template #title>
         <span>{{ sectionI18nLabel }}</span>

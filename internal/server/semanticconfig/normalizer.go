@@ -63,6 +63,7 @@ func ValidatePatchKeys(reg *Registry, keys []string) error {
 
 func normalizeDockerOptions(reg *Registry, snapshot *Snapshot, item map[string]any) {
 	values, _ := item["value"].(map[string]any)
+	enabledFields, _ := item["enabled_fields"].(map[string]any)
 	for subKey, value := range values {
 		legacy := "launcher.docker_options." + subKey
 		canonical, ok := reg.CanonicalKey(legacy)
@@ -73,6 +74,7 @@ func normalizeDockerOptions(reg *Registry, snapshot *Snapshot, item map[string]a
 		subItem["code"] = legacy
 		subItem["value"] = value
 		subItem["default_value"] = value
+		subItem["enabled"] = boolFromAny(enabledFields[subKey], false)
 		addNormalizedItem(reg, snapshot, canonical, legacy, subItem)
 	}
 }
@@ -87,6 +89,10 @@ func addNormalizedItem(reg *Registry, snapshot *Snapshot, canonical, sourceKey s
 	if defaultValue == nil {
 		defaultValue = value
 	}
+	enabled := boolFromAny(item["enabled"], false)
+	if boolFromAny(item["required"], false) {
+		enabled = true
+	}
 	next := SnapshotItem{
 		Key:          canonical,
 		Owner:        def.Owner,
@@ -95,7 +101,7 @@ func addNormalizedItem(reg *Registry, snapshot *Snapshot, canonical, sourceKey s
 		Label:        def.Label,
 		Value:        value,
 		DefaultValue: defaultValue,
-		Enabled:      boolFromAny(item["enabled"], true),
+		Enabled:      enabled,
 		Source:       anyMap(item["source"]),
 	}
 	if existing, ok := snapshot.Items[canonical]; ok {

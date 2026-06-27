@@ -112,6 +112,50 @@ func TestNormalizeConfigSetRewritesLegacyKeysAndReportsConflicts(t *testing.T) {
 	}
 }
 
+func TestNormalizeConfigSetDoesNotDefaultMissingEnabledToTrue(t *testing.T) {
+	reg := DefaultRegistry()
+	set := map[string]any{
+		"schema_version": 1,
+		"items": map[string]any{
+			"model_runtime.max_model_len": map[string]any{
+				"code":  "model_runtime.max_model_len",
+				"type":  "integer",
+				"value": 4096,
+			},
+			"model_runtime.gpu_memory_utilization": map[string]any{
+				"code":     "model_runtime.gpu_memory_utilization",
+				"type":     "number",
+				"value":    0.9,
+				"required": true,
+			},
+			"launcher.docker_options": map[string]any{
+				"code": "launcher.docker_options",
+				"type": "object",
+				"value": map[string]any{
+					"shm_size": "16g",
+				},
+				"enabled_fields": map[string]any{
+					"shm_size": true,
+				},
+			},
+		},
+	}
+
+	out, err := NormalizeConfigSet(reg, set)
+	if err != nil {
+		t.Fatalf("normalize config set: %v", err)
+	}
+	if out.Items["model_runtime.max_model_len"].Enabled {
+		t.Fatalf("missing enabled must default false: %#v", out.Items["model_runtime.max_model_len"])
+	}
+	if !out.Items["model_runtime.gpu_memory_utilization"].Enabled {
+		t.Fatalf("required item must be enabled: %#v", out.Items["model_runtime.gpu_memory_utilization"])
+	}
+	if !out.Items["docker.shm_size"].Enabled {
+		t.Fatalf("docker subfield enabled_fields metadata was not honored: %#v", out.Items["docker.shm_size"])
+	}
+}
+
 func TestValidatePatchRejectsLegacyKeysAndUnknownCanonicalKeys(t *testing.T) {
 	reg := DefaultRegistry()
 	err := ValidatePatchKeys(reg, []string{"backend.arg.max_model_len"})

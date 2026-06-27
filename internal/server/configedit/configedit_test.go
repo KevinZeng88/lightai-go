@@ -251,6 +251,83 @@ func TestApplyEditPatchToConfigSetKeepsDisabledValueAndHiddenItems(t *testing.T)
 	}
 }
 
+func TestApplyEditPatchOrdinaryEnabledRoundTripsThroughProjection(t *testing.T) {
+	set := testConfigSet()
+	items := set["items"].(map[string]any)
+	items["backend.arg.round_trip"] = map[string]any{
+		"code": "backend.arg.round_trip", "category": "model_runtime", "kind": "cli_arg", "type": "string",
+		"value": "keep-me", "enabled": false,
+		"render": map[string]any{"flag": "--round-trip", "label": "Round Trip"},
+	}
+
+	enabled := true
+	out, err := ApplyEditPatchToConfigSet(set, ConfigEditPatch{
+		Layer:    "node_backend_runtime",
+		ObjectID: "nbr-test",
+		Fields: []EditFieldPatch{
+			{Key: "backend.arg.round_trip", InternalKey: "backend.arg.round_trip", Value: "keep-me", Enabled: &enabled},
+		},
+	}, "NodeBackendRuntime", "nbr-test")
+	if err != nil {
+		t.Fatalf("apply enabled=true: %v", err)
+	}
+	view, err := ProjectConfigSetToEditView(ProjectInput{ConfigSet: out, Layer: "node_backend_runtime", ObjectKind: "node_backend_runtime", ObjectID: "nbr-test"})
+	if err != nil {
+		t.Fatalf("project enabled=true: %v", err)
+	}
+	field := requireField(t, flattenFields(view), "backend.arg.round_trip", "backend.arg.round_trip", nil, "advanced_parameters")
+	if !field.Enabled || field.Value != "keep-me" {
+		t.Fatalf("enabled=true did not round-trip with value preserved: %#v", field)
+	}
+
+	enabled = false
+	out, err = ApplyEditPatchToConfigSet(out, ConfigEditPatch{
+		Layer:    "node_backend_runtime",
+		ObjectID: "nbr-test",
+		Fields: []EditFieldPatch{
+			{Key: "backend.arg.round_trip", InternalKey: "backend.arg.round_trip", Value: "keep-me", Enabled: &enabled},
+		},
+	}, "NodeBackendRuntime", "nbr-test")
+	if err != nil {
+		t.Fatalf("apply enabled=false: %v", err)
+	}
+	view, err = ProjectConfigSetToEditView(ProjectInput{ConfigSet: out, Layer: "node_backend_runtime", ObjectKind: "node_backend_runtime", ObjectID: "nbr-test"})
+	if err != nil {
+		t.Fatalf("project enabled=false: %v", err)
+	}
+	field = requireField(t, flattenFields(view), "backend.arg.round_trip", "backend.arg.round_trip", nil, "advanced_parameters")
+	if field.Enabled || field.Value != "keep-me" {
+		t.Fatalf("enabled=false did not round-trip with value preserved: %#v", field)
+	}
+}
+
+func TestApplyEditPatchDockerSubfieldEnabledRoundTripsThroughProjection(t *testing.T) {
+	out, err := ApplyEditPatchToConfigSet(testConfigSet(), ConfigEditPatch{
+		Layer:    "backend_runtime",
+		ObjectID: "rt-test",
+		Fields: []EditFieldPatch{
+			{Key: "launcher.docker_options.shm_size", InternalKey: "launcher.docker_options", Path: []string{"shm_size"}, Value: "24gb", Enabled: boolPtr(true)},
+			{Key: "launcher.docker_options.group_add", InternalKey: "launcher.docker_options", Path: []string{"group_add"}, Value: []any{"video"}, Enabled: boolPtr(false)},
+		},
+	}, "BackendRuntime", "rt-test")
+	if err != nil {
+		t.Fatalf("apply docker patch: %v", err)
+	}
+	view, err := ProjectConfigSetToEditView(ProjectInput{ConfigSet: out, Layer: "backend_runtime", ObjectKind: "backend_runtime", ObjectID: "rt-test"})
+	if err != nil {
+		t.Fatalf("project docker view: %v", err)
+	}
+	fields := flattenFields(view)
+	shm := requireField(t, fields, "docker.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
+	if !shm.Enabled || shm.Value != "24gb" {
+		t.Fatalf("docker shm_size enabled/value did not round-trip: %#v", shm)
+	}
+	groupAdd := requireField(t, fields, "docker.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
+	if groupAdd.Enabled {
+		t.Fatalf("docker group_add enabled=false did not round-trip: %#v", groupAdd)
+	}
+}
+
 func TestApplyEditPatchToConfigSetMergesDockerOptionsAndForcesRequiredEnabled(t *testing.T) {
 	out, err := ApplyEditPatchToConfigSet(testConfigSet(), ConfigEditPatch{
 		Layer:    "backend_runtime",

@@ -192,6 +192,7 @@ func mergeCanonicalItem(code, canon string, item map[string]any, items map[strin
 
 func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 	value := valueMap(item)
+	enabledFields := nestedMap(item, "enabled_fields")
 	var fields []EditField
 	for _, spec := range dockerFieldSpecs {
 		code := "launcher.docker_options." + spec.Path
@@ -199,10 +200,10 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 		dockerItem["type"] = spec.Type
 		dockerItem["value"] = value[spec.Path]
 		dockerItem["required"] = false
-		// Docker sub-fields keep prefilled values separate from their enable toggle.
-		// The parent object only stores values, so sub-field projection defaults to
-		// unchecked unless a future schema explicitly carries a per-field enabled bit.
-		dockerItem["enabled"] = false
+		// Docker sub-fields keep value and enabled state independently. The
+		// parent object stores values under value and per-subfield toggles under
+		// enabled_fields to avoid inferring activation from a prefilled value.
+		dockerItem["enabled"] = boolValue(enabledFields[spec.Path])
 		field := projectItem(code, "launcher.docker_options", []string{spec.Path}, dockerItem, input)
 		field.Section = spec.Section
 		field.Widget = spec.Widget

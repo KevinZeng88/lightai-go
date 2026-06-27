@@ -21,13 +21,16 @@ func ApplyEditPatchToConfigSet(set map[string]any, patch ConfigEditPatch, layer,
 		if len(field.Path) > 0 {
 			target := valueMap(item)
 			setPathValue(target, field.Path, field.Value)
+			if field.Enabled != nil {
+				setPathEnabled(item, field.Path, *field.Enabled)
+			}
 		} else {
 			item["value"] = field.Value
 		}
 		required := boolValue(item["required"])
 		if required {
 			item["enabled"] = true
-		} else if field.Enabled != nil {
+		} else if field.Enabled != nil && len(field.Path) == 0 {
 			item["enabled"] = *field.Enabled
 		}
 		item["source"] = map[string]any{
@@ -45,6 +48,29 @@ func ApplyEditPatchToConfigSet(set map[string]any, patch ConfigEditPatch, layer,
 		item["enabled"] = true
 	}
 	return out, nil
+}
+
+func setPathEnabled(item map[string]any, path []string, enabled bool) {
+	if len(path) == 0 {
+		return
+	}
+	fields, _ := item["enabled_fields"].(map[string]any)
+	if fields == nil {
+		fields = map[string]any{}
+		item["enabled_fields"] = fields
+	}
+	fields[pathKey(path)] = enabled
+}
+
+func pathKey(path []string) string {
+	if len(path) == 0 {
+		return ""
+	}
+	key := path[0]
+	for _, part := range path[1:] {
+		key += "." + part
+	}
+	return key
 }
 
 func setPathValue(root map[string]any, path []string, value any) {

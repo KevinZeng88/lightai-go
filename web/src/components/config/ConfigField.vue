@@ -1,16 +1,31 @@
 <template>
-  <div class="config-field" :class="{ disabled: !field.enabled, readonly: readonly || field.readonly }">
+  <div
+    class="config-field"
+    :class="{ disabled: !field.enabled, readonly: readonly || field.readonly }"
+    data-testid="config-field"
+    :data-field-key="field.key"
+    :data-internal-key="field.internal_key"
+    :data-section-key="field.section"
+  >
     <div class="field-header">
       <el-checkbox
         v-if="field.has_enable && !field.required"
         v-model="field.enabled"
+        data-testid="config-field-enabled"
+        :data-field-key="field.key"
+        :data-internal-key="field.internal_key"
         :disabled="readonly || field.readonly"
         @change="$emit('change')"
       />
       <span class="field-label">{{ displayLabel }}</span>
       <el-tag v-if="field.required" size="small" type="danger" effect="plain">required</el-tag>
     </div>
-    <div class="field-control">
+    <div
+      class="field-control"
+      data-testid="config-field-value"
+      :data-field-key="field.key"
+      :data-internal-key="field.internal_key"
+    >
       <!-- Boolean switch -->
       <el-switch
         v-if="field.widget === 'boolean' || field.type === 'boolean'"

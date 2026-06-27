@@ -120,6 +120,17 @@ async function saveNBREdit() {
     }
     ElMessage.success('Saved')
     await load()
+    const updated = configs.value.find(r => r.id === selected.value?.id)
+    if (updated) {
+      selected.value = updated
+    } else if (selected.value?.id) {
+      nbrEditView.value = await getConfigEditView({
+        object_kind: 'node_backend_runtime',
+        object_id: selected.value.id,
+        layer: 'node_backend_runtime',
+        mode: 'edit',
+      })
+    }
   } catch (e: any) {
     ElMessage.error(e?.message || 'Save failed')
   } finally {
