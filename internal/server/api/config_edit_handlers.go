@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"lightai-go/internal/server/catalog"
 	"lightai-go/internal/server/configedit"
 )
 
@@ -27,8 +28,9 @@ func (h *AgentHandler) HandleConfigEditView(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusNotFound, "object not found")
 		return
 	}
+	configSetRaw := rawJSONString(obj["config_set_json"], "{}")
 	view, err := configedit.ProjectConfigSetToEditView(configedit.ProjectInput{
-		ConfigSet:   copyConfigSet(rawJSONString(obj["config_set_json"], "{}")),
+		ConfigSet:   copyConfigSet(configSetRaw),
 		Layer:       layer,
 		ObjectKind:  kind,
 		ObjectID:    id,
@@ -40,7 +42,29 @@ func (h *AgentHandler) HandleConfigEditView(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, view)
+
+	// Generate ConfigView from ConfigSet for tiered presentation
+	var configView *catalog.ConfigView
+	var cs catalog.ConfigSet
+	if err := json.Unmarshal([]byte(configSetRaw), &cs); err == nil {
+		cv := cs.GenerateView()
+		// Populate child panels from the bundle
+		for i, slot := range cs.ChildSlots {
+			if i < len(cv.ChildPanels) {
+				cv.ChildPanels[i].Slot = slot.Slot
+				cv.ChildPanels[i].Title = slot.Title
+			}
+		}
+		configView = &cv
+	}
+
+	response := map[string]interface{}{
+		"config_edit_view": view,
+	}
+	if configView != nil {
+		response["config_view"] = configView
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (h *AgentHandler) HandleConfigEditApply(w http.ResponseWriter, r *http.Request) {

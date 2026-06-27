@@ -20,9 +20,13 @@ func TestConfigEditViewAPIProjectsRuntimeWithoutInternalOrdinaryLabels(t *testin
 	if w.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
-	var view map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil {
+	var response map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode view: %v", err)
+	}
+	view, _ := response["config_edit_view"].(map[string]any)
+	if view == nil {
+		view = response // backward compat: old format had sections at top level
 	}
 	raw, _ := json.Marshal(view["sections"])
 	if strings.Contains(string(raw), `"label":"launcher.docker_options"`) || strings.Contains(string(raw), `"label":"runtime.env"`) {
