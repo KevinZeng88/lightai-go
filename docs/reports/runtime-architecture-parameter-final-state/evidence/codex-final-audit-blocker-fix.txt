@@ -1,0 +1,68 @@
+CODEX FINAL AUDIT BLOCKER FIX EVIDENCE
+======================================
+
+Audit: 17-codex-final-implementation-audit.md
+Verdict: REJECT_WITH_BLOCKERS
+Audited HEAD: 5d8cd37
+
+BLOCKER 1 — semanticconfig normalizer flat reads (FIXED)
+--------------------------------------------------------
+File: internal/server/semanticconfig/normalizer.go
+
+Changes:
+- item["code"] → tieredString(item, "schema", "key")
+- item["value"].(map[string]any) for docker → item["value"]["effective_value"]
+- item["enabled_fields"] → removed; reads from state tier
+- item["value"] (scalar) → tieredValue(item, "effective_value")
+- item["default_value"] → tieredValue(item, "default_value")
+- item["enabled"] → tieredBool(item, "state", "enabled")
+- item["required"] → tieredBool(item, "schema", "required")
+
+Added helpers: tieredString, tieredBool, tieredValue, ensureTieredValue, ensureTieredState
+Updated normalizeDockerOptions to read from tiered value.effective_value and state.enabled
+Updated addNormalizedItem to use tiered reads exclusively
+
+Tests: registry_normalizer_test.go fixtures converted to tiered format
+- TestNormalizeConfigSetRewritesLegacyKeysAndReportsConflicts: PASS
+- TestNormalizeConfigSetDoesNotDefaultMissingEnabledToTrue: PASS
+
+BLOCKER 2 — runtime_handlers.go raw config_set persistence (FIXED)
+----------------------------------------------------------------
+File: internal/server/api/runtime_handlers.go
+
+Changes:
+- buildRuntimeConfigSnapshot now REJECTS req["config_set"] and req["config_set_json"]
+  with 400 error: "use editable_config_patch to modify individual parameters"
+- Only the BackendRuntime's tiered config_set_json is used as the snapshot base
+
+Tests: runtime_boundary_test.go updated
+- TestCreateNodeBackendRuntimeAppliesRequestConfigSetSnapshot:
+  Uses editable_config_patch instead of raw config_set
+  Asserts tiered value.effective_value and state.enabled
+  Modified key from fake_new_param (non-existent) to launcher.image (existing)
+
+BLOCKER 3 — closeout update (DONE BELOW)
+-----------------------------------------
+Updated final-closeout.md in this commit.
+
+GREP RESULTS (post-fix)
+-----------------------
+No flat scalar item["value"] reads in production RunPlan paths.
+No flat item["default_value"] reads in semanticconfig.
+No flat item["enabled"] reads in semanticconfig.
+No enabled_fields reads in semanticconfig.
+
+Remaining non-tiered reads are limited to:
+- applyConfigOverrides: reads request payload (API input format, not stored data)
+- configedit apply.go: enabled_fields for Docker sub-field UI editing path
+- configedit project.go: enabled_fields + item["default_value"] for UI projection
+
+TEST RESULTS
+------------
+go test ./... -count=1: 18/18 PASS
+cd web && npm test -- --run: All PASS
+cd web && npm run build: built in 3.62s
+
+REMAINING BLOCKERS
+------------------
+OI-06: DOCUMENTED_BLOCKER (external hardware — NVIDIA/MetaX GPU not available)

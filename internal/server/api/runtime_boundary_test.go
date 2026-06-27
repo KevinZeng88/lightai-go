@@ -161,47 +161,53 @@ func TestCreateNodeBackendRuntimeAppliesRequestConfigSetSnapshot(t *testing.T) {
 	if err := db.QueryRow(`SELECT config_set_json FROM backend_runtimes WHERE id='rt-nbr-config-set'`).Scan(&runtimeSetRaw); err != nil {
 		t.Fatalf("read runtime config set: %v", err)
 	}
-	editedSet := copyConfigSet(runtimeSetRaw)
-	items := configSetItems(editedSet)
-	items["backend.arg.fake_new_param"] = map[string]interface{}{
-		"code":          "backend.arg.fake_new_param",
-		"category":      "model_runtime",
-		"kind":          "cli_arg",
-		"type":          "string",
-		"enabled":       true,
-		"value":         "node-local-value",
-		"default_value": "runtime-default",
-		"render": map[string]interface{}{
-			"flag":   "--fake-new-param",
-			"target": "cli",
-			"style":  "flag_space_value",
-		},
-	}
-	editedSet["items"] = items
+		editedSet := copyConfigSet(runtimeSetRaw)
+		items := configSetItems(editedSet)
+		items["launcher.image"] = map[string]interface{}{
+			"schema": map[string]interface{}{"key": "launcher.image", "category": "model_runtime", "kind": "cli_arg", "type": "string"},
+			"state":  map[string]interface{}{"enabled": true, "checked": true},
+			"value":  map[string]interface{}{"effective_value": "img:patched", "default_value": "runtime-default"},
+			"render": map[string]interface{}{
+				"flag":   "--fake-new-param",
+				"target": "cli",
+				"style":  "flag_space_value",
+			},
+		}
+		editedSet["items"] = items
 
-	w := httptest.NewRecorder()
-	body := jsonString(map[string]interface{}{
-		"backend_runtime_id": "rt-nbr-config-set",
-		"image_ref":          "img:nbr-config-set",
-		"config_set":         editedSet,
-	})
-	h.HandleEnableNodeBackendRuntime(w, newReq("POST", "/x", body, adminSession(), map[string]string{"id": "node-nbr-config-set"}))
-	if w.Code != 200 {
-		t.Fatalf("enable code=%d body=%s", w.Code, w.Body.String())
+		w := httptest.NewRecorder()
+		// Use editable_config_patch instead of raw config_set
+		body := jsonString(map[string]interface{}{
+			"backend_runtime_id": "rt-nbr-config-set",
+			"image_ref":          "img:nbr-config-set",
+			"editable_config_patch": map[string]interface{}{
+				"layer":     "node_backend_runtime",
+				"object_id": "node-nbr-config-set:rt-nbr-config-set",
+				"fields": []map[string]interface{}{
+					{"key": "launcher.image", "internal_key": "launcher.image", "value": "img:patched", "enabled": true},
+				},
+			},
+		})
+		h.HandleEnableNodeBackendRuntime(w, newReq("POST", "/x", body, adminSession(), map[string]string{"id": "node-nbr-config-set"}))
+		if w.Code != 200 {
+			t.Fatalf("enable code=%d body=%s", w.Code, w.Body.String())
+		}
+		var nbrSetRaw string
+		if err := db.QueryRow(`SELECT config_set_json FROM node_backend_runtimes WHERE id='node-nbr-config-set:rt-nbr-config-set'`).Scan(&nbrSetRaw); err != nil {
+			t.Fatalf("read NBR config set: %v", err)
+		}
+		nbrSet := parseConfigSet(nbrSetRaw)
+		item, _ := configSetItems(nbrSet)["launcher.image"].(map[string]interface{})
+		if item == nil {
+			t.Fatalf("NBR config set missing fake_new_param: %s", nbrSetRaw)
+		}
+		// Read from tiered value.effective_value and state.enabled
+		vt, _ := item["value"].(map[string]interface{})
+		st, _ := item["state"].(map[string]interface{})
+		if vt == nil || vt["effective_value"] != "img:patched" || st == nil || st["enabled"] != true {
+			t.Fatalf("fake_new_param not preserved in NBR config set: %#v", item)
+		}
 	}
-	var nbrSetRaw string
-	if err := db.QueryRow(`SELECT config_set_json FROM node_backend_runtimes WHERE id='node-nbr-config-set:rt-nbr-config-set'`).Scan(&nbrSetRaw); err != nil {
-		t.Fatalf("read NBR config set: %v", err)
-	}
-	nbrSet := parseConfigSet(nbrSetRaw)
-	item, _ := configSetItems(nbrSet)["backend.arg.fake_new_param"].(map[string]interface{})
-	if item == nil {
-		t.Fatalf("NBR config set missing fake_new_param: %s", nbrSetRaw)
-	}
-	if item["value"] != "node-local-value" || item["enabled"] != true {
-		t.Fatalf("fake_new_param not preserved in NBR config set: %#v", item)
-	}
-}
 
 func TestNodeBackendRuntimeCheckDoesNotRefreshSnapshot(t *testing.T) {
 	db := setupTestDB(t)

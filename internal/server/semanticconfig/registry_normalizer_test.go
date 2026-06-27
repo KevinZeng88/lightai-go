@@ -38,35 +38,31 @@ func TestNormalizeConfigSetRewritesLegacyKeysAndReportsConflicts(t *testing.T) {
 		"schema_version": 1,
 		"items": map[string]any{
 			"backend.common.port": map[string]any{
-				"code":  "backend.common.port",
-				"type":  "integer",
-				"value": 8000,
+				"schema": map[string]any{"key": "backend.common.port", "type": "integer"},
+				"value":  map[string]any{"effective_value": 8000},
 			},
 			"service.container_port": map[string]any{
-				"code":  "service.container_port",
-				"type":  "integer",
-				"value": 9000,
+				"schema": map[string]any{"key": "service.container_port", "type": "integer"},
+				"value":  map[string]any{"effective_value": 9000},
 			},
 			"backend.arg.max_model_len": map[string]any{
-				"code":  "backend.arg.max_model_len",
-				"type":  "integer",
-				"value": 4096,
+				"schema": map[string]any{"key": "backend.arg.max_model_len", "type": "integer"},
+				"value":  map[string]any{"effective_value": 4096},
 				"render": map[string]any{
 					"flag": "--max-model-len",
 				},
 			},
 			"backend.common.served_model_name": map[string]any{
-				"code":  "backend.common.served_model_name",
-				"type":  "string",
-				"value": "llama",
+				"schema": map[string]any{"key": "backend.common.served_model_name", "type": "string"},
+				"value":  map[string]any{"effective_value": "llama"},
 			},
 			"launcher.docker_options": map[string]any{
-				"code": "launcher.docker_options",
-				"type": "object",
-				"value": map[string]any{
+				"schema": map[string]any{"key": "launcher.docker_options", "type": "object"},
+				"state":  map[string]any{"enabled": true},
+				"value":  map[string]any{"effective_value": map[string]any{
 					"shm_size":  "16g",
 					"group_add": []any{"video"},
-				},
+				}},
 			},
 		},
 	}
@@ -118,25 +114,20 @@ func TestNormalizeConfigSetDoesNotDefaultMissingEnabledToTrue(t *testing.T) {
 		"schema_version": 1,
 		"items": map[string]any{
 			"model_runtime.max_model_len": map[string]any{
-				"code":  "model_runtime.max_model_len",
-				"type":  "integer",
-				"value": 4096,
+				"schema": map[string]any{"key": "model_runtime.max_model_len", "type": "integer"},
+				"value":  map[string]any{"effective_value": 4096},
 			},
 			"model_runtime.gpu_memory_utilization": map[string]any{
-				"code":     "model_runtime.gpu_memory_utilization",
-				"type":     "number",
-				"value":    0.9,
-				"required": true,
+				"schema": map[string]any{"key": "model_runtime.gpu_memory_utilization", "type": "number", "required": true},
+				"state":  map[string]any{},
+				"value":  map[string]any{"effective_value": 0.9},
 			},
 			"launcher.docker_options": map[string]any{
-				"code": "launcher.docker_options",
-				"type": "object",
-				"value": map[string]any{
+				"schema": map[string]any{"key": "launcher.docker_options", "type": "object"},
+				"state":  map[string]any{"enabled": true},
+				"value":  map[string]any{"effective_value": map[string]any{
 					"shm_size": "16g",
-				},
-				"enabled_fields": map[string]any{
-					"shm_size": true,
-				},
+				}},
 			},
 		},
 	}

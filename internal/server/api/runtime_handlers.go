@@ -942,10 +942,13 @@ func (h *AgentHandler) upsertNodeBackendRuntime(w http.ResponseWriter, r *http.R
 // This is called only at NodeBackendRuntime creation time (not on check/validate).
 func (h *AgentHandler) buildRuntimeConfigSnapshot(rt map[string]interface{}, runtimeID, imageRef string, req map[string]interface{}) (string, error) {
 	set := copyConfigSet(rawJSONString(rt["config_set_json"], "{}"))
-	if requestSet := mapFromAny(req["config_set"]); len(requestSet) > 0 {
-		set = copyConfigSet(jsonString(requestSet))
-	} else if requestSet := mapFromAny(req["config_set_json"]); len(requestSet) > 0 {
-		set = copyConfigSet(jsonString(requestSet))
+	// Reject caller-provided raw config_set / config_set_json — only tiered snapshot from
+	// the BackendRuntime is accepted. Use editable_config_patch for modifications.
+	if _, ok := req["config_set"]; ok {
+		return "", fmt.Errorf("config_set is not accepted; use editable_config_patch to modify individual parameters")
+	}
+	if _, ok := req["config_set_json"]; ok {
+		return "", fmt.Errorf("config_set_json is not accepted; use editable_config_patch to modify individual parameters")
 	}
 	if imageRef != "" {
 		setConfigValue(set, "launcher.image", imageRef, "NodeBackendRuntime", runtimeID, "explicit_node_runtime_image")
