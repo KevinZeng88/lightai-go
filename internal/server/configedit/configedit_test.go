@@ -92,9 +92,8 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 	}
 	depFields := flattenFields(depView)
 	depParam := requireField(t, depFields, "backend.arg.fake_new_param", "backend.arg.fake_new_param", nil, "advanced_parameters")
-	// Has non-empty value "abc" — should be enabled under new rules.
-	if !depParam.HasEnable || !depParam.Enabled {
-		t.Fatalf("deployment param with non-empty value should be enabled: %#v", depParam)
+	if !depParam.HasEnable || depParam.Enabled || depParam.Value != "abc" {
+		t.Fatalf("disabled deployment param should stay unchecked while retaining value: %#v", depParam)
 	}
 
 	// Docker sub-fields hidden at deployment layer.
@@ -113,20 +112,64 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 	if sec.Enabled {
 		t.Fatal("empty security_options should default disabled")
 	}
-	// shm_size has value "16gb" → should be enabled.
+	// shm_size has a prefilled value, but values/defaults must not imply enabled.
 	shm := requireField(t, fields, "docker.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
-	if !shm.Enabled {
-		t.Fatal("shm_size with value should be enabled")
+	if shm.Enabled || shm.Value != "16gb" {
+		t.Fatalf("shm_size value should be retained without auto-enabling: %#v", shm)
 	}
 	// optional_devices is empty → should default disabled.
 	odev := requireField(t, fields, "docker.optional_devices", "launcher.docker_options", []string{"optional_devices"}, "devices_mounts")
 	if odev.Enabled {
 		t.Fatal("empty optional_devices should default disabled")
 	}
-	// group_add has value ["video"] → should be enabled.
+	// group_add has a prefilled value, but values/defaults must not imply enabled.
 	ga := requireField(t, fields, "docker.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
-	if !ga.Enabled {
-		t.Fatal("group_add with value should be enabled")
+	if ga.Enabled {
+		t.Fatalf("group_add value should not auto-enable the field: %#v", ga)
+	}
+}
+
+func TestProjectConfigSetToEditViewDoesNotInferEnabledFromDefaultOrVisibility(t *testing.T) {
+	set := testConfigSet()
+	items := set["items"].(map[string]any)
+	items["backend.arg.default_common"] = map[string]any{
+		"code": "backend.arg.default_common", "category": "model_runtime", "kind": "cli_arg", "type": "string",
+		"default_value": "prefilled", "visible_by_default": true, "tier": "common",
+		"render": map[string]any{"flag": "--default-common", "label": "Default Common"},
+	}
+	items["backend.arg.boolean_default"] = map[string]any{
+		"code": "backend.arg.boolean_default", "category": "model_runtime", "kind": "cli_arg", "type": "boolean",
+		"default_value": false, "visible_by_default": true,
+		"render": map[string]any{"flag": "--boolean-default", "label": "Boolean Default"},
+	}
+	items["backend.arg.required_default"] = map[string]any{
+		"code": "backend.arg.required_default", "category": "model_runtime", "kind": "cli_arg", "type": "string",
+		"default_value": "required-value", "required": true,
+		"render": map[string]any{"flag": "--required-default", "label": "Required Default"},
+	}
+
+	view, err := ProjectConfigSetToEditView(ProjectInput{
+		ConfigSet:   set,
+		Layer:       "node_backend_runtime",
+		ObjectKind:  "node_backend_runtime",
+		ObjectID:    "nbr-test",
+		ObjectLabel: "NBR Test",
+	})
+	if err != nil {
+		t.Fatalf("project view: %v", err)
+	}
+	fields := flattenFields(view)
+	common := requireField(t, fields, "backend.arg.default_common", "backend.arg.default_common", nil, "model_serving")
+	if common.Enabled || common.Value != "prefilled" || common.Tier != "common" {
+		t.Fatalf("common/default should control display only, not enabled: %#v", common)
+	}
+	booleanDefault := requireField(t, fields, "backend.arg.boolean_default", "backend.arg.boolean_default", nil, "model_serving")
+	if booleanDefault.Enabled || booleanDefault.Value != false {
+		t.Fatalf("boolean default_value must not force enabled: %#v", booleanDefault)
+	}
+	required := requireField(t, fields, "backend.arg.required_default", "backend.arg.required_default", nil, "advanced_parameters")
+	if !required.Enabled || required.HasEnable {
+		t.Fatalf("required field must be forced enabled without user toggle: %#v", required)
 	}
 }
 

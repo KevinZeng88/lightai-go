@@ -199,8 +199,10 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 		dockerItem["type"] = spec.Type
 		dockerItem["value"] = value[spec.Path]
 		dockerItem["required"] = false
-		// Docker sub-fields default to disabled if their value is empty.
-		dockerItem["enabled"] = hasValue(value, spec.Path) && !isEmptyValue(value[spec.Path])
+		// Docker sub-fields keep prefilled values separate from their enable toggle.
+		// The parent object only stores values, so sub-field projection defaults to
+		// unchecked unless a future schema explicitly carries a per-field enabled bit.
+		dockerItem["enabled"] = false
 		field := projectItem(code, "launcher.docker_options", []string{spec.Path}, dockerItem, input)
 		field.Section = spec.Section
 		field.Widget = spec.Widget
@@ -227,27 +229,14 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	}
 	required := boolValue(item["required"])
 
-	// --- Enabled default logic ---
-	// required → always enabled
-	// has non-empty value → enabled
-	// has default_value that is meaningful → enabled
-	// optional empty → disabled
+	// Enabled is an explicit saved toggle. Defaults/values/tier/visibility only
+	// prefill or organize UI fields; they must not opt parameters into RunPlan.
 	enabled := false
-	if required {
-		enabled = true
-	} else if !isEmptyValue(item["value"]) {
-		enabled = true
-	} else if !isEmptyValue(item["default_value"]) {
-		enabled = true
-	} else if hasValue(item, "enabled") {
-		// Respect explicit enabled toggle from stored item.
+	if hasValue(item, "enabled") {
 		enabled = boolValue(item["enabled"])
 	}
-	// For boolean widgets, default_value of false is a valid default.
-	if widgetFor(item) == "boolean" && !required && isEmptyValue(item["value"]) {
-		if hasValue(item, "default_value") {
-			enabled = true // boolean switches are always meaningful
-		}
+	if required {
+		enabled = true
 	}
 
 	// Determine if this is a capability/internal field that should be forced to readonly summary.

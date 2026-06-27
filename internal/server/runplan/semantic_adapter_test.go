@@ -83,6 +83,37 @@ func TestSemanticAdapterContextFlags(t *testing.T) {
 	}
 }
 
+func TestSemanticAdapterRespectsDisabledSemanticItems(t *testing.T) {
+	in := semanticAdapterBaseInput("vllm")
+	snapshot := semanticAdapterSnapshot()
+	for key, item := range snapshot.Items {
+		if key == "model_runtime.max_model_len" || key == "model_runtime.gpu_memory_utilization" || key == "deployment.served_model_name" {
+			item.Enabled = false
+			snapshot.Items[key] = item
+		}
+	}
+	snapshot.Items["model_runtime.gpu_memory_utilization"] = semanticconfig.SnapshotItem{
+		Key:     "model_runtime.gpu_memory_utilization",
+		Enabled: false,
+		Value:   0.85,
+	}
+
+	in = ApplySemanticSnapshot(in, snapshot, "vllm")
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("resolve errors: %v", errs)
+	}
+	args := strings.Join(plan.Args, " ")
+	for _, unwanted := range []string{"--max-model-len", "--gpu-memory-utilization", "--served-model-name"} {
+		if strings.Contains(args, unwanted) {
+			t.Fatalf("disabled semantic item rendered %q: %s", unwanted, args)
+		}
+	}
+	if in.Deployment.Parameters["max_model_len"] != 4096 {
+		t.Fatalf("disabled semantic value should be retained in parameters: %#v", in.Deployment.Parameters)
+	}
+}
+
 func semanticAdapterBaseInput(backend string) ResolveInput {
 	args := []string{"{{model_container_path}}", "--host", "0.0.0.0", "--port", "{{container_port}}"}
 	if backend == "llamacpp" {
@@ -115,24 +146,29 @@ func semanticAdapterSnapshot() semanticconfig.Snapshot {
 	return semanticconfig.Snapshot{
 		Items: map[string]semanticconfig.SnapshotItem{
 			"deployment.host_port": {
-				Key:   "deployment.host_port",
-				Value: 18080,
+				Key:     "deployment.host_port",
+				Enabled: true,
+				Value:   18080,
 			},
 			"service.container_port": {
-				Key:   "service.container_port",
-				Value: 8000,
+				Key:     "service.container_port",
+				Enabled: true,
+				Value:   8000,
 			},
 			"deployment.served_model_name": {
-				Key:   "deployment.served_model_name",
-				Value: "served-alias",
+				Key:     "deployment.served_model_name",
+				Enabled: true,
+				Value:   "served-alias",
 			},
 			"service.listen_host": {
-				Key:   "service.listen_host",
-				Value: "0.0.0.0",
+				Key:     "service.listen_host",
+				Enabled: true,
+				Value:   "0.0.0.0",
 			},
 			"model_runtime.max_model_len": {
-				Key:   "model_runtime.max_model_len",
-				Value: 4096,
+				Key:     "model_runtime.max_model_len",
+				Enabled: true,
+				Value:   4096,
 			},
 		},
 	}

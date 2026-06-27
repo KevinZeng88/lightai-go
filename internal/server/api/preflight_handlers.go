@@ -91,18 +91,12 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 		}
 	}
 
-	// Verify the NBR's node has a valid ModelLocation for the given artifact.
-	var mlID string
-	h.DB.QueryRow(`SELECT id FROM model_locations
-		WHERE model_artifact_id = ? AND node_id = ?
-		AND verification_status IN ('verified','warning','manually_accepted')
-		ORDER BY updated_at DESC LIMIT 1`,
-		req.ModelArtifactID, req.NodeID).Scan(&mlID)
-	if mlID == "" {
+	// Verify the NBR's node has a deployable ModelLocation for the given artifact.
+	if loc, _, reason := h.findDeployableModelLocation(req.ModelArtifactID, req.NodeID); loc == nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"can_run":           false,
 			"candidate_nodes":   []interface{}{},
-			"errors":            []map[string]interface{}{{"code": "model_location_missing", "message": "no model location found on the NBR's node for this model artifact", "field": "model_artifact_id", "severity": "error"}},
+			"errors":            []map[string]interface{}{{"code": "model_location_missing", "message": reason, "field": "model_artifact_id", "severity": "error"}},
 			"warnings":          warnings,
 			"resolved_run_plan": nil,
 		})

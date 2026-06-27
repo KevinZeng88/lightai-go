@@ -192,7 +192,7 @@ func (h *AgentHandler) HandlePatchNodeBackendRuntime(w http.ResponseWriter, r *h
 }
 
 // HandleDeleteNodeBackendRuntime removes a node backend runtime.
-// Blocks if active instances reference it.
+// Blocks if deployments or active instances reference it.
 func (h *AgentHandler) HandleDeleteNodeBackendRuntime(w http.ResponseWriter, r *http.Request) {
 	nbrID := r.PathValue("nbr_id")
 	if !authz.CheckNBRTenant(r, h.DB.DB, nbrID) {
@@ -202,6 +202,12 @@ func (h *AgentHandler) HandleDeleteNodeBackendRuntime(w http.ResponseWriter, r *
 	var nbrNodeID, nbrRuntimeID string
 	if err := h.DB.QueryRow(`SELECT node_id, backend_runtime_id FROM node_backend_runtimes WHERE id = ?`, nbrID).Scan(&nbrNodeID, &nbrRuntimeID); err != nil {
 		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	var deploymentCount int
+	h.DB.QueryRow(`SELECT COUNT(*) FROM model_deployments WHERE source_node_backend_runtime_id = ?`, nbrID).Scan(&deploymentCount)
+	if deploymentCount > 0 {
+		writeError(w, http.StatusConflict, "node runtime is used by deployments")
 		return
 	}
 	var instanceCount int

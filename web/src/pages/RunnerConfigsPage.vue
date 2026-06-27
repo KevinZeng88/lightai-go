@@ -16,9 +16,10 @@
       </el-table-column>
       <el-table-column prop="image_ref" :label="$t('runtimes.image')" min-width="260" show-overflow-tooltip />
       <el-table-column prop="status" :label="$t('common.status')" width="140" />
-      <el-table-column :label="$t('common.actions')" width="160">
+      <el-table-column :label="$t('common.actions')" width="220">
         <template #default="{ row }">
           <el-button size="small" @click.stop="check(row)">{{ $t('runnerConfigs.check') }}</el-button>
+          <el-button size="small" type="danger" @click.stop="deleteNBR(row)">{{ $t('common.delete') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -48,7 +49,8 @@
           @update:patch="onNBREditPatch"
         />
         <el-empty v-else :description="$t('common.noData')" />
-        <div style="margin-top:12px;text-align:right">
+        <div style="margin-top:12px;display:flex;justify-content:space-between;gap:12px">
+          <el-button type="danger" @click="deleteNBR(selected)">{{ $t('common.delete') }}</el-button>
           <el-button type="primary" :loading="saving" @click="saveNBREdit">{{ $t('common.save') }}</el-button>
         </div>
         <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
@@ -61,7 +63,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { apiClient } from '@/api/client'
 import { getConfigEditView, applyConfigEditPatch } from '@/api/configEdit'
 import JsonViewer from '@/components/common/JsonViewer.vue'
@@ -69,6 +72,7 @@ import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import NodeRuntimeConfigWizard from '@/components/deployments/NodeRuntimeConfigWizard.vue'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 
+const { t } = useI18n()
 const loading = ref(false)
 const saving = ref(false)
 const createVisible = ref(false)
@@ -141,6 +145,30 @@ async function check(row: any) {
   await apiClient.post(`/nodes/${row.node_id}/backend-runtimes/${row.id}/check-request`, {})
   ElMessage.success('Check requested')
   await load()
+}
+
+async function deleteNBR(row: any) {
+  if (!row?.id || !row?.node_id) return
+  const name = row.display_name || row.name || row.id
+  try {
+    await ElMessageBox.confirm(t('runnerConfigs.deleteConfirm', { name }), t('common.confirm'), {
+      type: 'warning',
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
+    })
+  } catch {
+    return
+  }
+  try {
+    await apiClient.delete(`/nodes/${row.node_id}/backend-runtimes/${row.id}`)
+    ElMessage.success(t('runnerConfigs.deleted'))
+    if (selected.value?.id === row.id) {
+      detailVisible.value = false
+    }
+    await load()
+  } catch (e: any) {
+    ElMessage.error(e?.message || e?.response?.data?.error || 'Delete failed')
+  }
 }
 
 onMounted(load)

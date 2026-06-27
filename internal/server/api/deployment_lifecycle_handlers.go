@@ -136,16 +136,8 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 
 	// Validate model location matches NBR node (same check as preview/preflight/start).
 	if artifactID != "" && nbrNodeID != "" {
-		var mlID string
-		h.DB.QueryRow(`SELECT id FROM model_locations
-			WHERE model_artifact_id = ? AND node_id = ?
-			AND verification_status IN ('verified','warning','manually_accepted')
-			AND match_status IN ('exact_match','probable_match','manual_attested')
-			ORDER BY updated_at DESC LIMIT 1`,
-			artifactID, nbrNodeID).Scan(&mlID)
-		if mlID == "" {
-			writeError(w, http.StatusBadRequest,
-				"model_location_missing: selected model has no verified location on selected runtime node")
+		if loc, _, reason := h.findDeployableModelLocation(artifactID, nbrNodeID); loc == nil {
+			writeError(w, http.StatusBadRequest, reason)
 			return
 		}
 	}
@@ -817,17 +809,15 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	pf.processStartConfig = processStartConfigFromProbe(nbrProbeResults)
 
 	// Validate ModelLocation.
-	var verificationStatus, matchStatus string
-	h.DB.QueryRow(`SELECT id, model_root, relative_path, absolute_path, verification_status, match_status
-		FROM model_locations
-		WHERE model_artifact_id = ? AND node_id = ? AND verification_status IN ('verified','warning','manually_accepted') AND match_status IN ('exact_match','probable_match','manual_attested')
-		ORDER BY updated_at DESC LIMIT 1`, pf.artifactID, pf.placement.NodeID).Scan(&pf.locationID, &pf.modelRoot, &pf.relativePath, &pf.absolutePath, &verificationStatus, &matchStatus)
-	if pf.locationID == "" {
-		pf.addErr("model_location_missing", fmt.Sprintf("model location is not available on target node %s for artifact %s", pf.placement.NodeID, pf.artifactID), map[string]interface{}{"node_id": pf.placement.NodeID, "artifact_id": pf.artifactID})
+	location, _, reason := h.findDeployableModelLocation(pf.artifactID, pf.placement.NodeID)
+	if location == nil {
+		pf.addErr("model_location_missing", reason, map[string]interface{}{"node_id": pf.placement.NodeID, "artifact_id": pf.artifactID})
 		return pf
 	}
-	_ = verificationStatus
-	_ = matchStatus
+	pf.locationID = strVal(location, "id", "")
+	pf.modelRoot = strVal(location, "model_root", "")
+	pf.relativePath = strVal(location, "relative_path", "")
+	pf.absolutePath = strVal(location, "absolute_path", "")
 
 	// Fetch GPU info.
 	for _, gid := range pf.placement.AcceleratorIds {

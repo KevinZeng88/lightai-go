@@ -361,6 +361,18 @@ func workflowAssertModelArtifactListDetailConsistent(t *testing.T, app *workflow
 			t.Fatalf("model artifact list/detail mismatch field %q: list=%#v detail=%#v", field, listItem[field], detail[field])
 		}
 	}
+	listLocations := workflowLocationsField(t, listItem)
+	detailLocations := workflowLocationsField(t, detail)
+	if len(listLocations) != len(detailLocations) {
+		t.Fatalf("model artifact list/detail locations length mismatch: list=%#v detail=%#v", listLocations, detailLocations)
+	}
+	for _, detailLocation := range detailLocations {
+		locationID := workflowStringField(t, detailLocation, "id")
+		listLocation := workflowArtifactLocationByID(t, listItem, locationID)
+		if !reflect.DeepEqual(listLocation, detailLocation) {
+			t.Fatalf("model artifact list/detail location mismatch for %s: list=%#v detail=%#v", locationID, listLocation, detailLocation)
+		}
+	}
 }
 
 func workflowAssertArtifactFieldsFromScan(t *testing.T, artifact map[string]interface{}, scan map[string]interface{}) {

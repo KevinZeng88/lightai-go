@@ -6,6 +6,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"lightai-go/internal/server/db"
 )
 
 // TestContractPreflightAcceptsReadyWithWarnings verifies R-003: preflight/dry-run/start
@@ -135,6 +138,120 @@ func TestContractPreflightRejectsModelLocationMissing(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["can_run"] != false {
 		t.Fatal("missing model location allowed by preflight")
+	}
+}
+
+func TestContractModelLocationEligibilityAllowsSameNodeVerifiedExact(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	nodeID := "node-ml-ok"
+	runtimeID := "br-ml-ok"
+	nbrID := nodeID + ":" + runtimeID
+	artifactID := "art-ml-ok"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-ml-ok',?,'nvidia',0,'RTX','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
+	insertRuntime(t, db, runtimeID, "Runtime ML OK", "")
+	insertNodeBackendRuntime(t, db, nbrID, runtimeID, nodeID, "img:test", "ready", "ok", 1, 1, "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	insertModelLocationStatus(t, db, "ml-ok", artifactID, nodeID, "verified", "exact_match", "")
+
+	pw := httptest.NewRecorder()
+	h.HandlePreflightDeployments(pw, newReq("POST", "/x", `{"model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nbrID+`","node_id":"`+nodeID+`","host_port":9000}`, adminSession(), nil))
+	if pw.Code != http.StatusOK {
+		t.Fatalf("preflight code=%d body=%s", pw.Code, pw.Body.String())
+	}
+	var preflight map[string]interface{}
+	json.Unmarshal(pw.Body.Bytes(), &preflight)
+	if preflight["can_run"] != true {
+		t.Fatalf("verified+exact_match same-node location blocked: %s", pw.Body.String())
+	}
+
+	cw := httptest.NewRecorder()
+	h.HandleCreateDeployment(cw, newReq("POST", "/x", `{"name":"dep-ml-ok","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nbrID+`","service_json":{"host_port":9001}}`, adminSession(), nil))
+	if cw.Code != http.StatusCreated {
+		t.Fatalf("create deployment code=%d body=%s", cw.Code, cw.Body.String())
+	}
+}
+
+func TestContractModelLocationEligibilityRejectsDifferentNode(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	nodeID := "node-ml-target"
+	otherNodeID := "node-ml-other"
+	runtimeID := "br-ml-different"
+	nbrID := nodeID + ":" + runtimeID
+	artifactID := "art-ml-different"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	runtimeBoundaryInsertOnlineNode(t, db, otherNodeID)
+	insertRuntime(t, db, runtimeID, "Runtime ML Different", "")
+	insertNodeBackendRuntime(t, db, nbrID, runtimeID, nodeID, "img:test", "ready", "ok", 1, 1, "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	insertModelLocationStatus(t, db, "ml-other", artifactID, otherNodeID, "verified", "exact_match", "")
+
+	w := httptest.NewRecorder()
+	h.HandlePreflightDeployments(w, newReq("POST", "/x", `{"model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nbrID+`","node_id":"`+nodeID+`","host_port":9000}`, adminSession(), nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("preflight code=%d body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["can_run"] != false {
+		t.Fatalf("different-node location allowed: %s", w.Body.String())
+	}
+	for _, want := range []string{artifactID, nodeID, otherNodeID, "verified", "exact_match"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("error missing %q in body: %s", want, w.Body.String())
+		}
+	}
+}
+
+func TestContractModelLocationEligibilityRejectsBadStatuses(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	nodeID := "node-ml-bad"
+	runtimeID := "br-ml-bad"
+	nbrID := nodeID + ":" + runtimeID
+	artifactID := "art-ml-bad"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	insertRuntime(t, db, runtimeID, "Runtime ML Bad", "")
+	insertNodeBackendRuntime(t, db, nbrID, runtimeID, nodeID, "img:test", "ready", "ok", 1, 1, "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	insertModelLocationStatus(t, db, "ml-bad", artifactID, nodeID, "verified", "mismatch", "checksum differs")
+
+	pw := httptest.NewRecorder()
+	h.HandlePreflightDeployments(pw, newReq("POST", "/x", `{"model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nbrID+`","node_id":"`+nodeID+`","host_port":9000}`, adminSession(), nil))
+	if pw.Code != http.StatusOK {
+		t.Fatalf("preflight code=%d body=%s", pw.Code, pw.Body.String())
+	}
+	var preflight map[string]interface{}
+	json.Unmarshal(pw.Body.Bytes(), &preflight)
+	if preflight["can_run"] != false {
+		t.Fatalf("bad match status allowed by preflight: %s", pw.Body.String())
+	}
+
+	cw := httptest.NewRecorder()
+	h.HandleCreateDeployment(cw, newReq("POST", "/x", `{"name":"dep-ml-bad","model_artifact_id":"`+artifactID+`","node_backend_runtime_id":"`+nbrID+`","service_json":{"host_port":9001}}`, adminSession(), nil))
+	if cw.Code != http.StatusBadRequest {
+		t.Fatalf("create with bad location code=%d body=%s", cw.Code, cw.Body.String())
+	}
+	for _, want := range []string{artifactID, nodeID, "verified", "mismatch", "checksum differs"} {
+		if !strings.Contains(cw.Body.String(), want) {
+			t.Fatalf("create error missing %q in body: %s", want, cw.Body.String())
+		}
+	}
+}
+
+func insertModelLocationStatus(t *testing.T, db *db.DB, id, artifactID, nodeID, verificationStatus, matchStatus, lastError string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := db.Exec(`INSERT INTO model_locations
+		(id, model_artifact_id, node_id, path_type, model_root, relative_path, absolute_path,
+		 size_bytes, match_status, verification_status, last_error, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		id, artifactID, nodeID, "directory", "/models", id, "/models/"+id,
+		12345, matchStatus, verificationStatus, lastError, "", now, now); err != nil {
+		t.Fatalf("insert model_location: %v", err)
 	}
 }
 

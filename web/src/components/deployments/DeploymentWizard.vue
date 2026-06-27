@@ -143,6 +143,9 @@ const deployableRuntimes = computed(() => {
 
 const hasArtifacts = computed(() => props.artifacts && props.artifacts.length > 0)
 const hasRuntimes = computed(() => props.nodeRuntimes && props.nodeRuntimes.length > 0)
+const selectedArtifact = computed(() =>
+  props.artifacts.find((artifact: any) => artifact.id === form.model_artifact_id)
+)
 
 function isNBRDeployable(nbr: any): boolean {
   if (!nbr) return false
@@ -173,17 +176,28 @@ function checkNodeCompatibility(): boolean {
   if (!nbr) return true
 
   const nbrNodeId = nbr.node_id
-  const locs = (props.modelLocations || []).filter(
+  const explicitLocations = (props.modelLocations || []).filter(
     (l: any) => l.model_artifact_id === form.model_artifact_id
   )
+  const artifactLocations = Array.isArray(selectedArtifact.value?.locations)
+    ? selectedArtifact.value.locations
+    : []
+  const locs = explicitLocations.length > 0 ? explicitLocations : artifactLocations
+  const deployableVerificationStatuses = ['verified', 'warning', 'manually_accepted']
+  const deployableMatchStatuses = ['exact_match', 'probable_match', 'manual_attested']
   const hasLocationOnNode = locs.some(
     (l: any) => l.node_id === nbrNodeId &&
-      (l.verification_status === 'verified' || l.verification_status === 'warning' || l.verification_status === 'manually_accepted')
+      deployableVerificationStatuses.includes(l.verification_status) &&
+      deployableMatchStatuses.includes(l.match_status)
   )
 
   if (!hasLocationOnNode) {
-    compatibilityError.value = t('deployments.nodeMismatch') ||
-      'This model has no verified location on the selected runtime node. Choose an NBR on the same node, or add a model location for this node.'
+    const visibleLocations = locs.map((l: any) =>
+      `id=${l.id || ''} node_id=${l.node_id || ''} verification_status=${l.verification_status || ''} match_status=${l.match_status || ''} last_error=${l.last_error || ''}`
+    ).join('; ') || '<none>'
+    const artifactName = selectedArtifact.value?.display_name || selectedArtifact.value?.name || form.model_artifact_id
+    compatibilityError.value = `${t('deployments.nodeMismatch') ||
+      'This model has no deployable location on the selected runtime node.'} model_artifact_id=${form.model_artifact_id} model=${artifactName} node_id=${nbrNodeId} visibleLocations=${visibleLocations}`
     return false
   }
   return true

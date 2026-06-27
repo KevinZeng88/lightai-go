@@ -408,7 +408,11 @@ func (h *AgentHandler) queryArtifacts(query string, args ...interface{}) ([]map[
 			continue
 		}
 		capabilitySet := mapFromAny(capabilitySetJSON)
-		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "capability_set": capabilitySet, "capabilities": nilToDefault(capabilitySet["capabilities"], []interface{}{}), "capability_sources": nilToDefault(capabilitySet["capability_sources"], map[string]interface{}{}), "default_test_mode": testMode, "parameter_defaults": nilToDefault(capabilitySet["parameter_defaults"], []interface{}{}), "tenant_id": tid, "created_at": ca, "updated_at": ua})
+		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "source_type": st, "path": path, "format": frmt, "task_type": tt, "architecture": arch, "size_label": sl, "quantization": quant, "default_context_length": ctxLen, "estimated_vram_bytes": vram, "required_gpu_count": gpuCount, "capability_set": capabilitySet, "capabilities": nilToDefault(capabilitySet["capabilities"], []interface{}{}), "capability_sources": nilToDefault(capabilitySet["capability_sources"], map[string]interface{}{}), "default_test_mode": testMode, "parameter_defaults": nilToDefault(capabilitySet["parameter_defaults"], []interface{}{}), "locations": []map[string]interface{}{}, "tenant_id": tid, "created_at": ca, "updated_at": ua})
+	}
+	rows.Close()
+	for _, artifact := range out {
+		artifact["locations"] = h.listModelLocations(strVal(artifact, "id", ""))
 	}
 	if out == nil {
 		out = []map[string]interface{}{}

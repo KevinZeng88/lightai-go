@@ -75,15 +75,9 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 	}
 
 	// Check model location.
-	var mlID string
-	h.DB.QueryRow(`SELECT id FROM model_locations
-		WHERE model_artifact_id = ? AND node_id = ?
-		AND verification_status IN ('verified','warning','manually_accepted')
-		ORDER BY updated_at DESC LIMIT 1`,
-		modelArtifactID, nbrNodeID).Scan(&mlID)
-	if mlID == "" {
+	if loc, _, reason := h.findDeployableModelLocation(modelArtifactID, nbrNodeID); loc == nil {
 		errs = append(errs, errEntry("model_location_missing",
-			"no verified model location found on the NBR's node for this model artifact",
+			reason,
 			"model_artifact_id", "error"))
 		writeJSON(w, http.StatusOK, previewResponse(false, nil, "", runplan.LintResult{Status: "ok"}, errs, warns))
 		return

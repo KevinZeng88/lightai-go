@@ -13,6 +13,7 @@ const files = [
   'src/components/config/ConfigField.vue',
   'src/utils/configEditView.ts',
   'src/components/deployments/NodeRuntimeConfigWizard.vue',
+  'src/components/deployments/DeploymentWizard.vue',
   'src/components/DockerImagePicker.vue',
   'src/components/deployments/DeploymentOverrideEditor.vue',
   'src/api/runtimes.ts',
@@ -130,6 +131,8 @@ check('RunnerConfigsPage uses ConfigEditView', rcpSrc.includes('ConfigEditView')
 check('RunnerConfigsPage does NOT use RuntimeParameterEditor', !rcpSrc.includes('RuntimeParameterEditor'))
 check('RunnerConfigsPage applies editable_config_patch', rcpSrc.includes('applyConfigEditPatch'))
 check('RunnerConfigsPage uses node_backend_runtime layer', rcpSrc.includes('node_backend_runtime'))
+check('RunnerConfigsPage has NBR delete confirmation', rcpSrc.includes('ElMessageBox') && rcpSrc.includes('deleteNBR'))
+check('RunnerConfigsPage deletes NBR through node-scoped route', rcpSrc.includes('apiClient.delete(`/nodes/${row.node_id}/backend-runtimes/${row.id}`)'))
 
 // i. NBR wizard has node image selector.
 const wizardSrc = sources['src/components/deployments/NodeRuntimeConfigWizard.vue']
@@ -157,6 +160,12 @@ check('runtimeDisplay has displayIsTechSlug check', rtSrc.includes('displayIsTec
 const zhSrc = sources['src/locales/zh-CN.ts']
 check('zh-CN has service.listen_host i18n', zhSrc.includes('service.listen_host'))
 check('zh-CN has service.container_port i18n', zhSrc.includes('service.listen_host') && zhSrc.includes('容器监听端口'))
+
+// m. Deployment wizard uses complete model location eligibility.
+const deploymentWizardSrc = sources['src/components/deployments/DeploymentWizard.vue']
+check('DeploymentWizard falls back to artifact.locations', deploymentWizardSrc.includes('selectedArtifact') && deploymentWizardSrc.includes('locations'))
+check('DeploymentWizard checks deployable match_status', deploymentWizardSrc.includes('match_status') && deploymentWizardSrc.includes('exact_match') && deploymentWizardSrc.includes('probable_match') && deploymentWizardSrc.includes('manual_attested'))
+check('DeploymentWizard compatibility error includes artifact and node context', deploymentWizardSrc.includes('model_artifact_id') && deploymentWizardSrc.includes('nbrNodeId') && deploymentWizardSrc.includes('visibleLocations'))
 
 if (failed > 0) {
   console.error(`\n${failed} test(s) FAILED`)

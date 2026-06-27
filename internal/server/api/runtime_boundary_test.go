@@ -610,6 +610,100 @@ func runtimeBoundaryInsertArtifact(t *testing.T, db *db.DB, id string) {
 		id, "test-model", "Test Model", "local_path", "/tmp/test", "huggingface", "chat", "", now, now)
 }
 
+func TestDeleteNodeBackendRuntimeWithoutReferencesSucceeds(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	nodeID := "node-delete-free"
+	runtimeID := "rt-delete-free"
+	nbrID := nodeID + ":" + runtimeID
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	insertRuntime(t, database, runtimeID, "Runtime Delete Free", "")
+	insertNodeBackendRuntime(t, database, nbrID, runtimeID, nodeID, "img:delete", "ready", "ok", 1, 1, "")
+
+	w := httptest.NewRecorder()
+	h.HandleDeleteNodeBackendRuntime(w, newReq("DELETE", "/x", `{}`, adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete code=%d body=%s", w.Code, w.Body.String())
+	}
+	var count int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM node_backend_runtimes WHERE id = ?`, nbrID).Scan(&count); err != nil {
+		t.Fatalf("count nbr: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("node backend runtime still exists after delete")
+	}
+}
+
+func TestDeleteNodeBackendRuntimeRejectsDeploymentReference(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	nodeID := "node-delete-dep"
+	runtimeID := "rt-delete-dep"
+	nbrID := nodeID + ":" + runtimeID
+	artifactID := "art-delete-dep"
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	insertRuntime(t, database, runtimeID, "Runtime Delete Dep", "")
+	insertNodeBackendRuntime(t, database, nbrID, runtimeID, nodeID, "img:delete", "ready", "ok", 1, 1, "")
+	insertDeploymentArtifactLocation(t, database, artifactID, nodeID)
+	now := time.Now().Format(time.RFC3339)
+	if _, err := database.Exec(`INSERT INTO model_deployments
+		(id, name, display_name, model_artifact_id, backend_runtime_id, source_node_backend_runtime_id, replicas, placement_json, service_json, config_overrides_json, config_set_json, source_metadata_json, desired_state, status, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"dep-delete-ref", "dep-delete-ref", "Delete Ref", artifactID, runtimeID, nbrID, 1, "{}", "{}", "{}", "{}", "{}", "stopped", "saved", "", now, now); err != nil {
+		t.Fatalf("insert deployment ref: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	h.HandleDeleteNodeBackendRuntime(w, newReq("DELETE", "/x", `{}`, adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("delete with deployment ref code=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "deployment") {
+		t.Fatalf("error should mention deployment reference: %s", w.Body.String())
+	}
+}
+
+func TestDeleteNodeBackendRuntimeRejectsActiveInstanceReference(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	nodeID := "node-delete-inst"
+	runtimeID := "rt-delete-inst"
+	nbrID := nodeID + ":" + runtimeID
+	artifactID := "art-delete-inst"
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	insertRuntime(t, database, runtimeID, "Runtime Delete Inst", "")
+	insertNodeBackendRuntime(t, database, nbrID, runtimeID, nodeID, "img:delete", "ready", "ok", 1, 1, "")
+	insertDeploymentArtifactLocation(t, database, artifactID, nodeID)
+	now := time.Now().Format(time.RFC3339)
+	if _, err := database.Exec(`INSERT INTO model_deployments
+		(id, name, display_name, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, config_overrides_json, config_set_json, source_metadata_json, desired_state, status, tenant_id, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"dep-active-inst", "dep-active-inst", "Active Inst", artifactID, runtimeID, 1, "{}", "{}", "{}", "{}", "{}", "running", "running", "", now, now); err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+	if _, err := database.Exec(`INSERT INTO model_instances
+		(id, deployment_id, tenant_id, node_id, actual_state, host_port, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		"inst-active-ref", "dep-active-inst", "", nodeID, "running", 8123, now, now); err != nil {
+		t.Fatalf("insert instance: %v", err)
+	}
+	if _, err := database.Exec(`INSERT INTO resolved_run_plans
+		(id, deployment_id, instance_id, tenant_id, backend_runtime_id, node_backend_runtime_id, plan_json, docker_preview, input_hash, plan_hash, created_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		"plan-active-ref", "dep-active-inst", "inst-active-ref", "", runtimeID, nbrID, "{}", "docker run", "ih-active-ref", "ph-active-ref", now); err != nil {
+		t.Fatalf("insert run plan: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	h.HandleDeleteNodeBackendRuntime(w, newReq("DELETE", "/x", `{}`, adminSession(), map[string]string{"id": nodeID, "nbr_id": nbrID}))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("delete with active instance code=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "active instances") {
+		t.Fatalf("error should mention active instances: %s", w.Body.String())
+	}
+}
+
 // ── NBR readiness enforcement tests ─────────────────────────────────────
 
 // TestPreflightDeploymentFailsWhenNoNBRExists verifies that deployment start
