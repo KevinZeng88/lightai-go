@@ -1,0 +1,148 @@
+
+> lightai-web@0.1.0 test
+> node tests/apiClientPaths.test.mjs && node tests/formatters.test.mjs && node tests/i18nKeys.test.mjs && node tests/i18nMissingKeys.test.mjs && node tests/noHardcodedCredentials.test.mjs && node tests/runtimeBoundaryUi.test.mjs && node tests/modelCapabilities.test.mjs && node tests/configEditContract.test.mjs --run
+
+
+Passed: 12, Failed: 0
+PASS: All API modules use relative paths
+PASS [zh-CN null]: "-"
+PASS [zh-CN empty]: "-"
+PASS [zh-CN invalid]: "-"
+PASS [zh-CN <1s]: "<1秒前"
+PASS [zh-CN 2s]: "2秒前"
+PASS [zh-CN 30s]: "30秒前"
+PASS [zh-CN 59s]: "59秒前"
+PASS [zh-CN 1min]: "1分钟前"
+PASS [zh-CN 5min]: "5分钟前"
+PASS [zh-CN 59min]: "59分钟前"
+PASS [zh-CN 1hr]: "1小时前"
+PASS [zh-CN 23hr]: "23小时前"
+PASS [zh-CN 25hr (same year)]: "06-27 00:24:08"
+PASS [zh-CN future 2s]: "<1秒前"
+PASS [zh-CN future 10s]: "时间异常"
+PASS [en-US null]: "-"
+PASS [en-US invalid]: "-"
+PASS [en-US <1s]: "<1s ago"
+PASS [en-US 2s]: "2s ago"
+PASS [en-US 59s]: "59s ago"
+PASS [en-US 1min]: "1m ago"
+PASS [en-US 59min]: "59m ago"
+PASS [en-US 1hr]: "1h ago"
+PASS [en-US 23hr]: "23h ago"
+PASS [en-US future]: "<1s ago"
+PASS: No "刚刚" or "just now" in any output
+PASS [zh-CN cross-year]: "2025-06-28 01:24:08" (YYYY-MM-DD HH:mm:ss format)
+
+All tests PASSED
+zh-CN keys: 1083
+en-US keys: 1083
+PASS: i18n keys consistent between zh-CN and en-US
+PASS: all 699 i18n key references found in both locale files and resolve to strings
+  zh-CN leaf keys: 1083
+  en-US leaf keys: 1083
+PASS: No hardcoded credentials found
+PASS: UI does not reference config_snapshot_json
+PASS: UI does not reference parameter_schema_json
+PASS: UI does not reference parameter_values_json
+PASS: UI does not reference parameters_json
+PASS: UI does not reference default_args_json
+PASS: UI does not reference default_env_json
+PASS: UI does not reference docker_json
+PASS: UI does not reference model_mount_json
+PASS: UI does not reference health_check_json
+PASS: UI does not reference capabilities_json
+PASS: UI does not reference image_candidates_json
+PASS: UI does not reference default_images_json
+PASS: UI does not reference env_json
+PASS: UI does not reference ports_json
+PASS: UI does not reference volumes_json
+PASS: UI does not reference devices_json
+PASS: UI does not reference resource_controls_json
+PASS: Backend runtime page no longer imports hardcoded human form
+PASS: Node runtime wizard no longer imports hardcoded human form
+PASS: Runtime human field helper is not used by active pages
+PASS: Backend runtime page shows Advanced Diagnostics (ConfigSet collapsed)
+PASS: Runner config page enables NBR through current route (via wizard)
+PASS: Runner config page checks NBR through check-request
+PASS: Deployment create uses node_backend_runtime_id
+PASS: Deployment create uses DeploymentWizard (with config_overrides)
+PASS: Deployment edit runtime selector is absent
+PASS: Model deployment page does not import RuntimeParameterEditor
+PASS: ConfigEditView renders sections in order
+PASS: ConfigEditView required fields cannot be disabled
+PASS: ConfigEditView optional fields show enabled checkbox
+PASS: ConfigEditView keeps inputs editable when field disabled
+PASS: ConfigEditView has structured Docker widgets
+PASS: ConfigEditView ordinary rendering does not show launcher.docker_options label
+PASS: Advanced raw section defaults collapsed
+PASS: BackendRuntimesPage uses ConfigEditView
+PASS: BackendsPage uses ConfigEditView for BackendVersion
+PASS: NodeRuntimeConfigWizard uses ConfigEditView
+PASS: DeploymentOverrideEditor uses ConfigEditView patch model
+PASS: Config edit API client uses view/apply endpoints
+PASS: NodeRuntimeConfigWizard selector main title avoids raw id
+PASS: BackendRuntime clone dialog passes display_name/name
+PASS: ConfigSection maps section.key to i18n (SECTION_I18N_MAP)
+PASS: ConfigSection does not show raw section.label directly
+PASS: ConfigSection uses sectionI18nLabel computed
+PASS: ConfigSection advanced_raw tag uses i18n
+PASS: ConfigField has displayLabel computed with i18n mapping
+PASS: ConfigField template uses displayLabel not field.label
+PASS: key_value_table key column has el-input
+PASS: key_value_table filters empty keys on writeback
+PASS: key_value_table has both key and value columns
+PASS: device_table host_path has el-input
+PASS: device_table container_path has el-input
+PASS: device_table readonly has el-switch
+PASS: device_table initDeviceRows handles string arrays (allStrings)
+PASS: device_table onDeviceTableChange preserves readonly
+PASS: runtimeDisplay extractVersion uses is_editable for builtin detection
+PASS: runtimeDisplay does not use source_type/managed_by for version detection
+PASS: runtimeDisplay strips runtime. prefix from display_name
+PASS: runtimeDisplay strips runtime. prefix from name
+PASS: RunnerConfigsPage uses ConfigEditView
+PASS: RunnerConfigsPage does NOT use RuntimeParameterEditor
+PASS: RunnerConfigsPage applies editable_config_patch
+PASS: RunnerConfigsPage uses node_backend_runtime layer
+PASS: RunnerConfigsPage has NBR delete confirmation
+PASS: RunnerConfigsPage deletes NBR through node-scoped route
+PASS: NodeRuntimeConfigWizard uses Docker image picker with manual input support
+PASS: NodeRuntimeConfigWizard no longer owns ad hoc node image loading
+PASS: NodeRuntimeConfigWizard uses node_backend_runtime layer for ConfigEditView
+PASS: NodeRuntimeConfigWizard uses DockerImagePicker component
+PASS: NodeRuntimeConfigWizard does not read file-style repoTags image fields
+PASS: DockerImagePicker does not render NaN image sizes
+PASS: BackendsPage Add Parameter uses i18n title
+PASS: BackendsPage Add Parameter has developer hint
+PASS: runtimeDisplay normalizes runtime.xxx prefix names
+PASS: runtimeDisplay has product-friendly backend/vendor maps
+PASS: runtimeDisplay detects tech slugs and uses product name
+PASS: runtimeDisplay has displayIsTechSlug check
+PASS: zh-CN has service.listen_host i18n
+PASS: zh-CN has service.container_port i18n
+PASS: DeploymentWizard falls back to artifact.locations
+PASS: DeploymentWizard checks deployable match_status
+PASS: DeploymentWizard compatibility error includes artifact and node context
+
+All tests PASSED
+PASS: Qwen without persisted caps returns empty (inference disabled by default)
+PASS: Qwen with allowInference infers chat capability
+PASS: Qwen with allowInference chat source is inferred
+PASS: Qwen recommendedTestMode is chat
+PASS: embedding-like model infers embedding
+PASS: embedding-like model defaults to auto because UI only supports chat/completion
+PASS: causal LLM infers completion
+PASS: completion-only model defaults to completion
+PASS: chat failure mentions endpoint
+PASS: chat failure mentions HTTP status
+PASS: chat failure is specific to Chat Completion
+PASS: not-running failure includes current state
+PASS: persisted capabilities override inference
+PASS: persisted capability source is user_override for chat
+PASS: persisted capability source is scan for completion
+PASS: persisted default_test_mode=chat returns chat
+PASS: empty persisted caps without allowInference returns empty
+PASS: empty persisted caps with allowInference falls back
+PASS: default_test_mode=completion returns completion
+PASS: default_test_mode=auto falls back to inference
+ConfigEdit contract tests PASSED

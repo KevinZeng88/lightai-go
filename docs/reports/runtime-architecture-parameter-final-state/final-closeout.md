@@ -42,11 +42,21 @@ Result: 18/18 packages PASS. Zero failures.
 # Web tests
 cd web && npm test -- --run
 Result: All tests PASS. ConfigEdit contract tests PASSED.
+Evidence: docs/reports/runtime-architecture-parameter-final-state/evidence/web-test-output.txt
 
 # Web build
 cd web && npm run build
-Result: Build succeeds (3.58s).
+Result: Build succeeds (3.54s).
+Evidence: docs/reports/runtime-architecture-parameter-final-state/evidence/web-build-output.txt
 ```
+
+### 5.1 Final repair changes (2026-06-28)
+
+- Removed all flat shape fallbacks from configset_helpers.go (configValue, configItemEnabled, configItemSchemaField, defaultValueFromItem)
+- Fixed setConfigValueTiered to never overwrite item["value"] with scalar; always preserves tiered struct
+- Fixed setItemEffectiveValue (configedit) same way
+- Strengthened SourceMap: source labels derived from NBR provenance (pv.Source, pv.CopiedFrom); system_generated entries have source_chain
+- Added TestResolveWithSourceMapDoesNotReturnNilMap, TestSourceMapFromProvenanceTracksSourceChain tests
 
 ## 6. Commits
 
