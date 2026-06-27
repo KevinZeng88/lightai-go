@@ -75,6 +75,10 @@
     {
       "file": "15-codex-second-review-instructions.md",
       "role": "codex_second_review_instructions"
+    },
+    {
+      "file": "16-codex-second-review.md",
+      "role": "codex_second_review"
     }
   ],
   "expected_generated_documents": [
@@ -88,7 +92,7 @@
       "file": "16-codex-second-review.md",
       "generated_by": "Codex",
       "required_before_claude_autorun": true,
-      "status": "pending"
+      "status": "generated"
     }
   ],
   "hard_contracts": [
