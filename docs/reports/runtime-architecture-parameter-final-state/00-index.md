@@ -33,12 +33,14 @@ docs/reports/runtime-architecture-parameter-final-state/
 ├── 14-codex-review-fix-plan.md
 ├── 15-codex-second-review-instructions.md
 ├── 16-codex-second-review.md
+├── 17-codex-final-implementation-audit.md
 ├── evidence/
 ├── templates/
 └── manifest.json
 ```
 
 `13-codex-review.md` 为 Codex 第一轮审核结果。`14-codex-review-fix-plan.md` 是用户与 ChatGPT 对 review 的正式设计决策。`15-codex-second-review-instructions.md` 用于第二轮 Codex 复审。`16-codex-second-review.md` 为第二轮复审结果。
+`17-codex-final-implementation-audit.md` 为当前 main HEAD 的最终实现审计结果。
 
 ## 第二轮修订定位
 
