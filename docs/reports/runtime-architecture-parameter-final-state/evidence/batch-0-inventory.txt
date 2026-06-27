@@ -1,0 +1,81 @@
+BATCH 0 — BASELINE AND INVENTORY
+================================
+
+Date: 2026-06-28
+Branch: main (clean working tree, up to date with origin/main)
+Commit at start: 23f9d9c docs: add second codex review for configset bundle plan
+
+FILES WITH config_set_json / config_overrides_json / ConfigEdit / RuntimeParameterEditor / RunPlan REFERENCES
+---------------------------------------------------------------------------------------------------------
+
+SERVER (Go):
+  internal/server/configedit/apply.go              — ApplyEditPatchToConfigSet
+  internal/server/configedit/validate.go            — ValidateEditPatch
+  internal/server/configedit/project.go             — ProjectConfigSetToEditView, ConfigEditView
+  internal/server/configedit/types.go               — ConfigEditView, ConfigEditDiagnostics, ConfigEditPatch
+  internal/server/configedit/configedit_test.go     — ConfigEditPatch tests
+  internal/server/api/config_edit_handlers.go       — HandleConfigEditView, HandleConfigEditApply
+  internal/server/api/config_edit_handlers_test.go  — ConfigEditView API tests
+  internal/server/api/configset_helpers.go          — config_overrides_json, config_set_json
+  internal/server/api/deployment_preview_handlers.go — RunPlan resolution preview
+  internal/server/api/agent_handlers.go             — currentRunPlanID
+  internal/server/api/node_runtime_handlers.go      — config_set_json on NBR
+  internal/server/api/runtime_handlers.go           — config_set_json on BackendRuntime
+  internal/server/api/backend_handlers.go           — config_set_json on Backend/BackendVersion
+  internal/server/api/router.go                     — /api/v1/config-edit/view, /api/v1/config-edit/apply
+  internal/server/api/workflow_lifecycle_test.go    — RunPlan logs
+  internal/server/api/workflow_deployment_runplan_test.go — Deployment RunPlan tests
+  internal/server/api/ui_persistence_runplan_test.go — RunPlan immutability tests
+  internal/server/api/deployment_preflight_contract_test.go — config_set_json mutation tests
+  internal/server/api/runtime_boundary_test.go      — NBR config_set_json boundary tests
+  internal/server/api/node_run_plan_logs_test.go    — NodeRunPlan logs tests
+  internal/server/api/catalog_seed_drift_test.go    — config_set_json drift tests
+  internal/server/api/phase3_rbac_test.go           — config_set_json in RBAC tests
+  internal/server/runplan/types.go                  — ResolvedRunPlan struct
+  internal/server/runplan/resolver.go               — RunPlan resolver
+  internal/server/runplan/resolver_test.go          — RunPlan resolver tests
+  internal/server/runplan/lint.go                   — LintRunPlan
+  internal/server/runplan/lint_test.go              — LintRunPlan tests
+  internal/server/runplan/preview.go                — EquivalentCommandPreview
+  internal/server/runplan/metax_huawei_test.go      — MetaX/Huawei RunPlan tests
+  internal/server/runplan/llamacpp_nvidia_test.go   — llama.cpp RunPlan tests
+  internal/server/runplan/semantic_adapter_test.go  — semantic adapter tests
+  internal/server/models/runplan.go                 — ResolvedRunPlan model
+  internal/server/db/db.go                          — DB schema: config_set_json, config_overrides_json
+  internal/server/catalog/loader.go                 — catalog seed: config_set_json
+  internal/agent/runtime/runplan_adapter.go         — ConvertRunplanToAgentSpec
+
+WEB (Vue/TS):
+  web/src/components/config/ConfigEditView.vue      — ConfigEdit Vue component
+  web/src/components/config/ConfigField.vue          — ConfigField component
+  web/src/components/config/ConfigSection.vue        — ConfigSection component
+  web/src/pages/RunnerConfigsPage.vue               — Runner configs page
+  web/tests/configEditContract.test.mjs             — ConfigEdit contract test
+  web/src/components/common/RuntimeParameterEditor.vue — Legacy runtime parameter editor
+  web/src/utils/runtimeParameterViewModel.ts        — Runtime parameter view model
+  web/src/api/                                      — API client paths
+  web/src/stores/                                   — State store paths
+
+DATABASE TABLES with config_set_json / config_overrides_json:
+  inference_backends.config_set_json
+  backend_versions.config_set_json
+  backend_runtimes.config_set_json
+  node_backend_runtimes.config_set_json
+  model_deployments.config_set_json
+  model_deployments.config_overrides_json
+
+API ROUTES:
+  POST /api/v1/config-edit/view
+  POST /api/v1/config-edit/apply
+
+SUMMARY COUNTS:
+  Total references in internal/: ~200+ lines
+  Total references in web/: ~2000+ lines (Vue components, utils, stores)
+  Total references in docs/: ~200+ lines
+  DB columns with config_set_json: 5 tables
+  DB columns with config_overrides_json: 1 table (model_deployments)
+
+UNCOMMITTED CHANGES: none (working tree clean)
+
+PROTECTED FILE: deploy/observability/grafana/provisioning/dashboards/dashboards.yaml
+  — not in current diff, will be excluded from commits in this batch series.
