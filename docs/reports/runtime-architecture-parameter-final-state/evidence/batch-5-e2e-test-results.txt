@@ -1,0 +1,109 @@
+BATCH 5 — API-FIRST E2E EVIDENCE
+=================================
+
+Date: 2026-06-28
+Commit: 90a1ff5 feat(runplan): batch-4 shared RunPlan builder and parameter source map
+
+FULL TEST SUITE RESULTS
+-----------------------
+
+go test ./... -count=1
+
+ok  lightai-go/cmd/agent            0.004s
+ok  lightai-go/internal/agent/collector      0.638s
+ok  lightai-go/internal/agent/metrics        0.004s
+ok  lightai-go/internal/agent/register       0.009s
+ok  lightai-go/internal/agent/runtime        4.009s
+ok  lightai-go/internal/agent/state          0.005s
+ok  lightai-go/internal/common/errors        0.002s
+ok  lightai-go/internal/common/token         0.003s
+ok  lightai-go/internal/common/version       0.001s
+ok  lightai-go/internal/runtimecontract      0.002s
+ok  lightai-go/internal/server/agentclient   2.006s
+ok  lightai-go/internal/server/api           5.492s
+ok  lightai-go/internal/server/auth          0.005s
+ok  lightai-go/internal/server/authz         0.003s
+ok  lightai-go/internal/server/catalog       0.009s
+ok  lightai-go/internal/server/configedit    0.004s
+ok  lightai-go/internal/server/runplan       0.005s
+ok  lightai-go/internal/server/semanticconfig 0.002s
+
+Result: ALL 18 packages PASS. Zero failures.
+
+BACKEND-SPECIFIC RunPlan TESTS
+------------------------------
+
+TestResolveVLLMNVIDIA:
+  - vLLM container with HF model, GPU, model mount, args, env, health check
+  - docker run ... --privileged --ipc host --shm-size 10g --gpus "device=0"
+  - PASS with full Docker preview output
+
+TestResolveSGLangNVIDIA:
+  - SGLang container with model path, host/port, GPU
+  - docker run ... sglang serve --model-path /models/... --host 0.0.0.0 --port 30000
+  - PASS with full Docker preview output
+
+TestLlamaCppNvidiaRunPlan:
+  - llama.cpp container with GGUF model, --ctx-size, --host, --port
+  - docker run ... -m /models/llama.gguf --host 0.0.0.0 --port 8000 --ctx-size 4096
+  - PASS
+
+TestLlamaCppRunPlanNoGPU:
+  - CPU-only mode, no GPU device request
+  - PASS
+
+TestResolveMetaXRunPlanUsesRuntimeDockerOptions:
+  - MetaX vendor device binding, no --gpus flag, raw device path mapping
+  - PASS
+
+TestResolveHuaweiRunPlanUsesAscendVisibleDevices:
+  - Huawei vendor Ascend device binding
+  - PASS
+
+Key assertions confirmed:
+- vLLM / SGLang / llama.cpp RunPlan preview output matches expected Docker spec
+- Preview docker_run command can be compared with actual Docker create spec
+- Port, model path, GPU devices, env vars all correctly rendered
+- Vendor-specific device binding works (NVIDIA --gpus, MetaX raw devices, Huawei Ascend)
+
+API-LEVEL E2E TESTS
+-------------------
+
+Workflow lifecycle tests:
+- TestWorkflowDeploymentPreflightRunPlan: PASS
+- TestWorkflowDeploymentRunPlanPreservesNBRSnapshot: PASS
+- TestWorkflowLifecycle* tests (create→preflight→start→health→stop): PASS
+- TestWorkflowNBRProbeChain: PASS (image present → ready)
+- TestWorkflowNBRProbeMissingImageOnlyFromInspectNotFound: PASS (missing image detected)
+- TestWorkflowNBRProbeInspectErrorIsNotMissingImage: PASS (inspect error ≠ missing)
+
+ConfigEdit/RunPlan persistence tests:
+- TestRunPlanImmutableAfterDeploymentEdit: PASS (historical RunPlan not mutated)
+- TestConfigEditViewAPI*: PASS (config edit view projection)
+- TestNBRIsolationAfterBVMutation: PASS (child snapshot isolated from parent mutation)
+
+CONFIGSETBUNDLE DOMAIN TESTS
+----------------------------
+
+Batch 1 (types): 14/14 PASS
+Batch 2 (copy-on-create): 11/11 PASS
+Batch 3 (presentation): 9/9 PASS
+Batch 4 (source map): 4/4 PASS
+
+LIMITATIONS
+-----------
+
+Tests requiring live Docker/GPU infrastructure (NVIDIA real smoke, MetaX hardware
+validation) are not runnable in this dev environment. These are documented as
+DOCUMENTED_BLOCKER in the closeout.
+
+Tests requiring a running web dev server (npm/Vitest) are documented below.
+
+WEB TEST STATUS
+---------------
+
+cd web && npm test — NOT RUN (requires node_modules)
+cd web && npm run build — NOT RUN (requires node_modules)
+
+The web test infrastructure requires npm install before running. This is noted
+as an infrastructure dependency in the closeout.
