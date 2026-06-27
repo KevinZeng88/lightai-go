@@ -91,6 +91,10 @@
     {
       "file": "19-codex-final-targeted-acceptance-audit.md",
       "role": "codex_final_targeted_acceptance_audit"
+    },
+    {
+      "file": "20-codex-final-acceptance-audit.md",
+      "role": "codex_final_acceptance_audit"
     }
   ],
   "expected_generated_documents": [
@@ -120,6 +124,12 @@
     },
     {
       "file": "19-codex-final-targeted-acceptance-audit.md",
+      "generated_by": "Codex",
+      "required_before_final_acceptance": true,
+      "status": "generated"
+    },
+    {
+      "file": "20-codex-final-acceptance-audit.md",
       "generated_by": "Codex",
       "required_before_final_acceptance": true,
       "status": "generated"
