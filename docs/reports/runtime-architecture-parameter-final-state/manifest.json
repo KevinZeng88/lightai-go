@@ -59,13 +59,18 @@
     {
       "file": "12-codex-review-instructions.md",
       "role": "codex_review_instructions"
+    },
+    {
+      "file": "13-codex-review.md",
+      "role": "codex_review"
     }
   ],
   "expected_generated_documents": [
     {
       "file": "13-codex-review.md",
       "generated_by": "Codex",
-      "required_before_claude_autorun": true
+      "required_before_claude_autorun": true,
+      "status": "generated"
     }
   ],
   "hard_contracts": [

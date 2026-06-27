@@ -28,12 +28,13 @@ docs/reports/runtime-architecture-parameter-final-state/
 ├── 10-claude-execution-prompt.md
 ├── 11-final-closeout-template.md
 ├── 12-codex-review-instructions.md
+├── 13-codex-review.md
 ├── evidence/
 ├── templates/
 └── manifest.json
 ```
 
-`13-codex-review.md` 由 Codex 审核后生成并提交，不随初始文档包提供。
+`13-codex-review.md` 为 Codex 审核结果，必须在 Claude 执行前阅读。
 
 ## 安装方式
 
@@ -69,6 +70,7 @@ Codex 审核和 Claude 执行前按以下顺序阅读：
 11. `10-claude-execution-prompt.md`
 12. `11-final-closeout-template.md`
 13. `12-codex-review-instructions.md`
+14. `13-codex-review.md`
 
 ## 阶段主目标
 
