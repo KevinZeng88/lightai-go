@@ -132,67 +132,113 @@ type ConfigItem struct {
 
 // AlignTiers populates the tiered fields from legacy flat fields.
 // Call this after materializing a ConfigItem from catalog YAML or registry defaults.
+//
+// IMPORTANT: tiered fields that already have non-zero values are NOT overwritten.
+// This prevents EffectiveSnapshot/merge operations from reverting local edits.
 func (ci *ConfigItem) AlignTiers() {
 	if ci == nil {
 		return
 	}
-	// Schema
-	ci.Schema.Key = ci.Code
-	ci.Schema.Category = ci.Category
-	ci.Schema.Kind = ci.Kind
-	ci.Schema.Type = ci.Type
-	ci.Schema.Required = ci.Required
-	ci.Schema.Advanced = ci.Advanced
-	ci.Schema.ReadOnly = ci.Readonly
-	ci.Schema.DisplayOrder = ci.Order
-	ci.Schema.SupportLevel = ci.SupportLevel
-	ci.Schema.Constraints = ci.Constraints
+	// Schema — only populate from flat fields when tiered field is zero-value
+	if ci.Schema.Key == "" {
+		ci.Schema.Key = ci.Code
+	}
+	if ci.Schema.Category == "" {
+		ci.Schema.Category = ci.Category
+	}
+	if ci.Schema.Kind == "" {
+		ci.Schema.Kind = ci.Kind
+	}
+	if ci.Schema.Type == "" {
+		ci.Schema.Type = ci.Type
+	}
+	if !ci.Schema.Required && ci.Required {
+		ci.Schema.Required = ci.Required
+	}
+	if !ci.Schema.Advanced && ci.Advanced {
+		ci.Schema.Advanced = ci.Advanced
+	}
+	if !ci.Schema.ReadOnly && ci.Readonly {
+		ci.Schema.ReadOnly = ci.Readonly
+	}
+	if ci.Schema.DisplayOrder == 0 {
+		ci.Schema.DisplayOrder = ci.Order
+	}
+	if ci.Schema.SupportLevel == "" {
+		ci.Schema.SupportLevel = ci.SupportLevel
+	}
+	if ci.Schema.Constraints == nil {
+		ci.Schema.Constraints = ci.Constraints
+	}
 	if ci.Render != nil {
-		ci.Schema.Target = strVal(ci.Render["target"])
-		ci.Schema.ArgName = strVal(ci.Render["flag"])
-		ci.Schema.EnvName = strVal(ci.Render["env_name"])
+		if ci.Schema.Target == "" {
+			ci.Schema.Target = strVal(ci.Render["target"])
+		}
+		if ci.Schema.ArgName == "" {
+			ci.Schema.ArgName = strVal(ci.Render["flag"])
+		}
+		if ci.Schema.EnvName == "" {
+			ci.Schema.EnvName = strVal(ci.Render["env_name"])
+		}
 	}
 	if ci.Extensions != nil {
-		if l, ok := ci.Extensions["label"].(string); ok {
-			ci.Schema.Label = l
+		if ci.Schema.Label == "" {
+			if l, ok := ci.Extensions["label"].(string); ok {
+				ci.Schema.Label = l
+			}
 		}
-		if g, ok := ci.Extensions["group"].(string); ok {
-			ci.Presentation.Group = g
+		if ci.Presentation.Group == "" {
+			if g, ok := ci.Extensions["group"].(string); ok {
+				ci.Presentation.Group = g
+			}
 		}
 	}
 
-	// Value
-	ci.Value_.DefaultValue = ci.DefaultValue
-	if ci.Value != nil {
-		if ci.Enabled {
-			ci.Value_.LocalValue = ci.Value
+	// Value — only set from flat fields if tiered EffectiveValue is nil
+	if ci.Value_.EffectiveValue == nil {
+		ci.Value_.DefaultValue = ci.DefaultValue
+		if ci.Value != nil {
+			if ci.Enabled {
+				ci.Value_.LocalValue = ci.Value
+			} else {
+				ci.Value_.InheritedValue = ci.Value
+			}
+			ci.Value_.EffectiveValue = ci.Value
 		} else {
-			ci.Value_.InheritedValue = ci.Value
+			ci.Value_.EffectiveValue = ci.DefaultValue
 		}
-		ci.Value_.EffectiveValue = ci.Value
-	} else {
-		ci.Value_.EffectiveValue = ci.DefaultValue
 	}
 
-	// State
-	ci.State_.Enabled = ci.Enabled
-	ci.State_.Checked = ci.Enabled // current-layer local edit => checked
-	ci.State_.Editable = !ci.Readonly
-	ci.State_.Visible = ci.Visibility != "hidden"
-	ci.State_.Valid = true
-
-	// Provenance
-	if ci.Source != nil {
-		ci.Provenance_.ValueSource = ci.Source["layer"]
-		ci.Provenance_.LastValueLayer = ci.Source["layer"]
-		ci.Provenance_.LastValueOwnerID = ci.Source["ref"]
+	// State — only set from flat fields if not explicitly set
+	if !ci.State_.Enabled && ci.Enabled {
+		ci.State_.Enabled = ci.Enabled
 	}
-	if ci.LastModified != nil {
-		ci.Provenance_.LastValueLayer = ci.LastModified["layer"]
-		ci.Provenance_.LastValueOwnerID = ci.LastModified["ref"]
+	if !ci.State_.Checked && ci.Enabled && ci.Value_.LocalValue != nil {
+		ci.State_.Checked = ci.Enabled
+	}
+	if !ci.State_.Editable && !ci.Readonly {
+		ci.State_.Editable = !ci.Readonly
+	}
+	if ci.State_.Visible == false && ci.Visibility == "" {
+		ci.State_.Visible = ci.Visibility != "hidden"
+	}
+	if !ci.State_.Valid {
+		ci.State_.Valid = true
 	}
 
-	// Snapshot — populated during copy-on-create by the bundle layer
+	// Provenance — only populate if ValueSource is empty
+	if ci.Provenance_.ValueSource == "" {
+		if ci.Source != nil {
+			ci.Provenance_.ValueSource = ci.Source["layer"]
+			ci.Provenance_.LastValueLayer = ci.Source["layer"]
+			ci.Provenance_.LastValueOwnerID = ci.Source["ref"]
+		}
+		if ci.LastModified != nil {
+			ci.Provenance_.LastValueLayer = ci.LastModified["layer"]
+			ci.Provenance_.LastValueOwnerID = ci.LastModified["ref"]
+		}
+	}
+
 	// Presentation
 	if ci.Presentation.Priority == 0 {
 		ci.Presentation.Priority = ci.Order
@@ -307,6 +353,7 @@ func (b *ConfigSetBundle) EffectiveSnapshot() ConfigSet {
 	// Layer 1: apply inherited snapshots
 	for _, snap := range b.InheritedBundleSnapshots {
 		for k, v := range snap.Items {
+			v.AlignTiers()
 			merged.Items[k] = v
 		}
 	}
@@ -314,6 +361,7 @@ func (b *ConfigSetBundle) EffectiveSnapshot() ConfigSet {
 	// Layer 2: apply own sets (overwrite inherited by key)
 	for _, set := range b.OwnSets {
 		for k, v := range set.Items {
+			v.AlignTiers()
 			merged.Items[k] = v
 		}
 	}
