@@ -1,0 +1,26 @@
+{
+  "name": "runtime-architecture-parameter-final-state-docs",
+  "version": "1.0.0",
+  "created_for": "LightAI Go Runtime architecture and parameter final-state next stage",
+  "target_directory": "docs/reports/runtime-architecture-parameter-final-state/",
+  "contains_phase_directory": false,
+  "documents": [
+    "00-index.md",
+    "01-execution-policy-and-scope.md",
+    "02-current-context-and-known-issues.md",
+    "03-final-runtime-domain-contract.md",
+    "04-final-parameter-contract.md",
+    "05-runtime-requirements-and-capability-profile-design.md",
+    "06-runplan-and-preflight-contract.md",
+    "07-ui-and-api-contract.md",
+    "08-api-first-e2e-and-automation-requirements.md",
+    "09-implementation-plan.md",
+    "10-claude-execution-prompt.md",
+    "11-final-closeout-template.md"
+  ],
+  "install_commands": [
+    "cd /home/kzeng/projects/ai-platform-study/lightai-go",
+    "unzip -o /tmp/runtime-architecture-parameter-final-state-docs.zip",
+    "find docs/reports/runtime-architecture-parameter-final-state -maxdepth 2 -type f | sort"
+  ]
+}
