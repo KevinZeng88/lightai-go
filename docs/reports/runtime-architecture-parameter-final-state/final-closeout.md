@@ -21,7 +21,7 @@ All OI items resolved except OI-06 (external hardware dependency).
 | OI-07 | RuntimeParameterEditor legacy | FIXED | Dead code removed (3 files); web build verified |
 | OI-08 | DB schema flat config_set_json | FIXED | Catalog loader now emits tiered-only JSON; DB seeded with tiered format |
 | OI-09 | Catalog loader old flat JSON | FIXED | Materialize* functions use tiered fields; JSON serialization uses tiered shape |
-| OI-10 | Deployment accepts backend_runtime_id | FIXED | Already enforced: `node_backend_runtime_id` required; `backend_runtime_id` rejected |
+| OI-10 | Deployment accepts backend_runtime_id | FIXED | `node_backend_runtime_id` column added to model_deployments; API rejects `backend_runtime_id` input; NBR is exclusive deployment entry point |
 
 ## 4. OI-06 — External Hardware Blocker
 
