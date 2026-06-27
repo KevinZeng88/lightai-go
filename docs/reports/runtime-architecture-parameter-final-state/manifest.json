@@ -87,6 +87,10 @@
     {
       "file": "18-codex-targeted-blocker-reaudit.md",
       "role": "codex_targeted_blocker_reaudit"
+    },
+    {
+      "file": "19-codex-final-targeted-acceptance-audit.md",
+      "role": "codex_final_targeted_acceptance_audit"
     }
   ],
   "expected_generated_documents": [
@@ -110,6 +114,12 @@
     },
     {
       "file": "18-codex-targeted-blocker-reaudit.md",
+      "generated_by": "Codex",
+      "required_before_final_acceptance": true,
+      "status": "generated"
+    },
+    {
+      "file": "19-codex-final-targeted-acceptance-audit.md",
       "generated_by": "Codex",
       "required_before_final_acceptance": true,
       "status": "generated"
