@@ -201,7 +201,7 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 	serviceJSON, _ := rawBody["service_json"].(map[string]interface{})
 	input = runplan.ApplySemanticSnapshot(input, semanticDeploymentSnapshot(nbrConfigSet, serviceJSON), backendName)
 
-	plan, resolveErrs, resolveWarns := runplan.Resolve(input)
+	plan, resolveErrs, resolveWarns := runplan.ResolveWithSourceMap(input)
 	for _, e := range resolveErrs {
 		errs = append(errs, errEntry("resolve_error", e.Error(), "runplan", "error"))
 	}

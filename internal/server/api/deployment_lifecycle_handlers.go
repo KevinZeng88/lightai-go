@@ -960,7 +960,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		"host_port":      pf.service.HostPort,
 		"container_port": pf.service.ContainerPort,
 	}), pf.backendName)
-	plan, resolveErrs, resolveWarns := runplan.Resolve(resolveInput)
+	plan, resolveErrs, resolveWarns := runplan.ResolveWithSourceMap(resolveInput)
 	for _, e := range resolveErrs {
 		pf.addErr("unknown", e.Error(), nil)
 	}
