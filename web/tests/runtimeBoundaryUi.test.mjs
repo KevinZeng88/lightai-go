@@ -7,7 +7,6 @@ const files = [
   'src/pages/RunnerConfigsPage.vue',
   'src/pages/ModelDeploymentsPage.vue',
   'src/pages/BackendsPage.vue',
-  'src/components/common/RuntimeParameterEditor.vue',
   'src/components/config/ConfigEditView.vue',
   'src/components/config/ConfigSection.vue',
   'src/components/config/ConfigField.vue',
@@ -58,12 +57,8 @@ for (const token of [
   check(`UI does not reference ${token}`, !all.includes(token))
 }
 
-check('RuntimeParameterEditor edits ConfigSet items', sources['src/components/common/RuntimeParameterEditor.vue'].includes('config_set'))
-check('RuntimeParameterEditor emits config_overrides', sources['src/components/common/RuntimeParameterEditor.vue'].includes('config_overrides'))
-check('RuntimeParameterEditor supports extension labels', sources['src/components/common/RuntimeParameterEditor.vue'].includes('extensions?.label') || sources['src/components/common/RuntimeParameterEditor.vue'].includes("extensions &&"))
-check('RuntimeParameterEditor supports schema ordering', sources['src/components/common/RuntimeParameterEditor.vue'].includes('order'))
-check('RuntimeParameterEditor supports select controls', sources['src/components/common/RuntimeParameterEditor.vue'].includes('el-select'))
-check('RuntimeParameterEditor can render fake_new_param from ConfigSet schema', sources['src/components/common/RuntimeParameterEditor.vue'].includes('fake_new_param') || sources['src/components/common/RuntimeParameterEditor.vue'].includes('itemLabel(item)'))
+// RuntimeParameterEditor was intentionally removed (OI-07) — replaced by ConfigEditView.
+// HumanRuntimeParameterForm was intentionally removed — replaced by ConfigEditView.
 check('Backend runtime page no longer imports hardcoded human form', !sources['src/pages/BackendRuntimesPage.vue'].includes('HumanRuntimeParameterForm'))
 check('Node runtime wizard no longer imports hardcoded human form', !sources['src/components/deployments/NodeRuntimeConfigWizard.vue'].includes('HumanRuntimeParameterForm'))
 check('Runtime human field helper is not used by active pages', !sources['src/pages/BackendRuntimesPage.vue'].includes('getHumanFieldsForBackend') && !sources['src/components/deployments/NodeRuntimeConfigWizard.vue'].includes('getHumanFieldsForBackend'))
