@@ -8,7 +8,13 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "vue-tsc --noEmit",
-    "test": "node tests/apiClientPaths.test.mjs && node tests/formatters.test.mjs && node tests/i18nKeys.test.mjs && node tests/i18nMissingKeys.test.mjs && node tests/noHardcodedCredentials.test.mjs && node tests/runtimeBoundaryUi.test.mjs && node tests/modelCapabilities.test.mjs"
+    "test": "node tests/apiClientPaths.test.mjs && node tests/formatters.test.mjs && node tests/i18nKeys.test.mjs && node tests/i18nMissingKeys.test.mjs && node tests/noHardcodedCredentials.test.mjs && node tests/runtimeBoundaryUi.test.mjs && node tests/modelCapabilities.test.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report /tmp/lightai/e2e/playwright/report",
+    "test:e2e:noauth": "LIGHTAI_SKIP_AUTH_SETUP=1 playwright test"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.0",
@@ -19,7 +25,7 @@
     "vue-router": "^4.4.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.0",
+    "@playwright/test": "^1.61.1",
     "@vitejs/plugin-vue": "^5.1.0",
     "playwright": "^1.61.1",
     "typescript": "^5.6.0",
