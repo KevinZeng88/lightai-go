@@ -176,9 +176,9 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		"source_runtime_config_authority": "config_set",
 	}
 
-	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, replicas, placement_json, service_json, config_overrides_json, source_backend_runtime_id, source_node_backend_runtime_id, source_config_hash, copied_at, config_set_json, source_metadata_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, node_backend_runtime_id, replicas, placement_json, service_json, config_overrides_json, source_backend_runtime_id, source_node_backend_runtime_id, source_config_hash, copied_at, config_set_json, source_metadata_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, name, strVal(req, "display_name", name), strVal(req, "description", ""),
-		artifactID, backendRuntimeID,
+		artifactID, backendRuntimeID, nodeBackendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(configOverrides),
 		backendRuntimeID,
