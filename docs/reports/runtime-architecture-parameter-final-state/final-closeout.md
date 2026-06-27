@@ -61,8 +61,12 @@ Evidence: docs/reports/runtime-architecture-parameter-final-state/evidence/web-b
 ## 6. Commits
 
 ```
+6b60108 fix: reject raw config_set in BackendRuntime PATCH handler
+50c576a docs: add final targeted acceptance audit
 d958f02 fix: targeted reaudit blocker fix — BackendVersion raw config_set rejection
+4ea556a docs: add targeted codex blocker reaudit
 1428308 fix: codex final audit blocker fix — semanticconfig normalizer + NBR config_set rejection
+8e898f0 docs: add final codex implementation audit
 393c891 fix: final repair redo — remove all flat fallbacks, fix tiered value structure
 8f3f86e fix: final repair — remove flat fallbacks, fix setConfigValueTiered, strengthen SourceMap
 c082d49 feat: OI-10 add node_backend_runtime_id column to model_deployments
@@ -87,6 +91,9 @@ docs/reports/runtime-architecture-parameter-final-state/evidence/
 ├── batch-5-e2e-test-results.txt
 ├── final-repair-self-audit-before.txt
 ├── final-repair-self-audit-after.txt
+├── codex-final-audit-blocker-fix.txt
+├── codex-targeted-reaudit-blocker-fix.txt
+├── backend-runtime-raw-configset-blocker-fix.txt
 ├── web-test-output.txt
 └── web-build-output.txt
 ```

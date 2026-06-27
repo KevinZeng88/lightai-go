@@ -244,11 +244,6 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "config_set_json is not accepted; use editable_config_patch to modify individual parameters")
 		return
 	}
-	if false { // replaced: old raw config_set acceptance
-		if incoming, ok := req["config_set"].(map[string]interface{}); ok {
-			configSet = incoming
-		}
-	}
 	sets = append(sets, "config_set_json = ?", "checksum = ?")
 	args = append(args, configSetJSON(configSet), checksumString(configSetJSON(configSet)))
 	args = append(args, id)
