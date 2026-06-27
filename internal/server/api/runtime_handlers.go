@@ -237,6 +237,14 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 		setConfigValue(configSet, "launcher.command", v, "BackendRuntime", id, "user_patch")
 	}
 	if _, ok := req["config_set"]; ok {
+		writeError(w, http.StatusBadRequest, "config_set is not accepted; use editable_config_patch to modify individual parameters")
+		return
+	}
+	if _, ok := req["config_set_json"]; ok {
+		writeError(w, http.StatusBadRequest, "config_set_json is not accepted; use editable_config_patch to modify individual parameters")
+		return
+	}
+	if false { // replaced: old raw config_set acceptance
 		if incoming, ok := req["config_set"].(map[string]interface{}); ok {
 			configSet = incoming
 		}

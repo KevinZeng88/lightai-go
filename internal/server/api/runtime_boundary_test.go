@@ -2415,3 +2415,119 @@ func TestBackendVersionPatchRejectsFlatConfigSet(t *testing.T) {
 }
 
 
+
+// TestBackendRuntimePatchRejectsFlatConfigSet verifies that PATCH
+// /api/v1/backend-runtimes/{id} with flat config_set returns 400.
+func TestBackendRuntimePatchRejectsFlatConfigSet(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	// Create a runtime first
+	insertRuntime(t, db, "rt-patch-flat", "Patch Flat Test", "backend.vllm")
+
+	body := jsonString(map[string]interface{}{
+		"config_set": map[string]interface{}{
+			"schema_version": 1,
+			"items": map[string]interface{}{
+				"flat.param": map[string]interface{}{
+					"code":    "flat.param",
+					"type":    "string",
+					"enabled": true,
+					"value":   "flat-val",
+				},
+			},
+		},
+	})
+	w := httptest.NewRecorder()
+	h.HandlePatchBackendRuntime(w, newReq("PATCH", "/x", body, adminSession(), map[string]string{"id": "rt-patch-flat"}))
+	if w.Code != 400 {
+		t.Fatalf("expected 400 for flat config_set, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestBackendRuntimePatchRejectsConfigSetJSON verifies that PATCH
+// /api/v1/backend-runtimes/{id} with config_set_json returns 400.
+func TestBackendRuntimePatchRejectsConfigSetJSON(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	insertRuntime(t, db, "rt-patch-flat-json", "Patch Flat JSON Test", "backend.vllm")
+
+	body := jsonString(map[string]interface{}{
+		"config_set_json": map[string]interface{}{
+			"schema_version": 1,
+			"items": map[string]interface{}{
+				"flat.param": map[string]interface{}{
+					"code":  "flat.param",
+					"type":  "string",
+					"value": "flat-json-val",
+				},
+			},
+		},
+	})
+	w := httptest.NewRecorder()
+	h.HandlePatchBackendRuntime(w, newReq("PATCH", "/x", body, adminSession(), map[string]string{"id": "rt-patch-flat-json"}))
+	if w.Code != 400 {
+		t.Fatalf("expected 400 for config_set_json, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestBackendRuntimePatchAllowedFieldsStillSucceeds verifies that
+// PATCH with allowed fields (image_ref, docker_options) still works.
+func TestBackendRuntimePatchAllowedFieldsStillSucceeds(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+
+	insertRuntime(t, db, "rt-patch-allowed", "Patch Allowed Test", "backend.vllm")
+
+	body := jsonString(map[string]interface{}{
+		"image_ref":      "img:patched-v2",
+		"docker_options": map[string]interface{}{"shm_size": "32g"},
+	})
+	w := httptest.NewRecorder()
+	h.HandlePatchBackendRuntime(w, newReq("PATCH", "/x", body, adminSession(), map[string]string{"id": "rt-patch-allowed"}))
+	if w.Code != 200 {
+		t.Fatalf("expected 200 for allowed field patch, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	// Verify config_set remains tiered
+	var rtSetRaw string
+	db.QueryRow(`SELECT config_set_json FROM backend_runtimes WHERE id='rt-patch-allowed'`).Scan(&rtSetRaw)
+	set := parseConfigSet(rtSetRaw)
+	items := configSetItems(set)
+
+	// Check launcher.image tiered structure
+	imgItem, _ := items["launcher.image"].(map[string]interface{})
+	if imgItem == nil {
+		t.Fatal("launcher.image not found")
+	}
+	vt, ok := imgItem["value"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("launcher.image value is not a map (tiered): %T", imgItem["value"])
+	}
+	if vt["effective_value"] != "img:patched-v2" {
+		t.Errorf("launcher.image effective_value = %v, want img:patched-v2", vt["effective_value"])
+	}
+	st, ok := imgItem["state"].(map[string]interface{})
+	if !ok {
+		t.Fatal("launcher.image missing state tier")
+	}
+	if st["enabled"] != true {
+		t.Errorf("launcher.image state.enabled = %v, want true", st["enabled"])
+	}
+	// No flat fields
+	if _, ok := imgItem["enabled"]; ok {
+		t.Fatal("launcher.image has flat 'enabled' — tiered shape violated")
+	}
+	if _, ok := imgItem["default_value"]; ok {
+		t.Fatal("launcher.image has flat 'default_value' — tiered shape violated")
+	}
+
+	// Check docker_options tiered structure
+	dockerItem, _ := items["launcher.docker_options"].(map[string]interface{})
+	dockerVT, _ := dockerItem["value"].(map[string]interface{})
+	dockerEV, _ := dockerVT["effective_value"].(map[string]interface{})
+	if dockerEV["shm_size"] != "32g" {
+		t.Errorf("docker_options shm_size = %v, want 32g", dockerEV["shm_size"])
+	}
+}

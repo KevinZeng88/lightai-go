@@ -1,0 +1,37 @@
+BACKEND RUNTIME RAW CONFIGSET BLOCKER FIX EVIDENCE
+===================================================
+
+Audit: 19-codex-final-targeted-acceptance-audit.md
+Blocked: PATCH /api/v1/backend-runtimes/{id} accepted raw config_set
+
+FIX
+---
+File: internal/server/api/runtime_handlers.go
+- HandlePatchBackendRuntime now REJECTS req["config_set"] and req["config_set_json"]
+  with HTTP 400 + message directing to editable_config_patch
+- Allowed field patches (image_ref, docker_options, env, model_mount,
+  health_check, entrypoint, command) continue to work through setConfigValue()
+  which writes to tiered value/state/provenance
+
+Tests added (runtime_boundary_test.go):
+- TestBackendRuntimePatchRejectsFlatConfigSet — flat config_set → 400
+- TestBackendRuntimePatchRejectsConfigSetJSON — config_set_json → 400
+- TestBackendRuntimePatchAllowedFieldsStillSucceeds — image_ref/docker_options → 200
+  + verifies tiered shape preserved (no flat enabled/default_value fields)
+
+GREP RESULTS
+------------
+git grep 'req\["config_set"\]' runtime_handlers.go:
+  Line 239: rejection check in HandlePatchBackendRuntime (returns 400)
+  Line 955: rejection check in buildRuntimeConfigSnapshot (returns error)
+No remaining raw config_set acceptance in production paths.
+
+TEST RESULTS
+------------
+go test ./... -count=1: 18/18 PASS
+cd web && npm test -- --run: All PASS
+cd web && npm run build: built in 3.69s
+
+REMAINING BLOCKERS
+------------------
+OI-06: DOCUMENTED_BLOCKER (external hardware — NVIDIA/MetaX GPU)
