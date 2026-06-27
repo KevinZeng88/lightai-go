@@ -15,8 +15,8 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 			Key:       key,
 			Label:     label,
 			Order:     sectionOrder[key],
-			Advanced:  key == "advanced_raw",
-			Collapsed: key == "advanced_raw",
+			Advanced:  key == "advanced_raw" || key == "advanced_parameters" || key == "expert_parameters",
+			Collapsed: key == "advanced_raw" || key == "advanced_parameters" || key == "expert_parameters",
 		}
 	}
 
@@ -30,10 +30,16 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 		if item == nil {
 			continue
 		}
+		if input.Mode != "advanced" && hideFromOrdinaryFlow(code, item, input.Layer) {
+			continue
+		}
 
 		// --- Canonical alias merge ---
 		// If this code is an alias for a canonical key, merge into canonical.
 		if canon, ok := aliasCanonicalOf[code]; ok && canon != code {
+			if isLayerHidden(code, input.Layer) {
+				continue
+			}
 			// Alias: only render if canonical hasn't been rendered yet.
 			if projectedCanonical[canon] {
 				continue // already projected via primary key
@@ -46,6 +52,9 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 			continue
 		}
 		if canon, ok := aliasCanonicalOf[code]; ok && canon == code {
+			if isLayerHidden(code, input.Layer) {
+				continue
+			}
 			if projectedCanonical[code] {
 				continue // already projected via alias
 			}
@@ -102,6 +111,24 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 			"mode":         input.Mode,
 		},
 	}, nil
+}
+
+func hideFromOrdinaryFlow(key string, item map[string]any, layer string) bool {
+	if layer != "node_backend_runtime" && layer != "deployment" {
+		return false
+	}
+	visibility := stringValue(item["visibility"])
+	if visibility == "internal" || visibility == "hidden" || visibility == "deprecated" {
+		return true
+	}
+	if boolValue(item["deprecated"]) {
+		return true
+	}
+	category := stringValue(item["category"])
+	if category == "internal" || category == "debug" || strings.HasPrefix(key, "internal.") || strings.HasPrefix(key, "source_metadata.") || strings.HasPrefix(key, "resolver.") {
+		return true
+	}
+	return false
 }
 
 // mergeCanonicalItem creates a merged item for a canonical key by combining
@@ -194,6 +221,10 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 			def, hasDef = registry.Get(canonical)
 		}
 	}
+	displayKey := key
+	if hasDef && semanticKey != "" {
+		displayKey = semanticKey
+	}
 	required := boolValue(item["required"])
 
 	// --- Enabled default logic ---
@@ -224,10 +255,28 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	isInternalMeta := strings.HasPrefix(key, "internal.") || strings.HasPrefix(key, "source_metadata.") || strings.HasPrefix(key, "resolver.")
 
 	visibility := stringValue(item["visibility"])
-	advanced := boolValue(item["advanced"]) || isCapability || isInternalMeta || visibility == "internal" || visibility == "hidden"
-	section := sectionFor(key, item)
-	if advanced {
+	deprecated := boolValue(item["deprecated"]) || visibility == "deprecated"
+	debugLike := stringValue(item["category"]) == "debug" || strings.Contains(key, "debug") || strings.Contains(key, "profile")
+	tier := displayTierFor(displayKey, item, hasDef, string(def.DisplayTier))
+	advanced := boolValue(item["advanced"]) || tier == "advanced" || tier == "expert" || isCapability || isInternalMeta || visibility == "internal" || visibility == "hidden" || deprecated || debugLike
+	section := sectionFor(displayKey, item)
+	if input.Mode != "advanced" && (deprecated || debugLike || visibility == "internal" || visibility == "hidden") {
 		section = "advanced_raw"
+	}
+	if isModelServingCode(key) || strings.HasPrefix(displayKey, "model_runtime.") {
+		switch tier {
+		case "common":
+			section = "model_serving"
+		case "expert":
+			section = "expert_parameters"
+		default:
+			section = "advanced_parameters"
+		}
+	}
+	if advanced {
+		if section != "advanced_parameters" && section != "expert_parameters" {
+			section = "advanced_raw"
+		}
 	}
 
 	// Readonly from input, item config, layer scope, or capability status.
@@ -254,12 +303,12 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 
 	warnings, _ := item["warnings"].([]any)
 	field := EditField{
-		Key:             key,
+		Key:             displayKey,
 		InternalKey:     internalKey,
 		SemanticKey:     semanticKey,
 		ParentKey:       parentKey(internalKey, path),
 		Path:            path,
-		Label:           fieldLabel(key, item),
+		Label:           fieldLabel(displayKey, item),
 		Help:            firstString(nestedString(item, "render", "help"), nestedString(item, "extensions", "help")),
 		Section:         section,
 		Group:           firstString(nestedString(item, "render", "group"), nestedString(item, "extensions", "group")),
@@ -286,10 +335,50 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	}
 	if hasDef {
 		field.Owner = string(def.Owner)
-		field.Tier = string(def.DisplayTier)
+		field.Tier = tier
 		field.Label = firstString(def.Label, field.Label)
+	} else {
+		field.Tier = tier
 	}
 	return field
+}
+
+func displayTierFor(key string, item map[string]any, hasDef bool, registryTier string) string {
+	if tier := stringValue(item["tier"]); tier != "" {
+		return normalizeTier(tier)
+	}
+	if tier := nestedString(item, "render", "tier"); tier != "" {
+		return normalizeTier(tier)
+	}
+	if tier := nestedString(item, "extensions", "tier"); tier != "" {
+		return normalizeTier(tier)
+	}
+	if boolValue(item["dangerous"]) || expertRuntimeArgs[key] {
+		return "expert"
+	}
+	if commonRuntimeArgs[key] || boolValue(item["visible_by_default"]) {
+		return "common"
+	}
+	if hasDef {
+		return normalizeTier(registryTier)
+	}
+	if isModelServingCode(key) || strings.HasPrefix(key, "model_runtime.") {
+		return "advanced"
+	}
+	return "advanced"
+}
+
+func normalizeTier(tier string) string {
+	switch strings.ToLower(strings.TrimSpace(tier)) {
+	case "common", "required", "recommended", "deployment_common_advanced":
+		return "common"
+	case "expert", "dangerous", "diagnostic":
+		return "expert"
+	case "advanced":
+		return "advanced"
+	default:
+		return "advanced"
+	}
 }
 
 func parentKey(internalKey string, path []string) string {

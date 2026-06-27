@@ -5,7 +5,7 @@ slug: vllm-nvidia-docker
 managed_by: system
 runner_type: docker
 vendor: nvidia
-image_ref: vllm/vllm-openai:v0.23.0
+image_ref: vllm/vllm-openai:latest
 mount_policy:
   model:
     container_mount_dir: /models

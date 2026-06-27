@@ -5,7 +5,7 @@ slug: sglang-nvidia-docker
 managed_by: system
 runner_type: docker
 vendor: nvidia
-image_ref: lmsysorg/sglang:v0.5.13.post1-cu129-runtime
+image_ref: lmsysorg/sglang:latest
 
 model_mount:
   container_path: /models

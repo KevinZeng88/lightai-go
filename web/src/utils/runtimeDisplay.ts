@@ -105,8 +105,7 @@ function extractVersion(row: any): string {
   // is_editable === false means builtin/system template.
   const isBuiltin = row.is_builtin === true || row.is_editable === false
   if (isBuiltin) {
-    const vid = row.backend_version_id || ''
-    if (!vid || vid === 'latest') return '*'
+    return '*'
   }
   const vid = row.backend_version_id || ''
   // If version_id looks like "version.vllm.v0.23.0", extract "v0.23.0"

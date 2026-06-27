@@ -8,18 +8,22 @@ import (
 var sectionOrder = map[string]int{
 	"basic":               10,
 	"model_serving":       20,
-	"backend_runtime":     30,
-	"container_resources": 40,
-	"devices_mounts":      50,
-	"environment":         60,
-	"service":             70,
-	"health_check":        80,
+	"advanced_parameters": 30,
+	"expert_parameters":   35,
+	"backend_runtime":     40,
+	"container_resources": 50,
+	"devices_mounts":      60,
+	"environment":         70,
+	"service":             80,
+	"health_check":        90,
 	"advanced_raw":        90,
 }
 
 var sectionLabels = map[string]string{
 	"basic":               "Basic",
 	"model_serving":       "Model serving",
+	"advanced_parameters": "Advanced parameters",
+	"expert_parameters":   "Expert parameters",
 	"backend_runtime":     "Backend runtime",
 	"container_resources": "Container resources",
 	"devices_mounts":      "Devices and mounts",
@@ -161,10 +165,56 @@ var modelServingCodes = map[string]bool{
 	"backend.arg.repetition_penalty":     true,
 }
 
+var commonRuntimeArgs = map[string]bool{
+	"backend.arg.gpu_memory_utilization":   true,
+	"model_runtime.gpu_memory_utilization": true,
+	"backend.arg.max_model_len":            true,
+	"model_runtime.max_model_len":          true,
+	"backend.arg.dtype":                    true,
+	"model_runtime.dtype":                  true,
+	"backend.arg.tensor_parallel_size":     true,
+	"model_runtime.tensor_parallel_size":   true,
+	"backend.common.port":                  true,
+	"model_runtime.port":                   true,
+	"service.container_port":               true,
+	"backend.arg.served_model_name":        true,
+	"backend.common.served_model_name":     true,
+	"deployment.served_model_name":         true,
+
+	"backend.arg.mem_fraction_static":   true,
+	"model_runtime.mem_fraction_static": true,
+	"backend.arg.context_length":        true,
+	"model_runtime.context_length":      true,
+	"backend.arg.tp_size":               true,
+	"model_runtime.tp_size":             true,
+	"backend.arg.tp":                    true,
+
+	"backend.arg.n_gpu_layers":   true,
+	"backend.arg.ngl":            true,
+	"model_runtime.n_gpu_layers": true,
+	"model_runtime.ngl":          true,
+	"backend.arg.ctx_size":       true,
+	"model_runtime.ctx_size":     true,
+	"backend.arg.threads":        true,
+	"model_runtime.threads":      true,
+	"backend.arg.batch_size":     true,
+	"model_runtime.batch_size":   true,
+}
+
+var expertRuntimeArgs = map[string]bool{
+	"backend.arg.trust_remote_code":   true,
+	"backend.arg.enforce_eager":       true,
+	"model_runtime.trust_remote_code": true,
+	"model_runtime.enforce_eager":     true,
+}
+
 // isModelServingCode checks if a code is a model-serving parameter (should only
 // appear at Deployment layer).
 func isModelServingCode(code string) bool {
 	if modelServingCodes[code] {
+		return true
+	}
+	if strings.HasPrefix(code, "model_runtime.") {
 		return true
 	}
 	// Also match pattern: backend.arg.max_*, backend.arg.context_*, etc.
@@ -207,7 +257,7 @@ func isLayerHidden(code string, layer string) bool {
 		return true
 	}
 	// Model serving codes hidden from non-deployment layers.
-	if layer != "deployment" && isModelServingCode(code) {
+	if layer != "deployment" && layer != "node_backend_runtime" && isModelServingCode(code) {
 		return true
 	}
 	// Docker sub-fields hidden from deployment (they're inherited from NBR).
@@ -260,7 +310,7 @@ func sectionFor(code string, item map[string]any) string {
 		return "advanced_raw"
 	}
 	switch {
-	case code == "launcher.image":
+	case code == "launcher.image" || code == "runtime.image_ref":
 		return "basic"
 	case code == "launcher.command" || code == "launcher.entrypoint":
 		return "backend_runtime"

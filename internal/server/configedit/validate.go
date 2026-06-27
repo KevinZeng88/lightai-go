@@ -17,7 +17,7 @@ func ValidateEditPatch(set map[string]any, patch ConfigEditPatch) error {
 	items := itemsMap(normalized)
 	layer := patch.Layer
 	for _, field := range patch.Fields {
-		if isDirectLegacyPatchKey(field.Key) {
+		if layer != "node_backend_runtime" && isDirectLegacyPatchKey(field.Key) {
 			return fmt.Errorf("direct legacy key patch %q is not allowed", field.Key)
 		}
 		internal := field.InternalKey

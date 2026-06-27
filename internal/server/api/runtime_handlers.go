@@ -287,7 +287,7 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, nbr.config_set_json, nbr.source_metadata_json, COALESCE(nbr.probe_results_json,'{}'), br.name, br.display_name, br.vendor
+	rows, err := h.DB.Query(`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), COALESCE(nbr.runner_type,''), COALESCE(nbr.image_ref,''), COALESCE(nbr.image_id,''), COALESCE(nbr.image_digest,''), nbr.image_present, nbr.docker_available, COALESCE(nbr.driver_version,''), COALESCE(nbr.toolkit_version,''), COALESCE(nbr.device_check_json,'{}'), COALESCE(nbr.status,''), COALESCE(nbr.status_reason,''), COALESCE(nbr.last_checked_at,''), COALESCE(nbr.tenant_id,''), COALESCE(nbr.created_at,''), COALESCE(nbr.updated_at,''), COALESCE(nbr.config_set_json,'{}'), COALESCE(nbr.source_metadata_json,'{}'), COALESCE(nbr.probe_results_json,'{}'), br.name, COALESCE(br.display_name,''), COALESCE(br.vendor,'')
 		FROM node_backend_runtimes nbr
 		JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id
 		WHERE nbr.node_id = ?
@@ -302,7 +302,9 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 		var id, runtimeID, nid, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid, ca, ua, configSetJSONRaw, sourceMetaJSON, probeResultsJSON, rtName, rtDisplay, vendor string
 		var imagePresent, dockerAvailable int
 		if err := rows.Scan(&id, &runtimeID, &nid, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid, &ca, &ua, &configSetJSONRaw, &sourceMetaJSON, &probeResultsJSON, &rtName, &rtDisplay, &vendor); err != nil {
-			continue
+			log.Error("node backend runtime list scan failed", "error", err, "node_id", nodeID)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
 		}
 		if displayName == "" {
 			displayName = rtDisplay
@@ -342,7 +344,17 @@ func (h *AgentHandler) HandleListNodeBackendRuntimes(w http.ResponseWriter, r *h
 func (h *AgentHandler) HandleListAllNodeBackendRuntimes(w http.ResponseWriter, r *http.Request) {
 	tid := tenantID(r)
 	isAdmin := isPlatformAdmin(r)
-	rows, err := h.DB.Query(`SELECT n.id FROM nodes`)
+	query := `SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), COALESCE(nbr.runner_type,''), COALESCE(nbr.image_ref,''), COALESCE(nbr.image_id,''), COALESCE(nbr.image_digest,''), nbr.image_present, nbr.docker_available, COALESCE(nbr.driver_version,''), COALESCE(nbr.toolkit_version,''), COALESCE(nbr.device_check_json,'{}'), COALESCE(nbr.status,''), COALESCE(nbr.status_reason,''), COALESCE(nbr.last_checked_at,''), COALESCE(nbr.tenant_id,''), COALESCE(nbr.created_at,''), COALESCE(nbr.updated_at,''), COALESCE(nbr.config_set_json,'{}'), COALESCE(nbr.source_metadata_json,'{}'), COALESCE(nbr.probe_results_json,'{}'), br.name, COALESCE(br.display_name,''), COALESCE(br.vendor,'')
+		FROM node_backend_runtimes nbr
+		JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id
+		JOIN nodes n ON n.id = nbr.node_id`
+	var args []interface{}
+	if !isAdmin && tid != "" {
+		query += ` WHERE (n.tenant_id = ? OR n.tenant_id = '') AND (nbr.tenant_id = ? OR nbr.tenant_id = '')`
+		args = append(args, tid, tid)
+	}
+	query += ` ORDER BY n.hostname, br.name`
+	rows, err := h.DB.Query(query, args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -350,55 +362,33 @@ func (h *AgentHandler) HandleListAllNodeBackendRuntimes(w http.ResponseWriter, r
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var nid string
-		if err := rows.Scan(&nid); err != nil {
-			continue
+		var id, runtimeID, nid, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid2, ca, ua, configSetJSONRaw, sourceMetaJSON, probeResultsJSON, rtName, rtDisplay, vendor string
+		var imagePresent, dockerAvailable int
+		if err := rows.Scan(&id, &runtimeID, &nid, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid2, &ca, &ua, &configSetJSONRaw, &sourceMetaJSON, &probeResultsJSON, &rtName, &rtDisplay, &vendor); err != nil {
+			log.Error("all node backend runtime list scan failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
 		}
-		// Tenant check for non-admin
-		if !isAdmin {
-			var ntid string
-			h.DB.QueryRow("SELECT tenant_id FROM nodes WHERE id=?", nid).Scan(&ntid)
-			if ntid != tid && ntid != "" {
-				continue
-			}
-		}
-		nbrRows, err := h.DB.Query(
-			`SELECT nbr.id, nbr.backend_runtime_id, nbr.node_id, COALESCE(nbr.display_name,''), nbr.runner_type, nbr.image_ref, nbr.image_id, nbr.image_digest, nbr.image_present, nbr.docker_available, nbr.driver_version, nbr.toolkit_version, nbr.device_check_json, nbr.status, nbr.status_reason, nbr.last_checked_at, nbr.tenant_id, nbr.created_at, nbr.updated_at, nbr.config_set_json, nbr.source_metadata_json, COALESCE(nbr.probe_results_json,'{}'), br.name, br.display_name, br.vendor
-			 FROM node_backend_runtimes nbr JOIN backend_runtimes br ON br.id = nbr.backend_runtime_id WHERE nbr.node_id = ? ORDER BY br.name`, nid)
-		if err != nil {
-			continue
-		}
-		for nbrRows.Next() {
-			var id, runtimeID, nid2, displayName, runner, imageRef, imageID, digest, driver, toolkit, checkJSON, status, reason, checked, tid2, ca, ua, configSetJSONRaw, sourceMetaJSON, probeResultsJSON, rtName, rtDisplay, vendor string
-			var imagePresent, dockerAvailable int
-			if err := nbrRows.Scan(&id, &runtimeID, &nid2, &displayName, &runner, &imageRef, &imageID, &digest, &imagePresent, &dockerAvailable, &driver, &toolkit, &checkJSON, &status, &reason, &checked, &tid2, &ca, &ua, &configSetJSONRaw, &sourceMetaJSON, &probeResultsJSON, &rtName, &rtDisplay, &vendor); err != nil {
-				continue
-			}
+		if displayName == "" {
+			displayName = rtDisplay
 			if displayName == "" {
-				displayName = rtDisplay
-				if displayName == "" {
-					displayName = rtName
-				}
+				displayName = rtName
 			}
-			deployable := isNBRDeployable(status)
-			warnings := extractProbeWarnings(probeResultsJSON, status)
-			if tid != "" && tid2 != "" && tid != tid2 {
-				continue
-			}
-			out = append(out, map[string]interface{}{
-				"id": id, "backend_runtime_id": runtimeID, "node_id": nid2, "name": displayName, "display_name": displayName,
-				"runner_type": runner, "image_ref": imageRef, "image_present": imagePresent == 1, "docker_available": dockerAvailable == 1,
-				"status": status, "status_reason": reason, "last_checked_at": checked,
-				"deployable": deployable, "warnings": warnings,
-				"disabled_reason":    nbrDisabledReason(status, reason),
-				"config_set":         parseConfigSet(configSetJSONRaw),
-				"source_metadata":    configSourceMetadata(sourceMetaJSON),
-				"probe_results_json": json.RawMessage(probeResultsJSON),
-				"backend_runtime":    map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
-				"tenant_id":          tid2, "created_at": ca, "updated_at": ua,
-			})
 		}
-		nbrRows.Close()
+		deployable := isNBRDeployable(status)
+		warnings := extractProbeWarnings(probeResultsJSON, status)
+		out = append(out, map[string]interface{}{
+			"id": id, "backend_runtime_id": runtimeID, "node_id": nid, "name": displayName, "display_name": displayName,
+			"runner_type": runner, "image_ref": imageRef, "image_present": imagePresent == 1, "docker_available": dockerAvailable == 1,
+			"status": status, "status_reason": reason, "last_checked_at": checked,
+			"deployable": deployable, "warnings": warnings,
+			"disabled_reason":    nbrDisabledReason(status, reason),
+			"config_set":         parseConfigSet(configSetJSONRaw),
+			"source_metadata":    configSourceMetadata(sourceMetaJSON),
+			"probe_results_json": json.RawMessage(probeResultsJSON),
+			"backend_runtime":    map[string]interface{}{"name": rtName, "display_name": rtDisplay, "vendor": vendor},
+			"tenant_id":          tid2, "created_at": ca, "updated_at": ua,
+		})
 	}
 	if out == nil {
 		out = []map[string]interface{}{}

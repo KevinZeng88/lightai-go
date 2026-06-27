@@ -28,7 +28,7 @@ func TestConfigEditViewAPIProjectsRuntimeWithoutInternalOrdinaryLabels(t *testin
 	if strings.Contains(string(raw), `"label":"launcher.docker_options"`) || strings.Contains(string(raw), `"label":"runtime.env"`) {
 		t.Fatalf("ordinary labels expose internal keys: %s", raw)
 	}
-	if !strings.Contains(string(raw), `"key":"launcher.docker_options.shm_size"`) || !strings.Contains(string(raw), `"key":"launcher.docker_options.privileged"`) {
+	if !strings.Contains(string(raw), `"key":"docker.shm_size"`) || !strings.Contains(string(raw), `"key":"docker.privileged"`) {
 		t.Fatalf("docker options were not projected as structured fields: %s", raw)
 	}
 }

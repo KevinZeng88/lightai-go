@@ -816,6 +816,39 @@ func TestPreflightDoesNotAutoCreateNBR(t *testing.T) {
 	}
 }
 
+func TestListAllNodeBackendRuntimesReturnsCreatedRuntime(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	nodeID := "node-list-all"
+	runtimeID := "rt-list-all"
+	runtimeBoundaryInsertOnlineNode(t, database, nodeID)
+	insertRuntime(t, database, runtimeID, "Runtime list-all", "repo/runtime:latest")
+
+	ew := httptest.NewRecorder()
+	h.HandleEnableNodeBackendRuntime(ew, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+runtimeID+`","display_name":"List All Runtime","image_ref":"repo/runtime:latest"}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if ew.Code != 200 {
+		t.Fatalf("enable code=%d body=%s", ew.Code, ew.Body.String())
+	}
+	lw := httptest.NewRecorder()
+	h.HandleListAllNodeBackendRuntimes(lw, newReq("GET", "/x", "", adminSession(), nil))
+	if lw.Code != 200 {
+		t.Fatalf("list all code=%d body=%s", lw.Code, lw.Body.String())
+	}
+	var rows []map[string]interface{}
+	if err := json.Unmarshal(lw.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode list all: %v body=%s", err, lw.Body.String())
+	}
+	for _, row := range rows {
+		if row["id"] == nodeID+":"+runtimeID && row["image_ref"] == "repo/runtime:latest" {
+			return
+		}
+	}
+	t.Fatalf("created node backend runtime not found in list all: %#v", rows)
+}
+
 // ── Failure observability tests ──────────────────────────────────────────
 
 func TestContainerLogTailSingleLineEscapesNewlines(t *testing.T) {

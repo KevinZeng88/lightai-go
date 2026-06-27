@@ -59,17 +59,17 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 			t.Fatalf("ordinary label exposes internal key: %#v", field)
 		}
 	}
-	requireField(t, fields, "launcher.docker_options.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
-	requireField(t, fields, "launcher.docker_options.privileged", "launcher.docker_options", []string{"privileged"}, "container_resources")
-	requireField(t, fields, "launcher.docker_options.devices", "launcher.docker_options", []string{"devices"}, "devices_mounts")
-	requireField(t, fields, "launcher.docker_options.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
+	requireField(t, fields, "docker.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
+	requireField(t, fields, "docker.privileged", "launcher.docker_options", []string{"privileged"}, "container_resources")
+	requireField(t, fields, "docker.devices", "launcher.docker_options", []string{"devices"}, "devices_mounts")
+	requireField(t, fields, "docker.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
 
 	// backend.arg.* fields are model-serving: hidden at backend_runtime layer.
 	if fieldExists(fields, "backend.arg.fake_new_param") {
 		t.Fatal("model-serving param should be hidden at backend_runtime layer")
 	}
 
-	requiredImage := requireField(t, fields, "launcher.image", "launcher.image", nil, "basic")
+	requiredImage := requireField(t, fields, "runtime.image_ref", "launcher.image", nil, "basic")
 	if requiredImage.HasEnable || !requiredImage.Enabled || !requiredImage.Required {
 		t.Fatalf("required image should be enabled without user-toggle: %#v", requiredImage)
 	}
@@ -91,7 +91,7 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 		t.Fatalf("project deployment view: %v", err)
 	}
 	depFields := flattenFields(depView)
-	depParam := requireField(t, depFields, "backend.arg.fake_new_param", "backend.arg.fake_new_param", nil, "model_serving")
+	depParam := requireField(t, depFields, "backend.arg.fake_new_param", "backend.arg.fake_new_param", nil, "advanced_parameters")
 	// Has non-empty value "abc" — should be enabled under new rules.
 	if !depParam.HasEnable || !depParam.Enabled {
 		t.Fatalf("deployment param with non-empty value should be enabled: %#v", depParam)
@@ -114,19 +114,97 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 		t.Fatal("empty security_options should default disabled")
 	}
 	// shm_size has value "16gb" → should be enabled.
-	shm := requireField(t, fields, "launcher.docker_options.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
+	shm := requireField(t, fields, "docker.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
 	if !shm.Enabled {
 		t.Fatal("shm_size with value should be enabled")
 	}
 	// optional_devices is empty → should default disabled.
-	odev := requireField(t, fields, "launcher.docker_options.optional_devices", "launcher.docker_options", []string{"optional_devices"}, "devices_mounts")
+	odev := requireField(t, fields, "docker.optional_devices", "launcher.docker_options", []string{"optional_devices"}, "devices_mounts")
 	if odev.Enabled {
 		t.Fatal("empty optional_devices should default disabled")
 	}
 	// group_add has value ["video"] → should be enabled.
-	ga := requireField(t, fields, "launcher.docker_options.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
+	ga := requireField(t, fields, "docker.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
 	if !ga.Enabled {
 		t.Fatal("group_add with value should be enabled")
+	}
+}
+
+func TestProjectConfigSetToEditViewNodeRuntimeShowsCommonAndFoldsAdvanced(t *testing.T) {
+	set := testConfigSet()
+	items := set["items"].(map[string]any)
+	items["backend.arg.gpu_memory_utilization"] = map[string]any{
+		"code": "backend.arg.gpu_memory_utilization", "category": "model_runtime", "kind": "cli_arg", "type": "number",
+		"value": 0.9, "enabled": true, "render": map[string]any{"flag": "--gpu-memory-utilization", "label": "GPU Memory Utilization"},
+	}
+	items["backend.arg.scheduler"] = map[string]any{
+		"code": "backend.arg.scheduler", "category": "model_runtime", "kind": "cli_arg", "type": "string",
+		"value": "fcfs", "enabled": false, "tier": "advanced", "render": map[string]any{"flag": "--scheduler", "label": "Scheduler"},
+	}
+	items["backend.arg.trust_remote_code"] = map[string]any{
+		"code": "backend.arg.trust_remote_code", "category": "model_runtime", "kind": "cli_arg", "type": "boolean",
+		"value": false, "enabled": false, "dangerous": true, "render": map[string]any{"flag": "--trust-remote-code", "label": "Trust Remote Code"},
+	}
+	items["backend.arg.debug_profile"] = map[string]any{
+		"code": "backend.arg.debug_profile", "category": "debug", "kind": "cli_arg", "type": "boolean",
+		"value": true, "enabled": false, "render": map[string]any{"flag": "--debug-profile", "label": "Debug Profile"},
+	}
+
+	view, err := ProjectConfigSetToEditView(ProjectInput{
+		ConfigSet:   set,
+		Layer:       "node_backend_runtime",
+		ObjectKind:  "node_backend_runtime",
+		ObjectID:    "nbr-test",
+		ObjectLabel: "NBR Test",
+		Mode:        "enable",
+	})
+	if err != nil {
+		t.Fatalf("project view: %v", err)
+	}
+	fields := flattenFields(view)
+	common := requireField(t, fields, "model_runtime.gpu_memory_utilization", "backend.arg.gpu_memory_utilization", nil, "model_serving")
+	if common.Tier != "common" || common.Advanced {
+		t.Fatalf("gpu memory utilization should be common/default visible: %#v", common)
+	}
+	advanced := requireField(t, fields, "backend.arg.scheduler", "backend.arg.scheduler", nil, "advanced_parameters")
+	if advanced.Tier != "advanced" || !advanced.Advanced {
+		t.Fatalf("scheduler should be folded into advanced section: %#v", advanced)
+	}
+	expert := requireField(t, fields, "backend.arg.trust_remote_code", "backend.arg.trust_remote_code", nil, "expert_parameters")
+	if expert.Tier != "expert" || !expert.Advanced {
+		t.Fatalf("dangerous trust_remote_code should be expert/hidden by default: %#v", expert)
+	}
+	if fieldExists(fields, "backend.arg.debug_profile") {
+		t.Fatal("debug parameter should not appear in ordinary node runtime edit flow")
+	}
+}
+
+func TestApplyEditPatchToConfigSetKeepsDisabledValueAndHiddenItems(t *testing.T) {
+	set := testConfigSet()
+	items := set["items"].(map[string]any)
+	items["backend.arg.hidden_existing"] = map[string]any{
+		"code": "backend.arg.hidden_existing", "category": "model_runtime", "kind": "cli_arg", "type": "string",
+		"value": "keep-me", "enabled": true, "visibility": "internal", "render": map[string]any{"flag": "--hidden-existing"},
+	}
+	disabled := false
+	out, err := ApplyEditPatchToConfigSet(set, ConfigEditPatch{
+		Layer:    "node_backend_runtime",
+		ObjectID: "nbr-test",
+		Fields: []EditFieldPatch{
+			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "edited-while-disabled", Enabled: &disabled},
+		},
+	}, "NodeBackendRuntime", "nbr-test")
+	if err != nil {
+		t.Fatalf("apply patch: %v", err)
+	}
+	outItems := out["items"].(map[string]any)
+	edited := outItems["backend.arg.fake_new_param"].(map[string]any)
+	if edited["value"] != "edited-while-disabled" || edited["enabled"] != false {
+		t.Fatalf("disabled value/enabled not preserved separately: %#v", edited)
+	}
+	hidden := outItems["backend.arg.hidden_existing"].(map[string]any)
+	if hidden["value"] != "keep-me" || hidden["enabled"] != true {
+		t.Fatalf("hidden existing item was not preserved: %#v", hidden)
 	}
 }
 
@@ -197,7 +275,8 @@ func TestValidateEditPatchRejectsModelServingAtBackendRuntime(t *testing.T) {
 }
 
 func TestValidateEditPatchRejectsModelServingAtNodeBackendRuntime(t *testing.T) {
-	// backend.arg.* hidden at node_backend_runtime layer.
+	// NodeBackendRuntime is the node-level deployable runtime config; serving
+	// args are editable here and are checked before deployment.
 	err := ValidateEditPatch(testConfigSet(), ConfigEditPatch{
 		Layer:    "node_backend_runtime",
 		ObjectID: "nbr-test",
@@ -205,8 +284,8 @@ func TestValidateEditPatchRejectsModelServingAtNodeBackendRuntime(t *testing.T) 
 			{Key: "backend.arg.fake_new_param", InternalKey: "backend.arg.fake_new_param", Value: "xyz", Enabled: boolPtr(true)},
 		},
 	})
-	if err == nil {
-		t.Fatal("expected error: backend.arg.fake_new_param should be rejected at node_backend_runtime layer (hidden)")
+	if err != nil {
+		t.Fatalf("node backend runtime should accept model-serving arg patch: %v", err)
 	}
 }
 

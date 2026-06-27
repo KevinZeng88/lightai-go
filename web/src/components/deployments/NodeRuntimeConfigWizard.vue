@@ -69,28 +69,17 @@
             <el-input v-model="form.display_name" :placeholder="defaultConfigName" />
           </el-form-item>
           <el-form-item :label="$t('runtimes.image')">
-            <el-select
+            <DockerImagePicker
+              v-if="selectedNode?.id"
+              :node-id="selectedNode.id"
+              :initial-ref="form.image_ref || selectedRuntime?.image_ref || ''"
+              @select="onImageSelected"
+            />
+            <el-input
+              v-else
               v-model="form.image_ref"
-              filterable
-              allow-create
-              default-first-option
               :placeholder="selectedRuntime?.image_ref || $t('runnerConfigs.selectImage') || 'Select or enter image'"
-              :loading="imagesLoading"
-              style="width:100%"
-              @focus="loadNodeImages"
-            >
-              <el-option
-                v-for="img in nodeImages"
-                :key="img.id || img.ref"
-                :label="imageLabel(img)"
-                :value="img.ref || img.repoTags?.[0] || ''"
-              >
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                  <span style="font-family:monospace;font-size:12px">{{ img.ref || img.repoTags?.[0] || img.id }}</span>
-                  <span v-if="img.size" style="color:var(--el-text-color-secondary);font-size:11px;margin-left:8px">{{ formatSize(img.size) }}</span>
-                </div>
-              </el-option>
-            </el-select>
+            />
           </el-form-item>
         </el-form>
         <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
@@ -169,6 +158,7 @@ import { listRuntimes } from '@/api/runtimes'
 import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/runtimeDisplay'
 import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
+import DockerImagePicker from '@/components/DockerImagePicker.vue'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 
 const { t } = useI18n()
@@ -196,37 +186,11 @@ const selectedRuntimeDisplay = computed(() => {
 const paramOverrides = ref<ConfigEditPatch | null>(null)
 const runtimeEditView = ref<ConfigEditViewModel | null>(null)
 const checkResult = ref<any>(null)
-const imagesLoading = ref(false)
-const nodeImages = ref<any[]>([])
 
 const form = reactive({
   display_name: '',
   image_ref: '',
 })
-
-function imageLabel(img: any): string {
-  return img.ref || img.repoTags?.[0] || img.id || ''
-}
-
-function formatSize(bytes: number): string {
-  if (!bytes) return ''
-  if (bytes > 1e9) return (bytes / 1e9).toFixed(1) + ' GB'
-  if (bytes > 1e6) return (bytes / 1e6).toFixed(1) + ' MB'
-  return (bytes / 1e3).toFixed(1) + ' KB'
-}
-
-async function loadNodeImages() {
-  if (!selectedNode.value?.id || nodeImages.value.length > 0) return
-  imagesLoading.value = true
-  try {
-    const res = await apiClient.get(`/nodes/${selectedNode.value.id}/docker-images`)
-    nodeImages.value = Array.isArray(res) ? res : (res?.images || [])
-  } catch {
-    nodeImages.value = []
-  } finally {
-    imagesLoading.value = false
-  }
-}
 
 const defaultConfigName = computed(() => {
   const host = selectedNode.value?.name || selectedNode.value?.hostname || selectedNode.value?.id || 'node'
@@ -278,6 +242,10 @@ function onRuntimeSelected(row: any) {
   if (!row) return
   selectedRuntime.value = row
   form.image_ref = row.image_ref || ''
+}
+
+function onImageSelected(image: any) {
+  form.image_ref = image?.image_ref || ''
 }
 
 watch(selectedRuntime, async (runtime) => {

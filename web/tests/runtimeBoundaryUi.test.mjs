@@ -13,6 +13,7 @@ const files = [
   'src/components/config/ConfigField.vue',
   'src/utils/configEditView.ts',
   'src/components/deployments/NodeRuntimeConfigWizard.vue',
+  'src/components/DockerImagePicker.vue',
   'src/components/deployments/DeploymentOverrideEditor.vue',
   'src/api/runtimes.ts',
   'src/api/backends.ts',
@@ -75,7 +76,7 @@ check('Model deployment page does not import RuntimeParameterEditor', !sources['
 check('ConfigEditView renders sections in order', sources['src/components/config/ConfigEditView.vue'].includes('sortedSections'))
 check('ConfigEditView required fields cannot be disabled', sources['src/components/config/ConfigField.vue'].includes('!field.required') && sources['src/components/config/ConfigField.vue'].includes('field.has_enable'))
 check('ConfigEditView optional fields show enabled checkbox', sources['src/components/config/ConfigField.vue'].includes('el-checkbox') && sources['src/components/config/ConfigField.vue'].includes('has_enable'))
-check('ConfigEditView disables input when field disabled', sources['src/components/config/ConfigField.vue'].includes('!field.enabled || readonly'))
+check('ConfigEditView keeps inputs editable when field disabled', !sources['src/components/config/ConfigField.vue'].includes('!field.enabled || readonly'))
 check('ConfigEditView has structured Docker widgets', sources['src/components/config/ConfigField.vue'].includes('device_table') && sources['src/components/config/ConfigField.vue'].includes('key_value_table') && sources['src/components/config/ConfigField.vue'].includes('mount_form'))
 check('ConfigEditView ordinary rendering does not show launcher.docker_options label', !sources['src/components/config/ConfigField.vue'].includes('{{ field.internal_key }}') && !sources['src/components/config/ConfigField.vue'].includes('{{ field.key }}'))
 check('Advanced raw section defaults collapsed', sources['src/components/config/ConfigSection.vue'].includes('section.collapsed') && sources['src/components/config/ConfigSection.vue'].includes('advanced_raw'))
@@ -132,9 +133,13 @@ check('RunnerConfigsPage uses node_backend_runtime layer', rcpSrc.includes('node
 
 // i. NBR wizard has node image selector.
 const wizardSrc = sources['src/components/deployments/NodeRuntimeConfigWizard.vue']
-check('NodeRuntimeConfigWizard has image select with filterable+allow-create', wizardSrc.includes('filterable') && wizardSrc.includes('allow-create'))
-check('NodeRuntimeConfigWizard loads node docker images', wizardSrc.includes('loadNodeImages'))
+check('NodeRuntimeConfigWizard uses Docker image picker with manual input support', wizardSrc.includes('DockerImagePicker'))
+check('NodeRuntimeConfigWizard no longer owns ad hoc node image loading', !wizardSrc.includes('loadNodeImages'))
 check('NodeRuntimeConfigWizard uses node_backend_runtime layer for ConfigEditView', wizardSrc.includes('node_backend_runtime'))
+check('NodeRuntimeConfigWizard uses DockerImagePicker component', wizardSrc.includes('DockerImagePicker'))
+check('NodeRuntimeConfigWizard does not read file-style repoTags image fields', !wizardSrc.includes('repoTags'))
+const pickerSrc = sources['src/components/DockerImagePicker.vue']
+check('DockerImagePicker does not render NaN image sizes', pickerSrc.includes('Number.isFinite') && !pickerSrc.includes('NaN KB'))
 
 // j. BackendsPage has developer i18n for Add Parameter.
 const beSrc = sources['src/pages/BackendsPage.vue']

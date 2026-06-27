@@ -27,7 +27,9 @@
         <template #default="{ row }">{{ (row.image_id || '').slice(7, 19) }}</template>
       </el-table-column>
       <el-table-column prop="created_at" :label="$t('dockerImages.created')" width="160" />
-      <el-table-column prop="size" :label="$t('dockerImages.size')" width="100" />
+      <el-table-column :label="$t('dockerImages.size')" width="120">
+        <template #default="{ row }">{{ formatImageSize(row.size) }}</template>
+      </el-table-column>
       <el-table-column :label="$t('common.actions')" width="80">
         <template #default="{ row }">
           <el-button size="small" type="primary" @click.stop="selectRow(row)">{{ $t('dockerImages.select') }}</el-button>
@@ -42,11 +44,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { Check, Refresh } from '@element-plus/icons-vue'
 import { apiClient } from '@/api/client'
 
-const props = defineProps<{ nodeId: string }>()
+const props = defineProps<{ nodeId: string; initialRef?: string }>()
 const emit = defineEmits<{ select: [image: any] }>()
 
 const loading = ref(false)
@@ -54,7 +56,7 @@ const images = ref<any[]>([])
 const error = ref('')
 const query = ref('')
 const manualRef = ref('')
-const selectedRef = ref('')
+const selectedRef = ref(props.initialRef || '')
 
 async function search() {
   if (!props.nodeId) return
@@ -69,6 +71,17 @@ async function search() {
     error.value = e?.message || 'agent unreachable'
     images.value = []
   } finally { loading.value = false }
+}
+
+function formatImageSize(size: any) {
+  if (size === null || size === undefined || size === '') return '-'
+  if (typeof size === 'string') return size
+  const bytes = Number(size)
+  if (!Number.isFinite(bytes) || bytes <= 0) return '-'
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${bytes} B`
 }
 
 function imageRef(row: any) {
@@ -94,6 +107,10 @@ function rowClassName({ row }: { row: any }) {
 }
 
 onMounted(() => { if (props.nodeId) search() })
+watch(() => props.initialRef, (value) => {
+  selectedRef.value = value || ''
+  if (value) manualRef.value = value
+})
 </script>
 
 <style scoped>

@@ -31,6 +31,8 @@ const { t } = useI18n()
 const SECTION_I18N_MAP: Record<string, string> = {
   basic: 'configEdit.sections.basic',
   model_serving: 'configEdit.sections.modelServing',
+  advanced_parameters: 'configEdit.sections.advancedParameters',
+  expert_parameters: 'configEdit.sections.expertParameters',
   backend_runtime: 'configEdit.sections.backendRuntime',
   container_resources: 'configEdit.sections.containerResources',
   devices_mounts: 'configEdit.sections.devicesMounts',

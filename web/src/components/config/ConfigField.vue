@@ -15,7 +15,7 @@
       <el-switch
         v-if="field.widget === 'boolean' || field.type === 'boolean'"
         v-model="field.value"
-        :disabled="!field.enabled || readonly || field.readonly"
+        :disabled="readonly || field.readonly"
         @change="$emit('change')"
       />
 
@@ -24,7 +24,7 @@
         v-else-if="field.widget === 'select' || field.widget === 'multi_select'"
         v-model="field.value"
         :multiple="field.widget === 'multi_select'"
-        :disabled="!field.enabled || readonly || field.readonly"
+        :disabled="readonly || field.readonly"
         size="small"
         class="field-input"
         @change="$emit('change')"
@@ -36,7 +36,7 @@
       <el-input-number
         v-else-if="field.widget === 'number' || field.type === 'integer' || field.type === 'number'"
         v-model="field.value"
-        :disabled="!field.enabled || readonly || field.readonly"
+        :disabled="readonly || field.readonly"
         size="small"
         class="field-input"
         @change="$emit('change')"
@@ -48,7 +48,7 @@
         v-model="textValue"
         type="textarea"
         :rows="6"
-        :disabled="!field.enabled || readonly || field.readonly"
+        :disabled="readonly || field.readonly"
         @input="onTextInput"
       />
 
@@ -180,7 +180,7 @@
         v-model="textValue"
         type="textarea"
         :rows="field.widget === 'key_value_list' ? 3 : 2"
-        :disabled="!field.enabled || readonly || field.readonly"
+        :disabled="readonly || field.readonly"
         :placeholder="field.widget === 'key_value_list' ? 'KEY=value' : ''"
         @input="onLegacyListInput"
       />
@@ -190,7 +190,7 @@
         <el-input
           v-if="isScalarValue"
           v-model="field.value"
-          :disabled="!field.enabled || readonly || field.readonly"
+          :disabled="readonly || field.readonly"
           size="small"
           class="field-input"
           @input="$emit('change')"

@@ -75,6 +75,8 @@ export default {
     sections: {
       basic: 'Basic Info',
       modelServing: 'Model Serving Parameters',
+      advancedParameters: 'Advanced Parameters',
+      expertParameters: 'Expert Parameters',
       backendRuntime: 'Backend Launch Parameters',
       containerResources: 'Container Resources',
       devicesMounts: 'Devices & Mounts',

@@ -75,6 +75,8 @@ export default {
     sections: {
       basic: '基本信息',
       modelServing: '模型服务参数',
+      advancedParameters: '高级参数',
+      expertParameters: '专家参数',
       backendRuntime: '后端启动参数',
       containerResources: '容器资源',
       devicesMounts: '设备与挂载',
