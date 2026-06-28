@@ -1,27 +1,27 @@
-# Runtime 配置展示与 Probe Evidence 修复文档索引
+# Runtime Config Field Display Fix — Complete Index
 
-建议目录：
+This document set covers the runtime template detail / config field display fix batches.
 
-```text
-/home/kzeng/projects/ai-platform-study/lightai-go/docs/reports/phase-3/runtime-config-display-probe-fix/
-```
+## Files
 
-## 文档清单
+| File | Purpose |
+|------|---------|
+| `00-index.md` | This index |
+| `01-fix-boundary-and-acceptance.md` | P0-1 / P0-2 / P0-3 fix boundary and acceptance (original probe fix) |
+| `02-codex-review-prompt.md` | Codex light audit prompt |
+| `03-claude-execution-prompt.md` | Initial Claude execution prompt (P0-1/2/3) |
+| `04-codex-review-acceptance.md` | Codex audit conclusions adopted |
+| `05-closeout.md` | **Closeout document** — all three batches: root causes, changes, tests, commits, DB rebuild |
+| `06-mhtml-config-field-review.md` | MHTML snapshot review — object child field parent-value leak |
+| `07-config-field-display-design.md` | Batch 3 implementation design — docker sub-field value resolution, widget overrides, structured display |
+| `08-claude-execution-prompt.md` | Batch 3 execution prompt — config field display follow-up |
 
-| 文件 | 用途 |
-|---|---|
-| `01-fix-boundary-and-acceptance.md` | 修订后的修复边界、问题定义、验收标准、同类问题检查范围 |
-| `02-codex-review-prompt.md` | 给 Codex 的轻量核查 prompt；已执行，可作为审查记录保留 |
-| `03-claude-execution-prompt.md` | 修订后的 Claude 执行 prompt，已吸收 Codex 代码链路核查结论 |
-| `04-codex-review-acceptance.md` | Codex 核查结论采纳说明、文档修正点、执行建议 |
+## Execution History
 
-## 当前结论
+| Batch | Commit | Scope |
+|-------|--------|-------|
+| 1 | `ee35b5b` | P0-1: config edit envelope unwrap; P0-2: clone naming/version; P0-3: probe evidence |
+| 2 | `7671a3e` | Closeout: deployment NBR display_name, level4 i18n, DB seed test |
+| 3 | `d6e0523` | Config field display: docker sub-field value leak fix + widget overrides fix |
 
-Codex 核查结论已采纳。执行前必须使用修订后的 `03-claude-execution-prompt.md`，不要再使用早期基于旧字段链路的判断。
-
-## 建议流程
-
-1. 将本目录放入项目文档目录。
-2. 让 Claude 先阅读 `01-fix-boundary-and-acceptance.md`、`04-codex-review-acceptance.md`、`03-claude-execution-prompt.md`。
-3. Claude 按 `03-claude-execution-prompt.md` 执行修复、限定同类检查、最小测试。
-4. Claude 完成后，重点验收：已发现问题是否修复、Codex 指出的真实根因是否处理、同类问题是否检查、测试是否覆盖、是否 commit/push/status clean。
+See `05-closeout.md` for full root causes, all changes, test results, and acceptance verification per batch.
