@@ -2593,3 +2593,32 @@ func TestCloneBackendRuntimeNoDisplayNameUsesGeneratedName(t *testing.T) {
 		t.Errorf("clone reused source visible name as technical name")
 	}
 }
+
+// TestCatalogSeedProducersUserVisibleDisplayNames verifies that catalog
+// runtime YAMLs produce user-visible display_name (not raw tech IDs).
+func TestCatalogSeedProducersUserVisibleDisplayNames(t *testing.T) {
+	database := setupTestDB(t)
+	rows, err := database.Query(`SELECT id, display_name FROM backend_runtimes WHERE managed_by = 'system'`)
+	if err != nil {
+		t.Fatalf("query seeded runtimes: %v", err)
+	}
+	defer rows.Close()
+	checkMap := map[string]string{}
+	for rows.Next() {
+		var id, displayName string
+		if err := rows.Scan(&id, &displayName); err != nil {
+			continue
+		}
+		checkMap[id] = displayName
+	}
+	for id, want := range map[string]string{
+		"runtime.vllm.nvidia-docker":     "vLLM NVIDIA Docker",
+		"runtime.sglang.nvidia-docker":   "SGLang NVIDIA Docker",
+		"runtime.llamacpp.nvidia-docker": "llama.cpp NVIDIA Docker",
+	} {
+		got := checkMap[id]
+		if got != want {
+			t.Errorf("seeded runtime %s display_name = %q, want %q", id, got, want)
+		}
+	}
+}

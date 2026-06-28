@@ -660,7 +660,7 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 		"version_probed":             false,
 		"probe_skipped":              true,
 		"blocking":                   false,
-		"message":                    "当前仅完成镜像存在性与后端匹配检查。",
+		"message":                    "Image existence and backend matching check completed. Version probe is not yet available.",
 	}
 
 	// ---- Process Start Detection (Layer 3) ----

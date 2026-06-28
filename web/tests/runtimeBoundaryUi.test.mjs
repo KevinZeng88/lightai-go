@@ -112,10 +112,10 @@ check('device_table readonly has el-switch', fieldSrc.includes('row.readonly') &
 check('device_table initDeviceRows handles string arrays (allStrings)', fieldSrc.includes('allStrings'))
 check('device_table onDeviceTableChange preserves readonly', fieldSrc.includes('d.readonly'))
 
-// f. runtimeDisplay uses is_editable for builtin version * detection.
+// f. runtimeDisplay extractVersion returns * for all runtimes (no per-version differentiated configs).
 const rtSrc = sources['src/utils/runtimeDisplay.ts']
-check('runtimeDisplay extractVersion uses is_editable for builtin detection', rtSrc.includes('is_editable') && rtSrc.includes('is_builtin'))
-check('runtimeDisplay does not use source_type/managed_by for version detection', rtSrc.includes('is_builtin'))
+check('runtimeDisplay extractVersion returns * unconditionally', rtSrc.includes("return '*'"))
+check('runtimeDisplay does not show per-version number to user', !rtSrc.includes('v0.23.0') && !rtSrc.includes('sglang-v0.5.13') && !rtSrc.includes('llamacpp-b9700'))
 // g. runtimeDisplay normalizes runtime.xxx prefix names.
 check('runtimeDisplay strips runtime. prefix from display_name', rtSrc.includes("replace(/^runtime\\./, '')"))
 check('runtimeDisplay strips runtime. prefix from name', rtSrc.includes('normalizedName'))

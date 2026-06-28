@@ -11,7 +11,9 @@
     <el-table :data="deployments" v-loading="loading" stripe @row-click="selected = $event">
       <el-table-column prop="display_name" :label="$t('deployments.name')" min-width="220" />
       <el-table-column prop="model_artifact_id" :label="$t('deployments.artifact')" min-width="220" />
-      <el-table-column prop="source_node_backend_runtime_id" :label="$t('deployments.runtime')" min-width="260" />
+      <el-table-column :label="$t('deployments.runtime')" min-width="260">
+        <template #default="{ row }">{{ row.source_node_backend_runtime_display_name || row.source_node_backend_runtime_id }}</template>
+      </el-table-column>
       <el-table-column prop="status" :label="$t('common.status')" width="140" />
       <el-table-column :label="$t('common.actions')" width="260">
         <template #default="{ row }">
@@ -41,7 +43,7 @@
       <template v-if="selected">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('deployments.artifact')">{{ selected.model_artifact_id }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('deployments.runtime')">{{ selected.source_node_backend_runtime_id }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('deployments.runtime')">{{ selected.source_node_backend_runtime_display_name || selected.source_node_backend_runtime_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('common.status')">{{ selected.status }}</el-descriptions-item>
           <el-descriptions-item :label="$t('deployments.created')">{{ selected.created_at }}</el-descriptions-item>
         </el-descriptions>
