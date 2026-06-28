@@ -6,8 +6,6 @@ managed_by: system
 runner_type: docker
 vendor: nvidia
 image_ref: ollama/ollama:latest
-env:
-  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
 
 model_mount:
   container_path: /models

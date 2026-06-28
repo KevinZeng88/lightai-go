@@ -2622,3 +2622,86 @@ func TestCatalogSeedProducersUserVisibleDisplayNames(t *testing.T) {
 		}
 	}
 }
+
+// TestCatalogEnvDoesNotIncludeVendorDevicePlaceholder verifies that seeded
+// runtime templates do NOT include CUDA_VISIBLE_DEVICES/ASCEND_VISIBLE_DEVICES
+// as user-editable default environment variables. These must only be generated
+// by the RunPlan device-binding resolver at deployment time.
+func TestCatalogEnvDoesNotIncludeVendorDevicePlaceholder(t *testing.T) {
+	database := setupTestDB(t)
+	// Read the config_set_json for the three primary NVIDIA runtimes.
+	rows, err := database.Query(`SELECT id, config_set_json FROM backend_runtimes WHERE managed_by = 'system' AND vendor = 'nvidia'`)
+	if err != nil {
+		t.Fatalf("query seeded runtimes: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, csRaw string
+		if err := rows.Scan(&id, &csRaw); err != nil {
+			continue
+		}
+		// Parse ConfigSet and check runtime.env effective_value.
+		cs := parseConfigSet(csRaw)
+		envVal := configObject(cs, "runtime.env")
+		for k := range envVal {
+			if strings.Contains(k, "CUDA_VISIBLE_DEVICES") || strings.Contains(k, "ASCEND_VISIBLE_DEVICES") {
+				t.Errorf("runtime %s has vendor device placeholder %q in runtime.env — must not be user-editable default", id, k)
+			}
+			if strings.Contains(k, "NVIDIA_VISIBLE_DEVICES") {
+				t.Errorf("runtime %s has vendor device placeholder %q in runtime.env — must not be user-editable default", id, k)
+			}
+		}
+	}
+}
+
+// TestPreflightResolvesRuntimeTypeDocker verifies the vLLM Docker chain:
+// catalog → backend_runtime → NBR → preflight → runtime_type=docker.
+func TestPreflightResolvesRuntimeTypeDocker(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+
+	// Seed a node and NBR.
+	nodeID := "node-rt-type-test"
+	_, err := database.Exec(`INSERT INTO nodes (id, agent_id, hostname, status, tenant_id, primary_ip, last_heartbeat_at, created_at, updated_at)
+		VALUES (?, 'agent-rt-type', 'rt-type-host', 'online', '', '127.0.0.1', datetime('now'), datetime('now'), datetime('now'))`, nodeID)
+	if err != nil {
+		t.Fatalf("insert node: %v", err)
+	}
+
+	// Create a runtime from the seeded vllm template.
+	templateID := "runtime.vllm.nvidia-docker"
+	// Clone the template to create a user runtime and NBR.
+	cloneW := httptest.NewRecorder()
+	h.HandleCloneBackendRuntime(cloneW, newReq("POST", "/x", `{"display_name":"RT-Type Test"}`, adminSession(), map[string]string{"id": templateID}))
+	if cloneW.Code != http.StatusCreated {
+		t.Fatalf("clone code=%d body=%s", cloneW.Code, cloneW.Body.String())
+	}
+	var cloned map[string]interface{}
+	json.Unmarshal(cloneW.Body.Bytes(), &cloned)
+	cloneID, _ := cloned["id"].(string)
+	if cloneID == "" {
+		t.Fatal("clone returned empty id")
+	}
+
+	// Enable NBR on the node.
+	enableW := httptest.NewRecorder()
+	h.HandleEnableNodeBackendRuntime(enableW, newReq("POST", "/x",
+		`{"backend_runtime_id":"`+cloneID+`","display_name":"RT-Type NBR","image_ref":"vllm/vllm-openai:latest"}`,
+		adminSession(), map[string]string{"id": nodeID}))
+	if enableW.Code != http.StatusOK {
+		t.Fatalf("enable code=%d body=%s", enableW.Code, enableW.Body.String())
+	}
+
+	// Read the runtime_type from the DB.
+	var rtType string
+	database.QueryRow(`SELECT runtime_type FROM backend_runtimes WHERE id = ?`, cloneID).Scan(&rtType)
+	if rtType != "docker" {
+		t.Errorf("seeded vllm runtime_type = %q, want docker", rtType)
+	}
+
+	// Read runtime_type from the backend_runtimes table for the template itself.
+	database.QueryRow(`SELECT runtime_type FROM backend_runtimes WHERE id = ?`, templateID).Scan(&rtType)
+	if rtType != "docker" {
+		t.Errorf("template vllm runtime_type = %q, want docker", rtType)
+	}
+}

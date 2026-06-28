@@ -25,7 +25,5 @@ docker_options:
     - /usr/local/Ascend/driver/lib64
     - /usr/local/Ascend/driver/version.info
     - /etc/ascend_install.info
-env:
-  ASCEND_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
 verification:
   status: template_only

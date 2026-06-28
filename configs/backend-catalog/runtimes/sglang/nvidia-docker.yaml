@@ -17,7 +17,5 @@ docker_options:
   shm_size: 32gb
   gpu_driver: ""
   gpu_capabilities: [["gpu"]]
-env:
-  CUDA_VISIBLE_DEVICES: "{{vendor_visible_devices}}"
 verification:
   status: verified
