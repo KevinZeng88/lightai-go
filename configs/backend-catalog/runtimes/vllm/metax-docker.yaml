@@ -15,7 +15,7 @@ model_mount:
   container_path: /models
   readonly: true
 docker_options:
-  devices: [/dev/dri, /dev/mxcd, /dev/infiniband, /dev/mem]
+  devices: [/dev/dri, /dev/mxcd, /dev/mem]
   group_add: [video]
   uts_mode: host
   ipc_mode: host
