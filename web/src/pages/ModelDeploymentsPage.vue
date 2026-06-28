@@ -25,8 +25,9 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="createVisible" :title="$t('deployments.createDeployment') || $t('deployments.title')" width="960px" :close-on-click-modal="false">
+    <el-dialog v-model="createVisible" :title="$t('deployments.createDeployment') || $t('deployments.title')" width="960px" :close-on-click-modal="false" destroy-on-close @closed="onWizardClosed">
       <DeploymentWizard
+        v-if="createVisible"
         ref="wizardRef"
         :artifacts="artifacts"
         :node-runtimes="nodeRuntimes"
@@ -57,9 +58,18 @@
             <el-descriptions-item v-if="lastDryRun.selected_node" label="Selected Node">{{ lastDryRun.selected_node }}</el-descriptions-item>
           </el-descriptions>
         </template>
-        <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
-        <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
-        <JsonViewer v-if="lastDryRun" :value="lastDryRun" title="Dry Run Detail" max-height="420px" :searchable="true" />
+        <!-- Edit button for existing deployment -->
+        <template v-if="selected">
+          <el-button type="primary" size="small" style="margin-bottom:8px">{{ $t('common.edit') }}</el-button>
+        </template>
+        <!-- Diagnostic section (collapsed by default) -->
+        <el-collapse style="margin-top:12px">
+          <el-collapse-item :title="$t('runtimes.advancedDiagnostics') || 'Diagnostics'">
+            <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
+            <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
+            <JsonViewer v-if="lastDryRun" :value="lastDryRun" title="Dry Run Detail" max-height="420px" :searchable="true" />
+          </el-collapse-item>
+        </el-collapse>
       </template>
     </el-drawer>
   </div>
@@ -151,6 +161,13 @@ async function stop(row: any) {
   await stopDeployment(row.id)
   ElMessage.success('Stopped')
   await load()
+}
+
+function onWizardClosed() {
+  // Reset wizard state so next create starts from clean step 1.
+  if (wizardRef.value?.resetWizard) {
+    wizardRef.value.resetWizard()
+  }
 }
 
 onMounted(load)

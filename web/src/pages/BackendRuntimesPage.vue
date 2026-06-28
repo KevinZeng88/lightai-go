@@ -29,14 +29,15 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="$t('common.actions')" width="240" fixed="right">
+      <el-table-column :label="$t('common.actions')" width="280" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click.stop="openDetail(row.raw)">{{ $t('common.detail') }}</el-button>
+          <el-button size="small" @click.stop="openDetail(row.raw)">{{ $t('common.view') }}</el-button>
+          <el-button v-if="row.sourceType === 'user'" size="small" type="warning" @click.stop="openEdit(row.raw)">{{ $t('common.edit') }}</el-button>
           <el-button v-if="row.sourceType === 'builtin'" size="small" type="primary" @click.stop="cloneRuntime(row.raw)">
             {{ $t('runtimes.clone') }}
           </el-button>
           <template v-if="row.sourceType === 'user'">
-            <el-button size="small" type="primary" @click.stop="renameRuntime(row.raw)">{{ $t('common.rename') || 'Rename' }}</el-button>
+            <el-button size="small" @click.stop="renameRuntime(row.raw)">{{ $t('common.rename') || 'Rename' }}</el-button>
             <el-button size="small" type="danger" @click.stop="confirmDeleteRuntime(row.raw)">{{ $t('common.delete') }}</el-button>
           </template>
         </template>
@@ -217,6 +218,12 @@ const sourceSummary = computed(() => {
 
 function openDetail(row: any) {
   selected.value = row
+}
+
+function openEdit(row: any) {
+  selected.value = row
+  // After view loads, enter edit mode
+  editing.value = true
 }
 
 watch(selected, async (value) => {

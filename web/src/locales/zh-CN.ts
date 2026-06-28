@@ -129,7 +129,6 @@ export default {
       'launcher.docker_options.security_options': '安全选项',
       'launcher.docker_options.ulimits': 'Ulimits',
       'launcher.docker_options.devices': '设备映射',
-      'launcher.docker_options.optional_devices': '可选设备',
       'launcher.docker_options.group_add': '附加用户组',
       'runtime.model_mount': '模型挂载',
       'runtime.env': '环境变量',

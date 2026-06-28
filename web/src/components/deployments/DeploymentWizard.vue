@@ -260,7 +260,7 @@ function buildPayload() {
   }
 }
 
-defineExpose({ buildPayload, form })
+defineExpose({ buildPayload, form, resetWizard: () => { activeStep.value = 0 } })
 </script>
 
 <style scoped>

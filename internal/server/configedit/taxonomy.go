@@ -45,7 +45,6 @@ var taxonomyLabels = map[string]string{
 	"launcher.docker_options.security_options": "Security options",
 	"launcher.docker_options.ulimits":          "Ulimits",
 	"launcher.docker_options.devices":          "Devices",
-	"launcher.docker_options.optional_devices": "Optional devices",
 	"launcher.docker_options.group_add":        "Additional groups",
 	"runtime.model_mount":                      "Model mount",
 	"runtime.env":                              "Environment variables",
@@ -91,7 +90,6 @@ var dockerFieldSpecs = []struct {
 	{"security_options", "container_resources", "array", "string_list", 60},
 	{"ulimits", "container_resources", "object", "key_value_table", 70},
 	{"devices", "devices_mounts", "array", "device_table", 10},
-	{"optional_devices", "devices_mounts", "array", "device_table", 20},
 	{"group_add", "devices_mounts", "array", "string_list", 30},
 }
 
@@ -210,6 +208,23 @@ var expertRuntimeArgs = map[string]bool{
 	"backend.arg.enforce_eager":       true,
 	"model_runtime.trust_remote_code": true,
 	"model_runtime.enforce_eager":     true,
+	// Advanced/Expert parameters NOT shown as ordinary required fields:
+	"backend.arg.cpu_offload_gb":        true,
+	"model_runtime.cpu_offload_gb":      true,
+	"backend.arg.kv_cache_dtype":        true,
+	"model_runtime.kv_cache_dtype":      true,
+	"backend.arg.max_num_batched_tokens": true,
+	"backend.arg.max_num_seqs":          true,
+	"model_runtime.max_num_seqs":        true,
+	"backend.arg.swap_space":            true,
+	"model_runtime.swap_space":          true,
+	"backend.arg.safetensors_load_strategy": true,
+	"model_runtime.safetensors_load_strategy": true,
+	// Internal/system parameters NOT shown in ordinary deployment form:
+	"model_runtime.model":              true,
+	"model_runtime.host":               true,
+	"model_runtime.port":               true,
+	"model_runtime.download_dir":       true,
 }
 
 // isModelServingCode checks if a code is a model-serving parameter (should only

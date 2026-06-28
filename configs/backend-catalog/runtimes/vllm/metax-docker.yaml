@@ -15,12 +15,13 @@ model_mount:
   container_path: /models
   readonly: true
 docker_options:
-  devices: [/dev/dri, /dev/mxcd, /dev/infiniband]
-  optional_devices: [/dev/mem]
+  devices: [/dev/dri, /dev/mxcd, /dev/infiniband, /dev/mem]
   group_add: [video]
   uts_mode: host
   ipc_mode: host
+  network_mode: host
   privileged: true
+  cap_add: [SYS_PTRACE]
   security_opt: [seccomp=unconfined, apparmor=unconfined]
   shm_size: 100gb
   ulimits:

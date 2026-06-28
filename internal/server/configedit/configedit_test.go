@@ -120,11 +120,7 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 	if shm.Enabled || shm.Value != "16gb" {
 		t.Fatalf("shm_size value should be retained without auto-enabling: %#v", shm)
 	}
-	// optional_devices is empty → should default disabled.
-	odev := requireField(t, fields, "docker.optional_devices", "launcher.docker_options", []string{"optional_devices"}, "devices_mounts")
-	if odev.Enabled {
-		t.Fatal("empty optional_devices should default disabled")
-	}
+	// optional_devices removed — merged into single Devices field per design.
 	// group_add has a prefilled value, but values/defaults must not imply enabled.
 	ga := requireField(t, fields, "docker.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
 	if ga.Enabled {

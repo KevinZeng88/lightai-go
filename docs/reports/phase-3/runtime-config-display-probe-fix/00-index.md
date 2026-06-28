@@ -1,27 +1,55 @@
-# Runtime Config Field Display Fix — Complete Index
+# Runtime Devices / Model Deployment Regression Fix — Index
 
-This document set covers the runtime template detail / config field display fix batches.
+This package defines a controlled repair scope for the current LightAI Go runtime template and model deployment regressions.
 
-## Files
+## Documents
 
-| File | Purpose |
-|------|---------|
-| `00-index.md` | This index |
-| `01-fix-boundary-and-acceptance.md` | P0-1 / P0-2 / P0-3 fix boundary and acceptance (original probe fix) |
-| `02-codex-review-prompt.md` | Codex light audit prompt |
-| `03-claude-execution-prompt.md` | Initial Claude execution prompt (P0-1/2/3) |
-| `04-codex-review-acceptance.md` | Codex audit conclusions adopted |
-| `05-closeout.md` | **Closeout document** — all three batches: root causes, changes, tests, commits, DB rebuild |
-| `06-mhtml-config-field-review.md` | MHTML snapshot review — object child field parent-value leak |
-| `07-config-field-display-design.md` | Batch 3 implementation design — docker sub-field value resolution, widget overrides, structured display |
-| `08-claude-execution-prompt.md` | Batch 3 execution prompt — config field display follow-up |
+1. `11-metax-device-mount-template-review-v2.md`
+   - Revised review for MetaX Docker device / mount semantics.
+   - Supersedes earlier wording that introduced `Optional devices`.
 
-## Execution History
+2. `12-model-deployment-regression-review.md`
+   - Review of the uploaded `LightAI Go1.mhtml` model deployment page snapshot.
+   - Records confirmed and user-observed deployment regressions.
 
-| Batch | Commit | Scope |
-|-------|--------|-------|
-| 1 | `ee35b5b` | P0-1: config edit envelope unwrap; P0-2: clone naming/version; P0-3: probe evidence |
-| 2 | `7671a3e` | Closeout: deployment NBR display_name, level4 i18n, DB seed test |
-| 3 | `d6e0523` | Config field display: docker sub-field value leak fix + widget overrides fix |
+3. `13-runtime-device-volume-design.md`
+   - Final product and data-model semantics for Devices / Model mount / Additional volumes.
+   - Includes MetaX, NVIDIA, Huawei catalog expectations.
 
-See `05-closeout.md` for full root causes, all changes, test results, and acceptance verification per batch.
+4. `14-model-deployment-fix-design.md`
+   - Final design for model deployment wizard reset, detail/edit UX, raw JSON handling, runtime_type resolution, port fields, and parameter layering.
+
+5. `15-implementation-steps.md`
+   - Concrete implementation sequence and expected code areas.
+
+6. `16-validation-and-tests.md`
+   - Required tests and acceptance checklist.
+
+7. `17-claude-execution-prompt.md`
+   - Self-contained execution prompt for Claude.
+
+## Scope summary
+
+This repair combines these user-reported problems:
+
+- Runtime template device fields look like volume mounts.
+- Current template has `Devices` and `Optional devices`; the final model should use one `Devices` field only.
+- NVIDIA templates should leave Devices disabled/empty by default.
+- MetaX templates should enable Devices and prefill `/dev/mxcd`, `/dev/dri`, `/dev/mem`.
+- Device path existence is diagnostic-only and must not block deploy.
+- Model mount should stay read-only; broad `/mnt:/mnt` belongs to Additional volumes if needed.
+- Runtime template list page needs visible View / Edit / Copy-as-user-config actions.
+- Model deployment fails with `[resolve_error] unsupported runtime_type: (only docker is supported)`.
+- Model deployment details show raw config JSON / source metadata JSON instead of structured detail and edit operations.
+- Create deployment wizard reuses previous saved/cancelled state until page refresh.
+- Container listen port shows container port but host port is blank without explanation.
+- `model_runtime.port`, `model_runtime.host`, `model_runtime.model` and overly specialized backend args are shown as ordinary deployment fields.
+
+## Non-goals
+
+- No new branch.
+- No full runtime/config architecture rewrite.
+- No `metax-docker` runtime mode.
+- No real MetaX hardware validation requirement.
+- No Playwright requirement.
+- No handling of pre-existing `VERSION` modification.

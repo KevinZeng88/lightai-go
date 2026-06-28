@@ -129,7 +129,6 @@ export default {
       'launcher.docker_options.security_options': 'Security Options',
       'launcher.docker_options.ulimits': 'Ulimits',
       'launcher.docker_options.devices': 'Devices',
-      'launcher.docker_options.optional_devices': 'Optional Devices',
       'launcher.docker_options.group_add': 'Additional Groups',
       'runtime.model_mount': 'Model Mount',
       'runtime.env': 'Environment Variables',

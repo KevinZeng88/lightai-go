@@ -190,15 +190,6 @@ func DefaultRegistry() *Registry {
 			DefaultSource: "Runtime YAML Docker options",
 		},
 		{
-			Key:           "docker.optional_devices",
-			Owner:         OwnerRuntimeEnvironment,
-			ValueType:     TypeArray,
-			DisplayTier:   TierAdvanced,
-			Label:         "Optional Docker devices",
-			LegacyKeys:    []string{"launcher.docker_options.optional_devices", "docker_options.optional_devices", "optional_devices"},
-			DefaultSource: "Runtime YAML Docker options",
-		},
-		{
 			Key:           "docker.group_add",
 			Owner:         OwnerRuntimeEnvironment,
 			ValueType:     TypeArray,
