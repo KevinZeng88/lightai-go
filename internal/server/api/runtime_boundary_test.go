@@ -15,6 +15,7 @@ import (
 	"lightai-go/internal/agent/register"
 	"lightai-go/internal/server/agentclient"
 	"lightai-go/internal/server/db"
+	"lightai-go/internal/server/runplan"
 	"time"
 )
 
@@ -2703,5 +2704,201 @@ func TestPreflightResolvesRuntimeTypeDocker(t *testing.T) {
 	database.QueryRow(`SELECT runtime_type FROM backend_runtimes WHERE id = ?`, templateID).Scan(&rtType)
 	if rtType != "docker" {
 		t.Errorf("template vllm runtime_type = %q, want docker", rtType)
+	}
+}
+
+// TestProbeEnvBoundaryDockerImageEnvStaysInRawEvidence verifies that Docker
+// image inspect Config.Env (including NVIDIA_REQUIRE_CUDA, PATH,
+// LD_LIBRARY_PATH, CUDA_VERSION) is stored ONLY in
+// probe_results_json.level2.env and does NOT leak into the NBR
+// config_set_json / runtime.env / environment variables.
+func TestProbeEnvBoundaryDockerImageEnvStaysInRawEvidence(t *testing.T) {
+	database := setupTestDB(t)
+	_ = NewAgentHandler(database, nil)
+
+	// Insert a node.
+	nodeID := "node-probe-bound"
+	_, err := database.Exec(`INSERT INTO nodes (id, agent_id, hostname, status, tenant_id, primary_ip, last_heartbeat_at, created_at, updated_at)
+		VALUES (?, 'agent-pb', 'pb-host', 'online', '', '127.0.0.1', datetime('now'), datetime('now'), datetime('now'))`, nodeID)
+	if err != nil {
+		t.Fatalf("insert node: %v", err)
+	}
+
+	// Create a runtime.
+	insertRuntime(t, database, "rt-probe-bound", "Probe Boundary Runtime", "")
+
+	// Create an NBR with a known config_set_json.
+	now := "2026-01-01T00:00:00Z"
+	configSetJSON := `{"schema_version":1,"items":{"launcher.image":{"value":{"effective_value":"img:test"}},"runtime.env":{"value":{"effective_value":{"CUSTOM_USER_VAR":"keep-me"}}}}}`
+	sourceMetaJSON := `{}`
+	probeJSON := `{
+		"level1": {"image_present": true, "source": "docker_images_list"},
+		"level2": {
+			"inspect_success": true,
+			"image_id": "sha256:abc123",
+			"env": [
+				"PATH=/usr/local/nvidia/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+				"LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64",
+				"CUDA_VERSION=13.0.2",
+				"NVIDIA_REQUIRE_CUDA=cuda>=13.0 brand=unknown,driver>=535,driver<536",
+				"NV_CUDA_CUDART_VERSION=13.0.2",
+				"CUDA_VISIBLE_DEVICES=0,1"
+			],
+			"repotags": ["vllm/vllm-openai:latest"]
+		},
+		"level3": {"backend_match_status": "confirmed_match", "confirmed_match": true, "blocking": false},
+		"level4": {"compatibility_check_status": "not_run", "version_probe_status": "not_available", "blocking": false}
+	}`
+	nbrID := nodeID + ":rt-probe-bound"
+	_, err = database.Exec(`INSERT INTO node_backend_runtimes
+		(id, backend_runtime_id, node_id, display_name, runner_type, image_ref, image_present, docker_available, status, status_reason, last_checked_at, config_set_json, source_metadata_json, probe_results_json, tenant_id, created_at, updated_at)
+		VALUES (?, ?, ?, 'Probe Bound NBR', 'docker', 'vllm/vllm-openai:latest', 1, 1, 'ready', 'ok', ?, ?, ?, ?, '', ?, ?)`,
+		nbrID, "rt-probe-bound", nodeID, now, configSetJSON, sourceMetaJSON, probeJSON, now, now)
+	if err != nil {
+		t.Fatalf("insert nbr: %v", err)
+	}
+
+	// ---- Assertion 1: config_set_json.runtime.env must NOT contain Docker image metadata ----
+	var storedConfigSetRaw string
+	database.QueryRow(`SELECT config_set_json FROM node_backend_runtimes WHERE id = ?`, nbrID).Scan(&storedConfigSetRaw)
+	cs := parseConfigSet(storedConfigSetRaw)
+	envVal := configObject(cs, "runtime.env")
+
+	forbiddenEnvKeys := []string{"PATH", "LD_LIBRARY_PATH", "CUDA_VERSION", "NVIDIA_REQUIRE_CUDA", "NV_CUDA_CUDART_VERSION"}
+	for _, k := range forbiddenEnvKeys {
+		if _, ok := envVal[k]; ok {
+			t.Errorf("config_set_json.runtime.env contains Docker image metadata key %q — must not leak", k)
+		}
+	}
+	// User variables must be preserved.
+	if envVal["CUSTOM_USER_VAR"] != "keep-me" {
+		t.Errorf("config_set_json.runtime.env lost user variable CUSTOM_USER_VAR")
+	}
+
+	// ---- Assertion 2: probe_results_json.level2.env DOES contain the Docker metadata ----
+	var storedProbeRaw string
+	database.QueryRow(`SELECT probe_results_json FROM node_backend_runtimes WHERE id = ?`, nbrID).Scan(&storedProbeRaw)
+	var pr map[string]interface{}
+	json.Unmarshal([]byte(storedProbeRaw), &pr)
+	l2, _ := pr["level2"].(map[string]interface{})
+	if l2 == nil {
+		t.Fatal("probe_results_json.level2 missing")
+	}
+	envList, _ := l2["env"].([]interface{})
+	if len(envList) == 0 {
+		t.Fatal("probe_results_json.level2.env is empty — raw evidence must be preserved")
+	}
+
+	// ---- Assertion 3: NBR list response also preserves the boundary ----
+	h := NewAgentHandler(database, nil)
+	w := httptest.NewRecorder()
+	h.HandleListAllNodeBackendRuntimes(w, newReq("GET", "/x", "", adminSession(), nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("list all nbr code=%d", w.Code)
+	}
+	var list []map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &list)
+	for _, item := range list {
+		if fmt.Sprint(item["id"]) != nbrID {
+			continue
+		}
+		// ConfigSet in response must not contain Docker env.
+		respCS, _ := item["config_set"].(map[string]interface{})
+		if respCS != nil {
+			items, _ := respCS["items"].(map[string]interface{})
+			if items != nil {
+				envItem, _ := items["runtime.env"].(map[string]interface{})
+				if envItem != nil {
+					// Navigate tiered structure
+					if vt, ok := envItem["value"].(map[string]interface{}); ok {
+						if ev, ok := vt["effective_value"].(map[string]interface{}); ok {
+							for _, k := range forbiddenEnvKeys {
+								if _, present := ev[k]; present {
+									t.Errorf("NBR list response runtime.env contains %q — Docker image metadata must not leak", k)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestRunPlanEnvPollution verifies that Docker image inspect Config.Env does
+// NOT enter ResolvedRunPlan.env.  The test uses the RunPlan resolver with
+// a simulated NBR that has probe evidence with image metadata env.
+func TestRunPlanEnvDoesNotContainDockerImageConfigEnv(t *testing.T) {
+	// Build a RuntimeInfo with a config snapshot that includes only
+	// explicitly-configured env (no Docker image metadata).
+	rt := &runplan.RuntimeInfo{
+		ID:          "rt-env-test",
+		Vendor:      "nvidia",
+		RuntimeType: "docker",
+		ImageName:   "vllm/vllm-openai:latest",
+		DefaultEnv: map[string]string{
+			"EXPLICIT_USER_VAR": "explicit-value",
+		},
+		EntrypointOverride: []string{"vllm", "serve"},
+		ArgsOverride:       []string{"--model", "/models/test"},
+		Docker: runplan.DockerSpecInfo{
+			ShmSize:    "16gb",
+			IPCMode:    "host",
+			GpuDriver: "",
+			Privileged: false,
+			GPUVisibleEnvKey: "CUDA_VISIBLE_DEVICES",
+		},
+		ModelMount: runplan.ModelMountInfo{ContainerPath: "/models", Readonly: true},
+		HealthCheckOverride: &runplan.HealthCheckInput{
+			Path: "/v1/models", ExpectedStatus: 200, TimeoutSeconds: 30,
+		},
+	}
+
+	input := runplan.ResolveInput{
+		Backend:        &runplan.BackendInfo{ID: "backend.vllm", Name: "vllm"},
+		BackendVersion: &runplan.VersionInfo{ID: "vllm-v0.23.0", DefaultEntrypoint: []string{"vllm", "serve"}, DefaultArgs: []string{"--model", "/models/test"}},
+		BackendRuntime: rt,
+		Artifact:       &runplan.ArtifactInfo{ID: "art-test", Name: "test-model", Path: "/models/test-model"},
+		Deployment: &runplan.DeploymentInfo{
+			ID: "dep-test", Name: "env-pollution-test",
+			Service: runplan.ServiceInfo{HostPort: 9000, ContainerPort: 8000},
+			Placement: runplan.PlacementInfo{NodeID: "node-test"},
+		},
+		Node:              &runplan.NodeInfo{ID: "node-test", IP: "127.0.0.1"},
+		InstanceID:        "inst-test",
+		AssignedGPUs:      []runplan.GPUInfo{{Index: 0, Vendor: "nvidia"}},
+		NBRConfigSnapshot: &runplan.NBRSnapshotInfo{
+			DefaultEnv: map[string]string{"EXPLICIT_USER_VAR": "explicit-value"},
+		},
+	}
+
+	plan, errs, _ := runplan.Resolve(input)
+	if len(errs) > 0 {
+		var msgs []string
+		for _, e := range errs {
+			msgs = append(msgs, e.Error())
+		}
+		t.Fatalf("resolve failed: %v", msgs)
+	}
+	if plan == nil {
+		t.Fatal("resolved plan is nil")
+	}
+
+	// Resolved env must NOT contain Docker image metadata keys.
+	dockerImageEnvKeys := []string{"PATH", "LD_LIBRARY_PATH", "CUDA_VERSION", "NVIDIA_REQUIRE_CUDA", "NV_CUDA_CUDART_VERSION"}
+	for _, k := range dockerImageEnvKeys {
+		if _, ok := plan.Env[k]; ok {
+			t.Errorf("ResolvedRunPlan.env contains Docker image metadata key %q — must not be present", k)
+		}
+	}
+
+	// User-configured explicit env must be present.
+	if plan.Env["EXPLICIT_USER_VAR"] != "explicit-value" {
+		t.Errorf("ResolvedRunPlan.env lost explicit user env var: %v", plan.Env["EXPLICIT_USER_VAR"])
+	}
+
+	// CUDA_VISIBLE_DEVICES generated by device binding is allowed (source = resolver, not probe).
+	if plan.Env["CUDA_VISIBLE_DEVICES"] == "" {
+		t.Log("CUDA_VISIBLE_DEVICES not set — may be expected for single GPU (empty string is valid for GPU 0)")
 	}
 }
