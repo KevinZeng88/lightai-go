@@ -1,4 +1,6 @@
 id: runtime.sglang.nvidia-docker
+name: SGLang NVIDIA Docker
+display_name: SGLang NVIDIA Docker
 backend_id: backend.sglang
 backend_version_id: sglang-v0.5.13.post1
 slug: sglang-nvidia-docker

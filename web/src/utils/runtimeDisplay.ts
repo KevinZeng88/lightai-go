@@ -100,20 +100,10 @@ export function toRuntimeTemplateDisplay(row: any): RuntimeTemplateDisplay {
 }
 
 function extractVersion(row: any): string {
-  // Builtin generic runtimes (no specific version) → show *.
-  // API guarantees is_builtin and is_editable are present in list response.
-  // is_editable === false means builtin/system template.
-  const isBuiltin = row.is_builtin === true || row.is_editable === false
-  if (isBuiltin) {
-    return '*'
-  }
-  const vid = row.backend_version_id || ''
-  // If version_id looks like "version.vllm.v0.23.0", extract "v0.23.0"
-  const match = vid.match(/v\d+\.\d+\.\d+/)
-  if (match) return match[0]
-  // Otherwise use shortened form
-  if (vid.startsWith('version.')) return vid.replace(/^version\./, '').replace(/\..*\./, '.')
-  return vid
+  // Runtime templates do not currently have per-version differentiated parameter
+  // schemas, launch commands, health checks, or capability profiles.
+  // backend_version_id is technical metadata only; user-facing display shows *.
+  return '*'
 }
 
 function extractSupportedFormats(row: any): string[] {

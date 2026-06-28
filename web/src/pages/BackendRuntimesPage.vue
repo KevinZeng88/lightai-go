@@ -257,8 +257,9 @@ async function saveEdit() {
 
 function cloneRuntime(row: any) {
   cloneSource.value = row
+  const display = toRuntimeTemplateDisplay(row)
   cloneForm.value = {
-    display_name: `${row.display_name || row.name || 'Runtime'} ${t('runtimes.customSuffix')}`,
+    display_name: `${display.displayName}${t('runtimes.customSuffix')}`,
     name: '',
   }
   cloneDialogVisible.value = true

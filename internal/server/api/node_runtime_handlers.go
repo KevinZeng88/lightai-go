@@ -27,19 +27,18 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	newID := uuid.NewString()
 	now := time.Now().Format(time.RFC3339)
-	sourceName := strVal(original, "display_name", "")
-	if sourceName == "" {
-		sourceName = strVal(original, "name", "")
-	}
 	newName := strings.TrimSpace(strVal(req, "name", ""))
 	if newName == "" {
-		newName = sourceName + "-copy"
+		backend := strings.TrimPrefix(strVal(original, "backend_id", ""), "backend.")
+		vendor := strVal(original, "vendor", "")
+		newName = fmt.Sprintf("runtime.%s.%s.user.%s", backend, vendor, newID[:8])
 	}
 	newName = h.uniqueRuntimeName(tid, newName)
 	newDisplayName := strings.TrimSpace(strVal(req, "display_name", ""))
 	if newDisplayName == "" {
 		newDisplayName = newName
 	}
+	sourceName := strVal(original, "name", "")
 	configSet := copyConfigSet(rawJSONString(original["config_set_json"], "{}"))
 	if v := strVal(req, "image_ref", ""); v != "" {
 		setConfigValue(configSet, "launcher.image", v, "BackendRuntime", newID, "clone_override")

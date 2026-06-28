@@ -1,4 +1,6 @@
 id: runtime.vllm.nvidia-docker
+name: vLLM NVIDIA Docker
+display_name: vLLM NVIDIA Docker
 backend_id: backend.vllm
 backend_version_id: vllm-v0.23.0
 slug: vllm-nvidia-docker

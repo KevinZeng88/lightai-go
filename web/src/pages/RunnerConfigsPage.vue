@@ -55,7 +55,37 @@
         </div>
         <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
         <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
-        <JsonViewer :value="selected.probe_results_json || {}" :title="$t('nodeRuntimeProbe.title')" max-height="260px" :searchable="true" />
+
+        <!-- Probe Summary -->
+        <el-divider content-position="left">{{ $t('nodeRuntimeProbe.title') }}</el-divider>
+        <el-descriptions v-if="probeSummary" :column="2" border size="small">
+          <el-descriptions-item :label="$t('nodeRuntimeProbe.imageRef') || 'Image Ref'">{{ probeSummary.image_ref || selected.image_ref || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('common.status') || 'Status'">
+            <el-tag :type="probeSummary.image_present ? 'success' : 'warning'">{{ probeSummary.image_present ? ($t('runnerConfigs.checkReady') || 'Ready') : ($t('runnerConfigs.checkNotReady') || 'Not Ready') }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.image_id" :label="$t('nodeRuntimeProbe.imageId') || 'Image ID'" :span="2">{{ probeSummary.image_id_truncated }}</el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.cuda_version" :label="'CUDA Version'">{{ probeSummary.cuda_version }}</el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.nvidia_constraint" :label="'NVIDIA CUDA Constraint'">
+            <el-tooltip :content="probeSummary.nvidia_constraint" placement="top"><span style="color:var(--el-color-info);font-size:12px">{{ $t('common.yes') }}</span></el-tooltip>
+          </el-descriptions-item>
+          <el-descriptions-item :label="$t('nodeRuntimeProbe.backendMatch') || 'Backend Match'">
+            <el-tag :type="probeSummary.backend_confirmed ? 'success' : 'warning'">{{ probeSummary.backend_match_status || '-' }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.match_detail" :label="$t('nodeRuntimeProbe.matchDetail') || 'Match Detail'" :span="2">{{ probeSummary.match_detail }}</el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.runner_type" :label="$t('runnerConfigs.runnerType') || 'Runner Type'">{{ probeSummary.runner_type }}</el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.confidence" :label="'Confidence'">{{ probeSummary.confidence }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('runnerConfigs.checkReady') || 'Blocking'">
+            <el-tag :type="probeSummary.blocking ? 'danger' : 'success'">{{ probeSummary.blocking ? ($t('common.yes') || 'Yes') : ($t('common.no') || 'No') }}</el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-empty v-else :description="$t('common.noData') || 'No probe data'" :image-size="40" />
+
+        <!-- Raw probe evidence (collapsed by default) -->
+        <el-collapse style="margin-top:12px">
+          <el-collapse-item :title="$t('runtimes.advancedDiagnostics') || 'Raw Probe Evidence'">
+            <JsonViewer :value="selected.probe_results_json || {}" :title="$t('nodeRuntimeProbe.title')" max-height="260px" :searchable="true" />
+          </el-collapse-item>
+        </el-collapse>
       </template>
     </el-drawer>
   </div>
@@ -84,6 +114,57 @@ const nbrEditPatch = ref<ConfigEditPatch | null>(null)
 const detailVisible = computed({
   get: () => !!selected.value,
   set: (value: boolean) => { if (!value) { selected.value = null; nbrEditView.value = null; nbrEditPatch.value = null } },
+})
+
+const probeSummary = computed(() => {
+  const probe = selected.value?.probe_results_json
+  if (!probe || typeof probe !== 'object' || Object.keys(probe).length === 0) return null
+  const l2 = probe?.level2
+  const l3 = probe?.level3
+  const psd = probe?.process_start_detection
+  const summary: Record<string, any> = {}
+
+  // Image status
+  summary.image_present = !!(l2?.inspect_success || probe?.level1?.image_present)
+  summary.image_ref = selected.value?.image_ref || ''
+  summary.runner_type = selected.value?.runner_type || 'docker'
+
+  // Image ID (truncated)
+  const imageId = l2?.image_id || ''
+  summary.image_id = imageId
+  if (imageId && imageId.length > 20) {
+    summary.image_id_truncated = imageId.substring(0, 20) + '…'
+  } else {
+    summary.image_id_truncated = imageId
+  }
+
+  // Extract CUDA version from level2 env
+  const envList = l2?.env
+  if (Array.isArray(envList)) {
+    const cudaEnv = envList.find((e: string) => e.startsWith('CUDA_VERSION='))
+    if (cudaEnv) {
+      summary.cuda_version = cudaEnv.split('=')[1]
+    }
+    const nvidiaReq = envList.find((e: string) => e.startsWith('NVIDIA_REQUIRE_CUDA='))
+    if (nvidiaReq) {
+      summary.nvidia_constraint = nvidiaReq.split('=')[1]
+    }
+  }
+
+  // Backend match
+  summary.backend_match_status = l3?.backend_match_status || 'not_checked'
+  summary.backend_confirmed = !!l3?.confirmed_match
+  summary.match_detail = l3?.match_detail || ''
+  summary.match_method = l3?.match_method || ''
+
+  // Process start detection
+  summary.confidence = psd?.confidence || 'low'
+  summary.start_status = psd?.status || 'unknown'
+
+  // Blocking
+  summary.blocking = !!(l3?.blocking || (probe?.level4?.blocking))
+
+  return summary
 })
 
 function openDetail(row: any) {

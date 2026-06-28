@@ -1,4 +1,6 @@
 id: runtime.llamacpp.nvidia-docker
+name: llama.cpp NVIDIA Docker
+display_name: llama.cpp NVIDIA Docker
 backend_id: backend.llamacpp
 backend_version_id: llamacpp-b9700
 slug: llamacpp-nvidia-docker

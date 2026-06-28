@@ -651,13 +651,16 @@ func (h *AgentHandler) HandleRequestNodeBackendRuntimeCheck(w http.ResponseWrite
 	// ---- Level 4: Version probe (DEFERRED) ----
 	// The /version-probe agent endpoint is not yet enabled. It requires security
 	// review (--pull=never, --network=none, --cap-drop=ALL, etc.) before deployment.
-	// probe_skipped=true + skip_reason means this is NOT a warning — it's an
-	// intentionally deferred feature. Only real probe failures (timeout, error,
-	// version mismatch) produce warnings.
+	// version_probe_status=not_available + blocking=false means this is NOT a
+	// warning — it's an intentionally deferred feature. Only real probe failures
+	// produce warnings.
 	probeResults["level4"] = map[string]interface{}{
-		"version_probed": false,
-		"probe_skipped":  true,
-		"skip_reason":    "version probe not yet implemented; deferred to future design",
+		"compatibility_check_status": "not_run",
+		"version_probe_status":       "not_available",
+		"version_probed":             false,
+		"probe_skipped":              true,
+		"blocking":                   false,
+		"message":                    "当前仅完成镜像存在性与后端匹配检查。",
 	}
 
 	// ---- Process Start Detection (Layer 3) ----

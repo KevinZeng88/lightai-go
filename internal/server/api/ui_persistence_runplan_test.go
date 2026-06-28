@@ -60,8 +60,8 @@ func TestCloneBackendRuntimePersistsIndependentDisplayName(t *testing.T) {
 	if got["name"] == "llama.cpp CUDA Runtime" || got["display_name"] == "llama.cpp CUDA Runtime" {
 		t.Fatalf("clone reused source visible name: %#v", got)
 	}
-	if !strings.Contains(got["name"].(string), "-copy") {
-		t.Fatalf("clone name does not show copy suffix: %v", got["name"])
+	if !strings.Contains(got["name"].(string), "runtime.") || !strings.Contains(got["name"].(string), ".user.") {
+		t.Fatalf("clone name not stable technical name: %v", got["name"])
 	}
 	if got["display_name"] != got["name"] {
 		t.Fatalf("display_name=%v name=%v", got["display_name"], got["name"])

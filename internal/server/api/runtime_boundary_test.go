@@ -2531,3 +2531,65 @@ func TestBackendRuntimePatchAllowedFieldsStillSucceeds(t *testing.T) {
 		t.Errorf("docker_options shm_size = %v, want 32g", dockerEV["shm_size"])
 	}
 }
+
+// TestCloneBackendRuntimeWithUserVisibleDisplayName verifies that clone:
+// 1. Generates a stable technical name (not derived from display_name)
+// 2. Uses the user-visible display_name from the request
+// 3. Does not leak raw runtime IDs into user-facing fields
+func TestCloneBackendRuntimeWithUserVisibleDisplayName(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	insertRuntime(t, database, "rt-vllm-nvidia", "Test vLLM NVIDIA Docker fixture", "")
+
+	body := `{"display_name":"vLLM NVIDIA Docker - 用户配置"}`
+	w := httptest.NewRecorder()
+	h.HandleCloneBackendRuntime(w, newReq("POST", "/x", body, adminSession(), map[string]string{"id": "rt-vllm-nvidia"}))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("clone code=%d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode clone: %v", err)
+	}
+
+	// display_name must be user-facing, NOT raw runtime ID
+	if got["display_name"] != "vLLM NVIDIA Docker - 用户配置" {
+		t.Errorf("display_name = %v, want \"vLLM NVIDIA Docker - 用户配置\"", got["display_name"])
+	}
+
+	// name must be a stable technical name, NOT derived from display_name
+	name, _ := got["name"].(string)
+	if !strings.Contains(name, "runtime.") || !strings.Contains(name, ".user.") {
+		t.Errorf("name not stable technical name: %v", name)
+	}
+	if strings.Contains(name, "vLLM") || strings.Contains(name, "NVIDIA") {
+		t.Errorf("name contains human-readable text from display_name: %v", name)
+	}
+}
+
+// TestCloneBackendRuntimeNoDisplayNameUsesGeneratedName verifies clone
+// without explicit display_name defaults to the generated technical name.
+func TestCloneBackendRuntimeNoDisplayNameUsesGeneratedName(t *testing.T) {
+	database := setupTestDB(t)
+	h := NewAgentHandler(database, nil)
+	insertRuntime(t, database, "rt-sglang-nvidia", "Test SGLang NVIDIA Docker fixture", "")
+
+	w := httptest.NewRecorder()
+	h.HandleCloneBackendRuntime(w, newReq("POST", "/x", `{}`, adminSession(), map[string]string{"id": "rt-sglang-nvidia"}))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("clone code=%d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode clone: %v", err)
+	}
+
+	// name and display_name must be identical (since no explicit display_name)
+	if got["display_name"] != got["name"] {
+		t.Errorf("display_name=%v != name=%v", got["display_name"], got["name"])
+	}
+	// name must be technical, not the source display_name
+	if got["name"] == "Test SGLang NVIDIA Docker fixture" {
+		t.Errorf("clone reused source visible name as technical name")
+	}
+}
