@@ -174,12 +174,16 @@ var commonRuntimeArgs = map[string]bool{
 	"model_runtime.dtype":                  true,
 	"backend.arg.tensor_parallel_size":     true,
 	"model_runtime.tensor_parallel_size":   true,
-	"backend.common.port":                  true,
-	"model_runtime.port":                   true,
-	"service.container_port":               true,
+	"backend.common.port":    true,
+	"service.container_port": true,
 	"backend.arg.served_model_name":        true,
 	"backend.common.served_model_name":     true,
 	"deployment.served_model_name":         true,
+
+	// model_runtime.port is removed from common runtime args because it
+	// competes with service.container_port as the canonical port field.  The
+	// two-port confusion produces a required + readonly + empty field in the
+	// runtime template / NBR wizard that confuses users.
 
 	"backend.arg.mem_fraction_static":   true,
 	"model_runtime.mem_fraction_static": true,

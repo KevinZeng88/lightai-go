@@ -52,32 +52,30 @@
           <el-descriptions-item :label="$t('runtimes.image')">{{ selected.image_ref }}</el-descriptions-item>
         </el-descriptions>
 
+        <!-- Config parameters: readonly detail by default -->
+        <el-divider content-position="left">{{ editing ? $t('runtimes.structuredParameters') : $t('runtimes.configParametersReadonly') }}</el-divider>
+        <div style="margin-bottom:12px">
+          <ConfigEditView
+            :model-value="editView"
+            :readonly="!editing || !selected.is_editable"
+            @update:patch="editPatch = $event"
+          />
+        </div>
         <template v-if="selected.is_editable">
-          <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
-          <div style="margin-bottom:12px">
-            <ConfigEditView
-              :model-value="editView"
-              :readonly="false"
-              @update:patch="editPatch = $event"
-            />
-          </div>
           <div style="margin-top: 12px; text-align: right">
-            <el-button type="primary" :loading="saving" @click="saveEdit">
-              {{ $t('common.save') }}
-            </el-button>
+            <template v-if="!editing">
+              <el-button type="primary" @click="startEditing">{{ $t('common.edit') }}</el-button>
+            </template>
+            <template v-else>
+              <el-button @click="cancelEditing">{{ $t('common.cancel') }}</el-button>
+              <el-button type="primary" :loading="saving" @click="saveEdit">{{ $t('common.save') }}</el-button>
+            </template>
           </div>
         </template>
         <template v-else>
           <el-alert type="info" :closable="false" style="margin:12px 0">
             {{ $t('runtimes.systemTemplateReadonly') }}
           </el-alert>
-          <el-divider content-position="left">{{ $t('runtimes.configParametersReadonly') }}</el-divider>
-          <div style="margin-bottom:12px">
-            <ConfigEditView
-              :model-value="editView"
-              :readonly="true"
-            />
-          </div>
         </template>
 
         <!-- Source Summary -->
@@ -172,6 +170,7 @@ const selected = ref<any | null>(null)
 const editView = ref<ConfigEditViewModel | null>(null)
 const editPatch = ref<ConfigEditPatch | null>(null)
 const cloneDialogVisible = ref(false)
+	const editing = ref(false)
 const cloneSource = ref<any | null>(null)
 const cloneForm = ref<Record<string, any>>({ display_name: '', name: '' })
 const renameDialogVisible = ref(false)
@@ -189,7 +188,7 @@ const selectedDisplay = computed(() => {
 
 const detailVisible = computed({
   get: () => !!selected.value,
-  set: (value: boolean) => { if (!value) { selected.value = null; editView.value = null; editPatch.value = null } },
+  set: (value: boolean) => { if (!value) { selected.value = null; editView.value = null; editPatch.value = null; editing.value = false } },
 })
 
 const deleteMessage = computed(() => {
@@ -232,6 +231,18 @@ watch(selected, async (value) => {
   })
 })
 
+function startEditing() {
+  editing.value = true
+}
+
+function cancelEditing() {
+  editing.value = false
+  // Reload view to discard changes
+  if (selected.value?.id) {
+    getConfigEditView({ object_kind: 'backend_runtime', object_id: selected.value.id, layer: 'backend_runtime', mode: 'edit' }).then(v => { editView.value = v; editPatch.value = null })
+  }
+}
+
 async function saveEdit() {
   if (!selected.value) return
   saving.value = true
@@ -245,6 +256,7 @@ async function saveEdit() {
       })
     }
     ElMessage.success(t('common.saved'))
+    editing.value = false
     await load()
     const updated = runtimes.value.find(r => r.id === selected.value?.id)
     if (updated) selected.value = updated

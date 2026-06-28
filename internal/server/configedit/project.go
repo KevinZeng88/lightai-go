@@ -16,7 +16,7 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 			Label:     label,
 			Order:     sectionOrder[key],
 			Advanced:  key == "advanced_raw" || key == "advanced_parameters" || key == "expert_parameters",
-			Collapsed: key == "advanced_raw" || key == "advanced_parameters" || key == "expert_parameters",
+			Collapsed: key == "advanced_raw" || key == "advanced_parameters" || key == "expert_parameters" || key == "environment",
 		}
 	}
 

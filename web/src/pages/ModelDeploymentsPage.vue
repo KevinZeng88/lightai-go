@@ -15,8 +15,9 @@
         <template #default="{ row }">{{ row.source_node_backend_runtime_display_name || row.source_node_backend_runtime_id }}</template>
       </el-table-column>
       <el-table-column prop="status" :label="$t('common.status')" width="140" />
-      <el-table-column :label="$t('common.actions')" width="260">
+      <el-table-column :label="$t('common.actions')" min-width="300">
         <template #default="{ row }">
+          <el-button size="small" @click.stop="viewRunPlan(row)">{{ $t('deployments.viewRunPlan') }}</el-button>
           <el-button size="small" @click.stop="dryRun(row)">{{ $t('deployments.dryRun') }}</el-button>
           <el-button size="small" type="primary" @click.stop="start(row)">{{ $t('deployments.start') }}</el-button>
           <el-button size="small" @click.stop="stop(row)">{{ $t('deployments.stop') }}</el-button>
@@ -47,9 +48,18 @@
           <el-descriptions-item :label="$t('common.status')">{{ selected.status }}</el-descriptions-item>
           <el-descriptions-item :label="$t('deployments.created')">{{ selected.created_at }}</el-descriptions-item>
         </el-descriptions>
+        <!-- RunPlan / command preview -->
+        <template v-if="lastDryRun?.command_preview">
+          <el-divider content-position="left">{{ $t('deployments.finalRunPlan') || $t('common.runPlanTitle') || 'Run Plan' }}</el-divider>
+          <pre style="background:var(--el-fill-color);padding:12px;border-radius:4px;font-size:12px;overflow-x:auto;white-space:pre-wrap">{{ lastDryRun.command_preview }}</pre>
+          <el-descriptions v-if="lastDryRun.resolved_image" :column="2" border size="small" style="margin-top:8px">
+            <el-descriptions-item label="Resolved Image">{{ lastDryRun.resolved_image }}</el-descriptions-item>
+            <el-descriptions-item v-if="lastDryRun.selected_node" label="Selected Node">{{ lastDryRun.selected_node }}</el-descriptions-item>
+          </el-descriptions>
+        </template>
         <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
         <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
-        <JsonViewer v-if="lastDryRun" :value="lastDryRun" title="Last Dry Run" max-height="420px" :searchable="true" />
+        <JsonViewer v-if="lastDryRun" :value="lastDryRun" title="Dry Run Detail" max-height="420px" :searchable="true" />
       </template>
     </el-drawer>
   </div>
@@ -122,6 +132,11 @@ async function createFromWizard() {
 }
 
 async function dryRun(row: any) {
+  selected.value = row
+  lastDryRun.value = await dryRunDeployment(row.id)
+}
+
+async function viewRunPlan(row: any) {
   selected.value = row
   lastDryRun.value = await dryRunDeployment(row.id)
 }
