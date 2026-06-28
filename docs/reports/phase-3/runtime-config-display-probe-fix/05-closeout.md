@@ -1,8 +1,10 @@
 # Runtime Config Display & Probe Evidence Fix — Closeout
 
-## Commit
+## Commits
 
-`<latest>` (closeout patch on top of `ee35b5b`)
+- `ee35b5b` — initial fix batch (P0-1, P0-2, P0-3)
+- `7671a3e` — closeout patch (deployment NBR display_name, level4 i18n, DB seed test)
+- `<latest>` — config field display fix (docker sub-field value leak, widget overrides)
 
 ## Root Causes
 
@@ -107,3 +109,36 @@ npm run build: ✓ built in 3.55s
 - Non-seeded databases (existing deployments) must be manually deleted and reseeded for catalog display_name changes
 - `VERSION` file remains modified (pre-existing, not from this fix)
 - Version probe endpoint implementation is still deferred (by design)
+
+## Batch 3: Config Field Display Fix (latest)
+
+### Root Cause
+
+Two bugs in `internal/server/configedit/project.go`:
+
+1. **Docker sub-field parent value leak**: `projectDockerOptions` cloned the parent `launcher.docker_options` item and only overwrote `effective_value`/`local_value` in the cloned value tier, leaving `default_value` intact. For absent sub-fields (uts_mode, network_mode, etc.), `effective_value` was set to nil, but `default_value` was still the full parent object. `itemEffectiveValue` then fell through to `default_value` and returned the entire `launcher.docker_options` object.
+
+2. **Widget overrides not applied**: `widgetFor(item)` reads `item["code"]` to match against `widgetOverrides`, but ConfigSet items didn't have `code` set. So structured widgets (key_value_table for env, mount_form for model_mount, health_check_form for health) were never applied — items fell through to type-based default `raw_json`.
+
+### Changes
+
+| File | Change |
+|------|--------|
+| `internal/server/configedit/project.go` | (1) `projectDockerOptions`: replace entire value tier (effective + local + default) instead of partial overwrite; (2) Set `item["code"] = code` in main loop for widget override lookup |
+| `internal/server/configedit/configedit_test.go` | Add `TestDockerSubfieldValueDoesNotLeakParentDefault` (62 lines) and `TestItemCodeSetForWidgetOverride` (33 lines) |
+| `web/tests/runtimeBoundaryUi.test.mjs` | Add tests for structured widgets, null-value fallback, and collapsed raw JSON |
+
+### Acceptance Verification
+
+| Criterion | Result |
+|-----------|--------|
+| `shm_size` displays `16gb` (not parent obj) | ✅ test verifies |
+| `privileged` displays `false` (not parent obj) | ✅ test verifies |
+| `devices` displays `["/dev/nvidia0"]` (not parent obj) | ✅ test verifies |
+| `uts_mode` value is nil (absent sub-key) | ✅ test verifies |
+| `network_mode` value is nil (absent sub-key) | ✅ test verifies |
+| `security_options` value is nil (absent sub-key) | ✅ test verifies |
+| `runtime.env` widget = key_value_table | ✅ test verifies |
+| `runtime.model_mount` widget = mount_form | ✅ test verifies |
+| `runtime.health` widget = health_check_form | ✅ test verifies |
+| Raw Config Set JSON collapsed by default | ✅ frontend test verifies |

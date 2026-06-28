@@ -34,6 +34,9 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 			continue
 		}
 
+		// Ensure each item carries its own code for taxonomy/wiget lookups.
+		item["code"] = code
+
 		// --- Canonical alias merge ---
 		// If this code is an alias for a canonical key, merge into canonical.
 		if canon, ok := aliasCanonicalOf[code]; ok && canon != code {
@@ -199,12 +202,13 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 		dockerItem := cloneMap(item)
 		dockerItem["type"] = spec.Type
 			subVal := value[spec.Path]
-			// Write to tiered value structure, not flat scalar
-			if vt, ok := dockerItem["value"].(map[string]any); ok {
-				vt["effective_value"] = subVal
-				vt["local_value"] = subVal
-			} else {
-				dockerItem["value"] = map[string]any{"effective_value": subVal, "local_value": subVal}
+			// Replace entire value tier so parent default_value does not leak
+			// into child fields that are absent from the object (e.g. uts_mode,
+			// network_mode show the full docker_options parent object).
+			dockerItem["value"] = map[string]any{
+				"effective_value": subVal,
+				"local_value":     subVal,
+				"default_value":   subVal,
 			}
 		dockerItem["required"] = false
 		// Docker sub-fields keep value and enabled state independently. The

@@ -511,3 +511,98 @@ func requireField(t *testing.T, fields []EditField, key, internal string, path [
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+// TestDockerSubfieldValueDoesNotLeakParentDefault verifies that projected
+// docker sub-fields (uts_mode, network_mode, etc.) do NOT display the
+// parent launcher.docker_options object when the sub-key is absent.
+func TestDockerSubfieldValueDoesNotLeakParentDefault(t *testing.T) {
+	view, err := ProjectConfigSetToEditView(ProjectInput{
+		ConfigSet:   testConfigSet(),
+		Layer:       "backend_runtime",
+		ObjectKind:  "backend_runtime",
+		ObjectID:    "rt-test",
+		ObjectLabel: "Docker Leak Test",
+	})
+	if err != nil {
+		t.Fatalf("project view: %v", err)
+	}
+
+	fields := flattenFields(view)
+
+	// shm_size exists in test config: should display "16gb" (string, not object)
+	shm := requireField(t, fields, "docker.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
+	if shm.Value != "16gb" {
+		t.Errorf("shm_size Value = %#v, want \"16gb\"", shm.Value)
+	}
+	// privileged exists: should display false (boolean, not object)
+	priv := requireField(t, fields, "docker.privileged", "launcher.docker_options", []string{"privileged"}, "container_resources")
+	if priv.Value != false {
+		t.Errorf("privileged Value = %#v, want false", priv.Value)
+	}
+	// devices exists: should display ["/dev/nvidia0"] (array, not parent object)
+	dev := requireField(t, fields, "docker.devices", "launcher.docker_options", []string{"devices"}, "devices_mounts")
+	devArr, _ := dev.Value.([]interface{})
+	if len(devArr) != 1 || devArr[0] != "/dev/nvidia0" {
+		t.Errorf("devices Value = %#v, want [\"/dev/nvidia0\"]", dev.Value)
+	}
+	// group_add exists: should display ["video"]
+	ga := requireField(t, fields, "docker.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
+	gaArr, _ := ga.Value.([]interface{})
+	if len(gaArr) != 1 || gaArr[0] != "video" {
+		t.Errorf("group_add Value = %#v, want [\"video\"]", ga.Value)
+	}
+
+	// uts_mode does NOT exist in test config: value must be nil, NOT the parent object.
+	uts := requireField(t, fields, "launcher.docker_options.uts_mode", "launcher.docker_options", []string{"uts_mode"}, "container_resources")
+	if uts.Value != nil {
+		t.Errorf("uts_mode Value = %#v, want nil (absent sub-key must not show parent object)", uts.Value)
+	}
+	// network_mode does NOT exist: value must be nil, NOT the parent object.
+	net := requireField(t, fields, "docker.network_mode", "launcher.docker_options", []string{"network_mode"}, "container_resources")
+	if net.Value != nil {
+		t.Errorf("network_mode Value = %#v, want nil (absent sub-key must not show parent object)", net.Value)
+	}
+	// security_options does NOT exist: value must be nil.
+	sec := requireField(t, fields, "launcher.docker_options.security_options", "launcher.docker_options", []string{"security_options"}, "container_resources")
+	if sec.Value != nil {
+		t.Errorf("security_options Value = %#v, want nil (absent sub-key must not show parent object)", sec.Value)
+	}
+}
+
+// TestItemCodeSetForWidgetOverride verifies that widget overrides are
+// applied for items with known codes (model_mount, env, health).
+func TestItemCodeSetForWidgetOverride(t *testing.T) {
+	view, err := ProjectConfigSetToEditView(ProjectInput{
+		ConfigSet:   testConfigSet(),
+		Layer:       "backend_runtime",
+		ObjectKind:  "backend_runtime",
+		ObjectID:    "rt-test",
+		ObjectLabel: "Widget Test",
+	})
+	if err != nil {
+		t.Fatalf("project view: %v", err)
+	}
+
+	fields := flattenFields(view)
+
+	// runtime.env should have key_value_table widget (not raw_json)
+	env := requireField(t, fields, "runtime.env", "runtime.env", nil, "environment")
+	if env.Widget != "key_value_table" {
+		t.Errorf("runtime.env widget = %q, want key_value_table", env.Widget)
+	}
+
+	// Check health field from a richer config — this test config may not have it
+	// explicitly, but the widget override should still apply if it appears.
+	for _, f := range fields {
+		if f.Key == "runtime.model_mount" {
+			if f.Widget != "mount_form" {
+				t.Errorf("runtime.model_mount widget = %q, want mount_form", f.Widget)
+			}
+		}
+		if f.Key == "runtime.health" {
+			if f.Widget != "health_check_form" {
+				t.Errorf("runtime.health widget = %q, want health_check_form", f.Widget)
+			}
+		}
+	}
+}

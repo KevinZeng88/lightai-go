@@ -162,6 +162,21 @@ check('DeploymentWizard falls back to artifact.locations', deploymentWizardSrc.i
 check('DeploymentWizard checks deployable match_status', deploymentWizardSrc.includes('match_status') && deploymentWizardSrc.includes('exact_match') && deploymentWizardSrc.includes('probable_match') && deploymentWizardSrc.includes('manual_attested'))
 check('DeploymentWizard compatibility error includes artifact and node context', deploymentWizardSrc.includes('model_artifact_id') && deploymentWizardSrc.includes('nbrNodeId') && deploymentWizardSrc.includes('visibleLocations'))
 
+	// n. Object child field display: ConfigField handles structured widgets.
+	check('ConfigField has mount_form widget for model_mount', fieldSrc.includes('mount_form'))
+	check('ConfigField has health_check_form widget for health', fieldSrc.includes('health_check_form'))
+	check('ConfigField has key_value_table widget for env', fieldSrc.includes('key_value_table'))
+	check('ConfigField handles null/absent values with fallback display', fieldSrc.includes('v === null || v === undefined'))
+	check('ConfigField formattedDisplayValue shows - for null', fieldSrc.includes("return '-'"))
+
+	// o. Raw Config Set JSON collapsed by default in detail pages.
+	check('BackendRuntimesPage raw ConfigSet is in diagnostics collapse',
+		sources['src/pages/BackendRuntimesPage.vue'].includes('advancedDiagnostics') &&
+		sources['src/pages/BackendRuntimesPage.vue'].includes('el-collapse'))
+	check('RunnerConfigsPage raw probe evidence is collapsed by default',
+		sources['src/pages/RunnerConfigsPage.vue'].includes('el-collapse') &&
+		sources['src/pages/RunnerConfigsPage.vue'].includes('probe_results_json'))
+
 if (failed > 0) {
   console.error(`\n${failed} test(s) FAILED`)
   process.exit(1)
