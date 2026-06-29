@@ -95,7 +95,25 @@
       "stopped_at": "",
       "tenant_id": "a0000000-0000-0000-0000-000000000001"
     },
+    "note": "superseded by runtime_starts",
     "started": true,
     "state": "running"
+  },
+  "runtime_starts": {
+    "llamacpp": {
+      "deployment_id": "04a793d7-90f1-48db-940f-141f7909d477",
+      "started": true,
+      "state": "running"
+    },
+    "sglang": {
+      "deployment_id": "08621440-98c8-4da6-9b26-b0c858df2d70",
+      "started": true,
+      "state": "running"
+    },
+    "vllm": {
+      "deployment_id": "c8606eb0-1a30-4f4b-af19-a3e3273f676e",
+      "started": true,
+      "state": "running"
+    }
   }
 }

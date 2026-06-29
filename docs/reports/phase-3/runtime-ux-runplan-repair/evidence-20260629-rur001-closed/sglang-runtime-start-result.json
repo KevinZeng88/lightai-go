@@ -1,0 +1,128 @@
+{
+  "backend": "sglang",
+  "deployment_id": "08621440-98c8-4da6-9b26-b0c858df2d70",
+  "instance": {
+    "actual_state": "running",
+    "container_id": "6dd6e076f024926b531f1689f6a7696f3c5bba86b8821a8cfbf7413615a41152",
+    "created_at": "2026-06-29T20:50:30+08:00",
+    "current_run_plan_id": "975bead7-2a48-42e4-a263-0407f18582e3",
+    "deployment_id": "08621440-98c8-4da6-9b26-b0c858df2d70",
+    "endpoint_url": "http://127.0.0.1:18082",
+    "host_port": 18082,
+    "id": "7becbbbd-2ae8-4797-a385-a84a49934d93",
+    "last_error": "",
+    "node_id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+    "started_at": "2026-06-29T12:51:26Z",
+    "stopped_at": "",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001"
+  },
+  "observations": [
+    {
+      "at": "2026-06-29T20:50:30+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:35+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:40+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:45+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:50+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:55+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:51:00+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:51:05+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:51:10+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:51:15+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:51:20+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:51:25+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:51:30+0800",
+      "container_id": "6dd6e076f024926b531f1689f6a7696f3c5bba86b8821a8cfbf7413615a41152",
+      "endpoint_url": "http://127.0.0.1:18082",
+      "last_error": "",
+      "state": "running"
+    }
+  ],
+  "start_response": {
+    "deployment_id": "08621440-98c8-4da6-9b26-b0c858df2d70",
+    "docker_preview": "docker run -d --name lightai-0e2ae4b8-222 --ipc host --shm-size 32gb --gpus \"device=0\" -v /home/kzeng/models/Qwen3-0.6B-Instruct-2512:/models/Qwen3-0.6B-Instruct-2512:ro -e CUDA_VISIBLE_DEVICES=0 -p 18082:30000/tcp lmsysorg/sglang:latest python3 -m sglang.launch_server --model-path /models/Qwen3-0.6B-Instruct-2512 --port 30000 --host 0.0.0.0",
+    "instance_id": "7becbbbd-2ae8-4797-a385-a84a49934d93",
+    "run_plan_id": "975bead7-2a48-42e4-a263-0407f18582e3",
+    "status": "started",
+    "task_id": "0a9f1bd7-90e6-4030-93a7-a54ea6ca2994",
+    "warnings": null
+  },
+  "started": true,
+  "state": "running",
+  "stop_response": {
+    "instances_stopped": 1,
+    "status": "stopped",
+    "warnings": []
+  }
+}

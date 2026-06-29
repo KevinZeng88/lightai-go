@@ -1,0 +1,163 @@
+{
+  "backend": "vllm",
+  "deployment_id": "c8606eb0-1a30-4f4b-af19-a3e3273f676e",
+  "instance": {
+    "actual_state": "running",
+    "container_id": "06ff13a3c7f5c07c7bfbe6336230a4cb27839d509a3fca4d3ac9c7fd01b7591c",
+    "created_at": "2026-06-29T20:48:57+08:00",
+    "current_run_plan_id": "f49a00c2-ef53-4eda-8f7b-41b54a69b453",
+    "deployment_id": "c8606eb0-1a30-4f4b-af19-a3e3273f676e",
+    "endpoint_url": "http://127.0.0.1:18081",
+    "host_port": 18081,
+    "id": "f08e36da-bc9e-4a60-af8b-4e3e656b7f17",
+    "last_error": "",
+    "node_id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+    "started_at": "2026-06-29T12:50:20Z",
+    "stopped_at": "",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001"
+  },
+  "observations": [
+    {
+      "at": "2026-06-29T20:48:57+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:02+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:07+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:12+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:17+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:22+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:27+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:32+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:37+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:42+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:47+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:52+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:49:57+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:02+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:07+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:12+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:17+0800",
+      "container_id": "",
+      "endpoint_url": "",
+      "last_error": "",
+      "state": "pending"
+    },
+    {
+      "at": "2026-06-29T20:50:22+0800",
+      "container_id": "06ff13a3c7f5c07c7bfbe6336230a4cb27839d509a3fca4d3ac9c7fd01b7591c",
+      "endpoint_url": "http://127.0.0.1:18081",
+      "last_error": "",
+      "state": "running"
+    }
+  ],
+  "start_response": {
+    "deployment_id": "c8606eb0-1a30-4f4b-af19-a3e3273f676e",
+    "docker_preview": "docker run -d --name lightai-2c7bcbb9-fec --ipc host --shm-size 16gb --gpus \"device=0\" -v /home/kzeng/models/Qwen3-0.6B-Instruct-2512:/models/Qwen3-0.6B-Instruct-2512:ro -e CUDA_VISIBLE_DEVICES=0 -p 18081:8000/tcp vllm/vllm-openai:latest --model /models/Qwen3-0.6B-Instruct-2512 --port 8000 --host 0.0.0.0",
+    "instance_id": "f08e36da-bc9e-4a60-af8b-4e3e656b7f17",
+    "run_plan_id": "f49a00c2-ef53-4eda-8f7b-41b54a69b453",
+    "status": "started",
+    "task_id": "e6014262-46b5-42ab-9887-8053a6e5a5f7",
+    "warnings": null
+  },
+  "started": true,
+  "state": "running",
+  "stop_response": {
+    "instances_stopped": 1,
+    "status": "stopped",
+    "warnings": []
+  }
+}
