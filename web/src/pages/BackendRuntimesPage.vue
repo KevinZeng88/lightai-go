@@ -37,7 +37,7 @@
             {{ $t('runtimes.clone') }}
           </el-button>
           <template v-if="row.sourceType === 'user'">
-            <el-button size="small" @click.stop="renameRuntime(row.raw)">{{ $t('common.rename') || 'Rename' }}</el-button>
+            <el-button size="small" @click.stop="renameRuntime(row.raw)">{{ $t('common.rename') }}</el-button>
             <el-button size="small" type="danger" @click.stop="confirmDeleteRuntime(row.raw)">{{ $t('common.delete') }}</el-button>
           </template>
         </template>
@@ -156,6 +156,7 @@ import { listRuntimes } from '@/api/runtimes'
 import { apiClient } from '@/api/client'
 import { applyConfigEditPatch, getConfigEditView } from '@/api/configEdit'
 import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/runtimeDisplay'
+import { apiErrorMessage } from '@/utils/apiErrors'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
@@ -172,7 +173,7 @@ const selected = ref<any | null>(null)
 const editView = ref<ConfigEditViewModel | null>(null)
 const editPatch = ref<ConfigEditPatch | null>(null)
 const cloneDialogVisible = ref(false)
-	const editing = ref(false)
+const editing = ref(false)
 const cloneSource = ref<any | null>(null)
 const cloneForm = ref<Record<string, any>>({ display_name: '', name: '' })
 const renameDialogVisible = ref(false)
@@ -269,7 +270,7 @@ async function saveEdit() {
     const updated = runtimes.value.find(r => r.id === selected.value?.id)
     if (updated) selected.value = updated
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Save failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {
     saving.value = false
   }
@@ -296,7 +297,7 @@ async function submitCloneRuntime() {
     await load()
     selected.value = null
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Clone failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {
     cloning.value = false
   }
@@ -325,7 +326,7 @@ async function submitRenameRuntime() {
     const updated = runtimes.value.find(r => r.id === renameTarget.value?.id)
     if (updated) selected.value = updated
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Rename failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {
     renaming.value = false
   }
@@ -348,7 +349,7 @@ async function submitDeleteRuntime() {
     }
     await load()
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Delete failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {
     deleting.value = false
   }

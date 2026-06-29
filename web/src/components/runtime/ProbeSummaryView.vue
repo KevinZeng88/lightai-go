@@ -18,7 +18,7 @@
       </el-descriptions-item>
       <el-descriptions-item :label="labels.backendMatch">
         <el-tag :type="summary.backend_confirmed ? 'success' : 'warning'">
-          {{ summary.backend_match_status || '-' }}
+          {{ translateStatus(summary.backend_match_status || '', t) }}
         </el-tag>
       </el-descriptions-item>
       <el-descriptions-item v-if="summary.match_detail" :label="labels.matchDetail" :span="2">
@@ -49,6 +49,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { translateStatus } from '@/utils/status'
+
+const { t } = useI18n()
 
 export interface ProbeResults {
   level1?: Record<string, any>
@@ -85,26 +89,25 @@ const props = withDefaults(defineProps<{
   labels: () => ({}),
 })
 
-const defaultLabels: Record<string, string> = {
-  imageRef: 'Image Ref',
-  imageStatus: 'Status',
-  ready: 'Ready',
-  notReady: 'Not Ready',
-  imageId: 'Image ID',
-  cudaVersion: 'CUDA Version',
-  nvidiaConstraint: 'NVIDIA CUDA Constraint',
-  yes: 'Yes',
-  no: 'No',
-  backendMatch: 'Backend Match',
-  matchDetail: 'Match Detail',
-  runnerType: 'Runner Type',
-  confidence: 'Confidence',
-  blocking: 'Blocking',
-  rawDiagnostics: 'Raw Probe Evidence',
-  noData: 'No probe data',
-}
-
-const mergedLabels = computed(() => ({ ...defaultLabels, ...props.labels }))
+const labels = computed<Record<string, string>>(() => ({
+  imageRef: t('nodeRuntimeProbe.imageRef'),
+  imageStatus: t('nodeRuntime.status'),
+  ready: t('status.ready'),
+  notReady: t('runnerConfigs.checkNotReady'),
+  imageId: t('nodeRuntimeProbe.imageId'),
+  cudaVersion: 'CUDA_VERSION',
+  nvidiaConstraint: 'NVIDIA_REQUIRE_CUDA',
+  yes: t('common.yes'),
+  no: t('common.no'),
+  backendMatch: t('nodeRuntimeProbe.backendMatch'),
+  matchDetail: t('nodeRuntimeProbe.matchDetail'),
+  runnerType: t('runnerConfigs.runnerType'),
+  confidence: t('artifacts.confidence'),
+  blocking: t('preflight.errors'),
+  rawDiagnostics: t('nodeRuntimeProbe.imageMetadata'),
+  noData: t('common.noData'),
+  ...props.labels,
+}))
 
 const summary = computed<ProbeSummary | null>(() => {
   const probe = props.probeResults

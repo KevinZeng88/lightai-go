@@ -12,7 +12,7 @@
       <!-- Step 0: Model -->
       <div v-if="activeStep === 0">
         <div v-if="!hasArtifacts" style="text-align:center;padding:40px">
-          <el-empty :description="$t('deployments.noArtifacts') || 'No model artifacts available'">
+          <el-empty :description="$t('deployments.noArtifacts')">
             <el-button @click="$emit('refreshData')">{{ $t('common.refresh') }}</el-button>
           </el-empty>
         </div>
@@ -27,7 +27,7 @@
       <!-- Step 1: Node Runtime Config -->
       <div v-if="activeStep === 1">
         <div v-if="!hasRuntimes" style="text-align:center;padding:40px">
-          <el-empty :description="$t('runnerConfigs.noConfigs') || 'No node runtime configs available. Enable one first.'">
+          <el-empty :description="$t('runnerConfigs.noConfigs')">
             <el-button @click="$emit('refreshData')">{{ $t('common.refresh') }}</el-button>
           </el-empty>
         </div>
@@ -39,7 +39,7 @@
           />
           <div style="margin-top:8px; text-align:right">
             <el-button v-if="deployableRuntimes.length < props.nodeRuntimes.length" size="small" @click="showAllRuntimes = !showAllRuntimes">
-              {{ showAllRuntimes ? $t('runnerConfigs.showDeployableOnly') || 'Deployable only' : $t('runnerConfigs.showAll') || 'Show all (' + props.nodeRuntimes.length + ')' }}
+              {{ showAllRuntimes ? $t('runnerConfigs.showDeployableOnly') : $t('runnerConfigs.showAll') }}
             </el-button>
             <el-button size="small" @click="$emit('refreshData')">{{ $t('common.refresh') }}</el-button>
           </div>
@@ -101,6 +101,7 @@ import DeploymentOverrideEditor from './DeploymentOverrideEditor.vue'
 import DeploymentPreviewPanel from './DeploymentPreviewPanel.vue'
 import { previewDeployment, type PreviewResult } from '@/api/deployments'
 import type { ConfigEditPatch } from '@/utils/configEditView'
+import { apiErrorMessage } from '@/utils/apiErrors'
 
 const { t } = useI18n()
 
@@ -175,6 +176,19 @@ function onNBRSelected(nbrID: string) {
 
 const compatibilityError = ref('')
 
+function validateServiceConfig(): boolean {
+  compatibilityError.value = ''
+  if (!Number.isFinite(Number(form.host_port)) || form.host_port < 1 || form.host_port > 65535) {
+    compatibilityError.value = t('deployments.invalidHostPort')
+    return false
+  }
+  if (!Number.isFinite(Number(form.container_port)) || form.container_port < 1 || form.container_port > 65535) {
+    compatibilityError.value = t('deployments.invalidContainerPort')
+    return false
+  }
+  return true
+}
+
 function checkNodeCompatibility(): boolean {
   compatibilityError.value = ''
   if (!form.model_artifact_id || !form.node_backend_runtime_id) return true
@@ -203,8 +217,7 @@ function checkNodeCompatibility(): boolean {
       `id=${l.id || ''} node_id=${l.node_id || ''} verification_status=${l.verification_status || ''} match_status=${l.match_status || ''} last_error=${l.last_error || ''}`
     ).join('; ') || '<none>'
     const artifactName = selectedArtifact.value?.display_name || selectedArtifact.value?.name || form.model_artifact_id
-    compatibilityError.value = `${t('deployments.nodeMismatch') ||
-      'This model has no deployable location on the selected runtime node.'} model_artifact_id=${form.model_artifact_id} model=${artifactName} node_id=${nbrNodeId} visibleLocations=${visibleLocations}`
+    compatibilityError.value = `${t('deployments.nodeMismatch')} model_artifact_id=${form.model_artifact_id} model=${artifactName} node_id=${nbrNodeId} visibleLocations=${visibleLocations}`
     return false
   }
   return true
@@ -219,7 +232,8 @@ function nextStep() {
     if (!checkNodeCompatibility()) return
   }
   if (s === 2) {
-    doPreview()
+    if (!validateServiceConfig()) return
+    activeStep.value = 3
     return
   }
   if (s === 3 && activeStep.value < 4) {
@@ -242,6 +256,8 @@ async function doPreview() {
       editable_config_patch: form.editable_config_patch,
     })
     if (activeStep.value === 3) activeStep.value = 4
+  } catch (e: any) {
+    compatibilityError.value = apiErrorMessage(e, t, 'common.requestFailed')
   } finally {
     previewLoading.value = false
   }

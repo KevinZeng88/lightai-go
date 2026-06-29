@@ -15,19 +15,19 @@
     <el-drawer v-model="detailVisible" :title="selected?.display_name || selected?.name || ''" size="72%">
       <template v-if="selected">
         <el-tabs>
-          <el-tab-pane :label="$t('backends.title') || 'Backend'">
+          <el-tab-pane :label="$t('backends.title')">
             <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
             <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="240px" :searchable="true" />
           </el-tab-pane>
-          <el-tab-pane :label="$t('backends.versions') || 'Versions'">
+          <el-tab-pane :label="$t('backends.versions')">
             <div class="version-toolbar">
               <el-button size="small" @click="loadVersions(selected.id)">{{ $t('common.refresh') }}</el-button>
-              <el-button size="small" type="primary" @click="newVersion">{{ $t('backends.addVersion') || 'New Version' }}</el-button>
+              <el-button size="small" type="primary" @click="newVersion">{{ $t('backends.addVersion') }}</el-button>
             </div>
             <el-table :data="versions" v-loading="versionsLoading" stripe highlight-current-row @row-click="selectVersion">
-              <el-table-column prop="display_name" :label="$t('backends.versionName') || 'Version'" min-width="180" />
-              <el-table-column prop="version" :label="$t('backends.software') || 'Software'" width="150" />
-              <el-table-column prop="managed_by" :label="$t('runtimes.managedBy') || 'Managed By'" width="120" />
+              <el-table-column prop="display_name" :label="$t('backends.versionName')" min-width="180" />
+              <el-table-column prop="version" :label="$t('backends.software')" width="150" />
+              <el-table-column prop="managed_by" :label="$t('runtimes.managedBy')" width="120" />
               <el-table-column :label="$t('common.readonly')" width="100">
                 <template #default="{ row }">{{ row.readonly ? $t('common.yes') : $t('common.no') }}</template>
               </el-table-column>
@@ -44,10 +44,10 @@
               <el-form-item :label="$t('backends.versionName')">
                 <el-input v-model="versionForm.version" :disabled="versionReadonly" />
               </el-form-item>
-              <el-form-item :label="$t('backends.versionDisplayName') || $t('backends.displayName')">
+              <el-form-item :label="$t('backends.versionDisplayName')">
                 <el-input v-model="versionForm.display_name" :disabled="versionReadonly" />
               </el-form-item>
-              <el-form-item :label="$t('backends.versionDescription') || $t('common.description')">
+              <el-form-item :label="$t('backends.versionDescription')">
                 <el-input v-model="versionForm.description" type="textarea" :rows="2" :disabled="versionReadonly" />
               </el-form-item>
               <ConfigEditView
@@ -59,23 +59,23 @@
               <el-collapse v-if="!versionReadonly" style="margin-top:12px">
                 <el-collapse-item :title="$t('backends.addParameter')" name="add-param">
                   <el-alert type="info" :closable="false" style="margin-bottom:12px">
-                    {{ $t('backends.addParameterHint') || 'Developer parameter definition. Fields here define the schema and capabilities for this BackendVersion. These are not runtime configuration values.' }}
+                    {{ $t('backends.addParameterHint') }}
                   </el-alert>
                   <el-form label-position="top" class="param-grid">
-                    <el-form-item :label="$t('backends.paramCode') || 'Code'"><el-input v-model="newParam.code" placeholder="model_runtime.custom_parameter" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramLabel') || 'Label'"><el-input v-model="newParam.label" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramHelp') || 'Help'"><el-input v-model="newParam.help" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramCategory') || 'Category'"><el-input v-model="newParam.category" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramGroup') || 'Group'"><el-input v-model="newParam.group" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramKind') || 'Kind'"><el-input v-model="newParam.kind" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramType') || 'Type'"><el-input v-model="newParam.type" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramFlag') || 'CLI Flag'"><el-input v-model="newParam.flag" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramDefaultValue') || 'Default Value'"><el-input v-model="newParam.value" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramOrder') || 'Order'"><el-input v-model.number="newParam.order" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramEnabled') || 'Enabled'"><el-switch v-model="newParam.enabled" /></el-form-item>
-                    <el-form-item :label="$t('backends.paramRequired') || 'Required'"><el-switch v-model="newParam.required" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramCode')"><el-input v-model="newParam.code" placeholder="model_runtime.custom_parameter" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramLabel')"><el-input v-model="newParam.label" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramHelp')"><el-input v-model="newParam.help" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramCategory')"><el-input v-model="newParam.category" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramGroup')"><el-input v-model="newParam.group" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramKind')"><el-input v-model="newParam.kind" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramType')"><el-input v-model="newParam.type" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramFlag')"><el-input v-model="newParam.flag" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramDefaultValue')"><el-input v-model="newParam.value" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramOrder')"><el-input v-model.number="newParam.order" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramEnabled')"><el-switch v-model="newParam.enabled" /></el-form-item>
+                    <el-form-item :label="$t('backends.paramRequired')"><el-switch v-model="newParam.required" /></el-form-item>
                   </el-form>
-                  <el-button size="small" @click="addParameter">{{ $t('backends.addParameterButton') || 'Add Parameter' }}</el-button>
+                  <el-button size="small" @click="addParameter">{{ $t('backends.addParameterButton') }}</el-button>
                 </el-collapse-item>
               </el-collapse>
               <div v-if="!versionReadonly" class="version-actions">
@@ -91,6 +91,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import {
   cloneBackendVersion,
@@ -101,10 +102,12 @@ import {
   patchBackendVersion,
 } from '@/api/backends'
 import { applyConfigEditPatch, getConfigEditView } from '@/api/configEdit'
+import { apiErrorMessage } from '@/utils/apiErrors'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
 
+const { t } = useI18n()
 const loading = ref(false)
 const backends = ref<any[]>([])
 const selected = ref<any | null>(null)
@@ -202,22 +205,22 @@ function newVersion() {
 async function cloneVersion(row: any) {
   try {
     const cloned = await cloneBackendVersion(row.id)
-    ElMessage.success('Cloned')
+    ElMessage.success(t('backends.clonedVersion'))
     if (selected.value?.id) await loadVersions(selected.value.id)
     await selectVersion(cloned)
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Clone failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   }
 }
 
 async function removeVersion(row: any) {
   try {
     await deleteBackendVersion(row.id)
-    ElMessage.success('Deleted')
+    ElMessage.success(t('backends.deletedVersion'))
     if (selected.value?.id) await loadVersions(selected.value.id)
     resetVersionForm()
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Delete failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   }
 }
 
@@ -225,7 +228,7 @@ function addParameter() {
   const code = newParam.code.trim()
   if (!code) return
   if (isLegacyUserConfigKey(code)) {
-    ElMessage.error('Legacy backend/common/launcher keys are diagnostic-only; use a canonical semantic key.')
+    ElMessage.error(t('backends.legacyKeyRejected'))
     return
   }
   const configSet = versionEditorModel.value.config_set || { items: {} }
@@ -286,7 +289,7 @@ async function saveVersion() {
     const saved = versionForm.creating
       ? await createBackendVersion(selected.value.id, payload)
       : await patchBackendVersion(versionForm.id, payload)
-    ElMessage.success('Saved')
+    ElMessage.success(t('backends.savedVersion'))
     await loadVersions(selected.value.id)
     if (!versionForm.creating && versionEditPatch.value) {
       await applyConfigEditPatch({
@@ -298,7 +301,7 @@ async function saveVersion() {
     }
     await selectVersion(saved)
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Save failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {
     savingVersion.value = false
   }

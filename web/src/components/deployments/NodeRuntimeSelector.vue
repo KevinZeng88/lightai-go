@@ -26,12 +26,12 @@
             {{ row.warnings[0] }}
           </div>
           <div v-if="!isNBRDeployable(row)" style="font-size:11px;color:var(--el-color-danger);margin-top:2px">
-            {{ $t('runnerConfigs.needsCheckFirst') || 'Run check-request first' }}
+            {{ $t('runnerConfigs.needsCheckFirst') }}
           </div>
         </template>
       </el-table-column>
     </el-table>
-    <el-empty v-if="!props.nodeRuntimes.length" :description="$t('common.noData') || 'No node runtime configs available'" />
+    <el-empty v-if="!props.nodeRuntimes.length" :description="$t('common.noData')" />
   </div>
 </template>
 

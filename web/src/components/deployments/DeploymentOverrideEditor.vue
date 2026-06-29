@@ -1,14 +1,14 @@
 <template>
   <div>
     <el-alert type="info" :closable="false" style="margin-bottom:12px">
-      {{ $t('deployments.overrideHint') || 'Edit deployment-level overrides. Inherited values from the node runtime config are shown for reference.' }}
+      {{ $t('deployments.overrideHint') }}
     </el-alert>
     <ConfigEditView
       v-if="editView"
       :model-value="editView"
       @update:patch="onUpdate"
     />
-    <el-empty v-else :description="$t('common.noData') || 'Select a node runtime config first'" />
+    <el-empty v-else :description="$t('common.noData')" />
   </div>
 </template>
 

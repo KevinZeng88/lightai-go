@@ -12,13 +12,17 @@ const files = [
   'src/components/config/ConfigField.vue',
   'src/utils/configEditView.ts',
   'src/components/deployments/NodeRuntimeConfigWizard.vue',
+  'src/components/deployments/NodeRuntimeSelector.vue',
   'src/components/deployments/DeploymentWizard.vue',
   'src/components/DockerImagePicker.vue',
   'src/components/deployments/DeploymentOverrideEditor.vue',
   'src/api/runtimes.ts',
   'src/api/backends.ts',
   'src/api/configEdit.ts',
+  'src/utils/apiErrors.ts',
+  'src/utils/status.ts',
   'src/utils/runtimeDisplay.ts',
+  'src/components/runtime/ProbeSummaryView.vue',
   'src/locales/zh-CN.ts',
 ]
 
@@ -97,6 +101,23 @@ check('ConfigSection advanced_raw tag uses i18n', sectionSrc.includes('configEdi
 const fieldSrc = sources['src/components/config/ConfigField.vue']
 check('ConfigField has displayLabel computed with i18n mapping', fieldSrc.includes('displayLabel') && fieldSrc.includes('configEdit.labels'))
 check('ConfigField template uses displayLabel not field.label', fieldSrc.includes('{{ displayLabel }}'))
+check('ConfigField exposes technical parameter tooltip', fieldSrc.includes('fieldTooltip') && fieldSrc.includes('cli_flag') && fieldSrc.includes('technical_key'))
+check('ConfigField does not fall back to raw backend label', !fieldSrc.includes('return props.field.label'))
+check('API errors render through i18n helper', sources['src/utils/apiErrors.ts'].includes('apiErrors.') && sources['src/pages/BackendRuntimesPage.vue'].includes('apiErrorMessage'))
+check('Status helper does not fall back to raw status code', !sources['src/utils/status.ts'].includes('return status'))
+check('Status reason helper does not fall back to raw backend reason', !sources['src/utils/status.ts'].includes('return reason'))
+check('ProbeSummaryView localizes default labels', sources['src/components/runtime/ProbeSummaryView.vue'].includes("t('nodeRuntimeProbe.imageRef')"))
+check('ProbeSummaryView translates backend match status', sources['src/components/runtime/ProbeSummaryView.vue'].includes('translateStatus(summary.backend_match_status'))
+check('Runtime empty states avoid hardcoded English fallbacks',
+  !sources['src/components/deployments/NodeRuntimeSelector.vue'].includes('No node runtime configs available') &&
+  !sources['src/components/deployments/DeploymentOverrideEditor.vue'].includes('Select a node runtime config first'))
+check('zh-CN service port label is short', sources['src/locales/zh-CN.ts'].includes("'service.container_port': '容器端口'"))
+check('zh-CN requested runtime short labels exist',
+  sources['src/locales/zh-CN.ts'].includes("'model_runtime.gpu_memory_utilization': '显存比例'") &&
+  sources['src/locales/zh-CN.ts'].includes("'model_runtime.max_model_len': '最大上下文'") &&
+  sources['src/locales/zh-CN.ts'].includes("'model_runtime.mem_fraction_static': '静态显存比例'") &&
+  sources['src/locales/zh-CN.ts'].includes("'model_runtime.gpu_layers': 'GPU 层数'"))
+check('DeploymentWizard service next advances to overrides', sources['src/components/deployments/DeploymentWizard.vue'].includes('activeStep.value = 3'))
 
 // c. key_value_table has editable key column.
 check('key_value_table key column has el-input', fieldSrc.includes('key_value_table') && fieldSrc.includes('v-model="row.key"'))
@@ -154,13 +175,15 @@ check('runtimeDisplay has displayIsTechSlug check', rtSrc.includes('displayIsTec
 // l. Canonical alias i18n keys present in zh-CN.
 const zhSrc = sources['src/locales/zh-CN.ts']
 check('zh-CN has service.listen_host i18n', zhSrc.includes('service.listen_host'))
-check('zh-CN has service.container_port i18n', zhSrc.includes('service.listen_host') && zhSrc.includes('容器监听端口'))
+check('zh-CN has service.container_port short i18n', zhSrc.includes('service.container_port') && zhSrc.includes('容器端口'))
+check('zh-CN has requested runtime parameter short labels', zhSrc.includes('显存比例') && zhSrc.includes('最大上下文') && zhSrc.includes('静态显存比例') && zhSrc.includes('GPU 层数'))
 
 // m. Deployment wizard uses complete model location eligibility.
 const deploymentWizardSrc = sources['src/components/deployments/DeploymentWizard.vue']
 check('DeploymentWizard falls back to artifact.locations', deploymentWizardSrc.includes('selectedArtifact') && deploymentWizardSrc.includes('locations'))
 check('DeploymentWizard checks deployable match_status', deploymentWizardSrc.includes('match_status') && deploymentWizardSrc.includes('exact_match') && deploymentWizardSrc.includes('probable_match') && deploymentWizardSrc.includes('manual_attested'))
 check('DeploymentWizard compatibility error includes artifact and node context', deploymentWizardSrc.includes('model_artifact_id') && deploymentWizardSrc.includes('nbrNodeId') && deploymentWizardSrc.includes('visibleLocations'))
+check('DeploymentWizard service next advances instead of preview no-op', deploymentWizardSrc.includes('validateServiceConfig') && deploymentWizardSrc.includes('activeStep.value = 3'))
 
 	// n. Object child field display: ConfigField handles structured widgets.
 	check('ConfigField has mount_form widget for model_mount', fieldSrc.includes('mount_form'))

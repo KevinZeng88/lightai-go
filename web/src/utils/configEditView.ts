@@ -27,7 +27,12 @@ export type ConfigEditField = {
   parent_key?: string
   path?: string[]
   label: string
+  label_i18n_key?: string
+  description_i18n_key?: string
   help?: string
+  cli_flag?: string
+  env_key?: string
+  technical_key?: string
   section: string
   group?: string
   order: number

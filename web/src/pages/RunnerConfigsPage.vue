@@ -15,7 +15,11 @@
         <template #default="{ row }">{{ row.backend_runtime?.display_name || row.backend_runtime?.name || row.backend_runtime_id }}</template>
       </el-table-column>
       <el-table-column prop="image_ref" :label="$t('runtimes.image')" min-width="260" show-overflow-tooltip />
-      <el-table-column prop="status" :label="$t('common.status')" width="140" />
+      <el-table-column :label="$t('common.status')" width="150">
+        <template #default="{ row }">
+          <el-tag :type="getStatusType(row.status)">{{ translateStatus(row.status || '', t) }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column :label="$t('common.actions')" width="220">
         <template #default="{ row }">
           <el-button size="small" type="primary" @click.stop="openDetail(row)">{{ $t('common.edit') }}</el-button>
@@ -48,9 +52,9 @@
           <el-descriptions-item :label="$t('deployments.node')">{{ selected.node_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('deployments.runtime')">{{ selected.backend_runtime?.display_name || selected.backend_runtime?.name || selected.backend_runtime_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.image')">{{ selected.image_ref }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('common.status')">
-            <el-tag :type="selected.deployable ? 'success' : 'warning'">{{ selected.status }}</el-tag>
-            <span v-if="selected.disabled_reason" style="margin-left:8px;color:var(--el-color-warning);font-size:12px">{{ selected.disabled_reason }}</span>
+          <el-descriptions-item :label="$t('nodeRuntime.status')">
+            <el-tag :type="getStatusType(selected.status)">{{ translateStatus(selected.status || '', t) }}</el-tag>
+            <span v-if="selected.disabled_reason" style="margin-left:8px;color:var(--el-color-warning);font-size:12px">{{ translateStatusReason(selected.disabled_reason, t) }}</span>
           </el-descriptions-item>
         </el-descriptions>
         <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
@@ -66,30 +70,30 @@
         <!-- Probe Summary -->
         <el-divider content-position="left">{{ $t('nodeRuntimeProbe.title') }}</el-divider>
         <el-descriptions v-if="probeSummary" :column="2" border size="small">
-          <el-descriptions-item :label="$t('nodeRuntimeProbe.imageRef') || 'Image Ref'">{{ probeSummary.image_ref || selected.image_ref || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('common.status') || 'Status'">
-            <el-tag :type="probeSummary.image_present ? 'success' : 'warning'">{{ probeSummary.image_present ? ($t('runnerConfigs.checkReady') || 'Ready') : ($t('runnerConfigs.checkNotReady') || 'Not Ready') }}</el-tag>
+          <el-descriptions-item :label="$t('nodeRuntimeProbe.imageRef')">{{ probeSummary.image_ref || selected.image_ref || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('common.status')">
+            <el-tag :type="probeSummary.image_present ? 'success' : 'warning'">{{ probeSummary.image_present ? $t('runnerConfigs.checkReady') : $t('runnerConfigs.checkNotReady') }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item v-if="probeSummary.image_id" :label="$t('nodeRuntimeProbe.imageId') || 'Image ID'" :span="2">{{ probeSummary.image_id_truncated }}</el-descriptions-item>
-          <el-descriptions-item v-if="probeSummary.cuda_version" :label="'CUDA Version'">{{ probeSummary.cuda_version }}</el-descriptions-item>
-          <el-descriptions-item v-if="probeSummary.nvidia_constraint" :label="'NVIDIA CUDA Constraint'">
+          <el-descriptions-item v-if="probeSummary.image_id" :label="$t('nodeRuntimeProbe.imageId')" :span="2">{{ probeSummary.image_id_truncated }}</el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.cuda_version" label="CUDA_VERSION">{{ probeSummary.cuda_version }}</el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.nvidia_constraint" label="NVIDIA_REQUIRE_CUDA">
             <el-tooltip :content="probeSummary.nvidia_constraint" placement="top"><span style="color:var(--el-color-info);font-size:12px">{{ $t('common.yes') }}</span></el-tooltip>
           </el-descriptions-item>
-          <el-descriptions-item :label="$t('nodeRuntimeProbe.backendMatch') || 'Backend Match'">
-            <el-tag :type="probeSummary.backend_confirmed ? 'success' : 'warning'">{{ probeSummary.backend_match_status || '-' }}</el-tag>
+          <el-descriptions-item :label="$t('nodeRuntimeProbe.backendMatch')">
+            <el-tag :type="probeSummary.backend_confirmed ? 'success' : 'warning'">{{ translateStatus(probeSummary.backend_match_status || '', t) }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item v-if="probeSummary.match_detail" :label="$t('nodeRuntimeProbe.matchDetail') || 'Match Detail'" :span="2">{{ probeSummary.match_detail }}</el-descriptions-item>
-          <el-descriptions-item v-if="probeSummary.runner_type" :label="$t('runnerConfigs.runnerType') || 'Runner Type'">{{ probeSummary.runner_type }}</el-descriptions-item>
-          <el-descriptions-item v-if="probeSummary.confidence" :label="'Confidence'">{{ probeSummary.confidence }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('runnerConfigs.checkReady') || 'Blocking'">
-            <el-tag :type="probeSummary.blocking ? 'danger' : 'success'">{{ probeSummary.blocking ? ($t('common.yes') || 'Yes') : ($t('common.no') || 'No') }}</el-tag>
+          <el-descriptions-item v-if="probeSummary.match_detail" :label="$t('nodeRuntimeProbe.matchDetail')" :span="2">{{ probeSummary.match_detail }}</el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.runner_type" :label="$t('runnerConfigs.runnerType')">{{ probeSummary.runner_type }}</el-descriptions-item>
+          <el-descriptions-item v-if="probeSummary.confidence" :label="$t('artifacts.confidence')">{{ probeSummary.confidence }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('preflight.errors')">
+            <el-tag :type="probeSummary.blocking ? 'danger' : 'success'">{{ probeSummary.blocking ? $t('common.yes') : $t('common.no') }}</el-tag>
           </el-descriptions-item>
         </el-descriptions>
-        <el-empty v-else :description="$t('common.noData') || 'No probe data'" :image-size="40" />
+        <el-empty v-else :description="$t('common.noData')" :image-size="40" />
 
         <!-- Raw probe evidence (collapsed by default) -->
         <el-collapse style="margin-top:12px">
-          <el-collapse-item :title="$t('runtimes.advancedDiagnostics') || 'Raw Probe Evidence'">
+          <el-collapse-item :title="$t('runtimes.advancedDiagnostics')">
             <JsonViewer :value="selected.probe_results_json || {}" :title="$t('nodeRuntimeProbe.title')" max-height="260px" :searchable="true" />
           </el-collapse-item>
         </el-collapse>
@@ -104,6 +108,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { apiClient } from '@/api/client'
 import { getConfigEditView, applyConfigEditPatch } from '@/api/configEdit'
+import { apiErrorMessage } from '@/utils/apiErrors'
+import { getStatusType, translateStatus, translateStatusReason } from '@/utils/status'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import NodeRuntimeConfigWizard from '@/components/deployments/NodeRuntimeConfigWizard.vue'
@@ -206,7 +212,7 @@ async function saveNBREdit() {
         patch: nbrEditPatch.value,
       })
     }
-    ElMessage.success('Saved')
+    ElMessage.success(t('common.saved'))
     await load()
     const updated = configs.value.find(r => r.id === selected.value?.id)
     if (updated) {
@@ -220,7 +226,7 @@ async function saveNBREdit() {
       })
     }
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Save failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {
     saving.value = false
   }
@@ -241,9 +247,17 @@ async function onNBRCreated() {
 }
 
 async function check(row: any) {
-  await apiClient.post(`/nodes/${row.node_id}/backend-runtimes/${row.id}/check-request`, {})
-  ElMessage.success('Check requested')
-  await load()
+  try {
+    const result = await apiClient.post(`/nodes/${row.node_id}/backend-runtimes/${row.id}/check-request`, {})
+    if (result?.deployable) {
+      ElMessage.success(t('runnerConfigs.checkPassedWithImage', { image: result.checked_image_ref || result.image_ref || '-' }))
+    } else {
+      ElMessage.warning(translateStatusReason(result?.status_reason || '', t) || translateStatus(result?.status || '', t))
+    }
+    await load()
+  } catch (e: any) {
+    ElMessage.error(apiErrorMessage(e, t, 'runnerConfigs.checkFailed'))
+  }
 }
 
 async function deleteNBR(row: any) {
@@ -266,7 +280,7 @@ async function deleteNBR(row: any) {
     }
     await load()
   } catch (e: any) {
-    ElMessage.error(e?.message || e?.response?.data?.error || 'Delete failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   }
 }
 

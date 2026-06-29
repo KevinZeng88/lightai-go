@@ -20,7 +20,61 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+	writeJSON(w, status, map[string]string{
+		"error":   msg,
+		"code":    apiErrorCode(status, msg),
+		"message": msg,
+	})
+}
+
+func apiErrorCode(status int, msg string) string {
+	normalized := strings.ToLower(strings.TrimSpace(msg))
+	switch {
+	case strings.Contains(normalized, "display_name already exists"):
+		return "display_name_exists"
+	case strings.Contains(normalized, "already exists"):
+		return "already_exists"
+	case strings.Contains(normalized, "invalid request"):
+		return "invalid_request"
+	case strings.Contains(normalized, "not found"):
+		return "not_found"
+	case strings.Contains(normalized, "unauthorized"):
+		return "unauthorized"
+	case strings.Contains(normalized, "permission"):
+		return "permission_denied"
+	case strings.Contains(normalized, "read-only") || strings.Contains(normalized, "readonly"):
+		return "readonly"
+	case strings.Contains(normalized, "required"):
+		return "required"
+	case strings.Contains(normalized, "agent unreachable"):
+		return "agent_unreachable"
+	case strings.Contains(normalized, "node backend runtime is not deployable"):
+		return "node_runtime_not_deployable"
+	case strings.Contains(normalized, "model_artifact_id not found"):
+		return "model_artifact_not_found"
+	case strings.Contains(normalized, "node_backend_runtime_id not found"):
+		return "node_runtime_not_found"
+	case strings.Contains(normalized, "model root already exists"):
+		return "model_root_exists"
+	case strings.Contains(normalized, "root not allowed"):
+		return "root_not_allowed"
+	case strings.Contains(normalized, "node runtime is used by deployments"):
+		return "node_runtime_in_use"
+	case strings.Contains(normalized, "node runtime is used by active instances"):
+		return "node_runtime_active_instances"
+	case status == http.StatusConflict:
+		return "conflict"
+	case status == http.StatusBadRequest:
+		return "bad_request"
+	case status == http.StatusForbidden:
+		return "forbidden"
+	case status == http.StatusNotFound:
+		return "not_found"
+	case status >= 500:
+		return "server_error"
+	default:
+		return "request_failed"
+	}
 }
 
 // ==========================================================================

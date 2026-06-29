@@ -18,7 +18,13 @@
         @change="$emit('change')"
       />
       <span class="field-label">{{ displayLabel }}</span>
-      <el-tag v-if="field.required" size="small" type="danger" effect="plain">required</el-tag>
+      <el-tooltip v-if="fieldTooltip" placement="top" :show-after="250">
+        <template #content>
+          <div class="field-tooltip">{{ fieldTooltip }}</div>
+        </template>
+        <el-icon class="field-help-icon"><InfoFilled /></el-icon>
+      </el-tooltip>
+      <el-tag v-if="field.required" size="small" type="danger" effect="plain">{{ $t('common.required') }}</el-tag>
     </div>
     <div
       class="field-control"
@@ -213,13 +219,14 @@
         <span v-else class="readonly-hint">{{ formattedDisplayValue }}</span>
       </div>
     </div>
-    <div v-if="field.help" class="field-help">{{ field.help }}</div>
+    <div v-if="localizedHelp" class="field-help">{{ localizedHelp }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { InfoFilled } from '@element-plus/icons-vue'
 import type { ConfigEditField } from '@/utils/configEditView'
 
 const { t } = useI18n()
@@ -233,18 +240,44 @@ const props = defineProps<{
 
 const emit = defineEmits<{ change: [] }>()
 
-// Map field key to i18n label. Falls back to backend-provided label.
+// Map field key to i18n label. Falls back to a localized generic label, never to
+// raw backend labels in ordinary UI.
 const displayLabel = computed(() => {
-  const i18nKey = `configEdit.labels.${props.field.key}`
-  const translated = t(i18nKey)
-  if (translated !== i18nKey) return translated
+  for (const key of [
+    props.field.label_i18n_key,
+    `configEdit.labels.${props.field.key}`,
+    props.field.semantic_key ? `configEdit.labels.${props.field.semantic_key}` : '',
+  ]) {
+    if (!key) continue
+    const translated = t(key)
+    if (translated !== key) return translated
+  }
   // Also try internal_key if different from key
   if (props.field.internal_key && props.field.internal_key !== props.field.key) {
     const altKey = `configEdit.labels.${props.field.internal_key}`
     const altTranslated = t(altKey)
     if (altTranslated !== altKey) return altTranslated
   }
-  return props.field.label
+  return t('configEdit.labels.default')
+})
+
+const localizedHelp = computed(() => {
+  const key = props.field.description_i18n_key || `configEdit.descriptions.${props.field.key}`
+  const translated = t(key)
+  if (translated !== key) return translated
+  return ''
+})
+
+const fieldTooltip = computed(() => {
+  const lines: string[] = []
+  const technical = props.field.cli_flag || props.field.env_key || props.field.technical_key || props.field.internal_key || props.field.key
+  if (technical) lines.push(technical)
+  const help = localizedHelp.value
+  if (help) lines.push(help)
+  if (props.field.technical_key && props.field.technical_key !== technical) {
+    lines.push(`${t('configEdit.fields.technicalKey')}: ${props.field.technical_key}`)
+  }
+  return lines.join('\n')
 })
 
 // -- Scalar check for default widget --
@@ -535,6 +568,8 @@ initAll()
 }
 .field-header { display: flex; align-items: center; gap: 8px; min-height: 28px; }
 .field-label { font-weight: 500; overflow-wrap: anywhere; }
+.field-help-icon { color: var(--el-text-color-secondary); cursor: help; }
+.field-tooltip { white-space: pre-line; max-width: 360px; line-height: 1.5; }
 .field-input { width: 100%; }
 .field-help { grid-column: 2; color: var(--el-text-color-secondary); font-size: 12px; }
 .disabled .field-label { color: var(--el-text-color-secondary); }

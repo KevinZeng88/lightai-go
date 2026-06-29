@@ -30,7 +30,7 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="createVisible" :title="$t('deployments.createDeployment') || $t('deployments.title')" width="960px" :close-on-click-modal="false" destroy-on-close @closed="onWizardClosed">
+    <el-dialog v-model="createVisible" :title="$t('deployments.createDeployment')" width="960px" :close-on-click-modal="false" destroy-on-close @closed="onWizardClosed">
       <DeploymentWizard
         v-if="createVisible"
         ref="wizardRef"
@@ -66,7 +66,7 @@
         </el-descriptions>
         <!-- RunPlan / command preview -->
         <template v-if="lastDryRun?.command_preview">
-          <el-divider content-position="left">{{ $t('deployments.finalRunPlan') || $t('common.runPlanTitle') || 'Run Plan' }}</el-divider>
+          <el-divider content-position="left">{{ $t('deployments.finalRunPlan') }}</el-divider>
           <pre style="background:var(--el-fill-color);padding:12px;border-radius:4px;font-size:12px;overflow-x:auto;white-space:pre-wrap">{{ lastDryRun.command_preview }}</pre>
           <el-descriptions v-if="lastDryRun.resolved_image" :column="2" border size="small" style="margin-top:8px">
             <el-descriptions-item label="Resolved Image">{{ lastDryRun.resolved_image }}</el-descriptions-item>
@@ -89,7 +89,7 @@
         </div>
         <!-- Diagnostic section (collapsed by default) -->
         <el-collapse style="margin-top:12px">
-          <el-collapse-item :title="$t('runtimes.advancedDiagnostics') || 'Diagnostics'">
+          <el-collapse-item :title="$t('runtimes.advancedDiagnostics')">
             <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
             <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
             <JsonViewer v-if="lastDryRun" :value="lastDryRun" title="Dry Run Detail" max-height="420px" :searchable="true" />
@@ -102,6 +102,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
 import { createDeployment, dryRunDeployment, startDeployment, stopDeployment } from '@/api/deployments'
@@ -110,7 +111,9 @@ import JsonViewer from '@/components/common/JsonViewer.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import DeploymentWizard from '@/components/deployments/DeploymentWizard.vue'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
+import { apiErrorMessage } from '@/utils/apiErrors'
 
+const { t } = useI18n()
 const loading = ref(false)
 const saving = ref(false)
 const createVisible = ref(false)
@@ -161,13 +164,13 @@ async function createFromWizard() {
   saving.value = true
   try {
     const payload = wizardRef.value?.buildPayload()
-    if (!payload) { ElMessage.error('Cannot create deployment: check the compatibility errors above'); return }
+    if (!payload) { ElMessage.error(t('deployments.createBlocked')); return }
     await createDeployment(payload)
     createVisible.value = false
-    ElMessage.success('Saved')
+    ElMessage.success(t('deployments.created'))
     await load()
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Create failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {
     saving.value = false
   }
@@ -207,28 +210,36 @@ async function saveDeploymentEdit() {
         patch: deploymentEditPatch.value,
       })
     }
-    ElMessage.success('Saved')
+    ElMessage.success(t('common.saved'))
     editing.value = false
     await load()
     const updated = deployments.value.find((d: any) => d.id === selected.value?.id)
     if (updated) selected.value = updated
   } catch (e: any) {
-    ElMessage.error(e?.message || 'Save failed')
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {
     savingEdit.value = false
   }
 }
 
 async function start(row: any) {
-  await startDeployment(row.id)
-  ElMessage.success('Started')
-  await load()
+  try {
+    await startDeployment(row.id)
+    ElMessage.success(t('deployments.started'))
+    await load()
+  } catch (e: any) {
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
+  }
 }
 
 async function stop(row: any) {
-  await stopDeployment(row.id)
-  ElMessage.success('Stopped')
-  await load()
+  try {
+    await stopDeployment(row.id)
+    ElMessage.success(t('deployments.stopped'))
+    await load()
+  } catch (e: any) {
+    ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
+  }
 }
 
 function onWizardClosed() {

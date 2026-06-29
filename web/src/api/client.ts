@@ -6,6 +6,7 @@ export const API_BASE = '/api/v1'
 export class ApiError extends Error {
   status: number
   data: any
+  code: string
 
   constructor(status: number, data: any) {
     const msg = typeof data?.error === 'string' ? data.error : `HTTP ${status}`
@@ -13,6 +14,7 @@ export class ApiError extends Error {
     this.name = 'ApiError'
     this.status = status
     this.data = data
+    this.code = typeof data?.code === 'string' ? data.code : ''
   }
 }
 

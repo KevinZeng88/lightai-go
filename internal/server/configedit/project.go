@@ -201,24 +201,24 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 		code := "launcher.docker_options." + spec.Path
 		dockerItem := cloneMap(item)
 		dockerItem["type"] = spec.Type
-			subVal := value[spec.Path]
-			// Replace entire value tier so parent default_value does not leak
-			// into child fields that are absent from the object (e.g. uts_mode,
-			// network_mode show the full docker_options parent object).
-			dockerItem["value"] = map[string]any{
-				"effective_value": subVal,
-				"local_value":     subVal,
-				"default_value":   subVal,
-			}
+		subVal := value[spec.Path]
+		// Replace entire value tier so parent default_value does not leak
+		// into child fields that are absent from the object (e.g. uts_mode,
+		// network_mode show the full docker_options parent object).
+		dockerItem["value"] = map[string]any{
+			"effective_value": subVal,
+			"local_value":     subVal,
+			"default_value":   subVal,
+		}
 		dockerItem["required"] = false
 		// Docker sub-fields keep value and enabled state independently. The
 		// parent object stores values under value and per-subfield toggles under
 		// enabled_fields to avoid inferring activation from a prefilled value.
 		dockerItem["enabled"] = boolValue(enabledFields[spec.Path])
-			// Also update state tier for tiered-only reading
-			if st, ok := dockerItem["state"].(map[string]any); ok {
-				st["enabled"] = boolValue(enabledFields[spec.Path])
-			}
+		// Also update state tier for tiered-only reading
+		if st, ok := dockerItem["state"].(map[string]any); ok {
+			st["enabled"] = boolValue(enabledFields[spec.Path])
+		}
 		field := projectItem(code, "launcher.docker_options", []string{spec.Path}, dockerItem, input)
 		field.Section = spec.Section
 		field.Widget = spec.Widget
@@ -245,8 +245,8 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	}
 	required := itemRequired(item)
 
-		// Enabled: read from tiered state only.
-		enabled := itemEnabled(item)
+	// Enabled: read from tiered state only.
+	enabled := itemEnabled(item)
 	if required {
 		enabled = true
 	}
@@ -303,36 +303,42 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	}
 
 	warnings, _ := item["warnings"].([]any)
+	technicalKey := firstString(displayKey, key, internalKey)
 	field := EditField{
-		Key:             displayKey,
-		InternalKey:     internalKey,
-		SemanticKey:     semanticKey,
-		ParentKey:       parentKey(internalKey, path),
-		Path:            path,
-		Label:           fieldLabel(displayKey, item),
-		Help:            firstString(nestedString(item, "render", "help"), nestedString(item, "extensions", "help")),
-		Section:         section,
-		Group:           firstString(nestedString(item, "render", "group"), nestedString(item, "extensions", "group")),
-		Order:           intValue(item["order"]),
-		Type:            firstString(stringValue(item["type"]), "string"),
-		Widget:          widget,
-		Value:           value,
-		DefaultValue:    item["default_value"],
-		Enabled:         enabled,
-		HasEnable:       !required && !readonly,
-		Required:        required,
-		Readonly:        readonly,
-		Advanced:        advanced || section == "advanced_raw",
-		Visibility:      visibility,
-		Options:         optionsFor(item),
-		Constraints:     nestedMap(item, "constraints"),
-		Source:          nestedMap(item, "source"),
-		CopiedFrom:      firstString(stringValue(item["copied_from"]), stringValue(item["copiedFrom"])),
-		Dirty:           boolValue(item["dirty"]),
-		Warnings:        warnings,
-		Diagnostic:      advanced || visibility == "internal" || visibility == "hidden",
-		OriginalValue:   value,
-		OriginalEnabled: enabled,
+		Key:                displayKey,
+		InternalKey:        internalKey,
+		SemanticKey:        semanticKey,
+		ParentKey:          parentKey(internalKey, path),
+		Path:               path,
+		Label:              fieldLabel(displayKey, item),
+		LabelI18nKey:       "configEdit.labels." + displayKey,
+		DescriptionI18nKey: "configEdit.descriptions." + displayKey,
+		Help:               firstString(nestedString(item, "render", "help"), nestedString(item, "extensions", "help")),
+		CliFlag:            configEditCliFlag(displayKey, item),
+		EnvKey:             configEditEnvKey(displayKey, item),
+		TechnicalKey:       technicalKey,
+		Section:            section,
+		Group:              firstString(nestedString(item, "render", "group"), nestedString(item, "extensions", "group")),
+		Order:              intValue(item["order"]),
+		Type:               firstString(stringValue(item["type"]), "string"),
+		Widget:             widget,
+		Value:              value,
+		DefaultValue:       item["default_value"],
+		Enabled:            enabled,
+		HasEnable:          !required && !readonly,
+		Required:           required,
+		Readonly:           readonly,
+		Advanced:           advanced || section == "advanced_raw",
+		Visibility:         visibility,
+		Options:            optionsFor(item),
+		Constraints:        nestedMap(item, "constraints"),
+		Source:             nestedMap(item, "source"),
+		CopiedFrom:         firstString(stringValue(item["copied_from"]), stringValue(item["copiedFrom"])),
+		Dirty:              boolValue(item["dirty"]),
+		Warnings:           warnings,
+		Diagnostic:         advanced || visibility == "internal" || visibility == "hidden",
+		OriginalValue:      value,
+		OriginalEnabled:    enabled,
 	}
 	if hasDef {
 		field.Owner = string(def.Owner)
@@ -464,6 +470,54 @@ func firstString(values ...string) string {
 		if v != "" {
 			return v
 		}
+	}
+	return ""
+}
+
+func configEditCliFlag(key string, item map[string]any) string {
+	if flag := firstString(
+		nestedString(item, "schema", "arg_name"),
+		nestedString(item, "schema", "cli_flag"),
+		nestedString(item, "render", "arg_name"),
+		nestedString(item, "render", "cli_flag"),
+		nestedString(item, "render", "flag"),
+		nestedString(item, "extensions", "arg_name"),
+		nestedString(item, "extensions", "cli_flag"),
+		nestedString(item, "extensions", "flag"),
+	); flag != "" {
+		return flag
+	}
+	switch key {
+	case "service.container_port":
+		return "container_port"
+	case "deployment.host_port":
+		return "host_port"
+	case "model_runtime.max_model_len":
+		return "--max-model-len / --context-length / --ctx-size"
+	case "model_runtime.gpu_memory_utilization":
+		return "--gpu-memory-utilization / --mem-fraction-static"
+	case "model_runtime.mem_fraction_static":
+		return "--mem-fraction-static"
+	case "model_runtime.context_length":
+		return "--context-length"
+	case "model_runtime.gpu_layers":
+		return "-ngl"
+	case "model_runtime.ctx_size":
+		return "--ctx-size"
+	}
+	return ""
+}
+
+func configEditEnvKey(key string, item map[string]any) string {
+	if env := firstString(
+		nestedString(item, "schema", "env_key"),
+		nestedString(item, "render", "env_key"),
+		nestedString(item, "extensions", "env_key"),
+	); env != "" {
+		return env
+	}
+	if strings.HasPrefix(key, "runtime.env.") {
+		return strings.TrimPrefix(key, "runtime.env.")
 	}
 	return ""
 }

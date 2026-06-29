@@ -32,7 +32,7 @@
           </el-result>
         </div>
         <div v-else-if="!runtimes.length" style="text-align:center;padding:40px">
-          <el-empty :description="$t('runtimes.noRuntimes') || 'No runtime templates'">
+          <el-empty :description="$t('runtimes.noRuntimes')">
             <el-button @click="loadRuntimes">{{ $t('common.refresh') }}</el-button>
           </el-empty>
         </div>
@@ -50,7 +50,7 @@
             <template #default="{ row }">{{ row.versionDisplay || '-' }}</template>
           </el-table-column>
           <el-table-column prop="image" :label="$t('runtimes.image')" min-width="240" show-overflow-tooltip />
-          <el-table-column :label="$t('runtimes.source') || 'Source'" width="100">
+          <el-table-column :label="$t('runtimes.source')" width="100">
             <template #default="{ row }">{{ row.sourceType === 'user' ? $t('runtimes.userConfig') : $t('runtimes.builtinTemplate') }}</template>
           </el-table-column>
         </el-table>
@@ -78,7 +78,7 @@
             <el-input
               v-else
               v-model="form.image_ref"
-              :placeholder="selectedRuntime?.image_ref || $t('runnerConfigs.selectImage') || 'Select or enter image'"
+              :placeholder="selectedRuntime?.image_ref || $t('runnerConfigs.selectImage')"
             />
           </el-form-item>
         </el-form>
@@ -96,7 +96,7 @@
 
       <!-- Step 3: Save and check -->
       <div v-if="activeStep === 3">
-        <h4>{{ $t('runnerConfigs.summary') || 'Summary' }}</h4>
+        <h4>{{ $t('runnerConfigs.summary') }}</h4>
         <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
           <el-descriptions-item :label="$t('deployments.node')">{{ selectedNode?.name || selectedNode?.id || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('deployments.runtime')">{{ selectedRuntime?.display_name || selectedRuntime?.name || '-' }}</el-descriptions-item>
@@ -111,8 +111,8 @@
         <div v-if="checkResult" style="margin-bottom:16px">
           <el-alert
             :type="checkResult.deployable ? 'success' : 'warning'"
-            :title="checkResult.status"
-            :description="checkResult.status_reason || ''"
+            :title="checkResultTitle"
+            :description="checkResultDescription"
             show-icon :closable="false"
           />
           <div v-if="checkResult.warnings?.length" style="margin-top:8px">
@@ -159,6 +159,8 @@ import { apiClient } from '@/api/client'
 import { getConfigEditView } from '@/api/configEdit'
 import { listRuntimes } from '@/api/runtimes'
 import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/runtimeDisplay'
+import { apiErrorMessage } from '@/utils/apiErrors'
+import { translateStatus, translateStatusReason } from '@/utils/status'
 import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
@@ -189,6 +191,19 @@ const selectedRuntimeDisplay = computed(() => {
 const paramOverrides = ref<ConfigEditPatch | null>(null)
 const runtimeEditView = ref<ConfigEditViewModel | null>(null)
 const checkResult = ref<any>(null)
+
+const checkResultTitle = computed(() => {
+  if (!checkResult.value) return ''
+  return translateStatus(checkResult.value.status || '', t)
+})
+
+const checkResultDescription = computed(() => {
+  if (!checkResult.value) return ''
+  if (checkResult.value.deployable) {
+    return t('runnerConfigs.checkPassedWithImage', { image: checkResult.value.checked_image_ref || checkResult.value.image_ref || '-' })
+  }
+  return translateStatusReason(checkResult.value.status_reason || '', t)
+})
 
 const form = reactive({
   display_name: '',
@@ -277,7 +292,7 @@ async function loadNodes() {
   try {
     nodes.value = await apiClient.get('/nodes')
   } catch (e: any) {
-    nodesError.value = e?.message || 'Failed to load nodes'
+    nodesError.value = apiErrorMessage(e, t)
   } finally {
     nodesLoading.value = false
   }
@@ -289,7 +304,7 @@ async function loadRuntimes() {
   try {
     runtimes.value = await listRuntimes()
   } catch (e: any) {
-    runtimesError.value = e?.message || 'Failed to load runtimes'
+    runtimesError.value = apiErrorMessage(e, t)
   } finally {
     runtimesLoading.value = false
   }
@@ -320,14 +335,14 @@ async function saveAndMaybeCheck(andCheck: boolean) {
     const nbrId = enableResp?.id
 
     if (!andCheck) {
-      ElMessage.success('Saved')
+      ElMessage.success(t('common.saved'))
       checkResult.value = null
       savingState.value = 'idle'
       return
     }
 
     if (!nbrId) {
-      wizardError.value = 'Enable succeeded but no NBR ID returned'
+      wizardError.value = t('runnerConfigs.missingNBRID')
       savingState.value = 'save_failed'
       return
     }
@@ -342,11 +357,11 @@ async function saveAndMaybeCheck(andCheck: boolean) {
         savingState.value = 'idle'
       }
     } catch (e: any) {
-      wizardError.value = e?.message || 'Check failed'
+      wizardError.value = apiErrorMessage(e, t, 'runnerConfigs.checkFailed')
       savingState.value = 'check_failed'
     }
   } catch (e: any) {
-    wizardError.value = e?.message || 'Save failed'
+    wizardError.value = apiErrorMessage(e, t, 'common.requestFailed')
     savingState.value = 'save_failed'
   }
 }

@@ -52,7 +52,7 @@ export function translateStatus(status: string, t: (key: string) => string): str
   const key = `status.${status}`
   const translated = t(key)
   if (translated === key || (typeof translated === 'string' && translated.startsWith('status.'))) {
-    return status
+    return t('status.unknown')
   }
   return translated
 }
@@ -97,5 +97,6 @@ export function translateStatusReason(reason: string, t: (key: string, params?: 
       }
     }
   }
-  return reason
+  const unknown = t('runtime.statusReason.unknown')
+  return unknown !== 'runtime.statusReason.unknown' ? unknown : ''
 }

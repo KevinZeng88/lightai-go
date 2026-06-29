@@ -32,7 +32,8 @@ import { sortedFields, type ConfigEditSection } from '@/utils/configEditView'
 
 const { t } = useI18n()
 
-// Map section.key to i18n key. Falls back to section.label (from backend) if no mapping exists.
+// Map section.key to i18n key. Avoid falling back to backend English labels in
+// ordinary UI; raw labels remain visible only in diagnostic JSON.
 const SECTION_I18N_MAP: Record<string, string> = {
   basic: 'configEdit.sections.basic',
   model_serving: 'configEdit.sections.modelServing',
@@ -61,8 +62,7 @@ const sectionI18nLabel = computed(() => {
     // t() returns the key itself if no translation found
     if (translated !== i18nKey) return translated
   }
-  // Fallback to backend-provided label (may be English)
-  return props.section.label
+  return t('configEdit.sections.custom')
 })
 
 const activeNames = ref<string[]>(props.section.collapsed ? [] : [props.section.key])
