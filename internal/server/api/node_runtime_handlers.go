@@ -38,6 +38,10 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 	if newDisplayName == "" {
 		newDisplayName = newName
 	}
+	if h.runtimeDisplayNameExists(tid, newDisplayName, "") {
+		writeError(w, http.StatusConflict, "display_name already exists in runtime templates")
+		return
+	}
 	sourceName := strVal(original, "name", "")
 	configSet := copyConfigSet(rawJSONString(original["config_set_json"], "{}"))
 	if v := strVal(req, "image_ref", ""); v != "" {
@@ -90,6 +94,16 @@ func (h *AgentHandler) HandleCloneBackendRuntime(w http.ResponseWriter, r *http.
 
 	log.OperationCompleted(ctx, "backend_runtime.clone", opStart, "id", newID, "original_id", originalID, "tenant_id", tid)
 	writeJSON(w, http.StatusCreated, h.getBackendRuntimeJSON(newID))
+}
+
+func (h *AgentHandler) runtimeDisplayNameExists(tenantID, displayName, excludeID string) bool {
+	displayName = strings.TrimSpace(displayName)
+	if displayName == "" {
+		return false
+	}
+	var count int
+	_ = h.DB.QueryRow(`SELECT COUNT(*) FROM backend_runtimes WHERE display_name = ? AND (tenant_id = ? OR tenant_id = '') AND id != ?`, displayName, tenantID, excludeID).Scan(&count)
+	return count > 0
 }
 
 func (h *AgentHandler) uniqueRuntimeName(tenantID, base string) string {

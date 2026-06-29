@@ -46,6 +46,21 @@
 
     <el-drawer v-model="detailVisible" :title="selectedDisplay?.displayName || selected?.display_name || selected?.name || ''" size="65%">
       <template v-if="selected">
+        <div class="sticky-actions">
+          <div>
+            <strong>{{ selectedDisplay?.displayName || selected.display_name || selected.name }}</strong>
+            <div class="action-meta">{{ selectedDisplay?.backendDisplay || selected.backend_id }} / {{ selectedDisplay?.vendorDisplay || selected.vendor }} / {{ selected.runtime_type || 'docker' }}</div>
+          </div>
+          <div v-if="selected.is_editable">
+            <template v-if="!editing">
+              <el-button type="primary" @click="startEditing">{{ $t('common.edit') }}</el-button>
+            </template>
+            <template v-else>
+              <el-button @click="cancelEditing">{{ $t('common.cancel') }}</el-button>
+              <el-button type="primary" :loading="saving" @click="saveEdit">{{ $t('common.save') }}</el-button>
+            </template>
+          </div>
+        </div>
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('runtimes.backend')">{{ selectedDisplay?.backendDisplay || selected.backend_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('runtimes.backendVersion')">{{ selectedDisplay?.versionDisplay || selected.backend_version_id }}</el-descriptions-item>
@@ -62,18 +77,7 @@
             @update:patch="editPatch = $event"
           />
         </div>
-        <template v-if="selected.is_editable">
-          <div style="margin-top: 12px; text-align: right">
-            <template v-if="!editing">
-              <el-button type="primary" @click="startEditing">{{ $t('common.edit') }}</el-button>
-            </template>
-            <template v-else>
-              <el-button @click="cancelEditing">{{ $t('common.cancel') }}</el-button>
-              <el-button type="primary" :loading="saving" @click="saveEdit">{{ $t('common.save') }}</el-button>
-            </template>
-          </div>
-        </template>
-        <template v-else>
+        <template v-if="!selected.is_editable">
           <el-alert type="info" :closable="false" style="margin:12px 0">
             {{ $t('runtimes.systemTemplateReadonly') }}
           </el-alert>
@@ -109,9 +113,6 @@
       <el-form label-position="top">
         <el-form-item :label="$t('runtimes.displayName')">
           <el-input v-model="cloneForm.display_name" />
-        </el-form-item>
-        <el-form-item :label="$t('runtimes.technicalName')">
-          <el-input v-model="cloneForm.name" :placeholder="$t('runtimes.technicalNamePlaceholder')" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -279,7 +280,6 @@ function cloneRuntime(row: any) {
   const display = toRuntimeTemplateDisplay(row)
   cloneForm.value = {
     display_name: `${display.displayName}${t('runtimes.customSuffix')}`,
-    name: '',
   }
   cloneDialogVisible.value = true
 }
@@ -288,19 +288,13 @@ async function submitCloneRuntime() {
   if (!cloneSource.value) return
   cloning.value = true
   try {
-    const res = await apiClient.post(`/backend-runtimes/${cloneSource.value.id}/clone`, {
+    await apiClient.post(`/backend-runtimes/${cloneSource.value.id}/clone`, {
       display_name: cloneForm.value.display_name,
-      name: cloneForm.value.name,
     })
     ElMessage.success(t('runtimes.cloned'))
     cloneDialogVisible.value = false
     await load()
-    // Auto-select the newly created runtime if we have an id.
-    const newId = res?.data?.id || res?.id
-    if (newId) {
-      const found = runtimes.value.find(r => r.id === newId)
-      if (found) selected.value = found
-    }
+    selected.value = null
   } catch (e: any) {
     ElMessage.error(e?.message || 'Clone failed')
   } finally {
@@ -371,3 +365,25 @@ async function load() {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.sticky-actions {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  margin-bottom: 12px;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.action-meta {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+</style>

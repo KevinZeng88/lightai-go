@@ -164,6 +164,13 @@ const selectedNBRConfigSet = computed(() => {
 
 function onNBRSelected(nbrID: string) {
   form.node_backend_runtime_id = nbrID
+  const nbr = props.nodeRuntimes.find((r: any) => r.id === nbrID)
+  const port = configSetValue(nbr?.config_set, 'service.container_port')
+  const numericPort = Number(port)
+  if (Number.isFinite(numericPort) && numericPort > 0) {
+    form.container_port = numericPort
+    form.host_port = numericPort
+  }
 }
 
 const compatibilityError = ref('')
@@ -210,6 +217,10 @@ function nextStep() {
     if (!form.node_backend_runtime_id) return
     if (!isNBRDeployable(selectedNBR.value)) return
     if (!checkNodeCompatibility()) return
+  }
+  if (s === 2) {
+    doPreview()
+    return
   }
   if (s === 3 && activeStep.value < 4) {
     doPreview()
@@ -258,6 +269,14 @@ function buildPayload() {
     config_overrides: overrides,
     editable_config_patch: form.editable_config_patch,
   }
+}
+
+function configSetValue(configSet: any, key: string): any {
+  const item = configSet?.items?.[key]
+  const value = item?.value
+  if (value?.effective_value !== undefined && value?.effective_value !== null) return value.effective_value
+  if (value?.default_value !== undefined && value?.default_value !== null) return value.default_value
+  return undefined
 }
 
 defineExpose({ buildPayload, form, resetWizard: () => { activeStep.value = 0 } })

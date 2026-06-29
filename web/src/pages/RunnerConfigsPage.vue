@@ -18,6 +18,7 @@
       <el-table-column prop="status" :label="$t('common.status')" width="140" />
       <el-table-column :label="$t('common.actions')" width="220">
         <template #default="{ row }">
+          <el-button size="small" type="primary" @click.stop="openDetail(row)">{{ $t('common.edit') }}</el-button>
           <el-button size="small" @click.stop="check(row)">{{ $t('runnerConfigs.check') }}</el-button>
           <el-button size="small" type="danger" @click.stop="deleteNBR(row)">{{ $t('common.delete') }}</el-button>
         </template>
@@ -33,6 +34,16 @@
 
     <el-drawer v-model="detailVisible" :title="selected?.display_name || selected?.id || ''" size="65%">
       <template v-if="selected">
+        <div class="sticky-actions">
+          <div>
+            <strong>{{ selected.display_name || selected.id }}</strong>
+            <div class="action-meta">{{ selected.node_id }} / {{ selected.backend_runtime?.display_name || selected.backend_runtime?.name || selected.backend_runtime_id }}</div>
+          </div>
+          <div>
+            <el-button type="danger" @click="deleteNBR(selected)">{{ $t('common.delete') }}</el-button>
+            <el-button type="primary" :loading="saving" @click="saveNBREdit">{{ $t('common.save') }}</el-button>
+          </div>
+        </div>
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('deployments.node')">{{ selected.node_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('deployments.runtime')">{{ selected.backend_runtime?.display_name || selected.backend_runtime?.name || selected.backend_runtime_id }}</el-descriptions-item>
@@ -49,10 +60,6 @@
           @update:patch="onNBREditPatch"
         />
         <el-empty v-else :description="$t('common.noData')" />
-        <div style="margin-top:12px;display:flex;justify-content:space-between;gap:12px">
-          <el-button type="danger" @click="deleteNBR(selected)">{{ $t('common.delete') }}</el-button>
-          <el-button type="primary" :loading="saving" @click="saveNBREdit">{{ $t('common.save') }}</el-button>
-        </div>
         <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
         <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
 
@@ -265,3 +272,25 @@ async function deleteNBR(row: any) {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.sticky-actions {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  margin-bottom: 12px;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.action-meta {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+</style>

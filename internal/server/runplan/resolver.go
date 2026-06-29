@@ -113,6 +113,7 @@ type RuntimeInfo struct {
 	ID                  string
 	Vendor              string
 	RuntimeType         string
+	LauncherKind        string
 	ImageName           string
 	EntrypointOverride  []string
 	ArgsOverride        []string
@@ -213,9 +214,11 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	var errors []error
 	var warnings []string
 
-	// 1. Validate runtime_type == "docker".
-	if in.BackendRuntime.RuntimeType != "docker" {
-		errors = append(errors, fmt.Errorf("unsupported runtime_type: %s (only docker is supported)", in.BackendRuntime.RuntimeType))
+	// 1. Resolve launcher kind from the current runtime config surface. The
+	// legacy runtime_type column is only a fallback.
+	launcherKind := ResolveLauncherKind(in.BackendRuntime)
+	if launcherKind != "docker" {
+		errors = append(errors, fmt.Errorf("unsupported launcher kind: %s (only docker is supported)", launcherKind))
 		return nil, errors, warnings
 	}
 
@@ -279,7 +282,7 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 
 	// 10. Build ports.
 	containerPort := effectiveContainerPort(in)
-	hostPort := in.Deployment.Service.HostPort
+	hostPort := effectiveHostPort(in, containerPort)
 
 	// 11. GPU visible env.
 	gpuVisibleKey := docker.GPUVisibleEnvKey
@@ -293,6 +296,7 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	if len(gpuIDs) > 0 {
 		env[gpuVisibleKey] = strings.Join(gpuIDs, ",")
 	}
+	deviceBinding := buildDeviceBinding(in.BackendRuntime.Vendor, gpuIDs, gpuVisibleKey)
 
 	// 12. Build result.
 	plan := &ResolvedRunPlan{
@@ -316,6 +320,7 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 		HostPort:      hostPort,
 		ContainerPort: containerPort,
 
+		DeviceBinding:    deviceBinding,
 		GPUDeviceIDs:     gpuIDs,
 		GPUVisibleEnvKey: gpuVisibleKey,
 		GpuDriver:        docker.GpuDriver,
@@ -353,6 +358,22 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 		"errors", len(errors), "warnings", len(warnings),
 		"duration_ms", time.Since(startTime).Milliseconds())
 	return plan, errors, warnings
+}
+
+// ResolveLauncherKind centralizes the current runtime launcher source of truth.
+// New ConfigSet-backed paths should populate LauncherKind from launcher.kind or
+// context.launcher_kind; RuntimeType remains as a compatibility fallback.
+func ResolveLauncherKind(rt *RuntimeInfo) string {
+	if rt == nil {
+		return ""
+	}
+	if k := strings.TrimSpace(strings.ToLower(rt.LauncherKind)); k != "" {
+		return k
+	}
+	if k := strings.TrimSpace(strings.ToLower(rt.RuntimeType)); k != "" {
+		return k
+	}
+	return ""
 }
 
 // mapKeys returns the keys of a map as a sorted slice for safe logging.
@@ -1096,6 +1117,9 @@ func buildVarMap(in ResolveInput) map[string]string {
 	if in.Deployment.Service.HostPort > 0 {
 		vars["HOST_PORT"] = fmt.Sprintf("%d", in.Deployment.Service.HostPort)
 		vars["host_port"] = vars["HOST_PORT"]
+	} else {
+		vars["HOST_PORT"] = port
+		vars["host_port"] = port
 	}
 
 	vars["SERVED_MODEL_NAME"] = ""
@@ -1229,11 +1253,35 @@ func effectiveContainerPort(in ResolveInput) int {
 	return 8000
 }
 
+func effectiveHostPort(in ResolveInput, containerPort int) int {
+	if in.Deployment != nil && in.Deployment.Service.HostPort > 0 {
+		return in.Deployment.Service.HostPort
+	}
+	return containerPort
+}
+
 func effectiveAppPort(in ResolveInput, containerPort int) int {
 	if in.Deployment != nil && in.Deployment.Service.AppPort > 0 {
 		return in.Deployment.Service.AppPort
 	}
 	return containerPort
+}
+
+func buildDeviceBinding(vendor string, gpuIDs []string, envKey string) *DeviceBinding {
+	if len(gpuIDs) == 0 {
+		return nil
+	}
+	value := strings.Join(gpuIDs, ",")
+	binding := &DeviceBinding{
+		Vendor:          vendor,
+		GPUDeviceIDs:    append([]string(nil), gpuIDs...),
+		VisibleEnvKey:   envKey,
+		VisibleEnvValue: value,
+	}
+	if strings.EqualFold(vendor, "nvidia") {
+		binding.DockerGPUOption = "device=" + value
+	}
+	return binding
 }
 
 func computePlanHash(plan *ResolvedRunPlan) string {

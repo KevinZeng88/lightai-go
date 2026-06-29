@@ -82,13 +82,16 @@
             />
           </el-form-item>
         </el-form>
-        <el-divider content-position="left">{{ $t('runtimes.structuredParameters') }}</el-divider>
-        <ConfigEditView
-          v-if="runtimeEditView"
-          :model-value="runtimeEditView"
-          @update:patch="onSchemaParamOutput"
-        />
-        <el-empty v-else :description="$t('common.noData')" />
+        <el-collapse style="margin-top:12px">
+          <el-collapse-item :title="$t('runtimes.structuredParameters')">
+            <ConfigEditView
+              v-if="runtimeEditView"
+              :model-value="runtimeEditView"
+              @update:patch="onSchemaParamOutput"
+            />
+            <el-empty v-else :description="$t('common.noData')" />
+          </el-collapse-item>
+        </el-collapse>
       </div>
 
       <!-- Step 3: Save and check -->

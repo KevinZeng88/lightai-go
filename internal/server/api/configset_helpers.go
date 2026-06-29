@@ -121,6 +121,53 @@ func configStringMap(set map[string]interface{}, code string) map[string]string 
 	return out
 }
 
+func configLauncherKind(set map[string]interface{}, fallback string) string {
+	if k := configString(set, "launcher.kind", ""); strings.TrimSpace(k) != "" {
+		return k
+	}
+	if ctx, _ := set["context"].(map[string]interface{}); ctx != nil {
+		if k := strings.TrimSpace(fmt.Sprint(ctx["launcher_kind"])); k != "" && k != "<nil>" {
+			return k
+		}
+	}
+	if ctx, _ := set["context"].(map[string]string); ctx != nil {
+		if k := strings.TrimSpace(ctx["launcher_kind"]); k != "" {
+			return k
+		}
+	}
+	return fallback
+}
+
+func configDockerSpec(set map[string]interface{}) runplan.DockerSpecInfo {
+	raw := configObject(set, "launcher.docker_options")
+	var spec runplan.DockerSpecInfo
+	b, _ := json.Marshal(raw)
+	_ = json.Unmarshal(b, &spec)
+	return spec
+}
+
+func configModelMount(set map[string]interface{}) runplan.ModelMountInfo {
+	raw := configObject(set, "runtime.model_mount")
+	var mount runplan.ModelMountInfo
+	b, _ := json.Marshal(raw)
+	_ = json.Unmarshal(b, &mount)
+	return mount
+}
+
+func configHealthCheckPtr(set map[string]interface{}) *runplan.HealthCheckInput {
+	raw := configObject(set, "runtime.health")
+	if len(raw) == 0 {
+		return nil
+	}
+	var hc runplan.HealthCheckInput
+	b, _ := json.Marshal(raw)
+	_ = json.Unmarshal(b, &hc)
+	if hc.Path == "" && hc.ExpectedStatus == 0 && hc.StartupTimeoutSeconds == 0 && hc.IntervalSeconds == 0 && hc.TimeoutSeconds == 0 {
+		return nil
+	}
+	return &hc
+}
+
 func configArray(set map[string]interface{}, code string) []interface{} {
 	raw := configValue(set, code, []interface{}{})
 	switch v := raw.(type) {
@@ -323,8 +370,8 @@ func setConfigValue(set map[string]interface{}, code string, value interface{}, 
 		prov["last_value_owner_id"] = ref
 	} else {
 		item["provenance"] = map[string]interface{}{
-			"value_source":       layer,
-			"last_value_layer":   layer,
+			"value_source":        layer,
+			"last_value_layer":    layer,
 			"last_value_owner_id": ref,
 		}
 	}
@@ -523,4 +570,13 @@ func mapFromAny(v interface{}) map[string]interface{} {
 		}
 	}
 	return map[string]interface{}{}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

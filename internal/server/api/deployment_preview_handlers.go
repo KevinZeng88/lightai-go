@@ -75,7 +75,8 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 	}
 
 	// Check model location.
-	if loc, _, reason := h.findDeployableModelLocation(modelArtifactID, nbrNodeID); loc == nil {
+	loc, _, reason := h.findDeployableModelLocation(modelArtifactID, nbrNodeID)
+	if loc == nil {
 		errs = append(errs, errEntry("model_location_missing",
 			reason,
 			"model_artifact_id", "error"))
@@ -152,24 +153,41 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 	paramVals := configSetParameterValues(nbrConfigSet)
 
 	nbrSnapshot := &runplan.NBRSnapshotInfo{
-		ArgsOverride:       configStringSlice(nbrConfigSet, "launcher.args_override"),
-		DefaultEnv:         configStringMapNBR(nbrConfigSet, "runtime.env"),
-		EntrypointOverride: configStringSlice(nbrConfigSet, "launcher.entrypoint"),
-		ParameterSchema:    paramDefs,
-		ParameterValues:    paramVals,
+		ArgsOverride:        configStringSlice(nbrConfigSet, "launcher.command"),
+		DefaultEnv:          configStringMap(nbrConfigSet, "runtime.env"),
+		EntrypointOverride:  configStringSlice(nbrConfigSet, "launcher.entrypoint"),
+		Docker:              configDockerSpec(nbrConfigSet),
+		ModelMount:          configModelMount(nbrConfigSet),
+		HealthCheckOverride: configHealthCheckPtr(nbrConfigSet),
+		ParameterSchema:     paramDefs,
+		ParameterValues:     paramVals,
 	}
 
-	// Placement — build GPUInfo list from accelerator_ids.
+	// Placement — build GPUInfo list from accelerator_ids. Match start/dry-run:
+	// if the user did not explicitly pick GPUs, preview the first available GPU.
 	gpuIDs := []runplan.GPUInfo{}
+	acceleratorIDs := []string{}
 	if placementRaw, ok := rawBody["placement_json"].(map[string]interface{}); ok {
 		if aids, ok := placementRaw["accelerator_ids"].([]interface{}); ok {
-			for i, a := range aids {
+			for _, a := range aids {
 				if s, ok := a.(string); ok {
-					vendor := strVal(rtRow, "vendor", "nvidia")
-					gpuIDs = append(gpuIDs, runplan.GPUInfo{Index: i, Vendor: vendor})
-					_ = s // reserved for future GPU index lookup by UUID
+					acceleratorIDs = append(acceleratorIDs, s)
 				}
 			}
+		}
+	}
+	if len(acceleratorIDs) == 0 && nbrNodeID != "" {
+		var autoGpuID string
+		_ = h.DB.QueryRow(`SELECT id FROM gpu_devices WHERE node_id = ? AND status = 'available' LIMIT 1`, nbrNodeID).Scan(&autoGpuID)
+		if autoGpuID != "" {
+			acceleratorIDs = append(acceleratorIDs, autoGpuID)
+		}
+	}
+	for _, gid := range acceleratorIDs {
+		var idx int
+		var vendor string
+		if err := h.DB.QueryRow(`SELECT index_num, vendor FROM gpu_devices WHERE id = ?`, gid).Scan(&idx, &vendor); err == nil {
+			gpuIDs = append(gpuIDs, runplan.GPUInfo{Index: idx, Vendor: vendor})
 		}
 	}
 
@@ -182,16 +200,30 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 			ID: strVal(rtRow, "backend_version_id", ""),
 		},
 		BackendRuntime: &runplan.RuntimeInfo{
-			ID:     nbrBackendRuntimeID,
-			Vendor: strVal(rtRow, "vendor", ""),
+			ID:                  nbrBackendRuntimeID,
+			Vendor:              strVal(rtRow, "vendor", ""),
+			RuntimeType:         strVal(rtRow, "runtime_type", ""),
+			LauncherKind:        configLauncherKind(nbrConfigSet, strVal(rtRow, "runtime_type", "")),
+			ImageName:           configString(nbrConfigSet, "launcher.image", ""),
+			EntrypointOverride:  configStringSlice(nbrConfigSet, "launcher.entrypoint"),
+			ArgsOverride:        configStringSlice(nbrConfigSet, "launcher.command"),
+			DefaultEnv:          configStringMap(nbrConfigSet, "runtime.env"),
+			Docker:              configDockerSpec(nbrConfigSet),
+			ModelMount:          configModelMount(nbrConfigSet),
+			HealthCheckOverride: configHealthCheckPtr(nbrConfigSet),
 		},
 		Artifact: &runplan.ArtifactInfo{
-			ID:   modelArtifactID,
-			Name: strVal(artifact, "name", ""),
-			Path: strVal(artifact, "path", ""),
+			ID:           modelArtifactID,
+			Name:         firstNonEmpty(strVal(artifact, "display_name", ""), strVal(artifact, "name", "")),
+			Path:         firstNonEmpty(strVal(loc, "absolute_path", ""), strVal(artifact, "path", "")),
+			ModelRoot:    strVal(loc, "model_root", ""),
+			RelativePath: strVal(loc, "relative_path", ""),
 		},
 		Deployment: &runplan.DeploymentInfo{
+			ID:              "preview",
+			Name:            strVal(rawBody, "name", "preview"),
 			ParameterValues: paramVals,
+			Placement:       runplan.PlacementInfo{NodeID: nbrNodeID, AcceleratorIds: acceleratorIDs},
 		},
 		InstanceID:        "preview",
 		Node:              &runplan.NodeInfo{ID: nbrNodeID},
@@ -295,22 +327,4 @@ func defsToFlags(defs []runplan.ParameterDef) []string {
 		}
 	}
 	return flags
-}
-
-// configStringMapNBR extracts a string map from a nested ConfigSet path.
-func configStringMapNBR(cs map[string]interface{}, path string) map[string]string {
-	if cs == nil {
-		return nil
-	}
-	// Simplified: look up path directly.
-	if v, ok := cs[path]; ok {
-		if m, ok := v.(map[string]interface{}); ok {
-			out := make(map[string]string, len(m))
-			for k, val := range m {
-				out[k] = fmt.Sprint(val)
-			}
-			return out
-		}
-	}
-	return nil
 }

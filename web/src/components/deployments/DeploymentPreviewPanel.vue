@@ -36,6 +36,21 @@
       <el-divider content-position="left">{{ $t('deployments.dockerPreview') || 'Docker Command' }}</el-divider>
       <el-input :model-value="props.previewData.docker_preview" type="textarea" :rows="4" readonly />
 
+      <template v-if="props.previewData.run_plan?.device_binding">
+        <el-divider content-position="left">{{ $t('deployments.gpuBindingGroup') || 'GPU Binding' }}</el-divider>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="$t('deployments.acceleratorIds') || 'Accelerators'">
+            {{ props.previewData.run_plan.device_binding.gpu_device_ids?.join(', ') || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="$t('deployments.gpuVisibleEnv') || 'Visible Env'">
+            {{ props.previewData.run_plan.device_binding.visible_env_key }}={{ props.previewData.run_plan.device_binding.visible_env_value }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="props.previewData.run_plan.device_binding.docker_gpu_option" label="Docker GPU" :span="2">
+            --gpus "{{ props.previewData.run_plan.device_binding.docker_gpu_option }}"
+          </el-descriptions-item>
+        </el-descriptions>
+      </template>
+
       <el-divider content-position="left">{{ $t('deployments.finalRunPlan') || 'Run Plan' }}</el-divider>
       <JsonViewer :value="props.previewData.run_plan || {}" :title="$t('deployments.finalRunPlan') || 'Run Plan'" max-height="420px" :searchable="true" />
     </div>

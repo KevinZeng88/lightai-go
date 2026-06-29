@@ -31,9 +31,9 @@ func (h *AgentHandler) HandleListDeployments(w http.ResponseWriter, r *http.Requ
 	var out []map[string]interface{}
 	var err error
 	if isPlatformAdmin(r) {
-		out, err = h.queryDeployments(q + ` ORDER BY name`)
+		out, err = h.queryDeployments(q + ` ORDER BY md.name`)
 	} else {
-		out, err = h.queryDeployments(q+` WHERE tenant_id = ? ORDER BY name`, tid)
+		out, err = h.queryDeployments(q+` WHERE md.tenant_id = ? ORDER BY md.name`, tid)
 	}
 	if err != nil {
 		log.Error("list deployments", "error", err)
@@ -69,10 +69,6 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		return
 	}
 	name := strVal(req, "name", "")
-	if name == "" {
-		writeError(w, http.StatusBadRequest, "name required")
-		return
-	}
 
 	if legacyKey := rejectLegacyDeploymentPayload(req); legacyKey != "" {
 		writeError(w, http.StatusBadRequest,
@@ -133,6 +129,13 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 			return
 		}
 	}
+	if name == "" || name == "deployment" {
+		name = h.defaultDeploymentName(artifactID, nodeBackendRuntimeID)
+	}
+	displayName := strVal(req, "display_name", "")
+	if displayName == "" {
+		displayName = name
+	}
 
 	// Validate model location matches NBR node (same check as preview/preflight/start).
 	if artifactID != "" && nbrNodeID != "" {
@@ -177,7 +180,7 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 	}
 
 	_, err := h.DB.Exec(`INSERT INTO model_deployments (id, name, display_name, description, model_artifact_id, backend_runtime_id, node_backend_runtime_id, replicas, placement_json, service_json, config_overrides_json, source_backend_runtime_id, source_node_backend_runtime_id, source_config_hash, copied_at, config_set_json, source_metadata_json, desired_state, status, tenant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		id, name, strVal(req, "display_name", name), strVal(req, "description", ""),
+		id, name, displayName, strVal(req, "description", ""),
 		artifactID, backendRuntimeID, nodeBackendRuntimeID,
 		intVal(req, "replicas", 1), jsonString(req["placement_json"]), jsonString(req["service_json"]),
 		jsonString(configOverrides),
@@ -226,6 +229,29 @@ func (h *AgentHandler) HandleGetDeployment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, publicDeploymentJSON(m))
+}
+
+func (h *AgentHandler) defaultDeploymentName(artifactID, nodeBackendRuntimeID string) string {
+	var artifactName string
+	_ = h.DB.QueryRow(`SELECT COALESCE(NULLIF(display_name,''), name, id) FROM model_artifacts WHERE id = ?`, artifactID).Scan(&artifactName)
+	if strings.TrimSpace(artifactName) == "" {
+		artifactName = "model"
+	}
+	var runtimeName string
+	_ = h.DB.QueryRow(`SELECT COALESCE(NULLIF(display_name,''), id) FROM node_backend_runtimes WHERE id = ?`, nodeBackendRuntimeID).Scan(&runtimeName)
+	if strings.TrimSpace(runtimeName) == "" {
+		runtimeName = "runtime"
+	}
+	base := slugify(artifactName + "-" + runtimeName)
+	if base == "" {
+		base = "deployment"
+	}
+	suffix := time.Now().Format("20060102150405")
+	name := base + "-" + suffix
+	if len(name) > 120 {
+		name = name[:120]
+	}
+	return name
 }
 
 func (h *AgentHandler) HandlePatchDeployment(w http.ResponseWriter, r *http.Request) {
@@ -940,7 +966,7 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 	resolveInput := runplan.ResolveInput{
 		Backend:             &runplan.BackendInfo{ID: pf.rtBackendID, Name: pf.backendName, DefaultEnv: backendEnv},
 		BackendVersion:      &runplan.VersionInfo{ID: pf.rtVersionID, Version: "", DefaultEntrypoint: entrypoint, DefaultArgs: defaultArgs, DefaultBackendParams: backendParams, ParameterDefs: paramDefs, HealthCheck: hc, DefaultContainerPort: pf.bvPort, DefaultImages: defaultImages, Env: bvEnvMap, VendorOptionsJSON: pf.bvVendorOptions},
-		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: "docker", ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount, HealthCheckOverride: rtHCOverridePtr(rtHC)},
+		BackendRuntime:      &runplan.RuntimeInfo{ID: pf.runtimeID, Vendor: pf.rtVendor, RuntimeType: pf.rtVersionSnapshot, LauncherKind: configLauncherKind(deployConfigSet, pf.rtVersionSnapshot), ImageName: pf.rtImage, EntrypointOverride: rtEntryOverride, ArgsOverride: argsOverride, DefaultEnv: rtEnvMap, Docker: dockerSpec, ModelMount: modelMount, HealthCheckOverride: rtHCOverridePtr(rtHC)},
 		NodeRuntimeOverride: nil,
 		Artifact:            &runplan.ArtifactInfo{ID: pf.artifactID, Name: strVal(artifact, "name", ""), Path: pf.absolutePath, ModelRoot: pf.modelRoot, RelativePath: pf.relativePath},
 		Deployment: &runplan.DeploymentInfo{ID: deployID, Name: strVal(deploy, "name", ""), Parameters: pf.params, EnvOverrides: pf.envOverrides, ParameterValues: pf.parameterValues, DisabledParameters: pf.disabledParameters, Service: runplan.ServiceInfo{
@@ -1145,7 +1171,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		Ulimits:          pf.plan.Ulimits,
 		Devices:          agentPlanDevices(pf.plan.Devices),
 		Mounts:           agentPlanMounts(pf.plan.Mounts),
-		HostPort:         pf.service.HostPort,
+		HostPort:         pf.plan.HostPort,
 		ContainerPort:    pf.plan.ContainerPort,
 		GPUDeviceIDs:     gpuDeviceIDs,
 		GPUVisibleEnvKey: pf.plan.GPUVisibleEnvKey,
@@ -1156,7 +1182,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		HealthCheck: &agentruntime.PlanHealthCheck{
 			Enabled:         pf.plan.HealthCheck.Path != "",
 			Path:            pf.plan.HealthCheck.Path,
-			Port:            firstPositive(pf.service.HealthPort, pf.service.HostPort),
+			Port:            firstPositive(pf.service.HealthPort, pf.plan.HostPort),
 			Scheme:          "http",
 			ExpectedStatus:  pf.plan.HealthCheck.ExpectedStatus,
 			TimeoutSeconds:  healthTimeoutSeconds,
@@ -1169,7 +1195,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	log.Info("deployment.start.agent_spec.ports",
 		"deployment_id", deployID,
 		"instance_id", instanceID,
-		"host_port", pf.service.HostPort,
+		"host_port", pf.plan.HostPort,
 		"container_port", pf.plan.ContainerPort,
 		"health_check_path", pf.plan.HealthCheck.Path,
 		"health_check_port_source", "host_port",
@@ -1188,7 +1214,7 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`INSERT INTO model_instances (id, deployment_id, tenant_id, replica_index, node_id, agent_id, assigned_gpus_json, host_port, container_port, current_run_plan_id, actual_state, desired_state, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		instanceID, deployID, tid, 0, pf.placement.NodeID, "", jsonString(pf.placement.AcceleratorIds), pf.service.HostPort, pf.plan.ContainerPort, runPlanID, "pending", "running", now, now); err != nil {
+		instanceID, deployID, tid, 0, pf.placement.NodeID, "", jsonString(pf.placement.AcceleratorIds), pf.plan.HostPort, pf.plan.ContainerPort, runPlanID, "pending", "running", now, now); err != nil {
 		log.Error("deployment.start.instance_insert_failed", "error", err, "instance_id", instanceID, "deployment_id", deployID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -1794,6 +1820,7 @@ func (h *AgentHandler) HandleDeploymentDryRun(w http.ResponseWriter, r *http.Req
 		"warnings": pf.warns,
 	}
 	if pf.plan != nil {
+		result["run_plan"] = pf.plan
 		result["command_preview"] = pf.commandPreview
 		result["selected_node"] = pf.placement.NodeID
 		result["selected_runtime"] = pf.runtimeID
@@ -2057,13 +2084,13 @@ func parseJSONMap(raw string) map[string]interface{} {
 
 func (h *AgentHandler) getDeploymentJSON(id string) map[string]interface{} {
 	row := h.DB.QueryRow(deploymentSelectSQL()+` WHERE md.id = ?`, id)
-	var rid, name, dn, desc, maid, rtid, pj, sj, coj, configSetRaw, sourceMetaRaw, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua, nbrDisplay string
+	var rid, name, dn, desc, maid, modelName, modelDisplay, rtid, pj, sj, coj, configSetRaw, sourceMetaRaw, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua, nbrDisplay string
 	var replicas int
-	if err := row.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &coj, &configSetRaw, &sourceMetaRaw, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua, &nbrDisplay); err != nil {
+	if err := row.Scan(&rid, &name, &dn, &desc, &maid, &modelName, &modelDisplay, &rtid, &replicas, &pj, &sj, &coj, &configSetRaw, &sourceMetaRaw, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua, &nbrDisplay); err != nil {
 		return nil
 	}
 	configSet := parseConfigSet(configSetRaw)
-	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "config_overrides_json": json.RawMessage(coj), "config_overrides": mapFromAny(coj), "config_set": configSet, "config_set_json": json.RawMessage(configSetRaw), "source_metadata": configSourceMetadata(sourceMetaRaw), "source_metadata_json": json.RawMessage(sourceMetaRaw), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_node_backend_runtime_display_name": nbrDisplay, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua}
+	return map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "model_name": modelName, "model_display_name": modelDisplay, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "config_overrides_json": json.RawMessage(coj), "config_overrides": mapFromAny(coj), "config_set": configSet, "config_set_json": json.RawMessage(configSetRaw), "source_metadata": configSourceMetadata(sourceMetaRaw), "source_metadata_json": json.RawMessage(sourceMetaRaw), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_node_backend_runtime_display_name": nbrDisplay, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua}
 }
 
 func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]map[string]interface{}, error) {
@@ -2074,13 +2101,13 @@ func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]ma
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var rid, name, dn, desc, maid, rtid, pj, sj, coj, configSetRaw, sourceMetaRaw, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua, nbrDisplay string
+		var rid, name, dn, desc, maid, modelName, modelDisplay, rtid, pj, sj, coj, configSetRaw, sourceMetaRaw, sbrid, snbrid, stn, stv, sch, copiedAt, ds, status, tid, ca, ua, nbrDisplay string
 		var replicas int
-		if err := rows.Scan(&rid, &name, &dn, &desc, &maid, &rtid, &replicas, &pj, &sj, &coj, &configSetRaw, &sourceMetaRaw, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua, &nbrDisplay); err != nil {
+		if err := rows.Scan(&rid, &name, &dn, &desc, &maid, &modelName, &modelDisplay, &rtid, &replicas, &pj, &sj, &coj, &configSetRaw, &sourceMetaRaw, &sbrid, &snbrid, &stn, &stv, &sch, &copiedAt, &ds, &status, &tid, &ca, &ua, &nbrDisplay); err != nil {
 			continue
 		}
 		configSet := parseConfigSet(configSetRaw)
-		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "config_overrides_json": json.RawMessage(coj), "config_overrides": mapFromAny(coj), "config_set": configSet, "config_set_json": json.RawMessage(configSetRaw), "source_metadata": configSourceMetadata(sourceMetaRaw), "source_metadata_json": json.RawMessage(sourceMetaRaw), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_node_backend_runtime_display_name": nbrDisplay, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua})
+		out = append(out, map[string]interface{}{"id": rid, "name": name, "display_name": dn, "description": desc, "model_artifact_id": maid, "model_name": modelName, "model_display_name": modelDisplay, "backend_runtime_id": rtid, "replicas": replicas, "placement_json": json.RawMessage(pj), "service_json": json.RawMessage(sj), "config_overrides_json": json.RawMessage(coj), "config_overrides": mapFromAny(coj), "config_set": configSet, "config_set_json": json.RawMessage(configSetRaw), "source_metadata": configSourceMetadata(sourceMetaRaw), "source_metadata_json": json.RawMessage(sourceMetaRaw), "source_backend_runtime_id": sbrid, "source_node_backend_runtime_id": snbrid, "source_node_backend_runtime_display_name": nbrDisplay, "source_template_name": stn, "source_template_version": stv, "source_config_hash": sch, "copied_at": copiedAt, "desired_state": ds, "status": status, "tenant_id": tid, "created_at": ca, "updated_at": ua})
 	}
 	if out == nil {
 		out = []map[string]interface{}{}
@@ -2089,7 +2116,7 @@ func (h *AgentHandler) queryDeployments(query string, args ...interface{}) ([]ma
 }
 
 func deploymentSelectSQL() string {
-	return `SELECT md.id, md.name, md.display_name, md.description, md.model_artifact_id, md.backend_runtime_id, md.replicas, md.placement_json, md.service_json, md.config_overrides_json, md.config_set_json, md.source_metadata_json, COALESCE(md.source_backend_runtime_id,''), COALESCE(md.source_node_backend_runtime_id,''), COALESCE(md.source_template_name,''), COALESCE(md.source_template_version,''), COALESCE(md.source_config_hash,''), COALESCE(md.copied_at,''), md.desired_state, md.status, md.tenant_id, md.created_at, md.updated_at, COALESCE(nbr.display_name,'') AS source_node_backend_runtime_display_name FROM model_deployments md LEFT JOIN node_backend_runtimes nbr ON nbr.id = md.source_node_backend_runtime_id`
+	return `SELECT md.id, md.name, md.display_name, md.description, md.model_artifact_id, COALESCE(ma.name,''), COALESCE(ma.display_name,''), md.backend_runtime_id, md.replicas, md.placement_json, md.service_json, md.config_overrides_json, md.config_set_json, md.source_metadata_json, COALESCE(md.source_backend_runtime_id,''), COALESCE(md.source_node_backend_runtime_id,''), COALESCE(md.source_template_name,''), COALESCE(md.source_template_version,''), COALESCE(md.source_config_hash,''), COALESCE(md.copied_at,''), md.desired_state, md.status, md.tenant_id, md.created_at, md.updated_at, COALESCE(nbr.display_name,'') AS source_node_backend_runtime_display_name FROM model_deployments md LEFT JOIN model_artifacts ma ON ma.id = md.model_artifact_id LEFT JOIN node_backend_runtimes nbr ON nbr.id = md.source_node_backend_runtime_id`
 }
 
 // ==========================================================================

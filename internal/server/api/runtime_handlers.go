@@ -89,6 +89,10 @@ func (h *AgentHandler) HandleCreateBackendRuntimeFromTemplate(w http.ResponseWri
 	if displayName == "" {
 		displayName = name
 	}
+	if h.runtimeDisplayNameExists(tid, displayName, "") {
+		writeError(w, http.StatusConflict, "display_name already exists in runtime templates")
+		return
+	}
 
 	backendID := strVal(req, "backend_id", "")
 	if backendID == "" {
@@ -209,6 +213,10 @@ func (h *AgentHandler) HandlePatchBackendRuntime(w http.ResponseWriter, r *http.
 				v = strings.TrimSpace(s)
 				if (f == "name" || f == "display_name") && v == "" {
 					writeError(w, http.StatusBadRequest, f+" is required")
+					return
+				}
+				if f == "display_name" && h.runtimeDisplayNameExists(tid, fmt.Sprint(v), id) {
+					writeError(w, http.StatusConflict, "display_name already exists in runtime templates")
 					return
 				}
 			}

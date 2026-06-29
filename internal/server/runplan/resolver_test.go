@@ -426,6 +426,48 @@ func TestRuntimeTypeValidation(t *testing.T) {
 	}
 }
 
+func TestResolveLauncherKindFallbackAndHostPortMaterialization(t *testing.T) {
+	in := makeTestInput()
+	in.BackendRuntime.RuntimeType = ""
+	in.BackendRuntime.LauncherKind = "docker"
+	in.Deployment.Service = ServiceInfo{}
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan.HostPort != plan.ContainerPort || plan.HostPort != 8000 {
+		t.Fatalf("host/container ports = %d/%d, want 8000/8000", plan.HostPort, plan.ContainerPort)
+	}
+	preview := EquivalentCommandPreview(plan)
+	if !strings.Contains(preview, "-p 8000:8000/tcp") {
+		t.Fatalf("preview missing materialized port binding: %s", preview)
+	}
+}
+
+func TestResolveDeviceBindingVisibleInPlanAndPreview(t *testing.T) {
+	in := makeTestInput()
+	in.AssignedGPUs = []GPUInfo{{Index: 0, Vendor: "nvidia"}}
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan.DeviceBinding == nil {
+		t.Fatal("device_binding missing")
+	}
+	if plan.DeviceBinding.DockerGPUOption != "device=0" {
+		t.Fatalf("docker gpu option=%q", plan.DeviceBinding.DockerGPUOption)
+	}
+	if plan.DeviceBinding.VisibleEnvKey != "CUDA_VISIBLE_DEVICES" || plan.DeviceBinding.VisibleEnvValue != "0" {
+		t.Fatalf("visible env binding=%#v", plan.DeviceBinding)
+	}
+	preview := EquivalentCommandPreview(plan)
+	if !strings.Contains(preview, `--gpus "device=0"`) || !strings.Contains(preview, "CUDA_VISIBLE_DEVICES=0") {
+		t.Fatalf("preview missing device binding: %s", preview)
+	}
+}
+
 func TestEquivalentCommandPreview(t *testing.T) {
 	plan, _, _ := Resolve(makeTestInput())
 	preview := EquivalentCommandPreview(plan)
