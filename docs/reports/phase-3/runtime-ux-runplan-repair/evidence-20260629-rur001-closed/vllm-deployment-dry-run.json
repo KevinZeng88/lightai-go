@@ -1,0 +1,258 @@
+{
+  "command_preview": "docker run -d --name lightai-7fcd539d-35f --ipc host --shm-size 16gb --gpus \"device=0\" -v /home/kzeng/models/Qwen3-0.6B-Instruct-2512:/models/Qwen3-0.6B-Instruct-2512:ro -e CUDA_VISIBLE_DEVICES=0 -p 18081:8000/tcp vllm/vllm-openai:latest --model /models/Qwen3-0.6B-Instruct-2512 --host 0.0.0.0 --port 8000",
+  "error_details": null,
+  "errors": null,
+  "lint": {
+    "findings": [
+      {
+        "category": "high_risk",
+        "field_path": "docker.ipc_mode",
+        "id": "security.ipc_host",
+        "message": "Container uses IPC mode host",
+        "severity": "warning",
+        "sources": [
+          "platform"
+        ],
+        "suggestion": "IPC host mode allows shared memory with the host. This may be required for some GPU workloads but reduces isolation."
+      }
+    ],
+    "status": "warning"
+  },
+  "resolved_image": "vllm/vllm-openai:latest",
+  "run_plan": {
+    "args": [
+      "--model",
+      "/models/Qwen3-0.6B-Instruct-2512",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8000"
+    ],
+    "backend_name": "vllm",
+    "backend_version": "",
+    "container_name": "lightai-7fcd539d-35f",
+    "container_port": 8000,
+    "deployment_id": "c8606eb0-1a30-4f4b-af19-a3e3273f676e",
+    "device_binding": {
+      "docker_gpu_option": "device=0",
+      "gpu_device_ids": [
+        "0"
+      ],
+      "vendor": "nvidia",
+      "visible_env_key": "CUDA_VISIBLE_DEVICES",
+      "visible_env_value": "0"
+    },
+    "env": {
+      "CUDA_VISIBLE_DEVICES": "0"
+    },
+    "gpu_capabilities": [
+      [
+        "gpu"
+      ]
+    ],
+    "gpu_device_ids": [
+      "0"
+    ],
+    "gpu_visible_env_key": "CUDA_VISIBLE_DEVICES",
+    "health_check": {
+      "expected_status": 0,
+      "interval_seconds": 0,
+      "path": "/v1/models",
+      "startup_timeout_seconds": 120,
+      "timeout_seconds": 0
+    },
+    "host_port": 18081,
+    "image": "vllm/vllm-openai:latest",
+    "input_hash": "sha256:34d468972dec5def",
+    "instance_id": "7fcd539d-35f2-4da1-8d57-eb1e077df33f",
+    "ipc_mode": "host",
+    "model_name": "rur001-vllm-20260629204536",
+    "model_path": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+    "mounts": [
+      {
+        "container_path": "/models/Qwen3-0.6B-Instruct-2512",
+        "host_path": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+        "readonly": true
+      }
+    ],
+    "parameter_source_map": {
+      "args": [
+        {
+          "arg": "--model",
+          "effective_source": "config_set",
+          "key": "model_runtime.model",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "{{MODEL_CONTAINER_PATH}}"
+            }
+          ],
+          "target": "args",
+          "value": "{{MODEL_CONTAINER_PATH}}"
+        },
+        {
+          "arg": "--host",
+          "effective_source": "config_set",
+          "key": "service.listen_host",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "0.0.0.0"
+            }
+          ],
+          "target": "args",
+          "value": "0.0.0.0"
+        },
+        {
+          "arg": "--port",
+          "effective_source": "config_set",
+          "key": "model_runtime.port",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "{{container_port}}"
+            }
+          ],
+          "target": "args",
+          "value": "{{container_port}}"
+        },
+        {
+          "arg": "--port",
+          "effective_source": "config_set",
+          "key": "service.container_port",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": 8000
+            }
+          ],
+          "target": "args",
+          "value": 8000
+        },
+        {
+          "arg": "--host",
+          "effective_source": "config_set",
+          "key": "model_runtime.host",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "0.0.0.0"
+            }
+          ],
+          "target": "args",
+          "value": "0.0.0.0"
+        }
+      ],
+      "devices": null,
+      "docker_options": [
+        {
+          "effective_source": "backend_runtime",
+          "key": "docker.shm_size",
+          "last_value_layer": "",
+          "target": "docker_options",
+          "value": "16gb"
+        },
+        {
+          "effective_source": "backend_runtime",
+          "key": "docker.ipc_mode",
+          "last_value_layer": "",
+          "target": "docker_options",
+          "value": "host"
+        }
+      ],
+      "env": [
+        {
+          "effective_source": "resolved",
+          "key": "CUDA_VISIBLE_DEVICES",
+          "last_value_layer": "ResolvedRunPlan",
+          "target": "env",
+          "value": "0"
+        }
+      ],
+      "health_check": [
+        {
+          "effective_source": "backend_runtime",
+          "key": "health_check.path",
+          "last_value_layer": "",
+          "target": "health_check",
+          "value": "/v1/models"
+        },
+        {
+          "effective_source": "backend_runtime",
+          "key": "health_check.expected_status",
+          "last_value_layer": "",
+          "target": "health_check",
+          "value": 0
+        }
+      ],
+      "mounts": [
+        {
+          "effective_source": "model_location",
+          "key": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+          "last_value_layer": "",
+          "target": "mounts",
+          "value": {
+            "container_path": "/models/Qwen3-0.6B-Instruct-2512",
+            "host_path": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+            "readonly": true
+          }
+        }
+      ],
+      "ports": [
+        {
+          "effective_source": "backend_version",
+          "key": "container_port",
+          "last_value_layer": "",
+          "target": "ports",
+          "value": 8000
+        },
+        {
+          "effective_source": "deployment_service",
+          "key": "host_port",
+          "last_value_layer": "",
+          "target": "ports",
+          "value": 18081
+        }
+      ],
+      "resource_controls": null,
+      "system_generated": [
+        {
+          "effective_source": "system_generated",
+          "key": "gpu_device_ids",
+          "last_value_layer": "",
+          "target": "system_generated",
+          "value": [
+            "0"
+          ]
+        },
+        {
+          "effective_source": "system_generated",
+          "key": "gpu_visible_env_key",
+          "last_value_layer": "",
+          "target": "system_generated",
+          "value": "CUDA_VISIBLE_DEVICES"
+        }
+      ]
+    },
+    "plan_hash": "sha256:991af1d3493f29c4",
+    "served_model_name": "<nil>",
+    "shm_size": "16gb"
+  },
+  "selected_model_location": "413f38f5-0679-46d5-86bc-e6ab94a5c44d",
+  "selected_node": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+  "selected_runtime": "a8b43520-a31d-4a9b-992a-5dc97208ac2e",
+  "valid": true,
+  "warnings": [
+    "[lint] security.ipc_host: Container uses IPC mode host"
+  ]
+}

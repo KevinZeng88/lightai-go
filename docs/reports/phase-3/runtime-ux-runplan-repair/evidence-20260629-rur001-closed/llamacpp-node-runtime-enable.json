@@ -1,0 +1,15 @@
+{
+  "backend_runtime_id": "d0046621-15c6-4c87-8aac-c11c46a04874",
+  "deployable": false,
+  "disabled_reason": "Node runtime config has not been checked; run agent check first",
+  "display_name": "RUR001 llamacpp NBR 20260629204536",
+  "docker_available": false,
+  "id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322:d0046621-15c6-4c87-8aac-c11c46a04874",
+  "image_present": false,
+  "image_ref": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+  "last_checked_at": "2026-06-29T20:45:37+08:00",
+  "name": "RUR001 llamacpp NBR 20260629204536",
+  "node_id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+  "status": "needs_check",
+  "status_reason": "awaiting agent verification of Docker and image availability"
+}

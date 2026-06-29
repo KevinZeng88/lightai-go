@@ -1,0 +1,258 @@
+{
+  "command_preview": "docker run -d --name lightai-761e3d20-b38 --ipc host --shm-size 8gb --gpus \"device=0\" -v /home/kzeng/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf:/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf:ro -e CUDA_VISIBLE_DEVICES=0 -p 18083:8080/tcp ghcr.io/ggml-org/llama.cpp:server-cuda13 -m /models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf --host 0.0.0.0 --port 8080",
+  "error_details": null,
+  "errors": null,
+  "lint": {
+    "findings": [
+      {
+        "category": "high_risk",
+        "field_path": "docker.ipc_mode",
+        "id": "security.ipc_host",
+        "message": "Container uses IPC mode host",
+        "severity": "warning",
+        "sources": [
+          "platform"
+        ],
+        "suggestion": "IPC host mode allows shared memory with the host. This may be required for some GPU workloads but reduces isolation."
+      }
+    ],
+    "status": "warning"
+  },
+  "resolved_image": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+  "run_plan": {
+    "args": [
+      "-m",
+      "/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080"
+    ],
+    "backend_name": "llamacpp",
+    "backend_version": "",
+    "container_name": "lightai-761e3d20-b38",
+    "container_port": 8080,
+    "deployment_id": "04a793d7-90f1-48db-940f-141f7909d477",
+    "device_binding": {
+      "docker_gpu_option": "device=0",
+      "gpu_device_ids": [
+        "0"
+      ],
+      "vendor": "nvidia",
+      "visible_env_key": "CUDA_VISIBLE_DEVICES",
+      "visible_env_value": "0"
+    },
+    "env": {
+      "CUDA_VISIBLE_DEVICES": "0"
+    },
+    "gpu_capabilities": [
+      [
+        "gpu"
+      ]
+    ],
+    "gpu_device_ids": [
+      "0"
+    ],
+    "gpu_visible_env_key": "CUDA_VISIBLE_DEVICES",
+    "health_check": {
+      "expected_status": 0,
+      "interval_seconds": 0,
+      "path": "/v1/models",
+      "startup_timeout_seconds": 120,
+      "timeout_seconds": 0
+    },
+    "host_port": 18083,
+    "image": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+    "input_hash": "sha256:555cb9759c2f68e6",
+    "instance_id": "761e3d20-b38d-4d85-a2d6-b1a0674dda78",
+    "ipc_mode": "host",
+    "model_name": "rur001-llamacpp-20260629204536",
+    "model_path": "/home/kzeng/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    "mounts": [
+      {
+        "container_path": "/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "host_path": "/home/kzeng/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "readonly": true
+      }
+    ],
+    "parameter_source_map": {
+      "args": [
+        {
+          "arg": "--host",
+          "effective_source": "config_set",
+          "key": "model_runtime.host",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "0.0.0.0"
+            }
+          ],
+          "target": "args",
+          "value": "0.0.0.0"
+        },
+        {
+          "arg": "--host",
+          "effective_source": "config_set",
+          "key": "service.listen_host",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "0.0.0.0"
+            }
+          ],
+          "target": "args",
+          "value": "0.0.0.0"
+        },
+        {
+          "arg": "-m",
+          "effective_source": "config_set",
+          "key": "model_runtime.m",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "{{MODEL_CONTAINER_PATH}}"
+            }
+          ],
+          "target": "args",
+          "value": "{{MODEL_CONTAINER_PATH}}"
+        },
+        {
+          "arg": "--port",
+          "effective_source": "config_set",
+          "key": "model_runtime.port",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "{{container_port}}"
+            }
+          ],
+          "target": "args",
+          "value": "{{container_port}}"
+        },
+        {
+          "arg": "--port",
+          "effective_source": "config_set",
+          "key": "service.container_port",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": 8080
+            }
+          ],
+          "target": "args",
+          "value": 8080
+        }
+      ],
+      "devices": null,
+      "docker_options": [
+        {
+          "effective_source": "backend_runtime",
+          "key": "docker.shm_size",
+          "last_value_layer": "",
+          "target": "docker_options",
+          "value": "8gb"
+        },
+        {
+          "effective_source": "backend_runtime",
+          "key": "docker.ipc_mode",
+          "last_value_layer": "",
+          "target": "docker_options",
+          "value": "host"
+        }
+      ],
+      "env": [
+        {
+          "effective_source": "resolved",
+          "key": "CUDA_VISIBLE_DEVICES",
+          "last_value_layer": "ResolvedRunPlan",
+          "target": "env",
+          "value": "0"
+        }
+      ],
+      "health_check": [
+        {
+          "effective_source": "backend_runtime",
+          "key": "health_check.path",
+          "last_value_layer": "",
+          "target": "health_check",
+          "value": "/v1/models"
+        },
+        {
+          "effective_source": "backend_runtime",
+          "key": "health_check.expected_status",
+          "last_value_layer": "",
+          "target": "health_check",
+          "value": 0
+        }
+      ],
+      "mounts": [
+        {
+          "effective_source": "model_location",
+          "key": "/home/kzeng/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+          "last_value_layer": "",
+          "target": "mounts",
+          "value": {
+            "container_path": "/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "host_path": "/home/kzeng/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "readonly": true
+          }
+        }
+      ],
+      "ports": [
+        {
+          "effective_source": "backend_version",
+          "key": "container_port",
+          "last_value_layer": "",
+          "target": "ports",
+          "value": 8080
+        },
+        {
+          "effective_source": "deployment_service",
+          "key": "host_port",
+          "last_value_layer": "",
+          "target": "ports",
+          "value": 18083
+        }
+      ],
+      "resource_controls": null,
+      "system_generated": [
+        {
+          "effective_source": "system_generated",
+          "key": "gpu_device_ids",
+          "last_value_layer": "",
+          "target": "system_generated",
+          "value": [
+            "0"
+          ]
+        },
+        {
+          "effective_source": "system_generated",
+          "key": "gpu_visible_env_key",
+          "last_value_layer": "",
+          "target": "system_generated",
+          "value": "CUDA_VISIBLE_DEVICES"
+        }
+      ]
+    },
+    "plan_hash": "sha256:ae179bc99fade07e",
+    "served_model_name": "rur001-llamacpp-20260629204536",
+    "shm_size": "8gb"
+  },
+  "selected_model_location": "10848880-d9d7-4eec-89f8-5166533dc7f9",
+  "selected_node": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+  "selected_runtime": "d0046621-15c6-4c87-8aac-c11c46a04874",
+  "valid": true,
+  "warnings": [
+    "[lint] security.ipc_host: Container uses IPC mode host"
+  ]
+}

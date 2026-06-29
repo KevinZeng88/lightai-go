@@ -1,0 +1,30 @@
+{
+  "architecture": "qwen",
+  "capabilities": [],
+  "capability_set": {
+    "capabilities": [],
+    "capability_sources": {},
+    "parameter_defaults": [],
+    "schema_version": 1,
+    "source": "model_artifact"
+  },
+  "capability_sources": {},
+  "created_at": "2026-06-29T20:45:38+08:00",
+  "default_context_length": 0,
+  "default_test_mode": "auto",
+  "display_name": "rur001-llamacpp-20260629204536",
+  "estimated_vram_bytes": 0,
+  "format": "gguf",
+  "id": "e16af533-c9b7-4846-a3c7-22dad4f75fc9",
+  "locations": [],
+  "name": "rur001-llamacpp-20260629204536",
+  "parameter_defaults": [],
+  "path": "/home/kzeng/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+  "quantization": "unknown",
+  "required_gpu_count": 1,
+  "size_label": "",
+  "source_type": "local_path",
+  "task_type": "chat",
+  "tenant_id": "a0000000-0000-0000-0000-000000000001",
+  "updated_at": "2026-06-29T20:45:38+08:00"
+}

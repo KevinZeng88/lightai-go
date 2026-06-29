@@ -1,0 +1,30 @@
+{
+  "architecture": "qwen",
+  "capabilities": [],
+  "capability_set": {
+    "capabilities": [],
+    "capability_sources": {},
+    "parameter_defaults": [],
+    "schema_version": 1,
+    "source": "model_artifact"
+  },
+  "capability_sources": {},
+  "created_at": "2026-06-29T20:45:37+08:00",
+  "default_context_length": 0,
+  "default_test_mode": "auto",
+  "display_name": "rur001-vllm-20260629204536",
+  "estimated_vram_bytes": 0,
+  "format": "huggingface",
+  "id": "7eebfed1-99b2-47c8-887f-694bc5ea7400",
+  "locations": [],
+  "name": "rur001-vllm-20260629204536",
+  "parameter_defaults": [],
+  "path": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+  "quantization": "unknown",
+  "required_gpu_count": 1,
+  "size_label": "",
+  "source_type": "local_path",
+  "task_type": "chat",
+  "tenant_id": "a0000000-0000-0000-0000-000000000001",
+  "updated_at": "2026-06-29T20:45:37+08:00"
+}

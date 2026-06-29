@@ -1,0 +1,22 @@
+[
+  {
+    "advertised_address": "127.0.0.1",
+    "agent_id": "agent-rur001",
+    "agent_version": "lightai-go 0.1.0 (commit: unknown, built: unknown, go: go1.26.4, linux/amd64)",
+    "arch": "amd64",
+    "created_at": "2026-06-29T20:40:46+08:00",
+    "hostname": "KZ-LAPTOP",
+    "id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+    "kernel": "6.6.114.1-microsoft-standard-WSL2",
+    "last_heartbeat_at": "2026-06-29T20:45:35+08:00",
+    "metrics_enabled": true,
+    "metrics_path": "/metrics",
+    "metrics_port": 19091,
+    "metrics_scheme": "http",
+    "os": "linux",
+    "primary_ip": "10.255.255.254",
+    "status": "online",
+    "tenant_id": "a0000000-0000-0000-0000-000000000001",
+    "updated_at": "2026-06-29T20:45:35+08:00"
+  }
+]

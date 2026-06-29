@@ -1,0 +1,16 @@
+{
+  "created_at": "2026-06-29T12:45:37Z",
+  "created_by": "d82691b8-96dc-4bc0-9691-b4f2cf2d2039",
+  "description": "",
+  "id": "7835fe4e-46ca-4b56-8c6c-3f4f32c065d8",
+  "label": "/home/kzeng/models",
+  "last_checked_at": "2026-06-29T12:45:37Z",
+  "last_error": "",
+  "node_id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+  "path": "/home/kzeng/models",
+  "root": "/home/kzeng/models",
+  "source": "user",
+  "status": "enabled",
+  "tenant_id": "a0000000-0000-0000-0000-000000000001",
+  "updated_at": "2026-06-29T12:45:37Z"
+}

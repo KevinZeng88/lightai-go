@@ -1,0 +1,362 @@
+{
+  "can_run": false,
+  "docker_preview": "docker run -d --name lightai-preview --ipc host --shm-size 32gb --gpus \"device=0\" -v /home/kzeng/models/Qwen3-0.6B-Instruct-2512:/models/Qwen3-0.6B-Instruct-2512:ro -e CUDA_VISIBLE_DEVICES=0 -p 18082:30000/tcp --entrypoint sglang lmsysorg/sglang:latest serve --model-path /models/Qwen3-0.6B-Instruct-2512 --host 0.0.0.0 --port 30000",
+  "lint": {
+    "findings": [
+      {
+        "category": "high_risk",
+        "field_path": "docker.ipc_mode",
+        "id": "security.ipc_host",
+        "message": "Container uses IPC mode host",
+        "severity": "warning",
+        "sources": [
+          "platform"
+        ],
+        "suggestion": "IPC host mode allows shared memory with the host. This may be required for some GPU workloads but reduces isolation."
+      }
+    ],
+    "status": "warning"
+  },
+  "preflight": {
+    "errors": [
+      {
+        "code": "resolve_error",
+        "field": "runplan",
+        "message": "deployment parameter \"--host\" is protected and cannot be overridden by deployment; modify at NBR or BackendRuntime layer",
+        "severity": "error"
+      },
+      {
+        "code": "resolve_error",
+        "field": "runplan",
+        "message": "deployment parameter \"--port\" is protected and cannot be overridden by deployment; modify at NBR or BackendRuntime layer",
+        "severity": "error"
+      },
+      {
+        "code": "resolve_error",
+        "field": "runplan",
+        "message": "deployment parameter \"--port\" is protected and cannot be overridden by deployment; modify at NBR or BackendRuntime layer",
+        "severity": "error"
+      },
+      {
+        "code": "resolve_error",
+        "field": "runplan",
+        "message": "deployment parameter \"--host\" is protected and cannot be overridden by deployment; modify at NBR or BackendRuntime layer",
+        "severity": "error"
+      }
+    ],
+    "status": "warning",
+    "warnings": []
+  },
+  "resource_admission": {
+    "findings": [],
+    "status": "ok"
+  },
+  "run_plan": {
+    "args": [
+      "--model-path",
+      "/models/Qwen3-0.6B-Instruct-2512",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "30000"
+    ],
+    "backend_name": "sglang",
+    "backend_version": "",
+    "container_name": "lightai-preview",
+    "container_port": 30000,
+    "deployment_id": "preview",
+    "device_binding": {
+      "docker_gpu_option": "device=0",
+      "gpu_device_ids": [
+        "0"
+      ],
+      "vendor": "nvidia",
+      "visible_env_key": "CUDA_VISIBLE_DEVICES",
+      "visible_env_value": "0"
+    },
+    "entrypoint": [
+      "sglang",
+      "serve"
+    ],
+    "env": {
+      "CUDA_VISIBLE_DEVICES": "0"
+    },
+    "gpu_capabilities": [
+      [
+        "gpu"
+      ]
+    ],
+    "gpu_device_ids": [
+      "0"
+    ],
+    "gpu_visible_env_key": "CUDA_VISIBLE_DEVICES",
+    "health_check": {
+      "expected_status": 0,
+      "interval_seconds": 0,
+      "path": "/v1/models",
+      "startup_timeout_seconds": 120,
+      "timeout_seconds": 0
+    },
+    "host_port": 18082,
+    "image": "lmsysorg/sglang:latest",
+    "input_hash": "sha256:73edba479ed29478",
+    "instance_id": "preview",
+    "ipc_mode": "host",
+    "model_name": "rur001-sglang-20260629204536",
+    "model_path": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+    "mounts": [
+      {
+        "container_path": "/models/Qwen3-0.6B-Instruct-2512",
+        "host_path": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+        "readonly": true
+      }
+    ],
+    "parameter_source_map": {
+      "args": [
+        {
+          "arg": "--host",
+          "effective_source": "config_set",
+          "key": "service.listen_host",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "0.0.0.0"
+            }
+          ],
+          "target": "args",
+          "value": "0.0.0.0"
+        },
+        {
+          "arg": "--model-path",
+          "effective_source": "config_set",
+          "key": "model_runtime.model_path",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "{{MODEL_CONTAINER_PATH}}"
+            }
+          ],
+          "target": "args",
+          "value": "{{MODEL_CONTAINER_PATH}}"
+        },
+        {
+          "arg": "--port",
+          "effective_source": "config_set",
+          "key": "model_runtime.port",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "{{container_port}}"
+            }
+          ],
+          "target": "args",
+          "value": "{{container_port}}"
+        },
+        {
+          "arg": "--port",
+          "effective_source": "config_set",
+          "key": "service.container_port",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": 30000
+            }
+          ],
+          "target": "args",
+          "value": 30000
+        },
+        {
+          "arg": "--host",
+          "effective_source": "config_set",
+          "key": "model_runtime.host",
+          "last_value_layer": "config_set",
+          "source_chain": [
+            {
+              "layer": "NodeBackendRuntimeConfigBundle",
+              "reason": "nbr parameter value",
+              "value": "0.0.0.0"
+            }
+          ],
+          "target": "args",
+          "value": "0.0.0.0"
+        },
+        {
+          "arg": "--host",
+          "effective_source": "deployment_override",
+          "key": "service.listen_host",
+          "last_value_layer": "DeploymentConfigBundle",
+          "source_chain": [
+            {
+              "layer": "DeploymentConfigBundle",
+              "reason": "deployment override",
+              "value": "0.0.0.0"
+            }
+          ],
+          "target": "args",
+          "value": "0.0.0.0"
+        },
+        {
+          "arg": "--model-path",
+          "effective_source": "deployment_override",
+          "key": "model_runtime.model_path",
+          "last_value_layer": "DeploymentConfigBundle",
+          "source_chain": [
+            {
+              "layer": "DeploymentConfigBundle",
+              "reason": "deployment override",
+              "value": "{{MODEL_CONTAINER_PATH}}"
+            }
+          ],
+          "target": "args",
+          "value": "{{MODEL_CONTAINER_PATH}}"
+        },
+        {
+          "arg": "--port",
+          "effective_source": "deployment_override",
+          "key": "model_runtime.port",
+          "last_value_layer": "DeploymentConfigBundle",
+          "source_chain": [
+            {
+              "layer": "DeploymentConfigBundle",
+              "reason": "deployment override",
+              "value": "{{container_port}}"
+            }
+          ],
+          "target": "args",
+          "value": "{{container_port}}"
+        },
+        {
+          "arg": "--port",
+          "effective_source": "deployment_override",
+          "key": "service.container_port",
+          "last_value_layer": "DeploymentConfigBundle",
+          "source_chain": [
+            {
+              "layer": "DeploymentConfigBundle",
+              "reason": "deployment override",
+              "value": 30000
+            }
+          ],
+          "target": "args",
+          "value": 30000
+        },
+        {
+          "arg": "--host",
+          "effective_source": "deployment_override",
+          "key": "model_runtime.host",
+          "last_value_layer": "DeploymentConfigBundle",
+          "source_chain": [
+            {
+              "layer": "DeploymentConfigBundle",
+              "reason": "deployment override",
+              "value": "0.0.0.0"
+            }
+          ],
+          "target": "args",
+          "value": "0.0.0.0"
+        }
+      ],
+      "devices": null,
+      "docker_options": [
+        {
+          "effective_source": "backend_runtime",
+          "key": "docker.shm_size",
+          "last_value_layer": "",
+          "target": "docker_options",
+          "value": "32gb"
+        },
+        {
+          "effective_source": "backend_runtime",
+          "key": "docker.ipc_mode",
+          "last_value_layer": "",
+          "target": "docker_options",
+          "value": "host"
+        }
+      ],
+      "env": [
+        {
+          "effective_source": "resolved",
+          "key": "CUDA_VISIBLE_DEVICES",
+          "last_value_layer": "ResolvedRunPlan",
+          "target": "env",
+          "value": "0"
+        }
+      ],
+      "health_check": [
+        {
+          "effective_source": "backend_runtime",
+          "key": "health_check.path",
+          "last_value_layer": "",
+          "target": "health_check",
+          "value": "/v1/models"
+        },
+        {
+          "effective_source": "backend_runtime",
+          "key": "health_check.expected_status",
+          "last_value_layer": "",
+          "target": "health_check",
+          "value": 0
+        }
+      ],
+      "mounts": [
+        {
+          "effective_source": "model_location",
+          "key": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+          "last_value_layer": "",
+          "target": "mounts",
+          "value": {
+            "container_path": "/models/Qwen3-0.6B-Instruct-2512",
+            "host_path": "/home/kzeng/models/Qwen3-0.6B-Instruct-2512",
+            "readonly": true
+          }
+        }
+      ],
+      "ports": [
+        {
+          "effective_source": "backend_version",
+          "key": "container_port",
+          "last_value_layer": "",
+          "target": "ports",
+          "value": 30000
+        },
+        {
+          "effective_source": "deployment_service",
+          "key": "host_port",
+          "last_value_layer": "",
+          "target": "ports",
+          "value": 18082
+        }
+      ],
+      "resource_controls": null,
+      "system_generated": [
+        {
+          "effective_source": "system_generated",
+          "key": "gpu_device_ids",
+          "last_value_layer": "",
+          "target": "system_generated",
+          "value": [
+            "0"
+          ]
+        },
+        {
+          "effective_source": "system_generated",
+          "key": "gpu_visible_env_key",
+          "last_value_layer": "",
+          "target": "system_generated",
+          "value": "CUDA_VISIBLE_DEVICES"
+        }
+      ]
+    },
+    "plan_hash": "sha256:b3847a3badc5e682",
+    "served_model_name": "<nil>",
+    "shm_size": "32gb"
+  }
+}

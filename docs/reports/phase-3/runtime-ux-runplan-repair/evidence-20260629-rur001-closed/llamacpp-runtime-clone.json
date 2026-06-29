@@ -1,0 +1,3465 @@
+{
+  "backend_id": "backend.llamacpp",
+  "backend_version_id": "llamacpp-b9700",
+  "command": [
+    "-m",
+    "{{model_container_path}}"
+  ],
+  "config_set": {
+    "config_set_key": "BackendRuntimeConfigSet",
+    "context": {
+      "backend_id": "backend.llamacpp",
+      "backend_runtime": "runtime.llamacpp.nvidia-docker",
+      "backend_version": "llamacpp-b9700",
+      "launcher_kind": "docker",
+      "vendor": "nvidia"
+    },
+    "items": {
+      "backend.capabilities": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 5,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 5,
+          "key": "backend.capabilities",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": {
+            "model_path_modes": [
+              "file"
+            ],
+            "serving_protocols": [
+              "openai_compatible"
+            ],
+            "supported_capabilities": [
+              "chat",
+              "completion",
+              "embedding"
+            ],
+            "supported_formats": [
+              "gguf"
+            ],
+            "supported_tasks": [
+              "chat",
+              "completion",
+              "embedding"
+            ],
+            "test_endpoints": {
+              "chat": "/v1/chat/completions",
+              "completion": "/v1/completions",
+              "embedding": "/v1/embeddings",
+              "models": "/v1/models"
+            }
+          },
+          "effective_value": {
+            "model_path_modes": [
+              "file"
+            ],
+            "serving_protocols": [
+              "openai_compatible"
+            ],
+            "supported_capabilities": [
+              "chat",
+              "completion",
+              "embedding"
+            ],
+            "supported_formats": [
+              "gguf"
+            ],
+            "supported_tasks": [
+              "chat",
+              "completion",
+              "embedding"
+            ],
+            "test_endpoints": {
+              "chat": "/v1/chat/completions",
+              "completion": "/v1/completions",
+              "embedding": "/v1/embeddings",
+              "models": "/v1/models"
+            }
+          }
+        }
+      },
+      "backend.extra_args": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 900,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 900,
+          "key": "backend.extra_args",
+          "kind": "cli_args",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "lines"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "",
+          "effective_value": "",
+          "local_value": ""
+        }
+      },
+      "backend.supported_config_items": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 6,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 6,
+          "key": "backend.supported_config_items",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": [
+            "model_runtime.m",
+            "model_runtime.host",
+            "model_runtime.port",
+            "model_runtime.max_model_len",
+            "model_runtime.n_gpu_layers",
+            "model_runtime.threads",
+            "model_runtime.threads_batch",
+            "model_runtime.batch_size",
+            "model_runtime.ubatch_size",
+            "model_runtime.cache_type_k",
+            "model_runtime.cache_type_v",
+            "model_runtime.split_mode",
+            "model_runtime.main_gpu",
+            "model_runtime.tensor_split",
+            "backend.extra_args"
+          ],
+          "effective_value": [
+            "model_runtime.m",
+            "model_runtime.host",
+            "model_runtime.port",
+            "model_runtime.max_model_len",
+            "model_runtime.n_gpu_layers",
+            "model_runtime.threads",
+            "model_runtime.threads_batch",
+            "model_runtime.batch_size",
+            "model_runtime.ubatch_size",
+            "model_runtime.cache_type_k",
+            "model_runtime.cache_type_v",
+            "model_runtime.split_mode",
+            "model_runtime.main_gpu",
+            "model_runtime.tensor_split",
+            "backend.extra_args"
+          ]
+        }
+      },
+      "deployment.served_model_name": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 230,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--served-model-name",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 230,
+          "key": "deployment.served_model_name",
+          "kind": "cli_arg",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "",
+          "effective_value": "",
+          "inherited_value": ""
+        }
+      },
+      "launcher.command": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 40,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 40,
+          "key": "launcher.command",
+          "kind": "cli_args",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "cli",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": [
+            "-m",
+            "{{model_container_path}}"
+          ],
+          "local_value": null
+        }
+      },
+      "launcher.devices": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 70,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 70,
+          "key": "launcher.devices",
+          "kind": "device",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": [],
+          "effective_value": [],
+          "local_value": []
+        }
+      },
+      "launcher.docker_options": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 80,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 80,
+          "key": "launcher.docker_options",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": {
+            "gpu_capabilities": [
+              [
+                "gpu"
+              ]
+            ],
+            "gpu_driver": "",
+            "ipc_mode": "host",
+            "shm_size": "8gb"
+          },
+          "effective_value": {
+            "gpu_capabilities": [
+              [
+                "gpu"
+              ]
+            ],
+            "gpu_driver": "",
+            "ipc_mode": "host",
+            "shm_size": "8gb"
+          },
+          "local_value": {
+            "gpu_capabilities": [
+              [
+                "gpu"
+              ]
+            ],
+            "gpu_driver": "",
+            "ipc_mode": "host",
+            "shm_size": "8gb"
+          }
+        }
+      },
+      "launcher.entrypoint": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 30,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 30,
+          "key": "launcher.entrypoint",
+          "kind": "cli_args",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": [],
+          "local_value": null
+        }
+      },
+      "launcher.image": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 20,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 20,
+          "key": "launcher.image",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+          "effective_value": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+          "local_value": "ghcr.io/ggml-org/llama.cpp:server-cuda13"
+        }
+      },
+      "launcher.kind": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 10,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 10,
+          "key": "launcher.kind",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "docker",
+          "effective_value": "docker",
+          "local_value": "docker"
+        }
+      },
+      "launcher.ports": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 50,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 50,
+          "key": "launcher.ports",
+          "kind": "port",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": [],
+          "effective_value": [],
+          "local_value": []
+        }
+      },
+      "launcher.volumes": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 60,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 60,
+          "key": "launcher.volumes",
+          "kind": "volume",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": [],
+          "effective_value": [],
+          "local_value": []
+        }
+      },
+      "model_runtime.batch_size": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 307,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--batch-size",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 307,
+          "key": "model_runtime.batch_size",
+          "kind": "cli_arg",
+          "label": "Batch Size",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.cache_type_k": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 309,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--cache-type-k",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 309,
+          "key": "model_runtime.cache_type_k",
+          "kind": "cli_arg",
+          "label": "KV Cache Type K",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.cache_type_v": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 310,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--cache-type-v",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 310,
+          "key": "model_runtime.cache_type_v",
+          "kind": "cli_arg",
+          "label": "KV Cache Type V",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.host": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "startup",
+          "hide_when_empty": false,
+          "priority": 301,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--host",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 301,
+          "key": "model_runtime.host",
+          "kind": "cli_arg",
+          "label": "Listen Host",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": true,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "0.0.0.0",
+          "effective_value": "0.0.0.0"
+        }
+      },
+      "model_runtime.m": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "startup",
+          "hide_when_empty": false,
+          "priority": 300,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "-m",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 300,
+          "key": "model_runtime.m",
+          "kind": "cli_arg",
+          "label": "Model Path",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": true,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "{{MODEL_CONTAINER_PATH}}",
+          "effective_value": "{{MODEL_CONTAINER_PATH}}"
+        }
+      },
+      "model_runtime.main_gpu": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "parallelism",
+          "hide_when_empty": false,
+          "priority": 312,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--main-gpu",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 312,
+          "key": "model_runtime.main_gpu",
+          "kind": "cli_arg",
+          "label": "Main GPU",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.max_model_len": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 303,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--ctx-size",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 303,
+          "key": "model_runtime.max_model_len",
+          "kind": "cli_arg",
+          "label": "Context Size",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.n_gpu_layers": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 304,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--n-gpu-layers",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 304,
+          "key": "model_runtime.n_gpu_layers",
+          "kind": "cli_arg",
+          "label": "GPU Layers",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.port": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "startup",
+          "hide_when_empty": false,
+          "priority": 302,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--port",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 302,
+          "key": "model_runtime.port",
+          "kind": "cli_arg",
+          "label": "Container Port",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": true,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "{{container_port}}",
+          "effective_value": "{{container_port}}"
+        }
+      },
+      "model_runtime.split_mode": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "parallelism",
+          "hide_when_empty": false,
+          "priority": 311,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--split-mode",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 311,
+          "key": "model_runtime.split_mode",
+          "kind": "cli_arg",
+          "label": "Split Mode",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.tensor_split": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "parallelism",
+          "hide_when_empty": false,
+          "priority": 313,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--tensor-split",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 313,
+          "key": "model_runtime.tensor_split",
+          "kind": "cli_arg",
+          "label": "Tensor Split",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.threads": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 305,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--threads",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 305,
+          "key": "model_runtime.threads",
+          "kind": "cli_arg",
+          "label": "CPU Threads",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.threads_batch": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 306,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--threads-batch",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 306,
+          "key": "model_runtime.threads_batch",
+          "kind": "cli_arg",
+          "label": "Batch Threads",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.ubatch_size": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 308,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--ubatch-size",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 308,
+          "key": "model_runtime.ubatch_size",
+          "kind": "cli_arg",
+          "label": "Micro Batch Size",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "runtime.env": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 100,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "runtime_env",
+          "config_set_key": "",
+          "display_order": 100,
+          "key": "runtime.env",
+          "kind": "env",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "env",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": {},
+          "local_value": null
+        }
+      },
+      "runtime.extra_env": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 190,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "runtime_env",
+          "config_set_key": "",
+          "display_order": 190,
+          "key": "runtime.extra_env",
+          "kind": "env_lines",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "env",
+          "type": "lines"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "",
+          "effective_value": "",
+          "local_value": ""
+        }
+      },
+      "runtime.health": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 120,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "runtime_env",
+          "config_set_key": "",
+          "display_order": 120,
+          "key": "runtime.health",
+          "kind": "health_check",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "health",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": {
+            "path": "/v1/models",
+            "startup_timeout_seconds": 120,
+            "success_status": [
+              200
+            ],
+            "type": "http"
+          },
+          "local_value": null
+        }
+      },
+      "runtime.model_mount": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 110,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "runtime_env",
+          "config_set_key": "",
+          "display_order": 110,
+          "key": "runtime.model_mount",
+          "kind": "volume",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": {
+            "container_path": "/models",
+            "readonly": true
+          },
+          "effective_value": {
+            "container_path": "/models",
+            "readonly": true
+          },
+          "local_value": {
+            "container_path": "/models",
+            "readonly": true
+          }
+        }
+      },
+      "service.container_port": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 220,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--port",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 220,
+          "key": "service.container_port",
+          "kind": "cli_arg",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "cli",
+          "type": "integer"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": 8080,
+          "effective_value": 8080,
+          "local_value": 8080
+        }
+      },
+      "service.listen_host": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 210,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--host",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 210,
+          "key": "service.listen_host",
+          "kind": "cli_arg",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "0.0.0.0",
+          "effective_value": "0.0.0.0",
+          "local_value": "0.0.0.0"
+        }
+      }
+    },
+    "schema_version": 1,
+    "source_metadata": {
+      "copied_at": "catalog-import",
+      "copy_boundary": "detached_after_create",
+      "copy_semantics": "copy_on_create",
+      "kind": "backend_runtime",
+      "materialized_at": "catalog-import",
+      "parent_ref": "backend_version:llamacpp-b9700",
+      "source_hash": "sha256:5bc3a5137f2bbb54ec5d8d8ebd0570a908f07cdb6dece967a9d046427d94c05e",
+      "source_ref": "/home/kzeng/projects/ai-platform-study/lightai-go/configs/backend-catalog/runtimes/llamacpp/nvidia-docker.yaml"
+    }
+  },
+  "config_set_json": {
+    "config_set_key": "BackendRuntimeConfigSet",
+    "context": {
+      "backend_id": "backend.llamacpp",
+      "backend_runtime": "runtime.llamacpp.nvidia-docker",
+      "backend_version": "llamacpp-b9700",
+      "launcher_kind": "docker",
+      "vendor": "nvidia"
+    },
+    "items": {
+      "backend.capabilities": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 5,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 5,
+          "key": "backend.capabilities",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": {
+            "model_path_modes": [
+              "file"
+            ],
+            "serving_protocols": [
+              "openai_compatible"
+            ],
+            "supported_capabilities": [
+              "chat",
+              "completion",
+              "embedding"
+            ],
+            "supported_formats": [
+              "gguf"
+            ],
+            "supported_tasks": [
+              "chat",
+              "completion",
+              "embedding"
+            ],
+            "test_endpoints": {
+              "chat": "/v1/chat/completions",
+              "completion": "/v1/completions",
+              "embedding": "/v1/embeddings",
+              "models": "/v1/models"
+            }
+          },
+          "effective_value": {
+            "model_path_modes": [
+              "file"
+            ],
+            "serving_protocols": [
+              "openai_compatible"
+            ],
+            "supported_capabilities": [
+              "chat",
+              "completion",
+              "embedding"
+            ],
+            "supported_formats": [
+              "gguf"
+            ],
+            "supported_tasks": [
+              "chat",
+              "completion",
+              "embedding"
+            ],
+            "test_endpoints": {
+              "chat": "/v1/chat/completions",
+              "completion": "/v1/completions",
+              "embedding": "/v1/embeddings",
+              "models": "/v1/models"
+            }
+          }
+        }
+      },
+      "backend.extra_args": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 900,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 900,
+          "key": "backend.extra_args",
+          "kind": "cli_args",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "lines"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "",
+          "effective_value": "",
+          "local_value": ""
+        }
+      },
+      "backend.supported_config_items": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 6,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 6,
+          "key": "backend.supported_config_items",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": [
+            "model_runtime.m",
+            "model_runtime.host",
+            "model_runtime.port",
+            "model_runtime.max_model_len",
+            "model_runtime.n_gpu_layers",
+            "model_runtime.threads",
+            "model_runtime.threads_batch",
+            "model_runtime.batch_size",
+            "model_runtime.ubatch_size",
+            "model_runtime.cache_type_k",
+            "model_runtime.cache_type_v",
+            "model_runtime.split_mode",
+            "model_runtime.main_gpu",
+            "model_runtime.tensor_split",
+            "backend.extra_args"
+          ],
+          "effective_value": [
+            "model_runtime.m",
+            "model_runtime.host",
+            "model_runtime.port",
+            "model_runtime.max_model_len",
+            "model_runtime.n_gpu_layers",
+            "model_runtime.threads",
+            "model_runtime.threads_batch",
+            "model_runtime.batch_size",
+            "model_runtime.ubatch_size",
+            "model_runtime.cache_type_k",
+            "model_runtime.cache_type_v",
+            "model_runtime.split_mode",
+            "model_runtime.main_gpu",
+            "model_runtime.tensor_split",
+            "backend.extra_args"
+          ]
+        }
+      },
+      "deployment.served_model_name": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 230,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--served-model-name",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 230,
+          "key": "deployment.served_model_name",
+          "kind": "cli_arg",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "",
+          "effective_value": "",
+          "inherited_value": ""
+        }
+      },
+      "launcher.command": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 40,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 40,
+          "key": "launcher.command",
+          "kind": "cli_args",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "cli",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": [
+            "-m",
+            "{{model_container_path}}"
+          ],
+          "local_value": null
+        }
+      },
+      "launcher.devices": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 70,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 70,
+          "key": "launcher.devices",
+          "kind": "device",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": [],
+          "effective_value": [],
+          "local_value": []
+        }
+      },
+      "launcher.docker_options": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 80,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 80,
+          "key": "launcher.docker_options",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": {
+            "gpu_capabilities": [
+              [
+                "gpu"
+              ]
+            ],
+            "gpu_driver": "",
+            "ipc_mode": "host",
+            "shm_size": "8gb"
+          },
+          "effective_value": {
+            "gpu_capabilities": [
+              [
+                "gpu"
+              ]
+            ],
+            "gpu_driver": "",
+            "ipc_mode": "host",
+            "shm_size": "8gb"
+          },
+          "local_value": {
+            "gpu_capabilities": [
+              [
+                "gpu"
+              ]
+            ],
+            "gpu_driver": "",
+            "ipc_mode": "host",
+            "shm_size": "8gb"
+          }
+        }
+      },
+      "launcher.entrypoint": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 30,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 30,
+          "key": "launcher.entrypoint",
+          "kind": "cli_args",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": [],
+          "local_value": null
+        }
+      },
+      "launcher.image": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 20,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 20,
+          "key": "launcher.image",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+          "effective_value": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+          "local_value": "ghcr.io/ggml-org/llama.cpp:server-cuda13"
+        }
+      },
+      "launcher.kind": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 10,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 10,
+          "key": "launcher.kind",
+          "kind": "launcher_option",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "docker",
+          "effective_value": "docker",
+          "local_value": "docker"
+        }
+      },
+      "launcher.ports": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 50,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 50,
+          "key": "launcher.ports",
+          "kind": "port",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": [],
+          "effective_value": [],
+          "local_value": []
+        }
+      },
+      "launcher.volumes": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 60,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "launcher",
+          "config_set_key": "",
+          "display_order": 60,
+          "key": "launcher.volumes",
+          "kind": "volume",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "array"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": [],
+          "effective_value": [],
+          "local_value": []
+        }
+      },
+      "model_runtime.batch_size": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 307,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--batch-size",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 307,
+          "key": "model_runtime.batch_size",
+          "kind": "cli_arg",
+          "label": "Batch Size",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.cache_type_k": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 309,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--cache-type-k",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 309,
+          "key": "model_runtime.cache_type_k",
+          "kind": "cli_arg",
+          "label": "KV Cache Type K",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.cache_type_v": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 310,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--cache-type-v",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 310,
+          "key": "model_runtime.cache_type_v",
+          "kind": "cli_arg",
+          "label": "KV Cache Type V",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.host": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "startup",
+          "hide_when_empty": false,
+          "priority": 301,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--host",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 301,
+          "key": "model_runtime.host",
+          "kind": "cli_arg",
+          "label": "Listen Host",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": true,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "0.0.0.0",
+          "effective_value": "0.0.0.0"
+        }
+      },
+      "model_runtime.m": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "startup",
+          "hide_when_empty": false,
+          "priority": 300,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "-m",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 300,
+          "key": "model_runtime.m",
+          "kind": "cli_arg",
+          "label": "Model Path",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": true,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "{{MODEL_CONTAINER_PATH}}",
+          "effective_value": "{{MODEL_CONTAINER_PATH}}"
+        }
+      },
+      "model_runtime.main_gpu": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "parallelism",
+          "hide_when_empty": false,
+          "priority": 312,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--main-gpu",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 312,
+          "key": "model_runtime.main_gpu",
+          "kind": "cli_arg",
+          "label": "Main GPU",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.max_model_len": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 303,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--ctx-size",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 303,
+          "key": "model_runtime.max_model_len",
+          "kind": "cli_arg",
+          "label": "Context Size",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.n_gpu_layers": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 304,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--n-gpu-layers",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 304,
+          "key": "model_runtime.n_gpu_layers",
+          "kind": "cli_arg",
+          "label": "GPU Layers",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.port": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "startup",
+          "hide_when_empty": false,
+          "priority": 302,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--port",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 302,
+          "key": "model_runtime.port",
+          "kind": "cli_arg",
+          "label": "Container Port",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": true,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "{{container_port}}",
+          "effective_value": "{{container_port}}"
+        }
+      },
+      "model_runtime.split_mode": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "parallelism",
+          "hide_when_empty": false,
+          "priority": 311,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--split-mode",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 311,
+          "key": "model_runtime.split_mode",
+          "kind": "cli_arg",
+          "label": "Split Mode",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.tensor_split": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "parallelism",
+          "hide_when_empty": false,
+          "priority": 313,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--tensor-split",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 313,
+          "key": "model_runtime.tensor_split",
+          "kind": "cli_arg",
+          "label": "Tensor Split",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.threads": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 305,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--threads",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 305,
+          "key": "model_runtime.threads",
+          "kind": "cli_arg",
+          "label": "CPU Threads",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.threads_batch": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 306,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--threads-batch",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 306,
+          "key": "model_runtime.threads_batch",
+          "kind": "cli_arg",
+          "label": "Batch Threads",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "model_runtime.ubatch_size": {
+        "presentation": {
+          "default_expanded": false,
+          "group": "performance",
+          "hide_when_empty": false,
+          "priority": 308,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--ubatch-size",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 308,
+          "key": "model_runtime.ubatch_size",
+          "kind": "cli_arg",
+          "label": "Micro Batch Size",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": null
+        }
+      },
+      "runtime.env": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 100,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "runtime_env",
+          "config_set_key": "",
+          "display_order": 100,
+          "key": "runtime.env",
+          "kind": "env",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "env",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": {},
+          "local_value": null
+        }
+      },
+      "runtime.extra_env": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 190,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "runtime_env",
+          "config_set_key": "",
+          "display_order": 190,
+          "key": "runtime.extra_env",
+          "kind": "env_lines",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "documented",
+          "target": "env",
+          "type": "lines"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "",
+          "effective_value": "",
+          "local_value": ""
+        }
+      },
+      "runtime.health": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 120,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "runtime_env",
+          "config_set_key": "",
+          "display_order": 120,
+          "key": "runtime.health",
+          "kind": "health_check",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "health",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": false,
+          "editable": true,
+          "enabled": false,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": null,
+          "effective_value": {
+            "path": "/v1/models",
+            "startup_timeout_seconds": 120,
+            "success_status": [
+              200
+            ],
+            "type": "http"
+          },
+          "local_value": null
+        }
+      },
+      "runtime.model_mount": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 110,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendRuntime",
+          "last_value_owner_id": "runtime.llamacpp.nvidia-docker",
+          "value_source": "BackendRuntime"
+        },
+        "schema": {
+          "advanced": false,
+          "category": "runtime_env",
+          "config_set_key": "",
+          "display_order": 110,
+          "key": "runtime.model_mount",
+          "kind": "volume",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "docker",
+          "type": "object"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": {
+            "container_path": "/models",
+            "readonly": true
+          },
+          "effective_value": {
+            "container_path": "/models",
+            "readonly": true
+          },
+          "local_value": {
+            "container_path": "/models",
+            "readonly": true
+          }
+        }
+      },
+      "service.container_port": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 220,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--port",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 220,
+          "key": "service.container_port",
+          "kind": "cli_arg",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "cli",
+          "type": "integer"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": 8080,
+          "effective_value": 8080,
+          "local_value": 8080
+        }
+      },
+      "service.listen_host": {
+        "presentation": {
+          "default_expanded": false,
+          "hide_when_empty": false,
+          "priority": 210,
+          "sensitive": false,
+          "summary_priority": 0
+        },
+        "provenance": {
+          "last_value_layer": "BackendVersion",
+          "last_value_owner_id": "llamacpp-b9700",
+          "value_source": "BackendVersion"
+        },
+        "schema": {
+          "advanced": false,
+          "arg_name": "--host",
+          "category": "model_runtime",
+          "config_set_key": "",
+          "display_order": 210,
+          "key": "service.listen_host",
+          "kind": "cli_arg",
+          "label": "",
+          "owner": "",
+          "owner_layer": "",
+          "read_only": false,
+          "required": false,
+          "support_level": "verified",
+          "target": "cli",
+          "type": "string"
+        },
+        "snapshot": {
+          "snapshot_at": "",
+          "snapshot_from_id": "",
+          "snapshot_from_layer": "",
+          "snapshot_version": 0
+        },
+        "state": {
+          "checked": true,
+          "editable": true,
+          "enabled": true,
+          "valid": true,
+          "visible": true
+        },
+        "value": {
+          "default_value": "0.0.0.0",
+          "effective_value": "0.0.0.0",
+          "local_value": "0.0.0.0"
+        }
+      }
+    },
+    "schema_version": 1,
+    "source_metadata": {
+      "copied_at": "catalog-import",
+      "copy_boundary": "detached_after_create",
+      "copy_semantics": "copy_on_create",
+      "kind": "backend_runtime",
+      "materialized_at": "catalog-import",
+      "parent_ref": "backend_version:llamacpp-b9700",
+      "source_hash": "sha256:5bc3a5137f2bbb54ec5d8d8ebd0570a908f07cdb6dece967a9d046427d94c05e",
+      "source_ref": "/home/kzeng/projects/ai-platform-study/lightai-go/configs/backend-catalog/runtimes/llamacpp/nvidia-docker.yaml"
+    }
+  },
+  "created_at": "2026-06-29T20:45:37+08:00",
+  "display_name": "RUR001 llamacpp runtime 20260629204536",
+  "docker_options": {
+    "gpu_capabilities": [
+      [
+        "gpu"
+      ]
+    ],
+    "gpu_driver": "",
+    "ipc_mode": "host",
+    "shm_size": "8gb"
+  },
+  "entrypoint": [],
+  "env": {},
+  "health_check": {
+    "path": "/v1/models",
+    "startup_timeout_seconds": 120,
+    "success_status": [
+      200
+    ],
+    "type": "http"
+  },
+  "id": "d0046621-15c6-4c87-8aac-c11c46a04874",
+  "image_ref": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+  "is_builtin": false,
+  "is_editable": true,
+  "model_mount": {
+    "container_path": "/models",
+    "readonly": true
+  },
+  "name": "rur001-llamacpp-20260629204536",
+  "runtime_type": "docker",
+  "source_metadata": {
+    "copy_semantics": "copy_on_create",
+    "source_backend_runtime_id": "runtime.llamacpp.nvidia-docker",
+    "source_runtime_name": "llama.cpp NVIDIA Docker",
+    "source_runtime_revision": "2026-06-29T20:41:26+08:00",
+    "source_type": "backend_runtime_clone"
+  },
+  "source_metadata_json": {
+    "copy_semantics": "copy_on_create",
+    "source_backend_runtime_id": "runtime.llamacpp.nvidia-docker",
+    "source_runtime_name": "llama.cpp NVIDIA Docker",
+    "source_runtime_revision": "2026-06-29T20:41:26+08:00",
+    "source_type": "backend_runtime_clone"
+  },
+  "source_template_name": "llama.cpp NVIDIA Docker",
+  "status": "active",
+  "support_level": "documented",
+  "tenant_id": "a0000000-0000-0000-0000-000000000001",
+  "updated_at": "2026-06-29T20:45:37+08:00",
+  "vendor": "nvidia",
+  "visibility": "visible"
+}

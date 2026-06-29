@@ -1,0 +1,15 @@
+{
+  "backend_runtime_id": "120feab3-0a05-4ddb-b826-2b1dcabc565a",
+  "deployable": false,
+  "disabled_reason": "Node runtime config has not been checked; run agent check first",
+  "display_name": "RUR001 sglang NBR 20260629204536",
+  "docker_available": false,
+  "id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322:120feab3-0a05-4ddb-b826-2b1dcabc565a",
+  "image_present": false,
+  "image_ref": "lmsysorg/sglang:latest",
+  "last_checked_at": "2026-06-29T20:45:37+08:00",
+  "name": "RUR001 sglang NBR 20260629204536",
+  "node_id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+  "status": "needs_check",
+  "status_reason": "awaiting agent verification of Docker and image availability"
+}

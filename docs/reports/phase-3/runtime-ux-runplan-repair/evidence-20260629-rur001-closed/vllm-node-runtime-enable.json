@@ -1,0 +1,15 @@
+{
+  "backend_runtime_id": "a8b43520-a31d-4a9b-992a-5dc97208ac2e",
+  "deployable": false,
+  "disabled_reason": "Node runtime config has not been checked; run agent check first",
+  "display_name": "RUR001 vllm NBR 20260629204536",
+  "docker_available": false,
+  "id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322:a8b43520-a31d-4a9b-992a-5dc97208ac2e",
+  "image_present": false,
+  "image_ref": "vllm/vllm-openai:latest",
+  "last_checked_at": "2026-06-29T20:45:37+08:00",
+  "name": "RUR001 vllm NBR 20260629204536",
+  "node_id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+  "status": "needs_check",
+  "status_reason": "awaiting agent verification of Docker and image availability"
+}

@@ -1,0 +1,9 @@
+{
+  "deployment_id": "04a793d7-90f1-48db-940f-141f7909d477",
+  "docker_preview": "docker run -d --name lightai-0ac0ba41-2c2 --ipc host --shm-size 8gb --gpus \"device=0\" -v /home/kzeng/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf:/models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf:ro -e CUDA_VISIBLE_DEVICES=0 -p 18083:8080/tcp ghcr.io/ggml-org/llama.cpp:server-cuda13 -m /models/qwen2.5-0.5b-gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf --port 8080 --host 0.0.0.0",
+  "instance_id": "e3042a94-3ee7-4530-b3b5-a7e74fc42e07",
+  "run_plan_id": "69c23c47-a069-41dd-8cf4-eceeb62c9e3a",
+  "status": "started",
+  "task_id": "1d4caee8-2a05-4db9-8490-98ac132b88cb",
+  "warnings": null
+}

@@ -1,0 +1,117 @@
+{
+  "backend_runtime_id": "a8b43520-a31d-4a9b-992a-5dc97208ac2e",
+  "checked_image_ref": "vllm/vllm-openai:latest",
+  "deployable": true,
+  "disabled_reason": "",
+  "docker_available": true,
+  "id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322:a8b43520-a31d-4a9b-992a-5dc97208ac2e",
+  "image_present": true,
+  "image_ref": "vllm/vllm-openai:latest",
+  "last_checked_at": "2026-06-29T20:45:37+08:00",
+  "node_id": "node-83e3ef54-670b-4a4f-b015-e3a78c0d5322",
+  "probe_results": {
+    "level1": {
+      "created_at": "2026-05-04 17:19:43 +0800 CST",
+      "digest": "sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4",
+      "image_id": "sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4",
+      "image_present": true,
+      "image_ref": "vllm/vllm-openai:latest",
+      "size": "31.8GB",
+      "source": "docker_images_list"
+    },
+    "level2": {
+      "architecture": "amd64",
+      "cmd": null,
+      "created": "2026-05-04T09:19:43.737736908Z",
+      "entrypoint": null,
+      "env": [
+        "PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "NVARCH=x86_64",
+        "NVIDIA_REQUIRE_CUDA=cuda>=13.0 brand=unknown,driver>=535,driver<536 brand=grid,driver>=535,driver<536 brand=tesla,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=vapps,driver>=535,driver<536 brand=vpc,driver>=535,driver<536 brand=vcs,driver>=535,driver<536 brand=vws,driver>=535,driver<536 brand=cloudgaming,driver>=535,driver<536 brand=unknown,driver>=550,driver<551 brand=grid,driver>=550,driver<551 brand=tesla,driver>=550,driver<551 brand=nvidia,driver>=550,driver<551 brand=quadro,driver>=550,driver<551 brand=quadrortx,driver>=550,driver<551 brand=nvidiartx,driver>=550,driver<551 brand=vapps,driver>=550,driver<551 brand=vpc,driver>=550,driver<551 brand=vcs,driver>=550,driver<551 brand=vws,driver>=550,driver<551 brand=cloudgaming,driver>=550,driver<551 brand=unknown,driver>=565,driver<566 brand=grid,driver>=565,driver<566 brand=tesla,driver>=565,driver<566 brand=nvidia,driver>=565,driver<566 brand=quadro,driver>=565,driver<566 brand=quadrortx,driver>=565,driver<566 brand=nvidiartx,driver>=565,driver<566 brand=vapps,driver>=565,driver<566 brand=vpc,driver>=565,driver<566 brand=vcs,driver>=565,driver<566 brand=vws,driver>=565,driver<566 brand=cloudgaming,driver>=565,driver<566 brand=unknown,driver>=570,driver<571 brand=grid,driver>=570,driver<571 brand=tesla,driver>=570,driver<571 brand=nvidia,driver>=570,driver<571 brand=quadro,driver>=570,driver<571 brand=quadrortx,driver>=570,driver<571 brand=nvidiartx,driver>=570,driver<571 brand=vapps,driver>=570,driver<571 brand=vpc,driver>=570,driver<571 brand=vcs,driver>=570,driver<571 brand=vws,driver>=570,driver<571 brand=cloudgaming,driver>=570,driver<571 brand=unknown,driver>=575,driver<576 brand=grid,driver>=575,driver<576 brand=tesla,driver>=575,driver<576 brand=nvidia,driver>=575,driver<576 brand=quadro,driver>=575,driver<576 brand=quadrortx,driver>=575,driver<576 brand=nvidiartx,driver>=575,driver<576 brand=vapps,driver>=575,driver<576 brand=vpc,driver>=575,driver<576 brand=vcs,driver>=575,driver<576 brand=vws,driver>=575,driver<576 brand=cloudgaming,driver>=575,driver<576",
+        "NV_CUDA_CUDART_VERSION=13.0.96-1",
+        "CUDA_VERSION=13.0.2",
+        "LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64",
+        "NVIDIA_VISIBLE_DEVICES=all",
+        "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+        "DEBIAN_FRONTEND=noninteractive",
+        "UV_HTTP_TIMEOUT=500",
+        "UV_INDEX_STRATEGY=unsafe-best-match",
+        "UV_LINK_MODE=copy",
+        "VLLM_ENABLE_CUDA_COMPATIBILITY=0",
+        "TORCH_CUDA_ARCH_LIST=7.5 8.0 8.6 8.9 9.0 10.0 12.0+PTX",
+        "VLLM_USAGE_SOURCE=production-docker-image"
+      ],
+      "exposed_ports": null,
+      "image_id": "sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4",
+      "inspect_success": true,
+      "labels": {
+        "maintainer": "NVIDIA CORPORATION <cudatools@nvidia.com>",
+        "org.opencontainers.image.ref.name": "ubuntu",
+        "org.opencontainers.image.version": "22.04"
+      },
+      "os": "linux",
+      "repodigests": [
+        "vllm/vllm-openai@sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4"
+      ],
+      "repotags": [
+        "vllm/vllm-openai:latest"
+      ],
+      "size_bytes": 8230603218
+    },
+    "level3": {
+      "backend_id": "backend.vllm",
+      "backend_match_status": "confirmed_match",
+      "blocking": false,
+      "confirmed_match": true,
+      "match_detail": "repo tags match pattern 'vllm' for backend 'backend.vllm'",
+      "match_method": "repo_pattern",
+      "warning": false
+    },
+    "level4": {
+      "blocking": false,
+      "compatibility_check_status": "not_run",
+      "message": "Image existence and backend matching check completed. Version probe is not yet available.",
+      "probe_skipped": true,
+      "version_probe_status": "not_available",
+      "version_probed": false
+    },
+    "process_start_detection": {
+      "candidate_profile": {
+        "confidence": "high",
+        "profile_id": "vllm.image_default",
+        "reasons": [
+          "backend_family=vllm",
+          "entrypoint_shape=empty matches profile hints"
+        ],
+        "score": 120
+      },
+      "candidate_profiles": [
+        {
+          "confidence": "high",
+          "profile_id": "vllm.image_default",
+          "reasons": [
+            "backend_family=vllm",
+            "entrypoint_shape=empty matches profile hints"
+          ],
+          "score": 120
+        }
+      ],
+      "confidence": "high",
+      "entrypoint_mode": "image_default",
+      "evidence": {
+        "backend_family": "vllm",
+        "image_ref": "vllm/vllm-openai:latest",
+        "matched_signals": [
+          "backend_family",
+          "entrypoint_shape:empty"
+        ]
+      },
+      "selected_profile_id": "vllm.image_default",
+      "source": "backend_profile+image_inspect",
+      "status": "candidate_found"
+    }
+  },
+  "status": "ready",
+  "status_reason": "runtime verified for node (image=vllm/vllm-openai:latest)",
+  "warnings": null
+}

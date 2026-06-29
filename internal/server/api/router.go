@@ -30,6 +30,12 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 		cfg.AuthHandler.Metrics = cfg.ServerMetrics
 	}
 
+	// API health endpoint for external smoke checks. /healthz remains the
+	// process-level health endpoint registered by cmd/server.
+	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+	})
+
 	// Auth endpoints (no session required for login/CSRF).
 	mux.HandleFunc("POST /api/v1/auth/login", cfg.AuthHandler.HandleLogin)
 	mux.HandleFunc("GET /api/v1/auth/csrf-token", cfg.AuthHandler.HandleCSRFToken)

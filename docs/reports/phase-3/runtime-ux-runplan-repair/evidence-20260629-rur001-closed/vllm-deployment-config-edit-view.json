@@ -1,0 +1,3570 @@
+{
+  "config_edit_view": {
+    "diagnostics": {
+      "raw_config_set": {
+        "config_set_key": "BackendRuntimeConfigSet",
+        "context": {
+          "backend_id": "backend.vllm",
+          "backend_runtime": "runtime.vllm.nvidia-docker",
+          "backend_version": "vllm-v0.23.0",
+          "launcher_kind": "docker",
+          "vendor": "nvidia"
+        },
+        "items": {
+          "backend.capabilities": {
+            "code": "backend.capabilities",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 5,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 5,
+              "key": "backend.capabilities",
+              "kind": "launcher_option",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "type": "object"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": {
+                "model_path_modes": [
+                  "directory"
+                ],
+                "serving_protocols": [
+                  "openai_compatible"
+                ],
+                "supported_capabilities": [
+                  "chat",
+                  "completion",
+                  "embedding",
+                  "vision"
+                ],
+                "supported_formats": [
+                  "huggingface",
+                  "safetensors"
+                ],
+                "supported_tasks": [
+                  "chat",
+                  "completion",
+                  "embedding"
+                ],
+                "test_endpoints": {
+                  "chat": "/v1/chat/completions",
+                  "completion": "/v1/completions",
+                  "embedding": "/v1/embeddings",
+                  "models": "/v1/models"
+                }
+              },
+              "effective_value": {
+                "model_path_modes": [
+                  "directory"
+                ],
+                "serving_protocols": [
+                  "openai_compatible"
+                ],
+                "supported_capabilities": [
+                  "chat",
+                  "completion",
+                  "embedding",
+                  "vision"
+                ],
+                "supported_formats": [
+                  "huggingface",
+                  "safetensors"
+                ],
+                "supported_tasks": [
+                  "chat",
+                  "completion",
+                  "embedding"
+                ],
+                "test_endpoints": {
+                  "chat": "/v1/chat/completions",
+                  "completion": "/v1/completions",
+                  "embedding": "/v1/embeddings",
+                  "models": "/v1/models"
+                }
+              }
+            }
+          },
+          "backend.extra_args": {
+            "code": "backend.extra_args",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 900,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 900,
+              "key": "backend.extra_args",
+              "kind": "cli_args",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "lines"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": "",
+              "effective_value": "",
+              "local_value": ""
+            }
+          },
+          "backend.supported_config_items": {
+            "code": "backend.supported_config_items",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 6,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 6,
+              "key": "backend.supported_config_items",
+              "kind": "launcher_option",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "type": "array"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": [
+                "model_runtime.model",
+                "model_runtime.host",
+                "model_runtime.port",
+                "deployment.served_model_name",
+                "model_runtime.tensor_parallel_size",
+                "model_runtime.pipeline_parallel_size",
+                "model_runtime.max_model_len",
+                "model_runtime.gpu_memory_utilization",
+                "model_runtime.max_num_seqs",
+                "model_runtime.max_num_batched_tokens",
+                "model_runtime.kv_cache_dtype",
+                "model_runtime.dtype",
+                "model_runtime.swap_space",
+                "model_runtime.cpu_offload_gb",
+                "model_runtime.enforce_eager",
+                "model_runtime.safetensors_load_strategy",
+                "model_runtime.trust_remote_code",
+                "model_runtime.download_dir",
+                "backend.extra_args"
+              ],
+              "effective_value": [
+                "model_runtime.model",
+                "model_runtime.host",
+                "model_runtime.port",
+                "deployment.served_model_name",
+                "model_runtime.tensor_parallel_size",
+                "model_runtime.pipeline_parallel_size",
+                "model_runtime.max_model_len",
+                "model_runtime.gpu_memory_utilization",
+                "model_runtime.max_num_seqs",
+                "model_runtime.max_num_batched_tokens",
+                "model_runtime.kv_cache_dtype",
+                "model_runtime.dtype",
+                "model_runtime.swap_space",
+                "model_runtime.cpu_offload_gb",
+                "model_runtime.enforce_eager",
+                "model_runtime.safetensors_load_strategy",
+                "model_runtime.trust_remote_code",
+                "model_runtime.download_dir",
+                "backend.extra_args"
+              ]
+            }
+          },
+          "deployment.served_model_name": {
+            "code": "deployment.served_model_name",
+            "presentation": {
+              "default_expanded": false,
+              "group": "startup",
+              "hide_when_empty": false,
+              "priority": 303,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--served-model-name",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 303,
+              "key": "deployment.served_model_name",
+              "kind": "cli_arg",
+              "label": "Served Model Name",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "launcher.command": {
+            "code": "launcher.command",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 40,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendRuntime",
+              "last_value_owner_id": "runtime.vllm.nvidia-docker",
+              "value_source": "BackendRuntime"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "launcher",
+              "config_set_key": "",
+              "display_order": 40,
+              "key": "launcher.command",
+              "kind": "cli_args",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "cli",
+              "type": "array"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": [
+                "--model",
+                "{{model_container_path}}"
+              ],
+              "local_value": null
+            }
+          },
+          "launcher.devices": {
+            "code": "launcher.devices",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 70,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "launcher",
+              "config_set_key": "",
+              "display_order": 70,
+              "key": "launcher.devices",
+              "kind": "device",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "docker",
+              "type": "array"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": [],
+              "effective_value": [],
+              "local_value": []
+            }
+          },
+          "launcher.docker_options": {
+            "code": "launcher.docker_options",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 80,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendRuntime",
+              "last_value_owner_id": "runtime.vllm.nvidia-docker",
+              "value_source": "BackendRuntime"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "launcher",
+              "config_set_key": "",
+              "display_order": 80,
+              "key": "launcher.docker_options",
+              "kind": "launcher_option",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "docker",
+              "type": "object"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": {
+                "gpu_capabilities": [
+                  [
+                    "gpu"
+                  ]
+                ],
+                "gpu_driver": "",
+                "ipc_mode": "host",
+                "shm_size": "16gb"
+              },
+              "effective_value": {
+                "gpu_capabilities": [
+                  [
+                    "gpu"
+                  ]
+                ],
+                "gpu_driver": "",
+                "ipc_mode": "host",
+                "shm_size": "16gb"
+              },
+              "local_value": {
+                "gpu_capabilities": [
+                  [
+                    "gpu"
+                  ]
+                ],
+                "gpu_driver": "",
+                "ipc_mode": "host",
+                "shm_size": "16gb"
+              }
+            }
+          },
+          "launcher.entrypoint": {
+            "code": "launcher.entrypoint",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 30,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendRuntime",
+              "last_value_owner_id": "runtime.vllm.nvidia-docker",
+              "value_source": "BackendRuntime"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "launcher",
+              "config_set_key": "",
+              "display_order": 30,
+              "key": "launcher.entrypoint",
+              "kind": "cli_args",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "docker",
+              "type": "array"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": [
+                "vllm",
+                "serve"
+              ],
+              "local_value": null
+            }
+          },
+          "launcher.image": {
+            "code": "launcher.image",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 20,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "NodeBackendRuntime",
+              "last_value_owner_id": "",
+              "value_source": "NodeBackendRuntime"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "launcher",
+              "config_set_key": "",
+              "display_order": 20,
+              "key": "launcher.image",
+              "kind": "launcher_option",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "docker",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": "vllm/vllm-openai:latest",
+              "effective_value": "vllm/vllm-openai:latest",
+              "local_value": "vllm/vllm-openai:latest"
+            }
+          },
+          "launcher.kind": {
+            "code": "launcher.kind",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 10,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendRuntime",
+              "last_value_owner_id": "runtime.vllm.nvidia-docker",
+              "value_source": "BackendRuntime"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "launcher",
+              "config_set_key": "",
+              "display_order": 10,
+              "key": "launcher.kind",
+              "kind": "launcher_option",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "docker",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": "docker",
+              "effective_value": "docker",
+              "local_value": "docker"
+            }
+          },
+          "launcher.ports": {
+            "code": "launcher.ports",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 50,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "launcher",
+              "config_set_key": "",
+              "display_order": 50,
+              "key": "launcher.ports",
+              "kind": "port",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "docker",
+              "type": "array"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": [],
+              "effective_value": [],
+              "local_value": []
+            }
+          },
+          "launcher.volumes": {
+            "code": "launcher.volumes",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 60,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "launcher",
+              "config_set_key": "",
+              "display_order": 60,
+              "key": "launcher.volumes",
+              "kind": "volume",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "docker",
+              "type": "array"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": [],
+              "effective_value": [],
+              "local_value": []
+            }
+          },
+          "model_runtime.cpu_offload_gb": {
+            "code": "model_runtime.cpu_offload_gb",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 313,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--cpu-offload-gb",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 313,
+              "key": "model_runtime.cpu_offload_gb",
+              "kind": "cli_arg",
+              "label": "CPU Offload (GB)",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.download_dir": {
+            "code": "model_runtime.download_dir",
+            "presentation": {
+              "default_expanded": false,
+              "group": "advanced",
+              "hide_when_empty": false,
+              "priority": 317,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--download-dir",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 317,
+              "key": "model_runtime.download_dir",
+              "kind": "cli_arg",
+              "label": "Download Directory",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.dtype": {
+            "code": "model_runtime.dtype",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 311,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--dtype",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 311,
+              "key": "model_runtime.dtype",
+              "kind": "cli_arg",
+              "label": "Model Data Type",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.enforce_eager": {
+            "code": "model_runtime.enforce_eager",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 314,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--enforce-eager",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 314,
+              "key": "model_runtime.enforce_eager",
+              "kind": "cli_arg",
+              "label": "Enforce Eager Mode",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.gpu_memory_utilization": {
+            "code": "model_runtime.gpu_memory_utilization",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 307,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--gpu-memory-utilization",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 307,
+              "key": "model_runtime.gpu_memory_utilization",
+              "kind": "cli_arg",
+              "label": "GPU Memory Utilization",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.host": {
+            "code": "model_runtime.host",
+            "presentation": {
+              "default_expanded": false,
+              "group": "startup",
+              "hide_when_empty": false,
+              "priority": 301,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--host",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 301,
+              "key": "model_runtime.host",
+              "kind": "cli_arg",
+              "label": "Listen Host",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": true,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": "0.0.0.0",
+              "effective_value": "0.0.0.0"
+            }
+          },
+          "model_runtime.kv_cache_dtype": {
+            "code": "model_runtime.kv_cache_dtype",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 310,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--kv-cache-dtype",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 310,
+              "key": "model_runtime.kv_cache_dtype",
+              "kind": "cli_arg",
+              "label": "KV Cache Data Type",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.max_model_len": {
+            "code": "model_runtime.max_model_len",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 306,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--max-model-len",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 306,
+              "key": "model_runtime.max_model_len",
+              "kind": "cli_arg",
+              "label": "Max Model Length",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.max_num_batched_tokens": {
+            "code": "model_runtime.max_num_batched_tokens",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 309,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--max-num-batched-tokens",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 309,
+              "key": "model_runtime.max_num_batched_tokens",
+              "kind": "cli_arg",
+              "label": "Max Batched Tokens",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.max_num_seqs": {
+            "code": "model_runtime.max_num_seqs",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 308,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--max-num-seqs",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 308,
+              "key": "model_runtime.max_num_seqs",
+              "kind": "cli_arg",
+              "label": "Max Concurrent Sequences",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.model": {
+            "code": "model_runtime.model",
+            "presentation": {
+              "default_expanded": false,
+              "group": "startup",
+              "hide_when_empty": false,
+              "priority": 300,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--model",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 300,
+              "key": "model_runtime.model",
+              "kind": "cli_arg",
+              "label": "Model Path",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": true,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": "{{MODEL_CONTAINER_PATH}}",
+              "effective_value": "{{MODEL_CONTAINER_PATH}}"
+            }
+          },
+          "model_runtime.pipeline_parallel_size": {
+            "code": "model_runtime.pipeline_parallel_size",
+            "presentation": {
+              "default_expanded": false,
+              "group": "parallelism",
+              "hide_when_empty": false,
+              "priority": 305,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--pipeline-parallel-size",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 305,
+              "key": "model_runtime.pipeline_parallel_size",
+              "kind": "cli_arg",
+              "label": "Pipeline Parallel Size",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.port": {
+            "code": "model_runtime.port",
+            "presentation": {
+              "default_expanded": false,
+              "group": "startup",
+              "hide_when_empty": false,
+              "priority": 302,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--port",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 302,
+              "key": "model_runtime.port",
+              "kind": "cli_arg",
+              "label": "Container Port",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": true,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": "{{container_port}}",
+              "effective_value": "{{container_port}}"
+            }
+          },
+          "model_runtime.safetensors_load_strategy": {
+            "code": "model_runtime.safetensors_load_strategy",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 315,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--safetensors-load-strategy",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 315,
+              "key": "model_runtime.safetensors_load_strategy",
+              "kind": "cli_arg",
+              "label": "Safetensors Load Strategy",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.swap_space": {
+            "code": "model_runtime.swap_space",
+            "presentation": {
+              "default_expanded": false,
+              "group": "performance",
+              "hide_when_empty": false,
+              "priority": 312,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--swap-space",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 312,
+              "key": "model_runtime.swap_space",
+              "kind": "cli_arg",
+              "label": "Swap Space (GB)",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.tensor_parallel_size": {
+            "code": "model_runtime.tensor_parallel_size",
+            "presentation": {
+              "default_expanded": false,
+              "group": "parallelism",
+              "hide_when_empty": false,
+              "priority": 304,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--tensor-parallel-size",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 304,
+              "key": "model_runtime.tensor_parallel_size",
+              "kind": "cli_arg",
+              "label": "Tensor Parallel Size",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "model_runtime.trust_remote_code": {
+            "code": "model_runtime.trust_remote_code",
+            "presentation": {
+              "default_expanded": false,
+              "group": "security",
+              "hide_when_empty": false,
+              "priority": 316,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--trust-remote-code",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 316,
+              "key": "model_runtime.trust_remote_code",
+              "kind": "cli_arg",
+              "label": "Trust Remote Code",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": null
+            }
+          },
+          "runtime.env": {
+            "code": "runtime.env",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 100,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendRuntime",
+              "last_value_owner_id": "runtime.vllm.nvidia-docker",
+              "value_source": "BackendRuntime"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "runtime_env",
+              "config_set_key": "",
+              "display_order": 100,
+              "key": "runtime.env",
+              "kind": "env",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "env",
+              "type": "object"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": {},
+              "local_value": null
+            }
+          },
+          "runtime.extra_env": {
+            "code": "runtime.extra_env",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 190,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "runtime_env",
+              "config_set_key": "",
+              "display_order": 190,
+              "key": "runtime.extra_env",
+              "kind": "env_lines",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "documented",
+              "target": "env",
+              "type": "lines"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": "",
+              "effective_value": "",
+              "local_value": ""
+            }
+          },
+          "runtime.health": {
+            "code": "runtime.health",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 120,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendRuntime",
+              "last_value_owner_id": "runtime.vllm.nvidia-docker",
+              "value_source": "BackendRuntime"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "runtime_env",
+              "config_set_key": "",
+              "display_order": 120,
+              "key": "runtime.health",
+              "kind": "health_check",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "health",
+              "type": "object"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": false,
+              "editable": true,
+              "enabled": false,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": null,
+              "effective_value": {
+                "path": "/v1/models",
+                "startup_timeout_seconds": 120,
+                "success_status": [
+                  200
+                ],
+                "type": "http"
+              },
+              "local_value": null
+            }
+          },
+          "runtime.model_mount": {
+            "code": "runtime.model_mount",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 110,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendRuntime",
+              "last_value_owner_id": "runtime.vllm.nvidia-docker",
+              "value_source": "BackendRuntime"
+            },
+            "schema": {
+              "advanced": false,
+              "category": "runtime_env",
+              "config_set_key": "",
+              "display_order": 110,
+              "key": "runtime.model_mount",
+              "kind": "volume",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "docker",
+              "type": "object"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": {
+                "container_path": "/models",
+                "readonly": true
+              },
+              "effective_value": {
+                "container_path": "/models",
+                "readonly": true
+              },
+              "local_value": {
+                "container_path": "/models",
+                "readonly": true
+              }
+            }
+          },
+          "service.container_port": {
+            "code": "service.container_port",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 220,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--port",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 220,
+              "key": "service.container_port",
+              "kind": "cli_arg",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "cli",
+              "type": "integer"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": 8000,
+              "effective_value": 8000,
+              "local_value": 8000
+            }
+          },
+          "service.listen_host": {
+            "code": "service.listen_host",
+            "presentation": {
+              "default_expanded": false,
+              "hide_when_empty": false,
+              "priority": 210,
+              "sensitive": false,
+              "summary_priority": 0
+            },
+            "provenance": {
+              "last_value_layer": "BackendVersion",
+              "last_value_owner_id": "vllm-v0.23.0",
+              "value_source": "BackendVersion"
+            },
+            "schema": {
+              "advanced": false,
+              "arg_name": "--host",
+              "category": "model_runtime",
+              "config_set_key": "",
+              "display_order": 210,
+              "key": "service.listen_host",
+              "kind": "cli_arg",
+              "label": "",
+              "owner": "",
+              "owner_layer": "",
+              "read_only": false,
+              "required": false,
+              "support_level": "verified",
+              "target": "cli",
+              "type": "string"
+            },
+            "snapshot": {
+              "snapshot_at": "",
+              "snapshot_from_id": "",
+              "snapshot_from_layer": "",
+              "snapshot_version": 0
+            },
+            "state": {
+              "checked": true,
+              "editable": true,
+              "enabled": true,
+              "valid": true,
+              "visible": true
+            },
+            "value": {
+              "default_value": "0.0.0.0",
+              "effective_value": "0.0.0.0",
+              "local_value": "0.0.0.0"
+            }
+          }
+        },
+        "schema_version": 1,
+        "source_metadata": {
+          "copied_at": "catalog-import",
+          "copy_boundary": "detached_after_create",
+          "copy_semantics": "copy_on_create",
+          "kind": "backend_runtime",
+          "materialized_at": "catalog-import",
+          "parent_ref": "backend_version:vllm-v0.23.0",
+          "source_hash": "sha256:6a5967eecfd8934950b145e20b51daacaa4ff7b732e921eef2b02d065f7668b6",
+          "source_ref": "/home/kzeng/projects/ai-platform-study/lightai-go/configs/backend-catalog/runtimes/vllm/nvidia-docker.yaml"
+        }
+      }
+    },
+    "layer": "deployment",
+    "metadata": {
+      "mode": "edit",
+      "object_label": "RUR001 vllm deployment 20260629204536"
+    },
+    "object_id": "c8606eb0-1a30-4f4b-af19-a3e3273f676e",
+    "object_kind": "deployment",
+    "readonly": false,
+    "sections": [
+      {
+        "fields": [
+          {
+            "advanced": false,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.gpu_memory_utilization",
+            "key": "model_runtime.gpu_memory_utilization",
+            "label": "GPU memory utilization",
+            "order": 0,
+            "original_enabled": false,
+            "owner": "model_runtime",
+            "readonly": false,
+            "required": false,
+            "section": "model_serving",
+            "semantic_key": "model_runtime.gpu_memory_utilization",
+            "tier": "common",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": false,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.max_model_len",
+            "key": "model_runtime.max_model_len",
+            "label": "Max model length",
+            "order": 0,
+            "original_enabled": false,
+            "owner": "model_runtime",
+            "readonly": false,
+            "required": false,
+            "section": "model_serving",
+            "semantic_key": "model_runtime.max_model_len",
+            "tier": "common",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": false,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.dtype",
+            "key": "model_runtime.dtype",
+            "label": "Model runtime dtype",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "model_serving",
+            "semantic_key": "model_runtime.dtype",
+            "tier": "common",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": false,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.tensor_parallel_size",
+            "key": "model_runtime.tensor_parallel_size",
+            "label": "Model runtime tensor parallel size",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "model_serving",
+            "semantic_key": "model_runtime.tensor_parallel_size",
+            "tier": "common",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          }
+        ],
+        "key": "model_serving",
+        "label": "Model serving",
+        "order": 20
+      },
+      {
+        "advanced": true,
+        "collapsed": true,
+        "fields": [
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.max_num_batched_tokens",
+            "key": "model_runtime.max_num_batched_tokens",
+            "label": "Model runtime max num batched tokens",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "advanced_parameters",
+            "semantic_key": "model_runtime.max_num_batched_tokens",
+            "tier": "advanced",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.pipeline_parallel_size",
+            "key": "model_runtime.pipeline_parallel_size",
+            "label": "Model runtime pipeline parallel size",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "advanced_parameters",
+            "semantic_key": "model_runtime.pipeline_parallel_size",
+            "tier": "advanced",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          }
+        ],
+        "key": "advanced_parameters",
+        "label": "Advanced parameters",
+        "order": 30
+      },
+      {
+        "advanced": true,
+        "collapsed": true,
+        "fields": [
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.cpu_offload_gb",
+            "key": "model_runtime.cpu_offload_gb",
+            "label": "Model runtime cpu offload gb",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.cpu_offload_gb",
+            "tier": "expert",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.download_dir",
+            "key": "model_runtime.download_dir",
+            "label": "Model runtime download dir",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.download_dir",
+            "tier": "expert",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.enforce_eager",
+            "key": "model_runtime.enforce_eager",
+            "label": "Model runtime enforce eager",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.enforce_eager",
+            "tier": "expert",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": false,
+            "internal_key": "model_runtime.host",
+            "key": "model_runtime.host",
+            "label": "Model runtime host",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": "0.0.0.0",
+            "readonly": false,
+            "required": true,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.host",
+            "tier": "expert",
+            "type": "string",
+            "value": "0.0.0.0",
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.kv_cache_dtype",
+            "key": "model_runtime.kv_cache_dtype",
+            "label": "Model runtime kv cache dtype",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.kv_cache_dtype",
+            "tier": "expert",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.max_num_seqs",
+            "key": "model_runtime.max_num_seqs",
+            "label": "Model runtime max num seqs",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.max_num_seqs",
+            "tier": "expert",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": false,
+            "internal_key": "model_runtime.model",
+            "key": "model_runtime.model",
+            "label": "Model runtime model",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": "{{MODEL_CONTAINER_PATH}}",
+            "readonly": true,
+            "required": true,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.model",
+            "tier": "expert",
+            "type": "string",
+            "value": "{{MODEL_CONTAINER_PATH}}",
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": false,
+            "internal_key": "model_runtime.port",
+            "key": "model_runtime.port",
+            "label": "Model runtime port",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": "{{container_port}}",
+            "readonly": true,
+            "required": true,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.port",
+            "tier": "expert",
+            "type": "string",
+            "value": "{{container_port}}",
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.safetensors_load_strategy",
+            "key": "model_runtime.safetensors_load_strategy",
+            "label": "Model runtime safetensors load strategy",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.safetensors_load_strategy",
+            "tier": "expert",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.swap_space",
+            "key": "model_runtime.swap_space",
+            "label": "Model runtime swap space",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.swap_space",
+            "tier": "expert",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "model_runtime.trust_remote_code",
+            "key": "model_runtime.trust_remote_code",
+            "label": "Model runtime trust remote code",
+            "order": 0,
+            "original_enabled": false,
+            "readonly": false,
+            "required": false,
+            "section": "expert_parameters",
+            "semantic_key": "model_runtime.trust_remote_code",
+            "tier": "expert",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          }
+        ],
+        "key": "expert_parameters",
+        "label": "Expert parameters",
+        "order": 35
+      },
+      {
+        "fields": [
+          {
+            "advanced": false,
+            "enabled": true,
+            "has_enable": false,
+            "internal_key": "runtime.model_mount",
+            "key": "runtime.model_mount",
+            "label": "Model mount",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": {
+              "container_path": "/models",
+              "readonly": true
+            },
+            "owner": "runtime_environment",
+            "readonly": true,
+            "required": false,
+            "section": "devices_mounts",
+            "semantic_key": "runtime.model_mount",
+            "tier": "common",
+            "type": "string",
+            "value": {
+              "container_path": "/models",
+              "readonly": true
+            },
+            "visibility": "",
+            "widget": "mount_form"
+          }
+        ],
+        "key": "devices_mounts",
+        "label": "Devices and mounts",
+        "order": 60
+      },
+      {
+        "collapsed": true,
+        "fields": [
+          {
+            "advanced": false,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "runtime.env",
+            "key": "runtime.env",
+            "label": "Environment variables",
+            "order": 0,
+            "original_enabled": false,
+            "original_value": {},
+            "owner": "runtime_environment",
+            "readonly": false,
+            "required": false,
+            "section": "environment",
+            "semantic_key": "runtime.env",
+            "tier": "common",
+            "type": "string",
+            "value": {},
+            "visibility": "",
+            "widget": "key_value_table"
+          }
+        ],
+        "key": "environment",
+        "label": "Environment",
+        "order": 70
+      },
+      {
+        "fields": [
+          {
+            "advanced": false,
+            "enabled": true,
+            "has_enable": true,
+            "internal_key": "service.listen_host",
+            "key": "service.listen_host",
+            "label": "Container listen host",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": "0.0.0.0",
+            "owner": "runtime_service",
+            "readonly": false,
+            "required": false,
+            "section": "service",
+            "semantic_key": "service.listen_host",
+            "tier": "common",
+            "type": "string",
+            "value": "0.0.0.0",
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": false,
+            "enabled": true,
+            "has_enable": true,
+            "internal_key": "service.container_port",
+            "key": "service.container_port",
+            "label": "Container listen port",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": 8000,
+            "owner": "runtime_service",
+            "readonly": false,
+            "required": false,
+            "section": "service",
+            "semantic_key": "service.container_port",
+            "tier": "common",
+            "type": "string",
+            "value": 8000,
+            "visibility": "",
+            "widget": "port_form"
+          }
+        ],
+        "key": "service",
+        "label": "Service",
+        "order": 80
+      },
+      {
+        "advanced": true,
+        "collapsed": true,
+        "fields": [
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": true,
+            "internal_key": "backend.extra_args",
+            "key": "backend.extra_args",
+            "label": "Backend extra args",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": "",
+            "readonly": false,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "backend.extra_args",
+            "tier": "advanced",
+            "type": "string",
+            "value": "",
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": false,
+            "internal_key": "launcher.command",
+            "key": "runtime.command",
+            "label": "Command",
+            "order": 0,
+            "original_enabled": false,
+            "original_value": [
+              "--model",
+              "{{model_container_path}}"
+            ],
+            "owner": "runtime_environment",
+            "readonly": true,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "runtime.command",
+            "tier": "expert",
+            "type": "string",
+            "value": [
+              "--model",
+              "{{model_container_path}}"
+            ],
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": true,
+            "internal_key": "launcher.devices",
+            "key": "launcher.devices",
+            "label": "Devices",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": [],
+            "readonly": false,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "launcher.devices",
+            "tier": "advanced",
+            "type": "string",
+            "value": [],
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": false,
+            "has_enable": false,
+            "internal_key": "launcher.entrypoint",
+            "key": "runtime.entrypoint",
+            "label": "Entrypoint",
+            "order": 0,
+            "original_enabled": false,
+            "original_value": [
+              "vllm",
+              "serve"
+            ],
+            "owner": "runtime_environment",
+            "readonly": true,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "runtime.entrypoint",
+            "tier": "expert",
+            "type": "string",
+            "value": [
+              "vllm",
+              "serve"
+            ],
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": true,
+            "internal_key": "runtime.extra_env",
+            "key": "runtime.extra_env",
+            "label": "Extra env",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": "",
+            "readonly": false,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "runtime.extra_env",
+            "tier": "advanced",
+            "type": "string",
+            "value": "",
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": true,
+            "internal_key": "launcher.kind",
+            "key": "launcher.kind",
+            "label": "Kind",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": "docker",
+            "readonly": false,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "launcher.kind",
+            "tier": "advanced",
+            "type": "string",
+            "value": "docker",
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": true,
+            "internal_key": "launcher.ports",
+            "key": "launcher.ports",
+            "label": "Ports",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": [],
+            "readonly": false,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "launcher.ports",
+            "tier": "advanced",
+            "type": "string",
+            "value": [],
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "deployment.served_model_name",
+            "key": "deployment.served_model_name",
+            "label": "Served model name",
+            "order": 0,
+            "original_enabled": false,
+            "owner": "deployment_service",
+            "readonly": false,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "deployment.served_model_name",
+            "tier": "common",
+            "type": "string",
+            "value": null,
+            "visibility": "",
+            "widget": "string"
+          },
+          {
+            "advanced": true,
+            "diagnostic": true,
+            "enabled": true,
+            "has_enable": true,
+            "internal_key": "launcher.volumes",
+            "key": "launcher.volumes",
+            "label": "Volumes",
+            "order": 0,
+            "original_enabled": true,
+            "original_value": [],
+            "readonly": false,
+            "required": false,
+            "section": "advanced_raw",
+            "semantic_key": "launcher.volumes",
+            "tier": "advanced",
+            "type": "string",
+            "value": [],
+            "visibility": "",
+            "widget": "string"
+          }
+        ],
+        "key": "advanced_raw",
+        "label": "Advanced raw configuration",
+        "order": 90
+      },
+      {
+        "fields": [
+          {
+            "advanced": false,
+            "enabled": false,
+            "has_enable": true,
+            "internal_key": "runtime.health",
+            "key": "runtime.health",
+            "label": "Health check",
+            "order": 0,
+            "original_enabled": false,
+            "original_value": {
+              "path": "/v1/models",
+              "startup_timeout_seconds": 120,
+              "success_status": [
+                200
+              ],
+              "type": "http"
+            },
+            "owner": "runtime_service",
+            "readonly": false,
+            "required": false,
+            "section": "health_check",
+            "semantic_key": "runtime.health",
+            "tier": "common",
+            "type": "string",
+            "value": {
+              "path": "/v1/models",
+              "startup_timeout_seconds": 120,
+              "success_status": [
+                200
+              ],
+              "type": "http"
+            },
+            "visibility": "",
+            "widget": "health_check_form"
+          }
+        ],
+        "key": "health_check",
+        "label": "Health check",
+        "order": 90
+      }
+    ]
+  },
+  "config_view": {
+    "config_set_key": "BackendRuntimeConfigSet",
+    "sections": [
+      {
+        "default_expanded": true,
+        "fields": [
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": "{{MODEL_CONTAINER_PATH}}",
+            "editable": true,
+            "enabled": true,
+            "group": "startup",
+            "hide_when_empty": false,
+            "key": "model_runtime.model",
+            "label": "Model Path",
+            "last_value_layer": "BackendVersion",
+            "priority": 300,
+            "readonly": false,
+            "required": true,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": "{{MODEL_CONTAINER_PATH}}",
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": "{{container_port}}",
+            "editable": true,
+            "enabled": true,
+            "group": "startup",
+            "hide_when_empty": false,
+            "key": "model_runtime.port",
+            "label": "Container Port",
+            "last_value_layer": "BackendVersion",
+            "priority": 302,
+            "readonly": false,
+            "required": true,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": "{{container_port}}",
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": "0.0.0.0",
+            "editable": true,
+            "enabled": true,
+            "group": "startup",
+            "hide_when_empty": false,
+            "key": "model_runtime.host",
+            "label": "Listen Host",
+            "last_value_layer": "BackendVersion",
+            "priority": 301,
+            "readonly": false,
+            "required": true,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": "0.0.0.0",
+            "value_source": "BackendVersion",
+            "visible": true
+          }
+        ],
+        "key": "required",
+        "priority": 10,
+        "title": "必填配置"
+      },
+      {
+        "default_expanded": true,
+        "fields": [
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "default_value": {
+              "model_path_modes": [
+                "directory"
+              ],
+              "serving_protocols": [
+                "openai_compatible"
+              ],
+              "supported_capabilities": [
+                "chat",
+                "completion",
+                "embedding",
+                "vision"
+              ],
+              "supported_formats": [
+                "huggingface",
+                "safetensors"
+              ],
+              "supported_tasks": [
+                "chat",
+                "completion",
+                "embedding"
+              ],
+              "test_endpoints": {
+                "chat": "/v1/chat/completions",
+                "completion": "/v1/completions",
+                "embedding": "/v1/embeddings",
+                "models": "/v1/models"
+              }
+            },
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "backend.capabilities",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 5,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "object",
+            "valid": true,
+            "value": {
+              "model_path_modes": [
+                "directory"
+              ],
+              "serving_protocols": [
+                "openai_compatible"
+              ],
+              "supported_capabilities": [
+                "chat",
+                "completion",
+                "embedding",
+                "vision"
+              ],
+              "supported_formats": [
+                "huggingface",
+                "safetensors"
+              ],
+              "supported_tasks": [
+                "chat",
+                "completion",
+                "embedding"
+              ],
+              "test_endpoints": {
+                "chat": "/v1/chat/completions",
+                "completion": "/v1/completions",
+                "embedding": "/v1/embeddings",
+                "models": "/v1/models"
+              }
+            },
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": [],
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "launcher.devices",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 70,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "array",
+            "valid": true,
+            "value": [],
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": {
+              "container_path": "/models",
+              "readonly": true
+            },
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "runtime.model_mount",
+            "label": "",
+            "last_value_layer": "BackendRuntime",
+            "priority": 110,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "object",
+            "valid": true,
+            "value": {
+              "container_path": "/models",
+              "readonly": true
+            },
+            "value_source": "BackendRuntime",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.swap_space",
+            "label": "Swap Space (GB)",
+            "last_value_layer": "BackendVersion",
+            "priority": 312,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "hide_when_empty": false,
+            "key": "launcher.command",
+            "label": "",
+            "last_value_layer": "BackendRuntime",
+            "priority": 40,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "array",
+            "valid": true,
+            "value": [
+              "--model",
+              "{{model_container_path}}"
+            ],
+            "value_source": "BackendRuntime",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": {
+              "gpu_capabilities": [
+                [
+                  "gpu"
+                ]
+              ],
+              "gpu_driver": "",
+              "ipc_mode": "host",
+              "shm_size": "16gb"
+            },
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "launcher.docker_options",
+            "label": "",
+            "last_value_layer": "BackendRuntime",
+            "priority": 80,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "object",
+            "valid": true,
+            "value": {
+              "gpu_capabilities": [
+                [
+                  "gpu"
+                ]
+              ],
+              "gpu_driver": "",
+              "ipc_mode": "host",
+              "shm_size": "16gb"
+            },
+            "value_source": "BackendRuntime",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": [],
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "launcher.ports",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 50,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "array",
+            "valid": true,
+            "value": [],
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.dtype",
+            "label": "Model Data Type",
+            "last_value_layer": "BackendVersion",
+            "priority": 311,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.kv_cache_dtype",
+            "label": "KV Cache Data Type",
+            "last_value_layer": "BackendVersion",
+            "priority": 310,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.max_model_len",
+            "label": "Max Model Length",
+            "last_value_layer": "BackendVersion",
+            "priority": 306,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "security",
+            "hide_when_empty": false,
+            "key": "model_runtime.trust_remote_code",
+            "label": "Trust Remote Code",
+            "last_value_layer": "BackendVersion",
+            "priority": 316,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": "",
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "backend.extra_args",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 900,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "lines",
+            "valid": true,
+            "value": "",
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "default_value": [
+              "model_runtime.model",
+              "model_runtime.host",
+              "model_runtime.port",
+              "deployment.served_model_name",
+              "model_runtime.tensor_parallel_size",
+              "model_runtime.pipeline_parallel_size",
+              "model_runtime.max_model_len",
+              "model_runtime.gpu_memory_utilization",
+              "model_runtime.max_num_seqs",
+              "model_runtime.max_num_batched_tokens",
+              "model_runtime.kv_cache_dtype",
+              "model_runtime.dtype",
+              "model_runtime.swap_space",
+              "model_runtime.cpu_offload_gb",
+              "model_runtime.enforce_eager",
+              "model_runtime.safetensors_load_strategy",
+              "model_runtime.trust_remote_code",
+              "model_runtime.download_dir",
+              "backend.extra_args"
+            ],
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "backend.supported_config_items",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 6,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "array",
+            "valid": true,
+            "value": [
+              "model_runtime.model",
+              "model_runtime.host",
+              "model_runtime.port",
+              "deployment.served_model_name",
+              "model_runtime.tensor_parallel_size",
+              "model_runtime.pipeline_parallel_size",
+              "model_runtime.max_model_len",
+              "model_runtime.gpu_memory_utilization",
+              "model_runtime.max_num_seqs",
+              "model_runtime.max_num_batched_tokens",
+              "model_runtime.kv_cache_dtype",
+              "model_runtime.dtype",
+              "model_runtime.swap_space",
+              "model_runtime.cpu_offload_gb",
+              "model_runtime.enforce_eager",
+              "model_runtime.safetensors_load_strategy",
+              "model_runtime.trust_remote_code",
+              "model_runtime.download_dir",
+              "backend.extra_args"
+            ],
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "hide_when_empty": false,
+            "key": "launcher.entrypoint",
+            "label": "",
+            "last_value_layer": "BackendRuntime",
+            "priority": 30,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "array",
+            "valid": true,
+            "value": [
+              "vllm",
+              "serve"
+            ],
+            "value_source": "BackendRuntime",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.max_num_seqs",
+            "label": "Max Concurrent Sequences",
+            "last_value_layer": "BackendVersion",
+            "priority": 308,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.safetensors_load_strategy",
+            "label": "Safetensors Load Strategy",
+            "last_value_layer": "BackendVersion",
+            "priority": 315,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "hide_when_empty": false,
+            "key": "runtime.health",
+            "label": "",
+            "last_value_layer": "BackendRuntime",
+            "priority": 120,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "object",
+            "valid": true,
+            "value": {
+              "path": "/v1/models",
+              "startup_timeout_seconds": 120,
+              "success_status": [
+                200
+              ],
+              "type": "http"
+            },
+            "value_source": "BackendRuntime",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": "0.0.0.0",
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "service.listen_host",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 210,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": "0.0.0.0",
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "startup",
+            "hide_when_empty": false,
+            "key": "deployment.served_model_name",
+            "label": "Served Model Name",
+            "last_value_layer": "BackendVersion",
+            "priority": 303,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "parallelism",
+            "hide_when_empty": false,
+            "key": "model_runtime.pipeline_parallel_size",
+            "label": "Pipeline Parallel Size",
+            "last_value_layer": "BackendVersion",
+            "priority": 305,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.cpu_offload_gb",
+            "label": "CPU Offload (GB)",
+            "last_value_layer": "BackendVersion",
+            "priority": 313,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "advanced",
+            "hide_when_empty": false,
+            "key": "model_runtime.download_dir",
+            "label": "Download Directory",
+            "last_value_layer": "BackendVersion",
+            "priority": 317,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.gpu_memory_utilization",
+            "label": "GPU Memory Utilization",
+            "last_value_layer": "BackendVersion",
+            "priority": 307,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": "vllm/vllm-openai:latest",
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "launcher.image",
+            "label": "",
+            "last_value_layer": "NodeBackendRuntime",
+            "priority": 20,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": "vllm/vllm-openai:latest",
+            "value_source": "NodeBackendRuntime",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": "docker",
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "launcher.kind",
+            "label": "",
+            "last_value_layer": "BackendRuntime",
+            "priority": 10,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": "docker",
+            "value_source": "BackendRuntime",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.max_num_batched_tokens",
+            "label": "Max Batched Tokens",
+            "last_value_layer": "BackendVersion",
+            "priority": 309,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": 8000,
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "service.container_port",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 220,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "integer",
+            "valid": true,
+            "value": 8000,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "performance",
+            "hide_when_empty": false,
+            "key": "model_runtime.enforce_eager",
+            "label": "Enforce Eager Mode",
+            "last_value_layer": "BackendVersion",
+            "priority": 314,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "group": "parallelism",
+            "hide_when_empty": false,
+            "key": "model_runtime.tensor_parallel_size",
+            "label": "Tensor Parallel Size",
+            "last_value_layer": "BackendVersion",
+            "priority": 304,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "string",
+            "valid": true,
+            "value": null,
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": [],
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "launcher.volumes",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 60,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "array",
+            "valid": true,
+            "value": [],
+            "value_source": "BackendVersion",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": false,
+            "config_set_key": "",
+            "editable": true,
+            "enabled": false,
+            "hide_when_empty": false,
+            "key": "runtime.env",
+            "label": "",
+            "last_value_layer": "BackendRuntime",
+            "priority": 100,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "object",
+            "valid": true,
+            "value": {},
+            "value_source": "BackendRuntime",
+            "visible": true
+          },
+          {
+            "advanced": false,
+            "checked": true,
+            "config_set_key": "",
+            "default_value": "",
+            "editable": true,
+            "enabled": true,
+            "hide_when_empty": false,
+            "key": "runtime.extra_env",
+            "label": "",
+            "last_value_layer": "BackendVersion",
+            "priority": 190,
+            "readonly": false,
+            "required": false,
+            "section": "",
+            "sensitive": false,
+            "type": "lines",
+            "valid": true,
+            "value": "",
+            "value_source": "BackendVersion",
+            "visible": true
+          }
+        ],
+        "key": "common",
+        "priority": 20,
+        "title": "常用配置"
+      }
+    ],
+    "title": "BackendRuntimeConfigSet"
+  }
+}

@@ -1,0 +1,285 @@
+{
+  "count": 28,
+  "images": [
+    {
+      "created_at": "2026-06-24 14:56:00 +0800 CST",
+      "digest": "sha256:4cdb8aa17091f9942fcf89896d63ed244e48828e1b15f28f59e7ab49d84b8527",
+      "image_id": "sha256:4cdb8aa17091f9942fcf89896d63ed244e48828e1b15f28f59e7ab49d84b8527",
+      "image_present": true,
+      "image_ref": "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+      "repository": "ghcr.io/ggml-org/llama.cpp",
+      "size": "5.25GB",
+      "tag": "server-cuda13"
+    },
+    {
+      "created_at": "2026-06-15 16:12:00 +0800 CST",
+      "digest": "sha256:1c64fde976bdf0d56474a30bccbcfc19667e5b3ab34c826a534c9d6aaca41212",
+      "image_id": "sha256:1c64fde976bdf0d56474a30bccbcfc19667e5b3ab34c826a534c9d6aaca41212",
+      "image_present": true,
+      "image_ref": "lmsysorg/sglang:latest",
+      "repository": "lmsysorg/sglang",
+      "size": "41.6GB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2026-06-14 16:41:05 +0800 CST",
+      "digest": "sha256:3b91cbd1e759cfa0cef3a6262ce62d6b4f6c27bfaa779ba856bca985f7d60a67",
+      "image_id": "sha256:3b91cbd1e759cfa0cef3a6262ce62d6b4f6c27bfaa779ba856bca985f7d60a67",
+      "image_present": true,
+      "image_ref": "linux-build:el8-glibc2.28",
+      "repository": "linux-build",
+      "size": "4.3GB",
+      "tag": "el8-glibc2.28"
+    },
+    {
+      "created_at": "2026-06-14 16:41:05 +0800 CST",
+      "digest": "sha256:3b91cbd1e759cfa0cef3a6262ce62d6b4f6c27bfaa779ba856bca985f7d60a67",
+      "image_id": "sha256:3b91cbd1e759cfa0cef3a6262ce62d6b4f6c27bfaa779ba856bca985f7d60a67",
+      "image_present": true,
+      "image_ref": "linux-build:el8-glibc2.28-go1.26.4-node26.1-rust1.96",
+      "repository": "linux-build",
+      "size": "4.3GB",
+      "tag": "el8-glibc2.28-go1.26.4-node26.1-rust1.96"
+    },
+    {
+      "created_at": "2026-06-11 14:37:58 +0800 CST",
+      "digest": "sha256:7fcb3ae74e9411313a8185abe806a4ea8d25d3e4a6e23d93ecf48a20c122d268",
+      "image_id": "sha256:7fcb3ae74e9411313a8185abe806a4ea8d25d3e4a6e23d93ecf48a20c122d268",
+      "image_present": true,
+      "image_ref": "lightai-release-glibc228:latest",
+      "repository": "lightai-release-glibc228",
+      "size": "2.57GB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2026-05-04 17:19:43 +0800 CST",
+      "digest": "sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4",
+      "image_id": "sha256:9eff9734a30b6713a8566217d36f8277630fd2d31cec7f0a0292835901a23aa4",
+      "image_present": true,
+      "image_ref": "vllm/vllm-openai:latest",
+      "repository": "vllm/vllm-openai",
+      "size": "31.8GB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2026-04-16 04:01:40 +0800 CST",
+      "digest": "sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11",
+      "image_id": "sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11",
+      "image_present": true,
+      "image_ref": "alpine:latest",
+      "repository": "alpine",
+      "size": "13.1MB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2026-03-26 14:36:05 +0800 CST",
+      "digest": "<none>",
+      "image_id": "sha256:00ae19ba98a426e296327e4ef93f8e1c23f020b2c07821aa8c75ea73a2f0c6a1",
+      "image_present": true,
+      "image_ref": "gpustack/gpustack:latest",
+      "repository": "gpustack/gpustack",
+      "size": "14.2GB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2026-03-26 14:36:05 +0800 CST",
+      "digest": "sha256:00ae19ba98a426e296327e4ef93f8e1c23f020b2c07821aa8c75ea73a2f0c6a1",
+      "image_id": "sha256:00ae19ba98a426e296327e4ef93f8e1c23f020b2c07821aa8c75ea73a2f0c6a1",
+      "image_present": true,
+      "image_ref": "quay.io/gpustack/gpustack:v2.1.1",
+      "repository": "quay.io/gpustack/gpustack",
+      "size": "14.2GB",
+      "tag": "v2.1.1"
+    },
+    {
+      "created_at": "2026-03-18 12:58:49 +0800 CST",
+      "digest": "sha256:d9c3b722d38aa42f4a33f66721c68ea6035cfb671b7b10200d889f9957c8c33d",
+      "image_id": "sha256:d9c3b722d38aa42f4a33f66721c68ea6035cfb671b7b10200d889f9957c8c33d",
+      "image_present": true,
+      "image_ref": "ghcr.io/ggml-org/llama.cpp:light",
+      "repository": "ghcr.io/ggml-org/llama.cpp",
+      "size": "175MB",
+      "tag": "light"
+    },
+    {
+      "created_at": "2026-02-27 00:47:08 +0800 CST",
+      "digest": "sha256:cdef82518a5b2e41f1625f0f422ae42d7eb7ab86541aa2369ad9fd930d63894d",
+      "image_id": "sha256:cdef82518a5b2e41f1625f0f422ae42d7eb7ab86541aa2369ad9fd930d63894d",
+      "image_present": true,
+      "image_ref": "infra-frontend:latest",
+      "repository": "infra-frontend",
+      "size": "640MB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2026-02-26 19:53:43 +0800 CST",
+      "digest": "sha256:2e41df0179a10739c110f83cdccd4f19e1d41ff063d90051004d29fe82f1b8cf",
+      "image_id": "sha256:2e41df0179a10739c110f83cdccd4f19e1d41ff063d90051004d29fe82f1b8cf",
+      "image_present": true,
+      "image_ref": "infra-api:latest",
+      "repository": "infra-api",
+      "size": "284MB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2026-02-25 04:31:52 +0800 CST",
+      "digest": "sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+      "image_id": "sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+      "image_present": true,
+      "image_ref": "python:3.12-slim-bookworm",
+      "repository": "python",
+      "size": "189MB",
+      "tag": "3.12-slim-bookworm"
+    },
+    {
+      "created_at": "2026-02-20 03:39:10 +0800 CST",
+      "digest": "sha256:a2d126916bc2ba79a890a4bf62d305eb8b68fcbdd35c6e582d529df18faf5ebb",
+      "image_id": "sha256:a2d126916bc2ba79a890a4bf62d305eb8b68fcbdd35c6e582d529df18faf5ebb",
+      "image_present": true,
+      "image_ref": "mysql:8.4",
+      "repository": "mysql",
+      "size": "1.09GB",
+      "tag": "8.4"
+    },
+    {
+      "created_at": "2026-02-13 05:07:08 +0800 CST",
+      "digest": "sha256:97ff59a4e30e08d1c11bdcd9455e7832368c0572b576c9092cde2df4ae5552a3",
+      "image_id": "sha256:97ff59a4e30e08d1c11bdcd9455e7832368c0572b576c9092cde2df4ae5552a3",
+      "image_present": true,
+      "image_ref": "postgres:16-alpine",
+      "repository": "postgres",
+      "size": "395MB",
+      "tag": "16-alpine"
+    },
+    {
+      "created_at": "2026-02-11 17:12:16 +0800 CST",
+      "digest": "sha256:30339b4d5060488fac147ddc6fb40438ef71cd5f5dfdeb26c886768302bf7197",
+      "image_id": "sha256:30339b4d5060488fac147ddc6fb40438ef71cd5f5dfdeb26c886768302bf7197",
+      "image_present": true,
+      "image_ref": "langgenius/dify-web:1.13.0",
+      "repository": "langgenius/dify-web",
+      "size": "573MB",
+      "tag": "1.13.0"
+    },
+    {
+      "created_at": "2026-02-11 17:10:25 +0800 CST",
+      "digest": "sha256:5f622b4d0b39bdc6d3b401063cfb60962fa92dcc63f55daccec138f98b260e67",
+      "image_id": "sha256:5f622b4d0b39bdc6d3b401063cfb60962fa92dcc63f55daccec138f98b260e67",
+      "image_present": true,
+      "image_ref": "langgenius/dify-api:1.13.0",
+      "repository": "langgenius/dify-api",
+      "size": "3.7GB",
+      "tag": "1.13.0"
+    },
+    {
+      "created_at": "2026-02-05 07:53:09 +0800 CST",
+      "digest": "sha256:341bf0f3ce6c5277d6002cf6e1fb0319fa4252add24ab6a0e262e0056d313208",
+      "image_id": "sha256:341bf0f3ce6c5277d6002cf6e1fb0319fa4252add24ab6a0e262e0056d313208",
+      "image_present": true,
+      "image_ref": "nginx:latest",
+      "repository": "nginx",
+      "size": "240MB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2026-01-28 11:31:49 +0800 CST",
+      "digest": "sha256:09e2b3d9726018aecf269bd35325f46bf75046a643a66d28360ec71132750ec8",
+      "image_id": "sha256:09e2b3d9726018aecf269bd35325f46bf75046a643a66d28360ec71132750ec8",
+      "image_present": true,
+      "image_ref": "node:20-alpine",
+      "repository": "node",
+      "size": "192MB",
+      "tag": "20-alpine"
+    },
+    {
+      "created_at": "2026-01-28 10:36:08 +0800 CST",
+      "digest": "sha256:46884be93652d02a96a176ccf173d1040bef365c5706aa7b6a1931caec8bfeef",
+      "image_id": "sha256:46884be93652d02a96a176ccf173d1040bef365c5706aa7b6a1931caec8bfeef",
+      "image_present": true,
+      "image_ref": "redis:6-alpine",
+      "repository": "redis",
+      "size": "45.1MB",
+      "tag": "6-alpine"
+    },
+    {
+      "created_at": "2026-01-28 10:33:40 +0800 CST",
+      "digest": "sha256:1d1095b0503145be79c79239372aefadfacf6b7c33c9245bbf99ce4b6b89c737",
+      "image_id": "sha256:1d1095b0503145be79c79239372aefadfacf6b7c33c9245bbf99ce4b6b89c737",
+      "image_present": true,
+      "image_ref": "postgres:15-alpine",
+      "repository": "postgres",
+      "size": "392MB",
+      "tag": "15-alpine"
+    },
+    {
+      "created_at": "2026-01-20 17:46:54 +0800 CST",
+      "digest": "sha256:0bf7734135702a719701646a0fd9d7ad8b20b7d9cfb8eaedc8a890cf682d55bc",
+      "image_id": "sha256:0bf7734135702a719701646a0fd9d7ad8b20b7d9cfb8eaedc8a890cf682d55bc",
+      "image_present": true,
+      "image_ref": "langgenius/dify-plugin-daemon:0.5.3-local",
+      "repository": "langgenius/dify-plugin-daemon",
+      "size": "2.14GB",
+      "tag": "0.5.3-local"
+    },
+    {
+      "created_at": "2026-01-17 05:07:21 +0800 CST",
+      "digest": "sha256:e8c8679ccd042249d4c4080a3fab5a6bb52ab6e771addffa2e6e4eafea797bd2",
+      "image_id": "sha256:e8c8679ccd042249d4c4080a3fab5a6bb52ab6e771addffa2e6e4eafea797bd2",
+      "image_present": true,
+      "image_ref": "nvidia/cuda:13.1.1-base-ubuntu24.04",
+      "repository": "nvidia/cuda",
+      "size": "713MB",
+      "tag": "13.1.1-base-ubuntu24.04"
+    },
+    {
+      "created_at": "2025-11-24 21:31:32 +0800 CST",
+      "digest": "sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029",
+      "image_id": "sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029",
+      "image_present": true,
+      "image_ref": "ubuntu/squid:latest",
+      "repository": "ubuntu/squid",
+      "size": "303MB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2025-08-20 11:37:09 +0800 CST",
+      "digest": "sha256:748fc79d29a422f512018e8a58ef1a0e20306dd6254637933960573fa37b1e5e",
+      "image_id": "sha256:748fc79d29a422f512018e8a58ef1a0e20306dd6254637933960573fa37b1e5e",
+      "image_present": true,
+      "image_ref": "imsyy/dailyhot-api:latest",
+      "repository": "imsyy/dailyhot-api",
+      "size": "241MB",
+      "tag": "latest"
+    },
+    {
+      "created_at": "2025-05-07 18:08:12 +0800 CST",
+      "digest": "sha256:4e65e8a351a2b17d11750b65403527a347e5cb938bc2271521ca7d689c008ad3",
+      "image_id": "sha256:4e65e8a351a2b17d11750b65403527a347e5cb938bc2271521ca7d689c008ad3",
+      "image_present": true,
+      "image_ref": "langgenius/dify-sandbox:0.2.12",
+      "repository": "langgenius/dify-sandbox",
+      "size": "825MB",
+      "tag": "0.2.12"
+    },
+    {
+      "created_at": "2024-10-17 00:53:31 +0800 CST",
+      "digest": "sha256:53fa576934f8e2c9130dc3a61a0f9b7d9330fe0ff456ccb37db05d03b700abc9",
+      "image_id": "sha256:53fa576934f8e2c9130dc3a61a0f9b7d9330fe0ff456ccb37db05d03b700abc9",
+      "image_present": true,
+      "image_ref": "semitechnologies/weaviate:1.27.0",
+      "repository": "semitechnologies/weaviate",
+      "size": "234MB",
+      "tag": "1.27.0"
+    },
+    {
+      "created_at": "2024-09-27 05:31:42 +0800 CST",
+      "digest": "sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f",
+      "image_id": "sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f",
+      "image_present": true,
+      "image_ref": "busybox:latest",
+      "repository": "busybox",
+      "size": "6.77MB",
+      "tag": "latest"
+    }
+  ]
+}
