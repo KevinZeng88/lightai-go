@@ -50,7 +50,7 @@
 
 ### Commit id
 
-- Pending at log creation.
+- 5a3e0ba
 
 ## Work Package B — External ConfigEdit Component Template + Effect Engine
 
@@ -100,7 +100,7 @@
 
 ### Commit id
 
-- Pending at log creation.
+- 5a3e0ba
 
 ## Work Package C — Runtime Effects Components + RunPlan Compiler Cleanup
 
@@ -152,7 +152,7 @@
 
 ### Commit id
 
-- Pending at log creation.
+- 5a3e0ba
 
 ## Work Package D — UI Full-Chain Integration + Template Management MVP + Final Audit
 
@@ -205,4 +205,4 @@
 
 ### Commit id
 
-- Pending at log creation.
+- 5a3e0ba
