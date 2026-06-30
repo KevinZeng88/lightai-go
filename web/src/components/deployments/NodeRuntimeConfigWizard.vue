@@ -297,6 +297,7 @@ watch(selectedRuntime, async (runtime) => {
     object_id: runtime.id,
     layer: 'node_backend_runtime',
     mode: 'enable',
+    view_level: 'normal',
   })
 })
 

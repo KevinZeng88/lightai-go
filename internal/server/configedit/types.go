@@ -1,27 +1,87 @@
 package configedit
 
 type ProjectInput struct {
-	ConfigSet   map[string]any
-	Layer       string
-	ObjectKind  string
-	ObjectID    string
-	ObjectLabel string
-	Readonly    bool
-	Mode        string
+	ConfigSet    map[string]any
+	Layer        string
+	ObjectKind   string
+	ObjectID     string
+	ObjectLabel  string
+	Readonly     bool
+	Mode         string
+	ViewLevel    string
+	TemplateID   string
+	SnapshotID   string
+	Parent       *ObjectRef
+	ChildInit    *ChildInitContract
+	ResetContext map[string]any
 }
 
 type ConfigEditView struct {
-	Layer       string                `json:"layer"`
-	ObjectID    string                `json:"object_id"`
-	ObjectKind  string                `json:"object_kind"`
-	Readonly    bool                  `json:"readonly"`
-	Sections    []EditSection         `json:"sections"`
-	Diagnostics ConfigEditDiagnostics `json:"diagnostics,omitempty"`
-	Metadata    map[string]any        `json:"metadata,omitempty"`
+	Layer          string                `json:"layer"`
+	ObjectID       string                `json:"object_id"`
+	ObjectKind     string                `json:"object_kind"`
+	TemplateID     string                `json:"template_id"`
+	SnapshotID     string                `json:"snapshot_id"`
+	Parent         *ObjectRef            `json:"parent,omitempty"`
+	ChildInit      ChildInitContract     `json:"child_init"`
+	ViewLevel      string                `json:"view_level"`
+	Readonly       bool                  `json:"readonly"`
+	Sections       []EditSection         `json:"sections"`
+	Components     []EditComponent       `json:"components"`
+	Fields         []EditField           `json:"fields"`
+	EffectsPreview []EditEffectPreview   `json:"effects_preview"`
+	Diagnostics    ConfigEditDiagnostics `json:"diagnostics,omitempty"`
+	Metadata       map[string]any        `json:"metadata,omitempty"`
 }
 
 type ConfigEditDiagnostics struct {
 	RawConfigSet map[string]any `json:"raw_config_set,omitempty"`
+}
+
+type ObjectRef struct {
+	ObjectKind string `json:"object_kind"`
+	ObjectID   string `json:"object_id"`
+	SnapshotID string `json:"snapshot_id,omitempty"`
+}
+
+type ChildInitContract struct {
+	Strategy        string   `json:"strategy"`
+	AllowedChildren []string `json:"allowed_children,omitempty"`
+	CopyScope       string   `json:"copy_scope,omitempty"`
+}
+
+type EditComponent struct {
+	Key         string              `json:"key"`
+	Type        string              `json:"type"`
+	Renderer    string              `json:"renderer"`
+	Label       string              `json:"label"`
+	Section     string              `json:"section"`
+	View        string              `json:"view"`
+	Order       int                 `json:"order"`
+	Fields      []string            `json:"fields"`
+	Enabled     bool                `json:"enabled"`
+	Readonly    bool                `json:"readonly"`
+	Source      map[string]any      `json:"source,omitempty"`
+	Reset       ResetBehavior       `json:"reset"`
+	Effects     []EditEffectPreview `json:"effects,omitempty"`
+	Diagnostics []string            `json:"diagnostics,omitempty"`
+}
+
+type ResetBehavior struct {
+	AllowResetToParent  bool `json:"allow_reset_to_parent"`
+	AllowResetToDefault bool `json:"allow_reset_to_default"`
+}
+
+type EditEffectPreview struct {
+	ComponentKey string `json:"component_key"`
+	FieldKey     string `json:"field_key,omitempty"`
+	Type         string `json:"type"`
+	Target       string `json:"target"`
+	Key          string `json:"key,omitempty"`
+	Value        any    `json:"value,omitempty"`
+	Source       string `json:"source,omitempty"`
+	PatchTarget  string `json:"patch_target,omitempty"`
+	DockerEffect string `json:"docker_effect,omitempty"`
 }
 
 type EditSection struct {
@@ -35,58 +95,62 @@ type EditSection struct {
 }
 
 type EditField struct {
-	Key                string         `json:"key"`
-	InternalKey        string         `json:"internal_key"`
-	SemanticKey        string         `json:"semantic_key,omitempty"`
-	Owner              string         `json:"owner,omitempty"`
-	Tier               string         `json:"tier,omitempty"`
-	ParentKey          string         `json:"parent_key,omitempty"`
-	Path               []string       `json:"path,omitempty"`
-	Label              string         `json:"label"`
-	LabelI18nKey       string         `json:"label_i18n_key,omitempty"`
-	TitleI18nKey       string         `json:"title_i18n_key,omitempty"`
-	DescriptionI18nKey string         `json:"description_i18n_key,omitempty"`
-	HelpI18nKey        string         `json:"help_i18n_key,omitempty"`
-	TooltipI18nKey     string         `json:"tooltip_i18n_key,omitempty"`
-	Title              string         `json:"title,omitempty"`
-	Description        string         `json:"description,omitempty"`
-	Help               string         `json:"help,omitempty"`
-	CliFlag            string         `json:"cli_flag,omitempty"`
-	EnvKey             string         `json:"env_key,omitempty"`
-	TechnicalKey       string         `json:"technical_key,omitempty"`
-	Section            string         `json:"section"`
-	Group              string         `json:"group,omitempty"`
-	Order              int            `json:"order"`
-	Type               string         `json:"type"`
-	Widget             string         `json:"widget"`
-	Value              any            `json:"value"`
-	DefaultValue       any            `json:"default_value,omitempty"`
-	Enabled            bool           `json:"enabled"`
-	HasEnable          bool           `json:"has_enable"`
-	Required           bool           `json:"required"`
-	Readonly           bool           `json:"readonly"`
-	Advanced           bool           `json:"advanced"`
-	Visibility         string         `json:"visibility"`
-	Options            []EditOption   `json:"options,omitempty"`
-	Constraints        map[string]any `json:"constraints,omitempty"`
-	ValidationRules    map[string]any `json:"validation_rules,omitempty"`
-	Placeholder        string         `json:"placeholder,omitempty"`
-	Sensitive          bool           `json:"sensitive,omitempty"`
-	Disabled           bool           `json:"disabled,omitempty"`
-	Source             map[string]any `json:"source,omitempty"`
-	ValueSource        string         `json:"value_source,omitempty"`
-	LastValueLayer     string         `json:"last_value_layer,omitempty"`
-	InheritedValue     any            `json:"inherited_value,omitempty"`
-	CopyBehavior       string         `json:"copy_behavior,omitempty"`
-	OverrideBehavior   string         `json:"override_behavior,omitempty"`
-	DisableBehavior    string         `json:"disable_behavior,omitempty"`
-	PatchTarget        string         `json:"patch_target,omitempty"`
-	CopiedFrom         string         `json:"copied_from,omitempty"`
-	Dirty              bool           `json:"dirty,omitempty"`
-	Warnings           []any          `json:"warnings,omitempty"`
-	Diagnostic         bool           `json:"diagnostic,omitempty"`
-	OriginalValue      any            `json:"original_value,omitempty"`
-	OriginalEnabled    bool           `json:"original_enabled"`
+	Key                string              `json:"key"`
+	InternalKey        string              `json:"internal_key"`
+	SemanticKey        string              `json:"semantic_key,omitempty"`
+	Owner              string              `json:"owner,omitempty"`
+	Tier               string              `json:"tier,omitempty"`
+	ParentKey          string              `json:"parent_key,omitempty"`
+	Path               []string            `json:"path,omitempty"`
+	Label              string              `json:"label"`
+	LabelI18nKey       string              `json:"label_i18n_key,omitempty"`
+	TitleI18nKey       string              `json:"title_i18n_key,omitempty"`
+	DescriptionI18nKey string              `json:"description_i18n_key,omitempty"`
+	HelpI18nKey        string              `json:"help_i18n_key,omitempty"`
+	TooltipI18nKey     string              `json:"tooltip_i18n_key,omitempty"`
+	Title              string              `json:"title,omitempty"`
+	Description        string              `json:"description,omitempty"`
+	Help               string              `json:"help,omitempty"`
+	CliFlag            string              `json:"cli_flag,omitempty"`
+	EnvKey             string              `json:"env_key,omitempty"`
+	TechnicalKey       string              `json:"technical_key,omitempty"`
+	Section            string              `json:"section"`
+	Group              string              `json:"group,omitempty"`
+	Order              int                 `json:"order"`
+	Type               string              `json:"type"`
+	Widget             string              `json:"widget"`
+	Value              any                 `json:"value"`
+	DefaultValue       any                 `json:"default_value,omitempty"`
+	Enabled            bool                `json:"enabled"`
+	HasEnable          bool                `json:"has_enable"`
+	Required           bool                `json:"required"`
+	Readonly           bool                `json:"readonly"`
+	Advanced           bool                `json:"advanced"`
+	Visibility         string              `json:"visibility"`
+	Options            []EditOption        `json:"options,omitempty"`
+	Constraints        map[string]any      `json:"constraints,omitempty"`
+	ValidationRules    map[string]any      `json:"validation_rules,omitempty"`
+	Placeholder        string              `json:"placeholder,omitempty"`
+	Sensitive          bool                `json:"sensitive,omitempty"`
+	Disabled           bool                `json:"disabled,omitempty"`
+	Source             map[string]any      `json:"source,omitempty"`
+	ValueSource        string              `json:"value_source,omitempty"`
+	LastValueLayer     string              `json:"last_value_layer,omitempty"`
+	InheritedValue     any                 `json:"inherited_value,omitempty"`
+	CopyBehavior       string              `json:"copy_behavior,omitempty"`
+	OverrideBehavior   string              `json:"override_behavior,omitempty"`
+	DisableBehavior    string              `json:"disable_behavior,omitempty"`
+	PatchTarget        string              `json:"patch_target,omitempty"`
+	CopiedFrom         string              `json:"copied_from,omitempty"`
+	Dirty              bool                `json:"dirty,omitempty"`
+	Warnings           []any               `json:"warnings,omitempty"`
+	Diagnostic         bool                `json:"diagnostic,omitempty"`
+	OriginalValue      any                 `json:"original_value,omitempty"`
+	OriginalEnabled    bool                `json:"original_enabled"`
+	ComponentKey       string              `json:"component_key,omitempty"`
+	View               string              `json:"view"`
+	Reset              ResetBehavior       `json:"reset"`
+	Effects            []EditEffectPreview `json:"effects,omitempty"`
 }
 
 type EditOption struct {

@@ -47,6 +47,7 @@ var taxonomyLabels = map[string]string{
 	"launcher.docker_options.devices":          "Devices",
 	"launcher.docker_options.group_add":        "Additional groups",
 	"runtime.model_mount":                      "Model mount",
+	"runtime.device_binding":                   "Device binding",
 	"runtime.env":                              "Environment variables",
 	"runtime.health":                           "Health check",
 	"service.container_port":                   "Container port",
@@ -94,6 +95,7 @@ var capabilityLikeCodes = map[string]bool{
 // widgetOverrides maps internal keys to preferred widget types for structured display.
 var widgetOverrides = map[string]string{
 	"runtime.env":            "key_value_table",
+	"runtime.device_binding": "accelerator_binding",
 	"runtime.model_mount":    "mount_form",
 	"runtime.health":         "health_check_form",
 	"service.container_port": "port_form",

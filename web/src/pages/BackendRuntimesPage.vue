@@ -237,6 +237,7 @@ watch(selected, async (value) => {
     object_id: value.id,
     layer: 'backend_runtime',
     mode: value.is_editable ? 'edit' : 'view',
+    view_level: 'normal',
   })
 })
 
@@ -248,7 +249,7 @@ function cancelEditing() {
   editing.value = false
   // Reload view to discard changes
   if (selected.value?.id) {
-    getConfigEditView({ object_kind: 'backend_runtime', object_id: selected.value.id, layer: 'backend_runtime', mode: 'edit' }).then(v => { editView.value = v; editPatch.value = null })
+    getConfigEditView({ object_kind: 'backend_runtime', object_id: selected.value.id, layer: 'backend_runtime', mode: 'edit', view_level: 'normal' }).then(v => { editView.value = v; editPatch.value = null })
   }
 }
 

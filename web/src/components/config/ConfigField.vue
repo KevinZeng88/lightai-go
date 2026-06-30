@@ -73,6 +73,42 @@
         @input="onTextInput"
       />
 
+      <!-- Accelerator binding -->
+      <div v-else-if="field.widget === 'accelerator_binding'" class="binding-form">
+        <div class="binding-row">
+          <span class="binding-label">Enabled:</span>
+          <el-switch v-model="bindingData.enabled" :disabled="isControlReadonly" size="small" @change="onBindingChange" />
+          <span class="binding-label">Mode:</span>
+          <el-select v-model="bindingData.mode" :disabled="isControlReadonly" size="small" @change="onBindingChange">
+            <el-option label="auto" value="auto" />
+            <el-option label="manual" value="manual" />
+            <el-option label="disabled" value="disabled" />
+            <el-option label="inherited" value="inherited" />
+          </el-select>
+        </div>
+        <div class="binding-row">
+          <span class="binding-label">Vendor:</span>
+          <el-select v-model="bindingData.vendor" :disabled="isControlReadonly" size="small" @change="onBindingChange">
+            <el-option label="nvidia" value="nvidia" />
+            <el-option label="metax" value="metax" />
+            <el-option label="huawei" value="huawei" />
+            <el-option label="cpu" value="cpu" />
+            <el-option label="none" value="none" />
+          </el-select>
+          <span class="binding-label">Accelerators:</span>
+          <el-input v-model="bindingIdsText" :disabled="isControlReadonly" size="small" placeholder="0,1" @input="onBindingIdsChange" />
+        </div>
+        <div class="binding-row">
+          <span class="binding-label">Visible env:</span>
+          <el-input v-model="bindingData.visible_env_key" :disabled="isControlReadonly" size="small" placeholder="CUDA_VISIBLE_DEVICES" @input="onBindingChange" />
+          <el-input v-model="bindingData.visible_env_value" :disabled="isControlReadonly" size="small" placeholder="0,1" @input="onBindingChange" />
+        </div>
+        <div class="binding-row">
+          <span class="binding-label">Docker GPU:</span>
+          <el-input v-model="bindingData.docker_gpu_option" :disabled="isControlReadonly" size="small" placeholder="device=0" @input="onBindingChange" />
+        </div>
+      </div>
+
       <!-- Key-value table (structured, replaces key_value_list textarea) -->
       <div v-else-if="field.widget === 'key_value_table'" class="kv-table-wrap">
         <el-table :data="kvRows" border size="small" max-height="260px">
@@ -272,6 +308,59 @@ const formattedDisplayValue = computed(() => {
   }
   return String(v)
 })
+
+const bindingData = reactive<any>({
+  enabled: true,
+  mode: 'auto',
+  vendor: 'nvidia',
+  accelerator_ids: [] as string[],
+  accelerator_count: 0,
+  visible_env_key: '',
+  visible_env_value: '',
+  docker_gpu_option: '',
+  device_mounts: [] as any[],
+})
+const bindingIdsText = ref('')
+
+watch(() => props.field.value, () => {
+  syncBindingData()
+}, { deep: true, immediate: true })
+
+function syncBindingData() {
+  if (props.field.widget !== 'accelerator_binding') return
+  const value = props.field.value && typeof props.field.value === 'object' ? props.field.value : {}
+  bindingData.enabled = value.enabled ?? true
+  bindingData.mode = value.mode || 'auto'
+  bindingData.vendor = value.vendor || 'nvidia'
+  bindingData.accelerator_ids = Array.isArray(value.accelerator_ids) ? [...value.accelerator_ids] : []
+  bindingData.accelerator_count = Number(value.accelerator_count || bindingData.accelerator_ids.length || 0)
+  bindingData.visible_env_key = value.visible_env_key || ''
+  bindingData.visible_env_value = value.visible_env_value || ''
+  bindingData.docker_gpu_option = value.docker_gpu_option || ''
+  bindingData.device_mounts = Array.isArray(value.device_mounts) ? [...value.device_mounts] : []
+  bindingIdsText.value = bindingData.accelerator_ids.join(',')
+}
+
+function onBindingIdsChange(value: string) {
+  bindingData.accelerator_ids = value.split(',').map(v => v.trim()).filter(Boolean)
+  bindingData.accelerator_count = bindingData.accelerator_ids.length
+  onBindingChange()
+}
+
+function onBindingChange() {
+  props.field.value = {
+    enabled: bindingData.enabled,
+    mode: bindingData.mode,
+    vendor: bindingData.vendor,
+    accelerator_ids: [...bindingData.accelerator_ids],
+    accelerator_count: bindingData.accelerator_count,
+    visible_env_key: bindingData.visible_env_key,
+    visible_env_value: bindingData.visible_env_value,
+    docker_gpu_option: bindingData.docker_gpu_option,
+    device_mounts: [...bindingData.device_mounts],
+  }
+  emit('change')
+}
 
 // -- Text value (for textarea / raw_json / string_list widgets) --
 const textValue = computed({

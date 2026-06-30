@@ -168,6 +168,34 @@ func configHealthCheckPtr(set map[string]interface{}) *runplan.HealthCheckInput 
 	return &hc
 }
 
+func configDeviceBinding(set map[string]interface{}) *runplan.DeviceBindingConfig {
+	raw := configObject(set, "runtime.device_binding")
+	if len(raw) == 0 {
+		return nil
+	}
+	var binding runplan.DeviceBindingConfig
+	b, _ := json.Marshal(raw)
+	_ = json.Unmarshal(b, &binding)
+	if binding.Mode == "" && !binding.Enabled && len(binding.AcceleratorIDs) == 0 {
+		return nil
+	}
+	return &binding
+}
+
+func configServicePortBinding(set map[string]interface{}) *runplan.ServicePortBinding {
+	raw := configObject(set, "service.port_binding")
+	if len(raw) == 0 {
+		return nil
+	}
+	var binding runplan.ServicePortBinding
+	b, _ := json.Marshal(raw)
+	_ = json.Unmarshal(b, &binding)
+	if binding.HostPort == 0 && binding.ContainerPort == 0 && binding.ListenHost == "" && binding.ServedModelName == "" {
+		return nil
+	}
+	return &binding
+}
+
 func configArray(set map[string]interface{}, code string) []interface{} {
 	raw := configValue(set, code, []interface{}{})
 	switch v := raw.(type) {

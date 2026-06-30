@@ -78,7 +78,7 @@
         </el-descriptions>
       </template>
 
-      <template v-if="sourceEntries.length">
+      <template v-if="developerMode && sourceEntries.length">
         <el-divider content-position="left">{{ $t('deployments.runPlanSourceNote') }}</el-divider>
         <el-table :data="sourceEntries" size="small" border max-height="260">
           <el-table-column prop="target" label="target" width="130" />
@@ -89,8 +89,10 @@
         </el-table>
       </template>
 
-      <el-divider content-position="left">{{ $t('deployments.finalRunPlan') }}</el-divider>
-      <JsonViewer :value="props.previewData.run_plan || {}" :title="$t('deployments.finalRunPlan')" max-height="420px" :searchable="true" />
+      <template v-if="developerMode">
+        <el-divider content-position="left">{{ $t('deployments.finalRunPlan') }}</el-divider>
+        <JsonViewer :value="props.previewData.run_plan || {}" :title="$t('deployments.finalRunPlan')" max-height="420px" :searchable="true" />
+      </template>
     </div>
   </div>
 </template>
@@ -106,6 +108,7 @@ const { t } = useI18n()
 const props = defineProps<{
   previewData: PreviewResult | null
   loading: boolean
+  developerMode?: boolean
 }>()
 
 defineEmits<{ preview: [] }>()
@@ -113,6 +116,7 @@ defineEmits<{ preview: [] }>()
 const normalizedErrors = computed(() => dedupeIssues(props.previewData?.preflight?.errors || []))
 const normalizedWarnings = computed(() => dedupeIssues(props.previewData?.preflight?.warnings || []))
 const sourceEntries = computed(() => flattenSourceMap(props.previewData?.run_plan?.parameter_source_map))
+const developerMode = computed(() => props.developerMode === true)
 
 function preflightMessage(item: any): string {
   const direct = item?.message || item?.reason

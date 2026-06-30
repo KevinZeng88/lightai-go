@@ -61,8 +61,8 @@ func buildSourceMap(in ResolveInput, plan *ResolvedRunPlan) *ParameterSourceMap 
 		source := "node_backend_runtime"
 		layer := "NodeBackendRuntime"
 		if plan.DeviceBinding != nil && k == plan.DeviceBinding.VisibleEnvKey && v == plan.DeviceBinding.VisibleEnvValue {
-			source = "derived"
-			layer = "RunPlanResolver"
+			source = "configedit_effect"
+			layer = "DeploymentConfigEdit"
 		}
 		sm.AddEnv(k, v, source, "runtime.env", layer, []SourceChainEntry{{Layer: layer, Value: v, Reason: "resolved environment variable"}})
 	}
@@ -107,18 +107,18 @@ func buildSourceMap(in ResolveInput, plan *ResolvedRunPlan) *ParameterSourceMap 
 
 	// System generated
 	if plan.DeviceBinding != nil {
-		sm.AddSystemGenerated("device_binding", plan.DeviceBinding, plan.DeviceBinding.Source, "deployment.placement_json", "RunPlanResolver", []SourceChainEntry{{Layer: "Deployment", Value: in.Deployment.Placement, Reason: "deployment placement input"}, {Layer: "RunPlanResolver", Value: plan.DeviceBinding, Reason: "vendor-neutral device binding resolved"}})
+		sm.AddDockerOption("runtime.device_binding", plan.DeviceBinding, "configedit_effect", "runtime.device_binding", "DeploymentConfigEdit", []SourceChainEntry{{Layer: "DeploymentConfigEdit", Value: plan.DeviceBinding, Reason: "device binding component effect"}})
 		if len(plan.GPUDeviceIDs) > 0 {
-			sm.AddSystemGenerated("gpu_device_ids", plan.GPUDeviceIDs, "derived", "deployment.placement_json", "RunPlanResolver", nil)
+			sm.AddDevice("runtime.device_binding.accelerator_ids", plan.GPUDeviceIDs, "configedit_effect", "runtime.device_binding", "DeploymentConfigEdit", nil)
 		}
 		if plan.DeviceBinding.DockerGPUOption != "" {
-			sm.AddSystemGenerated("docker.gpus", plan.DeviceBinding.DockerGPUOption, "derived", "deployment.placement_json", "RunPlanResolver", nil)
+			sm.AddDockerOption("docker.gpus", plan.DeviceBinding.DockerGPUOption, "configedit_effect", "runtime.device_binding", "DeploymentConfigEdit", nil)
 		}
 		if plan.GPUVisibleEnvKey != "" && plan.DeviceBinding.VisibleEnvValue != "" {
-			sm.AddSystemGenerated("gpu_visible_env", plan.GPUVisibleEnvKey+"="+plan.DeviceBinding.VisibleEnvValue, "derived", "deployment.placement_json", "RunPlanResolver", nil)
+			sm.AddEnv(plan.GPUVisibleEnvKey, plan.DeviceBinding.VisibleEnvValue, "configedit_effect", "runtime.device_binding", "DeploymentConfigEdit", nil)
 		}
 		if plan.GpuDriver != "" {
-			sm.AddSystemGenerated("gpu_driver", plan.GpuDriver, "derived", "deployment.placement_json", "RunPlanResolver", nil)
+			sm.AddDockerOption("gpu_driver", plan.GpuDriver, "configedit_effect", "runtime.device_binding", "DeploymentConfigEdit", nil)
 		}
 	}
 

@@ -184,6 +184,7 @@ async function selectVersion(row: any) {
     object_id: row.id,
     layer: 'backend_version',
     mode: row.readonly ? 'view' : 'edit',
+    view_level: 'normal',
   })
 }
 

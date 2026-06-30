@@ -42,6 +42,7 @@
           </template>
           <el-menu-item index="/backends">{{ t('backends.title') }}</el-menu-item>
           <el-menu-item index="/runtimes">{{ t('runtimes.title') }}</el-menu-item>
+          <el-menu-item index="/config-edit/templates">ConfigEdit Templates</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="system">

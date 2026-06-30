@@ -297,15 +297,17 @@ func TestResolveWithSourceMapEmitsSelfContainedSourceEntries(t *testing.T) {
 	assertSelfContainedEntries(t, "ports", sm.Ports)
 	assertSelfContainedEntries(t, "docker_options", sm.DockerOptions)
 	assertSelfContainedEntries(t, "health_check", sm.HealthCheck)
-	assertSelfContainedEntries(t, "system_generated", sm.SystemGenerated)
+	if len(sm.SystemGenerated) > 0 {
+		assertSelfContainedEntries(t, "system_generated", sm.SystemGenerated)
+	}
 	foundGPU := false
-	for _, e := range sm.SystemGenerated {
+	for _, e := range sm.DockerOptions {
 		if e.Key == "docker.gpus" {
-			foundGPU = e.PatchTarget == "deployment.placement_json" && e.DockerEffect == "--gpus" && e.Derived
+			foundGPU = e.PatchTarget == "runtime.device_binding" && e.DockerEffect == "--gpus" && e.EffectiveSource == "configedit_effect"
 		}
 	}
 	if !foundGPU {
-		t.Fatalf("GPU docker injection source entry missing or incomplete: %#v", sm.SystemGenerated)
+		t.Fatalf("GPU docker effect source entry missing or incomplete: %#v", sm.DockerOptions)
 	}
 }
 

@@ -38,7 +38,9 @@ func EquivalentCommandPreview(plan *ResolvedRunPlan) string {
 	for k, v := range plan.Ulimits {
 		parts = append(parts, "--ulimit", fmt.Sprintf("%s=%s", k, v))
 	}
-	if len(plan.GPUDeviceIDs) > 0 {
+	if plan.DeviceBinding != nil && plan.DeviceBinding.Enabled && plan.DeviceBinding.DockerGPUOption != "" {
+		parts = append(parts, "--gpus", fmt.Sprintf("\"%s\"", plan.DeviceBinding.DockerGPUOption))
+	} else if len(plan.GPUDeviceIDs) > 0 {
 		parts = append(parts, "--gpus", fmt.Sprintf("\"device=%s\"", strings.Join(plan.GPUDeviceIDs, ",")))
 	} else if plan.GpuDriver != "" || len(plan.GpuCapabilities) > 0 {
 		// All GPUs with explicit driver/caps — equivalent to --gpus all

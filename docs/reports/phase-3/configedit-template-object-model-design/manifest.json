@@ -1,0 +1,18 @@
+{
+  "name": "lightai-configedit-object-model-codex-autonomous-execution-pack",
+  "created": "2026-06-30",
+  "target_repo": "/home/kzeng/projects/ai-platform-study/lightai-go",
+  "target_dir": "docs/reports/phase-3/configedit-template-object-model-design",
+  "primary_prompt": "06-codex-autonomous-execution-master-prompt.md",
+  "files": [
+    "README.md",
+    "06-codex-autonomous-execution-master-prompt.md",
+    "07-work-package-a-contract-object-model.md",
+    "08-work-package-b-template-effects.md",
+    "09-work-package-c-runtime-effects-runplan.md",
+    "10-work-package-d-ui-template-management.md",
+    "11-self-audit-evidence-and-acceptance.md",
+    "12-final-closeout-template.md",
+    "manifest.json"
+  ]
+}

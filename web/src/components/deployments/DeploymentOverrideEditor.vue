@@ -41,6 +41,7 @@ async function loadView() {
     object_id: props.nbrId,
     layer: 'deployment',
     mode: 'deployment_override',
+    view_level: 'normal',
   })
 }
 

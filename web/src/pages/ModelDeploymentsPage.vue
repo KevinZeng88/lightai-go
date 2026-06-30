@@ -201,6 +201,7 @@ async function editDeployment(row: any) {
     object_id: row.id,
     layer: 'deployment',
     mode: 'edit',
+    view_level: 'normal',
   })
 }
 

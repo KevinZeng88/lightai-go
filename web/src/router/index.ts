@@ -46,6 +46,11 @@ const router = createRouter({
           meta: { title: 'runtimes.title' },
         },
         {
+          path: 'config-edit/templates',
+          name: 'ConfigEditTemplates',
+          component: () => import('@/pages/ConfigEditTemplatesPage.vue'),
+        },
+        {
           path: 'runner-configs',
           name: 'RunnerConfigs',
           component: () => import('@/pages/RunnerConfigsPage.vue'),

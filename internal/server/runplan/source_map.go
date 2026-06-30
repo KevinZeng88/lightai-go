@@ -192,7 +192,7 @@ func enrichSourceEntry(e ParameterSourceEntry) ParameterSourceEntry {
 	if !e.UserEditable && e.ReadonlyReason == "" && (e.EffectiveSource == "system_generated" || e.EffectiveSource == "derived" || e.EffectiveSource == "model_location") {
 		e.ReadonlyReason = "derived from deployment selection or node inventory"
 	}
-	if e.EffectiveSource == "deployment_override" || e.EffectiveSource == "deployment_service" || e.EffectiveSource == "node_backend_runtime" || e.EffectiveSource == "backend_runtime" {
+	if e.EffectiveSource == "deployment_override" || e.EffectiveSource == "deployment_service" || e.EffectiveSource == "node_backend_runtime" || e.EffectiveSource == "backend_runtime" || e.EffectiveSource == "configedit_effect" {
 		e.UserEditable = true
 	}
 	if e.EffectiveSource == "system_generated" || e.EffectiveSource == "derived" || e.EffectiveSource == "model_location" {
@@ -225,6 +225,8 @@ func sourceLayerFor(source, fallback string) string {
 		return "ModelLocation"
 	case "system_generated", "derived", "node_inventory":
 		return "RunPlanResolver"
+	case "configedit_effect":
+		return "DeploymentConfigEdit"
 	default:
 		return source
 	}
@@ -244,6 +246,8 @@ func sourceKindFor(source string) string {
 		return "deployment_selection"
 	case "system_generated", "derived", "node_inventory":
 		return source
+	case "configedit_effect":
+		return "configedit_component_effect"
 	default:
 		return source
 	}
@@ -263,6 +267,8 @@ func sourcePatchTarget(e ParameterSourceEntry) string {
 		return "model_location"
 	case "system_generated", "derived", "node_inventory":
 		return "deployment.placement_json"
+	case "configedit_effect":
+		return "runtime.device_binding"
 	default:
 		if e.ConfigSetKey != "" {
 			return e.ConfigSetKey
@@ -298,6 +304,8 @@ func sourceDockerEffect(e ParameterSourceEntry) string {
 			return "--network"
 		case "docker.privileged":
 			return "--privileged"
+		case "docker.gpus", "runtime.device_binding":
+			return "--gpus"
 		default:
 			return "docker option"
 		}
@@ -335,6 +343,8 @@ func sourceReason(e ParameterSourceEntry) string {
 		return "resolved model location"
 	case "system_generated", "derived":
 		return "derived by runplan resolver"
+	case "configedit_effect":
+		return "compiled from ConfigEdit component effect"
 	default:
 		return e.EffectiveSource
 	}

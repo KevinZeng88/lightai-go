@@ -190,6 +190,7 @@ watch(selected, async (value) => {
     object_id: value.id,
     layer: 'node_backend_runtime',
     mode: 'edit',
+    view_level: 'normal',
   })
 })
 
@@ -220,6 +221,7 @@ async function saveNBREdit() {
         object_id: selected.value.id,
         layer: 'node_backend_runtime',
         mode: 'edit',
+        view_level: 'normal',
       })
     }
   } catch (e: any) {

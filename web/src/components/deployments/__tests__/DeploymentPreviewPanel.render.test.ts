@@ -30,9 +30,9 @@ const i18n = createI18n({
   },
 })
 
-function mountPanel(previewData: any) {
+function mountPanel(previewData: any, developerMode = false) {
   return mount(DeploymentPreviewPanel, {
-    props: { previewData, loading: false },
+    props: { previewData, loading: false, developerMode },
     global: {
       plugins: [ElementPlus, i18n],
       stubs: {
@@ -67,7 +67,7 @@ describe('DeploymentPreviewPanel', () => {
           system_generated: [{ key: 'docker.gpus', target: 'system_generated', effective_source: 'derived', patch_target: 'deployment.placement_json', docker_effect: '--gpus' }],
         },
       },
-    })
+    }, true)
 
     const text = wrapper.text()
     expect(text).toContain('可运行')
@@ -77,6 +77,24 @@ describe('DeploymentPreviewPanel', () => {
     expect(text).toContain('CUDA_VISIBLE_DEVICES')
     expect(text).toContain('deployment.placement_json')
     expect(text).toContain('launcher.image')
+  })
+
+  it('hides raw source map and final run plan in normal mode', () => {
+    const wrapper = mountPanel({
+      can_run: true,
+      docker_preview: 'docker run -d image',
+      lint: { status: 'ok', findings: [] },
+      preflight: { status: 'ok', errors: [], warnings: [] },
+      run_plan: {
+        parameter_source_map: {
+          image: [{ key: 'launcher.image', target: 'image', effective_source: 'node_backend_runtime', patch_target: 'node_backend_runtime.config_snapshot_json', docker_effect: 'docker image' }],
+        },
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).not.toContain('launcher.image')
+    expect(wrapper.find('[data-testid="json-viewer"]').exists()).toBe(false)
   })
 
   it('dedupes resolve errors and shows message key path source without unknown fallback', () => {

@@ -28,14 +28,36 @@ type ResolveInput struct {
 // NBRSnapshotInfo holds the frozen config snapshot from NodeBackendRuntime.
 // When present, the resolver reads from this instead of BackendVersion/BackendRuntime.
 type NBRSnapshotInfo struct {
-	ArgsOverride        []string          `json:"command"`
-	DefaultEnv          map[string]string `json:"env"`
-	EntrypointOverride  []string          `json:"entrypoint"`
-	Docker              DockerSpecInfo    `json:"docker_options"`
-	ModelMount          ModelMountInfo    `json:"model_mount"`
-	HealthCheckOverride *HealthCheckInput `json:"health_check"`
-	ParameterSchema     []ParameterDef    `json:"parameter_defs"`
-	ParameterValues     []ParameterValue  `json:"parameter_values"`
+	ArgsOverride        []string             `json:"command"`
+	DefaultEnv          map[string]string    `json:"env"`
+	EntrypointOverride  []string             `json:"entrypoint"`
+	Docker              DockerSpecInfo       `json:"docker_options"`
+	ModelMount          ModelMountInfo       `json:"model_mount"`
+	HealthCheckOverride *HealthCheckInput    `json:"health_check"`
+	DeviceBinding       *DeviceBindingConfig `json:"device_binding,omitempty"`
+	ServicePortBinding  *ServicePortBinding  `json:"service_port_binding,omitempty"`
+	ParameterSchema     []ParameterDef       `json:"parameter_defs"`
+	ParameterValues     []ParameterValue     `json:"parameter_values"`
+}
+
+type DeviceBindingConfig struct {
+	Enabled          bool            `json:"enabled"`
+	Mode             string          `json:"mode,omitempty"`
+	Vendor           string          `json:"vendor,omitempty"`
+	AcceleratorIDs   []string        `json:"accelerator_ids,omitempty"`
+	AcceleratorCount int             `json:"accelerator_count,omitempty"`
+	VisibleEnvKey    string          `json:"visible_env_key,omitempty"`
+	VisibleEnvValue  string          `json:"visible_env_value,omitempty"`
+	DockerGPUOption  string          `json:"docker_gpu_option,omitempty"`
+	DeviceMounts     []DeviceMapping `json:"device_mounts,omitempty"`
+}
+
+type ServicePortBinding struct {
+	ListenHost      string `json:"listen_host,omitempty"`
+	ContainerPort   int    `json:"container_port,omitempty"`
+	HostPort        int    `json:"host_port,omitempty"`
+	Protocol        string `json:"protocol,omitempty"`
+	ServedModelName string `json:"served_model_name,omitempty"`
 }
 
 // ParameterValue holds a structured parameter value with metadata.
@@ -284,29 +306,29 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 	// 9. Build health check.
 	hc := buildHealthCheck(in)
 
-	// 10. Build ports.
+	// 10. Build ports from the materialized service.port_binding component.
 	containerPort := effectiveContainerPort(in)
 	hostPort := effectiveHostPort(in, containerPort)
 
-	// 11. Vendor-neutral device binding. The resolver owns vendor-specific
-	// Docker/env injection. Pages and templates only carry neutral placement.
-	gpuVisibleKey := docker.GPUVisibleEnvKey
-	if gpuVisibleKey == "" {
-		gpuVisibleKey = defaultVisibleEnvKey(in.BackendRuntime.Vendor)
-	}
-	bindingEnabled := deviceBindingEnabled(in)
-	gpuIDs := make([]string, 0)
-	if bindingEnabled {
-		for _, g := range in.AssignedGPUs {
-			gpuIDs = append(gpuIDs, fmt.Sprintf("%d", g.Index))
+	// 11. Build device binding from the materialized runtime.device_binding
+	// component. Legacy placement remains only an initial-value compatibility
+	// source when the component is missing from old snapshots.
+	deviceBinding := buildDeviceBinding(in)
+	gpuIDs := []string{}
+	gpuVisibleKey := ""
+	if deviceBinding != nil {
+		gpuIDs = append(gpuIDs, deviceBinding.GPUDeviceIDs...)
+		gpuVisibleKey = deviceBinding.VisibleEnvKey
+		if deviceBinding.Enabled && deviceBinding.VisibleEnvKey != "" && deviceBinding.VisibleEnvValue != "" {
+			env[deviceBinding.VisibleEnvKey] = deviceBinding.VisibleEnvValue
+		}
+		if !deviceBinding.Enabled && deviceBinding.VisibleEnvKey != "" {
+			delete(env, deviceBinding.VisibleEnvKey)
+		}
+		if len(deviceBinding.FinalDeviceMounts) > 0 {
+			docker.Devices = append(docker.Devices, deviceBinding.FinalDeviceMounts...)
 		}
 	}
-	if len(gpuIDs) > 0 {
-		env[gpuVisibleKey] = strings.Join(gpuIDs, ",")
-	} else if !bindingEnabled && gpuVisibleKey != "" {
-		delete(env, gpuVisibleKey)
-	}
-	deviceBinding := buildDeviceBinding(in, gpuIDs, gpuVisibleKey)
 
 	// 12. Build result.
 	plan := &ResolvedRunPlan{
@@ -560,7 +582,7 @@ func buildArgs(in ResolveInput, vars map[string]string) ([]string, []error) {
 
 	// Apply service-level config to args.  Service fields (app_port, host, etc.)
 	// always take priority over ParameterDef defaults from any layer.
-	args = applyServiceArgs(args, in.Deployment.Service)
+	args = applyServiceArgs(args, effectiveServiceInfo(in))
 
 	return args, errors
 }
@@ -577,6 +599,27 @@ func applyServiceArgs(args []string, svc ServiceInfo) []string {
 		args = setLastFlagValue(args, "--host", strings.TrimSpace(svc.ListenHost))
 	}
 	return args
+}
+
+func effectiveServiceInfo(in ResolveInput) ServiceInfo {
+	svc := ServiceInfo{}
+	if in.Deployment != nil {
+		svc = in.Deployment.Service
+	}
+	if in.NBRConfigSnapshot != nil && in.NBRConfigSnapshot.ServicePortBinding != nil {
+		b := in.NBRConfigSnapshot.ServicePortBinding
+		if b.HostPort > 0 {
+			svc.HostPort = b.HostPort
+		}
+		if b.ContainerPort > 0 {
+			svc.ContainerPort = b.ContainerPort
+			svc.AppPort = b.ContainerPort
+		}
+		if strings.TrimSpace(b.ListenHost) != "" {
+			svc.ListenHost = strings.TrimSpace(b.ListenHost)
+		}
+	}
+	return svc
 }
 
 // setLastFlagValue replaces the value of the last occurrence of flag, or appends.
@@ -1267,6 +1310,9 @@ func computeInputHash(in ResolveInput) string {
 }
 
 func effectiveContainerPort(in ResolveInput) int {
+	if in.NBRConfigSnapshot != nil && in.NBRConfigSnapshot.ServicePortBinding != nil && in.NBRConfigSnapshot.ServicePortBinding.ContainerPort > 0 {
+		return in.NBRConfigSnapshot.ServicePortBinding.ContainerPort
+	}
 	if in.Deployment != nil && in.Deployment.Service.ContainerPort > 0 {
 		return in.Deployment.Service.ContainerPort
 	}
@@ -1280,6 +1326,9 @@ func effectiveContainerPort(in ResolveInput) int {
 }
 
 func effectiveHostPort(in ResolveInput, containerPort int) int {
+	if in.NBRConfigSnapshot != nil && in.NBRConfigSnapshot.ServicePortBinding != nil && in.NBRConfigSnapshot.ServicePortBinding.HostPort > 0 {
+		return in.NBRConfigSnapshot.ServicePortBinding.HostPort
+	}
 	if in.Deployment != nil && in.Deployment.Service.HostPort > 0 {
 		return in.Deployment.Service.HostPort
 	}
@@ -1287,6 +1336,9 @@ func effectiveHostPort(in ResolveInput, containerPort int) int {
 }
 
 func effectiveAppPort(in ResolveInput, containerPort int) int {
+	if in.NBRConfigSnapshot != nil && in.NBRConfigSnapshot.ServicePortBinding != nil && in.NBRConfigSnapshot.ServicePortBinding.ContainerPort > 0 {
+		return in.NBRConfigSnapshot.ServicePortBinding.ContainerPort
+	}
 	if in.Deployment != nil && in.Deployment.Service.AppPort > 0 {
 		return in.Deployment.Service.AppPort
 	}
@@ -1294,6 +1346,11 @@ func effectiveAppPort(in ResolveInput, containerPort int) int {
 }
 
 func deviceBindingEnabled(in ResolveInput) bool {
+	if in.NBRConfigSnapshot != nil && in.NBRConfigSnapshot.DeviceBinding != nil {
+		cfg := in.NBRConfigSnapshot.DeviceBinding
+		mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
+		return cfg.Enabled && mode != "disabled"
+	}
 	vendor := strings.ToLower(strings.TrimSpace(in.BackendRuntime.Vendor))
 	if vendor == "" || vendor == "cpu" || vendor == "none" {
 		return false
@@ -1308,10 +1365,28 @@ func deviceBindingEnabled(in ResolveInput) bool {
 	return mode != "disabled"
 }
 
-func buildDeviceBinding(in ResolveInput, gpuIDs []string, envKey string) *DeviceBinding {
+func buildDeviceBinding(in ResolveInput) *DeviceBinding {
 	vendor := strings.ToLower(strings.TrimSpace(in.BackendRuntime.Vendor))
 	placement := in.Deployment.Placement
+	var cfg *DeviceBindingConfig
+	if in.NBRConfigSnapshot != nil {
+		cfg = in.NBRConfigSnapshot.DeviceBinding
+	}
 	mode := strings.ToLower(strings.TrimSpace(placement.AcceleratorSelectionMode))
+	if cfg != nil && strings.TrimSpace(cfg.Mode) != "" {
+		mode = strings.ToLower(strings.TrimSpace(cfg.Mode))
+	}
+	if cfg != nil && strings.TrimSpace(cfg.Vendor) != "" {
+		vendor = strings.ToLower(strings.TrimSpace(cfg.Vendor))
+	}
+	gpuIDs := make([]string, 0)
+	if cfg != nil && len(cfg.AcceleratorIDs) > 0 {
+		gpuIDs = append(gpuIDs, cfg.AcceleratorIDs...)
+	} else if deviceBindingEnabled(in) {
+		for _, g := range in.AssignedGPUs {
+			gpuIDs = append(gpuIDs, fmt.Sprintf("%d", g.Index))
+		}
+	}
 	if mode == "" {
 		if len(placement.AcceleratorIds) > 0 {
 			mode = "manual"
@@ -1322,54 +1397,78 @@ func buildDeviceBinding(in ResolveInput, gpuIDs []string, envKey string) *Device
 		}
 	}
 	enabled := deviceBindingEnabled(in)
-	source := "deployment_selection"
+	source := "configedit_component"
 	if mode == "auto" {
-		source = "node_inventory"
+		source = "node_inventory_default"
+	}
+	envKey := ""
+	if cfg != nil {
+		envKey = strings.TrimSpace(cfg.VisibleEnvKey)
+	}
+	if envKey == "" {
+		envKey = defaultVisibleEnvKey(vendor)
 	}
 	if !enabled {
+		if envKey == "" {
+			envKey = defaultVisibleEnvKey(vendor)
+		}
 		return &DeviceBinding{
 			Enabled:           false,
 			SelectionMode:     "disabled",
 			Vendor:            vendor,
 			AllowAutoSelect:   placement.AllowAutoSelect,
-			Source:            "deployment_selection",
-			PatchTarget:       "deployment.placement_json",
+			Source:            source,
+			PatchTarget:       "runtime.device_binding",
+			VisibleEnvKey:     envKey,
 			Editable:          true,
 			FinalDockerEffect: "none",
 			FinalEnvEffect:    "none",
 		}
 	}
 	value := strings.Join(gpuIDs, ",")
+	if cfg != nil && strings.TrimSpace(cfg.VisibleEnvValue) != "" {
+		value = strings.TrimSpace(cfg.VisibleEnvValue)
+	}
 	binding := &DeviceBinding{
 		Enabled:              len(gpuIDs) > 0,
 		SelectionMode:        mode,
 		Vendor:               vendor,
-		AcceleratorIDs:       append([]string(nil), placement.AcceleratorIds...),
+		AcceleratorIDs:       append([]string(nil), gpuIDs...),
 		AcceleratorCount:     len(gpuIDs),
 		AllowAutoSelect:      placement.AllowAutoSelect || mode == "auto",
 		Source:               source,
-		PatchTarget:          "deployment.placement_json",
+		PatchTarget:          "runtime.device_binding",
 		GPUDeviceIDs:         append([]string(nil), gpuIDs...),
 		VisibleEnvKey:        envKey,
 		VisibleEnvValue:      value,
 		Editable:             true,
-		FinalInjectionSource: "runplan_resolver",
+		FinalInjectionSource: "configedit_effect",
+	}
+	if cfg != nil && cfg.AcceleratorCount > 0 {
+		binding.AcceleratorCount = cfg.AcceleratorCount
 	}
 	if strings.EqualFold(vendor, "nvidia") {
-		binding.DockerGPUOption = "device=" + value
+		if cfg != nil && strings.TrimSpace(cfg.DockerGPUOption) != "" {
+			binding.DockerGPUOption = strings.TrimSpace(cfg.DockerGPUOption)
+		} else {
+			binding.DockerGPUOption = "device=" + value
+		}
 		binding.FinalDockerEffect = `--gpus "device=` + value + `"`
+	}
+	if cfg != nil && len(cfg.DeviceMounts) > 0 {
+		binding.FinalDeviceMounts = append(binding.FinalDeviceMounts, cfg.DeviceMounts...)
 	}
 	if envKey != "" && value != "" {
 		binding.FinalEnvEffect = envKey + "=" + value
 	}
 	if binding.DockerGPUOption != "" {
 		binding.InjectionPreview = append(binding.InjectionPreview, DeviceBindingInjection{
-			Target: "docker_options", Key: "docker.gpus", Value: binding.DockerGPUOption, Source: "derived", PatchTarget: binding.PatchTarget, DockerEffect: "--gpus",
+			Target: "docker_options", Key: "docker.gpus", Value: binding.DockerGPUOption, Source: "configedit_effect", PatchTarget: binding.PatchTarget, DockerEffect: "--gpus",
 		})
 	}
 	if envKey != "" && value != "" {
 		binding.InjectionPreview = append(binding.InjectionPreview, DeviceBindingInjection{
-			Target: "env", Key: envKey, Value: value, Source: "derived", PatchTarget: binding.PatchTarget, DockerEffect: "-e",
+			Target: "env", Key: envKey, Value: value, Source: "configedit_effect", PatchTarget: binding.PatchTarget, DockerEffect: "-e",
 		})
 	}
 	return binding

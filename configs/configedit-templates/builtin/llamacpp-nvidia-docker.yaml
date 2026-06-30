@@ -1,0 +1,93 @@
+template_id: llamacpp-nvidia-docker-configedit-v1
+kind: config_edit_template
+version: 1
+applies_to:
+  backend: llamacpp
+  backend_versions: [latest]
+  runtime_kind: docker
+  vendors: [nvidia]
+metadata:
+  display_name: llama.cpp NVIDIA Docker
+  source: built_in
+views:
+  default_view: normal
+  supported_views: [normal, advanced, developer]
+layers:
+  backend_runtime:
+    editable: true
+  node_backend_runtime:
+    editable: true
+    copy_from_parent: copy_effective_snapshot
+  deployment:
+    editable: true
+    copy_from_parent: copy_effective_snapshot
+sections:
+  - key: resources
+    label: Resources
+    order: 20
+    view: normal
+  - key: service
+    label: Service
+    order: 30
+    view: normal
+  - key: runtime
+    label: Runtime Parameters
+    order: 40
+    view: normal
+  - key: advanced
+    label: Advanced
+    order: 90
+    view: advanced
+components:
+  - key: runtime.device_binding
+    component: accelerator_binding
+    renderer: accelerator_binding
+    label: Device Binding
+    section: resources
+    view: normal
+    order: 10
+    effects:
+      - type: device_binding
+        target: docker.gpus
+        value_from: docker_gpu_option
+      - type: env
+        target: env
+        key_from: visible_env_key
+        value_from: visible_env_value
+  - key: service.port_binding
+    component: port_binding
+    renderer: port_binding
+    label: Service Port
+    section: service
+    view: normal
+    order: 10
+    effects:
+      - type: port
+        target: docker.port_mapping
+      - type: cli_arg
+        flag: --port
+        value_from: container_port
+  - key: model_runtime.ctx_size
+    component: field
+    renderer: number
+    label: Context Size
+    section: runtime
+    view: normal
+    order: 10
+    effects:
+      - type: cli_arg
+        flag: --ctx-size
+        value_from: self.value
+  - key: model_runtime.n_gpu_layers
+    component: field
+    renderer: number
+    label: GPU Layers
+    section: runtime
+    view: normal
+    order: 20
+    help:
+      recommended_text: Use -1 to offload all supported layers to GPU.
+    effects:
+      - type: cli_arg
+        flag: --n-gpu-layers
+        value_from: self.value

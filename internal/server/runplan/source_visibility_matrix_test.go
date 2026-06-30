@@ -89,7 +89,9 @@ func TestRunPlanSourceVisibilityMatrixVLLMSGLangLlamaCpp(t *testing.T) {
 			assertSelfContainedEntries(t, "ports", plan.ParameterSourceMap.Ports)
 			assertSelfContainedEntries(t, "docker_options", plan.ParameterSourceMap.DockerOptions)
 			assertSelfContainedEntries(t, "health_check", plan.ParameterSourceMap.HealthCheck)
-			assertSelfContainedEntries(t, "system_generated", plan.ParameterSourceMap.SystemGenerated)
+			if len(plan.ParameterSourceMap.SystemGenerated) > 0 {
+				assertSelfContainedEntries(t, "system_generated", plan.ParameterSourceMap.SystemGenerated)
+			}
 		})
 	}
 }

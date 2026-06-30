@@ -168,6 +168,9 @@ func (h *AgentHandler) HandleCreateDeployment(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, patchErr.Error())
 		return
 	}
+	placementCompat, _ := req["placement_json"].(map[string]interface{})
+	serviceCompat, _ := req["service_json"].(map[string]interface{})
+	materializeDeploymentCompatConfig(deploymentConfigSet, placementCompat, serviceCompat, "deployment", id)
 	configSetRaw = configSetJSON(deploymentConfigSet)
 	sourceMetadata := map[string]interface{}{
 		"copy_semantics":                  "copy_on_create",
@@ -958,6 +961,8 @@ func (h *AgentHandler) preflightDeployment(deployID string, r *http.Request) *pr
 		Docker:              dockerSpec,
 		ModelMount:          modelMount,
 		HealthCheckOverride: rtHCOverridePtr(rtHC),
+		DeviceBinding:       configDeviceBinding(deployConfigSet),
+		ServicePortBinding:  configServicePortBinding(deployConfigSet),
 		ParameterSchema:     paramDefs,
 		ParameterValues:     runtimeParameterValues,
 	}

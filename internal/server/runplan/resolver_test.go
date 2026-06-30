@@ -460,7 +460,7 @@ func TestResolveDeviceBindingVisibleInPlanAndPreview(t *testing.T) {
 	if plan.DeviceBinding.DockerGPUOption != "device=0" {
 		t.Fatalf("docker gpu option=%q", plan.DeviceBinding.DockerGPUOption)
 	}
-	if plan.DeviceBinding.SelectionMode != "manual" || plan.DeviceBinding.Source != "deployment_selection" {
+	if plan.DeviceBinding.SelectionMode != "manual" || plan.DeviceBinding.Source != "configedit_component" || plan.DeviceBinding.PatchTarget != "runtime.device_binding" {
 		t.Fatalf("device binding contract=%#v", plan.DeviceBinding)
 	}
 	if plan.DeviceBinding.VisibleEnvKey != "CUDA_VISIBLE_DEVICES" || plan.DeviceBinding.VisibleEnvValue != "0" {

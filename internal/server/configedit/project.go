@@ -1,6 +1,9 @@
 package configedit
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -9,6 +12,10 @@ import (
 
 func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 	set := NormalizeConfigSet(input.ConfigSet)
+	viewLevel := normalizeViewLevel(input.ViewLevel)
+	if viewLevel == "" {
+		viewLevel = viewLevelFromMode(input.Mode)
+	}
 	sections := map[string]*EditSection{}
 	for key, label := range sectionLabels {
 		sections[key] = &EditSection{
@@ -51,6 +58,9 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 			canonItem := mergeCanonicalItem(code, canon, item, items)
 			projectedCanonical[canon] = true
 			field := projectItem(canon, canon, nil, canonItem, input)
+			if !fieldVisibleAtView(field, viewLevel) {
+				continue
+			}
 			sections[field.Section].Fields = append(sections[field.Section].Fields, field)
 			continue
 		}
@@ -64,6 +74,9 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 			projectedCanonical[code] = true
 			canonItem := mergeCanonicalItem(code, code, item, items)
 			field := projectItem(code, code, nil, canonItem, input)
+			if !fieldVisibleAtView(field, viewLevel) {
+				continue
+			}
 			sections[field.Section].Fields = append(sections[field.Section].Fields, field)
 			continue
 		}
@@ -78,11 +91,17 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 				if isLayerHidden(field.Key, input.Layer) {
 					continue
 				}
+				if !fieldVisibleAtView(field, viewLevel) {
+					continue
+				}
 				sections[field.Section].Fields = append(sections[field.Section].Fields, field)
 			}
 			continue
 		}
 		field := projectItem(code, code, nil, item, input)
+		if !fieldVisibleAtView(field, viewLevel) {
+			continue
+		}
 		sections[field.Section].Fields = append(sections[field.Section].Fields, field)
 	}
 
@@ -100,12 +119,36 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 	}
 	sort.SliceStable(outSections, func(i, j int) bool { return outSections[i].Order < outSections[j].Order })
 
+	fields := flattenSectionFields(outSections)
+	components := buildComponents(fields)
+	effects := buildEffectsPreview(components)
+	snapshotID := input.SnapshotID
+	if snapshotID == "" {
+		snapshotID = snapshotIDForConfigSet(set)
+	}
+	templateID := input.TemplateID
+	if templateID == "" {
+		templateID = templateIDFor(set, input.ObjectKind)
+	}
+	childInit := ChildInitContract{Strategy: "copy_effective_snapshot", CopyScope: "whole_effective_configedit_snapshot"}
+	if input.ChildInit != nil {
+		childInit = *input.ChildInit
+	}
+
 	return ConfigEditView{
-		Layer:      input.Layer,
-		ObjectID:   input.ObjectID,
-		ObjectKind: input.ObjectKind,
-		Readonly:   input.Readonly,
-		Sections:   outSections,
+		Layer:          input.Layer,
+		ObjectID:       input.ObjectID,
+		ObjectKind:     input.ObjectKind,
+		TemplateID:     templateID,
+		SnapshotID:     snapshotID,
+		Parent:         input.Parent,
+		ChildInit:      childInit,
+		ViewLevel:      viewLevel,
+		Readonly:       input.Readonly,
+		Sections:       outSections,
+		Components:     components,
+		Fields:         fields,
+		EffectsPreview: effects,
 		Diagnostics: ConfigEditDiagnostics{
 			RawConfigSet: set,
 		},
@@ -114,6 +157,137 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 			"mode":         input.Mode,
 		},
 	}, nil
+}
+
+func normalizeViewLevel(view string) string {
+	switch strings.ToLower(strings.TrimSpace(view)) {
+	case "normal", "advanced", "developer":
+		return strings.ToLower(strings.TrimSpace(view))
+	default:
+		return ""
+	}
+}
+
+func viewLevelFromMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "developer", "debug":
+		return "developer"
+	case "advanced":
+		return "advanced"
+	case "normal":
+		return "normal"
+	case "":
+		return "developer"
+	default:
+		return "developer"
+	}
+}
+
+func fieldVisibleAtView(field EditField, view string) bool {
+	switch view {
+	case "developer":
+		return true
+	case "advanced":
+		return field.Visibility != "internal" && field.Visibility != "hidden"
+	default:
+		return !field.Advanced && !field.Diagnostic && field.Visibility != "internal" && field.Visibility != "hidden"
+	}
+}
+
+func flattenSectionFields(sections []EditSection) []EditField {
+	var fields []EditField
+	for _, section := range sections {
+		fields = append(fields, section.Fields...)
+	}
+	sort.SliceStable(fields, func(i, j int) bool {
+		if fields[i].Section == fields[j].Section {
+			if fields[i].Order == fields[j].Order {
+				return fields[i].Key < fields[j].Key
+			}
+			return fields[i].Order < fields[j].Order
+		}
+		return sectionOrder[fields[i].Section] < sectionOrder[fields[j].Section]
+	})
+	return fields
+}
+
+func buildComponents(fields []EditField) []EditComponent {
+	byKey := map[string]*EditComponent{}
+	for _, field := range fields {
+		key := componentKeyForField(field)
+		c := byKey[key]
+		if c == nil {
+			c = &EditComponent{
+				Key:      key,
+				Type:     componentTypeForField(field),
+				Renderer: componentRendererForField(field),
+				Label:    componentLabelForField(field),
+				Section:  field.Section,
+				View:     field.View,
+				Order:    field.Order,
+				Enabled:  field.Enabled,
+				Readonly: field.Readonly,
+				Source:   field.Source,
+				Reset:    field.Reset,
+			}
+			byKey[key] = c
+		}
+		c.Fields = append(c.Fields, field.Key)
+		c.Effects = append(c.Effects, field.Effects...)
+		if !field.Readonly {
+			c.Readonly = false
+		}
+		if field.Enabled {
+			c.Enabled = true
+		}
+	}
+	out := make([]EditComponent, 0, len(byKey))
+	for _, c := range byKey {
+		out = append(out, *c)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Section == out[j].Section {
+			if out[i].Order == out[j].Order {
+				return out[i].Key < out[j].Key
+			}
+			return out[i].Order < out[j].Order
+		}
+		return sectionOrder[out[i].Section] < sectionOrder[out[j].Section]
+	})
+	return out
+}
+
+func buildEffectsPreview(components []EditComponent) []EditEffectPreview {
+	var out []EditEffectPreview
+	for _, c := range components {
+		out = append(out, c.Effects...)
+	}
+	return out
+}
+
+func snapshotIDForConfigSet(set map[string]any) string {
+	b, _ := json.Marshal(set)
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])[:16]
+}
+
+func templateIDFor(set map[string]any, objectKind string) string {
+	ctx, _ := set["context"].(map[string]any)
+	backend := strings.TrimSpace(stringValue(ctx["backend"]))
+	vendor := strings.TrimSpace(stringValue(ctx["vendor"]))
+	if vendor == "" {
+		vendor = strings.TrimSpace(stringValue(ctx["accelerator_vendor"]))
+	}
+	if backend != "" && vendor != "" {
+		return backend + "-" + vendor + "-docker-configedit-v1"
+	}
+	if backend != "" {
+		return backend + "-docker-configedit-v1"
+	}
+	if objectKind != "" {
+		return objectKind + "-configedit-v1"
+	}
+	return "generic-configedit-v1"
 }
 
 func hideFromOrdinaryFlow(key string, item map[string]any, layer string) bool {
@@ -355,7 +529,14 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		Diagnostic:         advanced || visibility == "internal" || visibility == "hidden",
 		OriginalValue:      value,
 		OriginalEnabled:    enabled,
+		ComponentKey:       componentKeyForRaw(displayKey, internalKey),
+		View:               viewForField(advanced, visibility),
+		Reset: ResetBehavior{
+			AllowResetToParent:  true,
+			AllowResetToDefault: true,
+		},
 	}
+	field.Effects = effectsForField(field)
 	if hasDef {
 		field.Owner = string(def.Owner)
 		field.Tier = tier
@@ -364,6 +545,194 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		field.Tier = tier
 	}
 	return field
+}
+
+func componentKeyForField(field EditField) string {
+	if field.ComponentKey != "" {
+		return field.ComponentKey
+	}
+	return componentKeyForRaw(field.Key, field.InternalKey)
+}
+
+func componentKeyForRaw(key, internalKey string) string {
+	candidate := key
+	if internalKey != "" {
+		candidate = internalKey
+	}
+	switch {
+	case candidate == "runtime.device_binding" || strings.HasPrefix(candidate, "runtime.device_binding."):
+		return "runtime.device_binding"
+	case candidate == "service.port_binding" || strings.HasPrefix(candidate, "service.port_binding."):
+		return "service.port_binding"
+	case candidate == "runtime.model_mount" || strings.HasPrefix(candidate, "runtime.model_mount."):
+		return "runtime.model_mount"
+	case candidate == "runtime.health" || strings.HasPrefix(candidate, "runtime.health."):
+		return "runtime.health_check"
+	case candidate == "runtime.env" || strings.HasPrefix(candidate, "runtime.env."):
+		return "runtime.env"
+	case candidate == "runtime.extra_env" || strings.HasPrefix(candidate, "runtime.extra_env."):
+		return "runtime.extra_env"
+	case candidate == "backend.extra_args" || strings.HasPrefix(candidate, "backend.extra_args."):
+		return "backend.extra_args"
+	case candidate == "launcher.docker_options" || strings.HasPrefix(candidate, "launcher.docker_options."):
+		return "launcher.docker_options"
+	case strings.HasPrefix(candidate, "backend.arg.") || strings.HasPrefix(candidate, "model_runtime."):
+		return "backend.args"
+	case candidate == "service.container_port" || candidate == "service.listen_host" || candidate == "deployment.host_port" || candidate == "deployment.served_model_name":
+		return "service.port_binding"
+	default:
+		return candidate
+	}
+}
+
+func componentTypeForField(field EditField) string {
+	switch componentKeyForField(field) {
+	case "runtime.device_binding":
+		return "accelerator_binding"
+	case "service.port_binding":
+		return "port_binding"
+	case "runtime.model_mount":
+		return "model_mount"
+	case "runtime.health_check":
+		return "health_check"
+	case "runtime.env", "runtime.extra_env":
+		return "env"
+	case "backend.args", "backend.extra_args":
+		return "args"
+	case "launcher.docker_options":
+		return "docker_options"
+	default:
+		return "field"
+	}
+}
+
+func componentRendererForField(field EditField) string {
+	switch componentTypeForField(field) {
+	case "accelerator_binding":
+		return "accelerator_binding"
+	case "port_binding":
+		return "port_binding"
+	case "model_mount":
+		return "mount_form"
+	case "health_check":
+		return "health_check_form"
+	case "env":
+		return "key_value_table"
+	case "args":
+		return "args_editor"
+	case "docker_options":
+		return "docker_options"
+	default:
+		return field.Widget
+	}
+}
+
+func componentLabelForField(field EditField) string {
+	switch componentKeyForField(field) {
+	case "runtime.device_binding":
+		return "Device binding"
+	case "service.port_binding":
+		return "Service port"
+	case "runtime.model_mount":
+		return "Model mount"
+	case "runtime.health_check":
+		return "Health check"
+	case "runtime.env":
+		return "Runtime environment"
+	case "runtime.extra_env":
+		return "Extra environment"
+	case "backend.args":
+		return "Backend arguments"
+	case "backend.extra_args":
+		return "Extra arguments"
+	case "launcher.docker_options":
+		return "Docker options"
+	default:
+		return field.Label
+	}
+}
+
+func viewForField(advanced bool, visibility string) string {
+	if visibility == "internal" || visibility == "hidden" {
+		return "developer"
+	}
+	if advanced {
+		return "advanced"
+	}
+	return "normal"
+}
+
+func effectsForField(field EditField) []EditEffectPreview {
+	componentKey := componentKeyForField(field)
+	base := EditEffectPreview{
+		ComponentKey: componentKey,
+		FieldKey:     field.Key,
+		Source:       firstString(field.ValueSource, "configedit_snapshot"),
+		PatchTarget:  field.PatchTarget,
+	}
+	switch componentKey {
+	case "runtime.device_binding":
+		return []EditEffectPreview{
+			{ComponentKey: componentKey, FieldKey: field.Key, Type: "docker", Target: "docker.gpus", Value: field.Value, PatchTarget: field.PatchTarget, DockerEffect: "--gpus"},
+			{ComponentKey: componentKey, FieldKey: field.Key, Type: "env", Target: "env", Key: "visible_devices", Value: field.Value, PatchTarget: field.PatchTarget, DockerEffect: "-e"},
+		}
+	case "service.port_binding":
+		base.Type = "port"
+		base.Target = "ports"
+		base.Value = field.Value
+		base.DockerEffect = "-p / backend CLI port"
+		return []EditEffectPreview{base}
+	case "runtime.model_mount":
+		base.Type = "mount"
+		base.Target = "mounts"
+		base.Value = field.Value
+		base.DockerEffect = "-v"
+		return []EditEffectPreview{base}
+	case "runtime.health_check":
+		base.Type = "health_check"
+		base.Target = "health_check"
+		base.Value = field.Value
+		return []EditEffectPreview{base}
+	case "runtime.env", "runtime.extra_env":
+		base.Type = "env"
+		base.Target = "env"
+		base.Value = field.Value
+		base.DockerEffect = "-e"
+		return []EditEffectPreview{base}
+	case "backend.args", "backend.extra_args":
+		base.Type = "cli_arg"
+		base.Target = "args"
+		base.Key = field.CliFlag
+		base.Value = field.Value
+		base.DockerEffect = field.CliFlag
+		return []EditEffectPreview{base}
+	case "launcher.docker_options":
+		base.Type = "docker"
+		base.Target = "docker_options"
+		base.Value = field.Value
+		base.DockerEffect = sourceEffectForDockerField(field.Key)
+		return []EditEffectPreview{base}
+	}
+	return nil
+}
+
+func sourceEffectForDockerField(key string) string {
+	switch {
+	case strings.Contains(key, "shm_size"):
+		return "--shm-size"
+	case strings.Contains(key, "ipc_mode"):
+		return "--ipc"
+	case strings.Contains(key, "network_mode"):
+		return "--network"
+	case strings.Contains(key, "privileged"):
+		return "--privileged"
+	case strings.Contains(key, "devices"):
+		return "--device"
+	case strings.Contains(key, "group_add"):
+		return "--group-add"
+	default:
+		return "docker option"
+	}
 }
 
 func displayTierFor(key string, item map[string]any, hasDef bool, registryTier string) string {

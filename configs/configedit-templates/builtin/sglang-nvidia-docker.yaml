@@ -1,0 +1,91 @@
+template_id: sglang-nvidia-docker-configedit-v1
+kind: config_edit_template
+version: 1
+applies_to:
+  backend: sglang
+  backend_versions: [latest]
+  runtime_kind: docker
+  vendors: [nvidia]
+metadata:
+  display_name: SGLang NVIDIA Docker
+  source: built_in
+views:
+  default_view: normal
+  supported_views: [normal, advanced, developer]
+layers:
+  backend_runtime:
+    editable: true
+  node_backend_runtime:
+    editable: true
+    copy_from_parent: copy_effective_snapshot
+  deployment:
+    editable: true
+    copy_from_parent: copy_effective_snapshot
+sections:
+  - key: resources
+    label: Resources
+    order: 20
+    view: normal
+  - key: service
+    label: Service
+    order: 30
+    view: normal
+  - key: runtime
+    label: Runtime Parameters
+    order: 40
+    view: normal
+  - key: advanced
+    label: Advanced
+    order: 90
+    view: advanced
+components:
+  - key: runtime.device_binding
+    component: accelerator_binding
+    renderer: accelerator_binding
+    label: Device Binding
+    section: resources
+    view: normal
+    order: 10
+    effects:
+      - type: device_binding
+        target: docker.gpus
+        value_from: docker_gpu_option
+      - type: env
+        target: env
+        key_from: visible_env_key
+        value_from: visible_env_value
+  - key: service.port_binding
+    component: port_binding
+    renderer: port_binding
+    label: Service Port
+    section: service
+    view: normal
+    order: 10
+    effects:
+      - type: port
+        target: docker.port_mapping
+      - type: cli_arg
+        flag: --port
+        value_from: container_port
+  - key: model_runtime.context_length
+    component: field
+    renderer: number
+    label: Context Length
+    section: runtime
+    view: normal
+    order: 10
+    effects:
+      - type: cli_arg
+        flag: --context-length
+        value_from: self.value
+  - key: model_runtime.mem_fraction_static
+    component: field
+    renderer: number
+    label: Static Memory Fraction
+    section: runtime
+    view: normal
+    order: 20
+    effects:
+      - type: cli_arg
+        flag: --mem-fraction-static
+        value_from: self.value

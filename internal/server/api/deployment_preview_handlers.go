@@ -136,6 +136,12 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusOK, previewResponse(false, nil, "", runplan.LintResult{Status: "ok"}, errs, warns))
 		return
 	}
+	if placementRaw, ok := rawBody["placement_json"].(map[string]interface{}); ok {
+		serviceRaw, _ := rawBody["service_json"].(map[string]interface{})
+		materializeDeploymentCompatConfig(nbrConfigSet, placementRaw, serviceRaw, "deployment", "preview")
+	} else if serviceRaw, ok := rawBody["service_json"].(map[string]interface{}); ok {
+		materializeDeploymentCompatConfig(nbrConfigSet, map[string]interface{}{}, serviceRaw, "deployment", "preview")
+	}
 
 	// Get BackendRuntime for resolution.
 	rtRow := h.getBackendRuntimeJSON(nbrBackendRuntimeID)
@@ -159,6 +165,8 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 		Docker:              configDockerSpec(nbrConfigSet),
 		ModelMount:          configModelMount(nbrConfigSet),
 		HealthCheckOverride: configHealthCheckPtr(nbrConfigSet),
+		DeviceBinding:       configDeviceBinding(nbrConfigSet),
+		ServicePortBinding:  configServicePortBinding(nbrConfigSet),
 		ParameterSchema:     paramDefs,
 		ParameterValues:     paramVals,
 	}

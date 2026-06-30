@@ -150,6 +150,10 @@ func SetupRoutes(mux *http.ServeMux, cfg RouterConfig) {
 	// User-facing ConfigSet projection/apply API.
 	mux.Handle("POST /api/v1/config-edit/view", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleConfigEditView)))
 	mux.Handle("POST /api/v1/config-edit/apply", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleConfigEditApply)))
+	mux.Handle("GET /api/v1/config-edit/templates", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleListConfigEditTemplates)))
+	mux.Handle("GET /api/v1/config-edit/templates/{id}", backendReadChain(http.HandlerFunc(cfg.AgentHandler.HandleGetConfigEditTemplate)))
+	mux.Handle("POST /api/v1/config-edit/templates/validate", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleValidateConfigEditTemplate)))
+	mux.Handle("POST /api/v1/config-edit/templates/{id}/clone", backendWriteChain(http.HandlerFunc(cfg.AgentHandler.HandleCloneConfigEditTemplate)))
 
 	// BackendRuntimeTemplate (read-only from config files).
 	mux.Handle("GET /api/v1/backend-runtime-templates", backendReadChain(http.HandlerFunc(HandleListRuntimeTemplates)))

@@ -50,6 +50,48 @@ func ApplyEditPatchToConfigSet(set map[string]any, patch ConfigEditPatch, layer,
 	return out, nil
 }
 
+func ResetFieldToDefault(set map[string]any, key string, path []string, layer, ref string) (map[string]any, error) {
+	out := NormalizeConfigSet(set)
+	items := itemsMap(out)
+	item := itemMap(items, key)
+	defaultValue := itemDefaultValue(item)
+	if len(path) > 0 {
+		target := valueMap(item)
+		setPathValue(target, path, defaultValue)
+	} else {
+		setItemEffectiveValue(item, defaultValue)
+	}
+	setResetSource(item, layer, ref, "reset_to_default")
+	return out, nil
+}
+
+func ResetFieldToParent(set map[string]any, key string, path []string, layer, ref string) (map[string]any, error) {
+	out := NormalizeConfigSet(set)
+	items := itemsMap(out)
+	item := itemMap(items, key)
+	parentValue := itemInheritedValue(item)
+	if parentValue == nil {
+		parentValue = itemDefaultValue(item)
+	}
+	if len(path) > 0 {
+		target := valueMap(item)
+		setPathValue(target, path, parentValue)
+	} else {
+		setItemEffectiveValue(item, parentValue)
+	}
+	setResetSource(item, layer, ref, "reset_to_parent")
+	return out, nil
+}
+
+func setResetSource(item map[string]any, layer, ref, reason string) {
+	item["source"] = map[string]any{
+		"layer":      layer,
+		"ref":        ref,
+		"reason":     reason,
+		"updated_at": time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
 func setPathEnabled(item map[string]any, path []string, enabled bool) {
 	if len(path) == 0 {
 		return

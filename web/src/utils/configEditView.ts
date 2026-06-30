@@ -2,10 +2,59 @@ export type ConfigEditView = {
   layer: string
   object_id: string
   object_kind: string
+  template_id?: string
+  snapshot_id?: string
+  parent?: {
+    object_kind: string
+    object_id: string
+    snapshot_id?: string
+  }
+  child_init?: {
+    strategy: string
+    allowed_children?: string[]
+    copy_scope?: string
+  }
+  view_level?: 'normal' | 'advanced' | 'developer'
   readonly?: boolean
   sections: ConfigEditSection[]
+  components?: ConfigEditComponent[]
+  fields?: ConfigEditField[]
+  effects_preview?: ConfigEditEffectPreview[]
   diagnostics?: Record<string, any>
   metadata?: Record<string, any>
+}
+
+export type ConfigEditComponent = {
+  key: string
+  type: string
+  renderer: string
+  label: string
+  section: string
+  view: 'normal' | 'advanced' | 'developer'
+  order: number
+  fields: string[]
+  enabled: boolean
+  readonly: boolean
+  source?: Record<string, any>
+  reset?: ConfigEditReset
+  effects?: ConfigEditEffectPreview[]
+}
+
+export type ConfigEditReset = {
+  allow_reset_to_parent?: boolean
+  allow_reset_to_default?: boolean
+}
+
+export type ConfigEditEffectPreview = {
+  component_key: string
+  field_key?: string
+  type: string
+  target: string
+  key?: string
+  value?: any
+  source?: string
+  patch_target?: string
+  docker_effect?: string
 }
 
 export type ConfigEditSection = {
@@ -71,6 +120,10 @@ export type ConfigEditField = {
   diagnostic?: boolean
   original_value?: any
   original_enabled?: boolean
+  component_key?: string
+  view?: 'normal' | 'advanced' | 'developer'
+  reset?: ConfigEditReset
+  effects?: ConfigEditEffectPreview[]
 }
 
 export type ConfigEditPatch = {
