@@ -67,6 +67,8 @@ export type ConfigEditSection = {
   fields: ConfigEditField[]
 }
 
+export type ConfigEditDisplayGroup = 'enabled' | 'common' | 'advanced' | 'expert'
+
 export type ConfigEditField = {
   key: string
   internal_key: string
@@ -122,6 +124,7 @@ export type ConfigEditField = {
   original_enabled?: boolean
   component_key?: string
   view?: 'normal' | 'advanced' | 'security' | 'developer'
+  display_group?: ConfigEditDisplayGroup
   reset?: ConfigEditReset
   effects?: ConfigEditEffectPreview[]
 }
@@ -175,12 +178,95 @@ function stableJSON(value: any): string {
 }
 
 export function sortedSections(view: ConfigEditView): ConfigEditSection[] {
-  return [...(view.sections || [])].sort((a, b) => (a.order || 0) - (b.order || 0))
+  const fields = (view.sections || []).flatMap(section =>
+    (section.fields || []).map(field => ({ ...field, section: field.section || section.key })),
+  )
+  if (!fields.length) {
+    return [...(view.sections || [])].sort((a, b) => (a.order || 0) - (b.order || 0))
+  }
+  const groups: Record<ConfigEditDisplayGroup, ConfigEditField[]> = {
+    enabled: [],
+    common: [],
+    advanced: [],
+    expert: [],
+  }
+  for (const field of fields) {
+    groups[displayGroupForField(field)].push(field)
+  }
+  return DISPLAY_GROUPS
+    .filter(group => groups[group.key].length > 0)
+    .map(group => ({
+      key: group.sectionKey,
+      label: group.label,
+      order: group.order,
+      advanced: group.key === 'advanced' || group.key === 'expert',
+      collapsed: group.key === 'expert',
+      fields: sortedFields({ key: group.sectionKey, label: group.label, order: group.order, fields: groups[group.key] }),
+    }))
 }
 
 export function sortedFields(section: ConfigEditSection): ConfigEditField[] {
   return [...(section.fields || [])].sort((a, b) => {
-    if ((a.order || 0) === (b.order || 0)) return a.label.localeCompare(b.label)
-    return (a.order || 0) - (b.order || 0)
+    const sectionDelta = sectionRank(a.section) - sectionRank(b.section)
+    if (sectionDelta !== 0) return sectionDelta
+    const orderDelta = (a.order || 0) - (b.order || 0)
+    if (orderDelta !== 0) return orderDelta
+    return fieldSortKey(a).localeCompare(fieldSortKey(b))
   })
+}
+
+const DISPLAY_GROUPS: Array<{ key: ConfigEditDisplayGroup, sectionKey: string, label: string, order: number }> = [
+  { key: 'enabled', sectionKey: 'enabled_parameters', label: 'Enabled parameters', order: 10 },
+  { key: 'common', sectionKey: 'common_parameters', label: 'Common parameters', order: 20 },
+  { key: 'advanced', sectionKey: 'advanced_parameters_group', label: 'Advanced parameters', order: 30 },
+  { key: 'expert', sectionKey: 'expert_parameters_group', label: 'Expert parameters', order: 40 },
+]
+
+const SECTION_RANKS: Record<string, number> = {
+  model: 10,
+  model_serving: 10,
+  runtime: 20,
+  backend_runtime: 20,
+  resource: 30,
+  container_resources: 30,
+  service: 40,
+  health: 50,
+  health_check: 50,
+  mount: 60,
+  devices_mounts: 60,
+  env: 70,
+  environment: 70,
+  docker: 80,
+  security: 90,
+  security_high_risk: 90,
+  raw: 100,
+  advanced_raw: 100,
+}
+
+export function displayGroupForField(field: ConfigEditField): ConfigEditDisplayGroup {
+  if (isExpertField(field)) return 'expert'
+  const enabledAtLoad = field.original_enabled ?? field.enabled
+  if (enabledAtLoad) return 'enabled'
+  if (field.advanced || field.view === 'advanced' || field.tier === 'advanced') return 'advanced'
+  return 'common'
+}
+
+function isExpertField(field: ConfigEditField): boolean {
+  return field.view === 'developer' ||
+    field.view === 'security' ||
+    field.tier === 'expert' ||
+    field.section === 'security_high_risk' ||
+    field.section === 'advanced_raw' ||
+    field.visibility === 'internal' ||
+    field.visibility === 'hidden' ||
+    !!field.diagnostic
+}
+
+function sectionRank(section?: string): number {
+  if (!section) return 999
+  return SECTION_RANKS[section] ?? 999
+}
+
+function fieldSortKey(field: ConfigEditField): string {
+  return field.path?.join('.') || field.semantic_key || field.key || field.internal_key || field.label || ''
 }

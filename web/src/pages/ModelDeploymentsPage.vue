@@ -52,7 +52,9 @@
             <div class="action-meta">{{ selected.model_display_name || selected.model_name || selected.model_artifact_id }} / {{ selected.source_node_backend_runtime_display_name || selected.source_node_backend_runtime_id }}</div>
           </div>
           <div class="detail-actions">
-            <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+            <el-tooltip :content="configViewLevelHelpText" placement="top">
+              <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+            </el-tooltip>
           </div>
           <div>
             <el-button @click="editDeployment(selected)">{{ $t('common.edit') }}</el-button>
@@ -120,6 +122,7 @@ import JsonViewer from '@/components/common/JsonViewer.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import DeploymentWizard from '@/components/deployments/DeploymentWizard.vue'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
+import { configEditViewLevelHelp, configEditViewLevelOptions, type ConfigEditViewLevel } from '@/utils/configEditDisplay'
 import { apiErrorMessage } from '@/utils/apiErrors'
 
 const { t } = useI18n()
@@ -137,12 +140,9 @@ const editing = ref(false)
 const savingEdit = ref(false)
 const deploymentEditView = ref<ConfigEditViewModel | null>(null)
 const deploymentEditPatch = ref<ConfigEditPatch | null>(null)
-const configViewLevel = ref<'normal' | 'advanced' | 'developer'>('advanced')
-const configViewOptions = [
-  { label: 'Normal', value: 'normal' },
-  { label: 'Advanced', value: 'advanced' },
-  { label: 'Developer', value: 'developer' },
-]
+const configViewLevel = ref<ConfigEditViewLevel>('advanced')
+const configViewOptions = computed(() => configEditViewLevelOptions(t))
+const configViewLevelHelpText = computed(() => configEditViewLevelHelp(t))
 
 const detailVisible = computed({
   get: () => !!selected.value,

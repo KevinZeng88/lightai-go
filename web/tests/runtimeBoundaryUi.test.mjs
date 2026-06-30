@@ -7,10 +7,13 @@ const files = [
   'src/pages/RunnerConfigsPage.vue',
   'src/pages/ModelDeploymentsPage.vue',
   'src/pages/BackendsPage.vue',
+  'src/pages/ConfigEditTemplatesPage.vue',
+  'src/layouts/ConsoleLayout.vue',
   'src/components/config/ConfigEditView.vue',
   'src/components/config/ConfigSection.vue',
   'src/components/config/ConfigField.vue',
   'src/utils/configEditView.ts',
+  'src/utils/configEditDisplay.ts',
   'src/utils/configEditFieldMeta.ts',
   'src/components/deployments/NodeRuntimeConfigWizard.vue',
   'src/components/deployments/NodeRuntimeSelector.vue',
@@ -198,9 +201,31 @@ check('DeploymentWizard service next advances instead of preview no-op', deploym
 	check('BackendRuntimesPage raw ConfigSet is in diagnostics collapse',
 		sources['src/pages/BackendRuntimesPage.vue'].includes('advancedDiagnostics') &&
 		sources['src/pages/BackendRuntimesPage.vue'].includes('el-collapse'))
-	check('RunnerConfigsPage raw probe evidence is collapsed by default',
+check('RunnerConfigsPage raw probe evidence is collapsed by default',
 		sources['src/pages/RunnerConfigsPage.vue'].includes('el-collapse') &&
 		sources['src/pages/RunnerConfigsPage.vue'].includes('probe_results_json'))
+
+// p. ConfigEdit template inspection and display levels are localized/productized.
+const templatePageSrc = sources['src/pages/ConfigEditTemplatesPage.vue']
+const layoutSrc = sources['src/layouts/ConsoleLayout.vue']
+const displaySrc = sources['src/utils/configEditDisplay.ts']
+check('ConfigEditTemplatesPage uses localized title', templatePageSrc.includes('configEdit.templates.title') && !templatePageSrc.includes('<h2>ConfigEdit Templates</h2>'))
+check('ConfigEditTemplatesPage localized table labels', templatePageSrc.includes('configEdit.templates.template') && templatePageSrc.includes('configEdit.templates.backend') && templatePageSrc.includes('configEdit.templates.source'))
+check('ConfigEditTemplatesPage localized empty state', templatePageSrc.includes('configEdit.templates.selectTemplate') && !templatePageSrc.includes('Select a template'))
+check('Console nav localizes ConfigEdit Templates label', layoutSrc.includes('configEdit.templates.title') && !layoutSrc.includes('>ConfigEdit Templates<'))
+check('ConfigEdit display levels are i18n backed', displaySrc.includes('configEdit.levels.normal') && displaySrc.includes('configEdit.levels.advanced') && displaySrc.includes('configEdit.levels.developer'))
+check('ConfigEdit display level help text is shared', displaySrc.includes('configEdit.levels.help'))
+check('Runtime pages do not hardcode Normal Advanced Developer labels',
+  !sources['src/pages/BackendRuntimesPage.vue'].includes("label: 'Normal'") &&
+  !sources['src/pages/RunnerConfigsPage.vue'].includes("label: 'Advanced'") &&
+  !sources['src/pages/ModelDeploymentsPage.vue'].includes("label: 'Developer'"))
+check('ConfigEdit shared grouping exposes enabled/common/advanced/expert groups',
+  sources['src/utils/configEditView.ts'].includes('enabled_parameters') &&
+  sources['src/utils/configEditView.ts'].includes('common_parameters') &&
+  sources['src/utils/configEditView.ts'].includes('advanced_parameters_group') &&
+  sources['src/utils/configEditView.ts'].includes('expert_parameters_group'))
+check('ConfigEdit grouping is stable during editing by original_enabled',
+  sources['src/utils/configEditView.ts'].includes('original_enabled ?? field.enabled'))
 
 if (failed > 0) {
   console.error(`\n${failed} test(s) FAILED`)

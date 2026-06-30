@@ -72,9 +72,11 @@ describe('ConfigEditView', () => {
       props: { modelValue: makeEditView(), readonly: true },
     })
     expect(wrapper.find('[data-testid="config-edit-view"]').exists()).toBe(true)
-    // Sections should render
+    // Display groups should render instead of raw backend sections.
     const sections = wrapper.findAll('[data-testid="config-edit-section"]')
-    expect(sections.length).toBeGreaterThanOrEqual(3)
+    expect(sections.length).toBeGreaterThanOrEqual(2)
+    expect(wrapper.find('[data-section-key="enabled_parameters"]').exists()).toBe(true)
+    expect(wrapper.find('[data-section-key="common_parameters"]').exists()).toBe(true)
   })
 
   it('shm_size field renders without leaking parent object', () => {
@@ -147,16 +149,14 @@ describe('ConfigEditView', () => {
       global: { plugins: [ElementPlus] },
       props: { modelValue: makeEditView(), readonly: true },
     })
-    // Environment section should be collapsed
-    const envSection = wrapper.find('[data-section-key="environment"]')
-    expect(envSection.exists()).toBe(true)
-    const collapseItem = envSection.find('.el-collapse-item')
+    // Enabled fields are grouped together at load time; environment stays inside
+    // that group instead of retaining its raw backend section key.
+    const enabledSection = wrapper.find('[data-section-key="enabled_parameters"]')
+    expect(enabledSection.exists()).toBe(true)
+    expect(enabledSection.find('[data-field-key="runtime.env"]').exists()).toBe(true)
+    const collapseItem = enabledSection.find('.el-collapse-item')
     expect(collapseItem.exists()).toBe(true)
-    // If collapsed by default, the class should not include is-active
-    const cls = collapseItem.classes()
-    // Element Plus sets is-active on expanded items; collapsed = no is-active
-    expect(cls).not.toContain('is-active')
-    // Or check that the collapse is rendered but not expanded
+    expect(collapseItem.classes()).toContain('is-active')
   })
 
   it('does not show vendor visible device placeholder as user env', () => {
@@ -174,9 +174,10 @@ describe('ConfigEditView', () => {
       global: { plugins: [ElementPlus] },
       props: { modelValue: makeEditView(), readonly: true },
     })
-    const advancedSection = wrapper.find('[data-section-key="advanced_raw"]')
-    expect(advancedSection.exists()).toBe(true)
-    const collapseItem = advancedSection.find('.el-collapse-item')
+    const expertSection = wrapper.find('[data-section-key="expert_parameters_group"]')
+    expect(expertSection.exists()).toBe(true)
+    expect(expertSection.find('[data-field-key="advanced_raw_diag"]').exists()).toBe(true)
+    const collapseItem = expertSection.find('.el-collapse-item')
     expect(collapseItem.exists()).toBe(true)
     // Should be collapsed
     expect(collapseItem.classes()).not.toContain('is-active')

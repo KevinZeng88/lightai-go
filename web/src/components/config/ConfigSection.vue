@@ -35,12 +35,17 @@ const { t } = useI18n()
 // Map section.key to i18n key. Avoid falling back to backend English labels in
 // ordinary UI; raw labels remain visible only in diagnostic JSON.
 const SECTION_I18N_MAP: Record<string, string> = {
+  enabled_parameters: 'configEdit.sections.enabledParameters',
+  common_parameters: 'configEdit.sections.commonParameters',
+  advanced_parameters_group: 'configEdit.sections.advancedParameterGroup',
+  expert_parameters_group: 'configEdit.sections.expertParametersGroup',
   basic: 'configEdit.sections.basic',
   model_serving: 'configEdit.sections.modelServing',
   advanced_parameters: 'configEdit.sections.advancedParameters',
   expert_parameters: 'configEdit.sections.expertParameters',
   backend_runtime: 'configEdit.sections.backendRuntime',
   container_resources: 'configEdit.sections.containerResources',
+  security_high_risk: 'configEdit.sections.securityHighRisk',
   devices_mounts: 'configEdit.sections.devicesMounts',
   environment: 'configEdit.sections.environment',
   service: 'configEdit.sections.service',

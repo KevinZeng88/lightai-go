@@ -41,7 +41,9 @@
             <div class="action-meta">{{ selected.node_id }} / {{ selected.backend_runtime?.display_name || selected.backend_runtime?.name || selected.backend_runtime_id }}</div>
           </div>
           <div class="detail-actions">
-            <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+            <el-tooltip :content="configViewLevelHelpText" placement="top">
+              <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+            </el-tooltip>
           </div>
           <div>
             <el-button type="danger" @click="deleteNBR(selected)">{{ $t('common.delete') }}</el-button>
@@ -112,6 +114,7 @@ import { apiClient } from '@/api/client'
 import { getConfigEditView, applyConfigEditPatch } from '@/api/configEdit'
 import { apiErrorMessage } from '@/utils/apiErrors'
 import { getStatusType, translateStatus, translateStatusReason } from '@/utils/status'
+import { configEditViewLevelHelp, configEditViewLevelOptions, type ConfigEditViewLevel } from '@/utils/configEditDisplay'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import NodeRuntimeConfigWizard from '@/components/deployments/NodeRuntimeConfigWizard.vue'
@@ -125,12 +128,9 @@ const configs = ref<any[]>([])
 const selected = ref<any | null>(null)
 const nbrEditView = ref<ConfigEditViewModel | null>(null)
 const nbrEditPatch = ref<ConfigEditPatch | null>(null)
-const configViewLevel = ref<'normal' | 'advanced' | 'developer'>('advanced')
-const configViewOptions = [
-  { label: 'Normal', value: 'normal' },
-  { label: 'Advanced', value: 'advanced' },
-  { label: 'Developer', value: 'developer' },
-]
+const configViewLevel = ref<ConfigEditViewLevel>('advanced')
+const configViewOptions = computed(() => configEditViewLevelOptions(t))
+const configViewLevelHelpText = computed(() => configEditViewLevelHelp(t))
 
 const detailVisible = computed({
   get: () => !!selected.value,

@@ -21,6 +21,7 @@ type ComponentTemplate struct {
 	Views      TemplateViews          `json:"views" yaml:"views"`
 	Layers     map[string]LayerPolicy `json:"layers" yaml:"layers"`
 	Sections   []TemplateSection      `json:"sections" yaml:"sections"`
+	Fields     []TemplateField        `json:"fields,omitempty" yaml:"fields,omitempty"`
 	Components []TemplateComponent    `json:"components" yaml:"components"`
 }
 
@@ -47,6 +48,26 @@ type TemplateSection struct {
 	Order     int    `json:"order" yaml:"order"`
 	View      string `json:"view" yaml:"view"`
 	Collapsed bool   `json:"collapsed,omitempty" yaml:"collapsed"`
+}
+
+type TemplateField struct {
+	Key          string           `json:"key" yaml:"key"`
+	InternalKey  string           `json:"internal_key,omitempty" yaml:"internal_key,omitempty"`
+	ComponentKey string           `json:"component_key,omitempty" yaml:"component_key,omitempty"`
+	Label        string           `json:"label" yaml:"label"`
+	LabelI18nKey string           `json:"label_i18n_key,omitempty" yaml:"label_i18n_key,omitempty"`
+	HelpI18nKey  string           `json:"help_i18n_key,omitempty" yaml:"help_i18n_key,omitempty"`
+	Section      string           `json:"section" yaml:"section"`
+	Tier         string           `json:"tier,omitempty" yaml:"tier,omitempty"`
+	View         string           `json:"view" yaml:"view"`
+	Risk         string           `json:"risk,omitempty" yaml:"risk,omitempty"`
+	Order        int              `json:"order" yaml:"order"`
+	Type         string           `json:"type" yaml:"type"`
+	Widget       string           `json:"widget" yaml:"widget"`
+	Enabled      bool             `json:"enabled" yaml:"enabled"`
+	Source       map[string]any   `json:"source,omitempty" yaml:"source,omitempty"`
+	Path         []string         `json:"path,omitempty" yaml:"path,omitempty"`
+	Effects      []TemplateEffect `json:"effects,omitempty" yaml:"effects,omitempty"`
 }
 
 type TemplateComponent struct {

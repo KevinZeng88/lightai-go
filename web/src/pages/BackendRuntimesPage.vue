@@ -52,7 +52,9 @@
             <div class="action-meta">{{ selectedDisplay?.backendDisplay || selected.backend_id }} / {{ selectedDisplay?.vendorDisplay || selected.vendor }} / {{ selected.runtime_type || 'docker' }}</div>
           </div>
           <div class="detail-actions">
-            <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+            <el-tooltip :content="configViewLevelHelpText" placement="top">
+              <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+            </el-tooltip>
           </div>
           <div v-if="selected.is_editable">
             <template v-if="!editing">
@@ -160,6 +162,7 @@ import { apiClient } from '@/api/client'
 import { applyConfigEditPatch, getConfigEditView } from '@/api/configEdit'
 import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/runtimeDisplay'
 import { apiErrorMessage } from '@/utils/apiErrors'
+import { configEditViewLevelHelp, configEditViewLevelOptions, type ConfigEditViewLevel } from '@/utils/configEditDisplay'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 import JsonViewer from '@/components/common/JsonViewer.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
@@ -175,12 +178,9 @@ const runtimes = ref<any[]>([])
 const selected = ref<any | null>(null)
 const editView = ref<ConfigEditViewModel | null>(null)
 const editPatch = ref<ConfigEditPatch | null>(null)
-const configViewLevel = ref<'normal' | 'advanced' | 'developer'>('advanced')
-const configViewOptions = [
-  { label: 'Normal', value: 'normal' },
-  { label: 'Advanced', value: 'advanced' },
-  { label: 'Developer', value: 'developer' },
-]
+const configViewLevel = ref<ConfigEditViewLevel>('advanced')
+const configViewOptions = computed(() => configEditViewLevelOptions(t))
+const configViewLevelHelpText = computed(() => configEditViewLevelHelp(t))
 const cloneDialogVisible = ref(false)
 const editing = ref(false)
 const cloneSource = ref<any | null>(null)
