@@ -46,6 +46,12 @@ func EquivalentCommandPreview(spec *AgentRunSpec) string {
 	for _, s := range spec.Docker.SecurityOptions {
 		parts = append(parts, "--security-opt", s)
 	}
+	for _, c := range spec.Docker.CapAdd {
+		parts = append(parts, "--cap-add", c)
+	}
+	for _, c := range spec.Docker.CapDrop {
+		parts = append(parts, "--cap-drop", c)
+	}
 
 	// Ulimits.
 	for k, v := range spec.Docker.Ulimits {

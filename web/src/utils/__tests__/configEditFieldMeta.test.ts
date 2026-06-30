@@ -40,8 +40,9 @@ describe('configEditFieldMeta', () => {
     })
     expect(resolveConfigFieldLabel(f, t)).toBe('数据类型')
     expect(resolveConfigFieldHelp(f, t)).toBe('模型权重和计算使用的数据类型。')
-    expect(resolveConfigFieldTooltip(f, t)).toContain('--dtype')
+    expect(resolveConfigFieldTooltip(f, t)).not.toContain('--dtype')
     expect(resolveConfigFieldTooltip(f, t)).toContain('模型权重和计算使用的数据类型。')
+    expect(resolveConfigFieldTooltip({ ...f, view: 'developer' }, t)).toContain('--dtype')
   })
 
   it('falls back to field label/title/help metadata before humanizing keys', () => {

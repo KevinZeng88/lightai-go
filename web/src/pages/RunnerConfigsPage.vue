@@ -40,6 +40,9 @@
             <strong>{{ selected.display_name || selected.id }}</strong>
             <div class="action-meta">{{ selected.node_id }} / {{ selected.backend_runtime?.display_name || selected.backend_runtime?.name || selected.backend_runtime_id }}</div>
           </div>
+          <div class="detail-actions">
+            <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+          </div>
           <div>
             <el-button type="danger" @click="deleteNBR(selected)">{{ $t('common.delete') }}</el-button>
             <el-button type="primary" :loading="saving" @click="saveNBREdit">{{ $t('common.save') }}</el-button>
@@ -61,8 +64,10 @@
           @update:patch="onNBREditPatch"
         />
         <el-empty v-else :description="$t('common.noData')" />
-        <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
-        <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
+        <template v-if="configViewLevel === 'developer'">
+          <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
+          <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
+        </template>
 
         <!-- Probe Summary -->
         <el-divider content-position="left">{{ $t('nodeRuntimeProbe.title') }}</el-divider>
@@ -120,6 +125,12 @@ const configs = ref<any[]>([])
 const selected = ref<any | null>(null)
 const nbrEditView = ref<ConfigEditViewModel | null>(null)
 const nbrEditPatch = ref<ConfigEditPatch | null>(null)
+const configViewLevel = ref<'normal' | 'advanced' | 'developer'>('advanced')
+const configViewOptions = [
+  { label: 'Normal', value: 'normal' },
+  { label: 'Advanced', value: 'advanced' },
+  { label: 'Developer', value: 'developer' },
+]
 
 const detailVisible = computed({
   get: () => !!selected.value,
@@ -181,7 +192,7 @@ function openDetail(row: any) {
   selected.value = row
 }
 
-watch(selected, async (value) => {
+watch([selected, configViewLevel], async ([value]) => {
   nbrEditView.value = null
   nbrEditPatch.value = null
   if (!value?.id) return
@@ -190,7 +201,7 @@ watch(selected, async (value) => {
     object_id: value.id,
     layer: 'node_backend_runtime',
     mode: 'edit',
-    view_level: 'normal',
+    view_level: configViewLevel.value,
   })
 })
 
@@ -221,7 +232,7 @@ async function saveNBREdit() {
         object_id: selected.value.id,
         layer: 'node_backend_runtime',
         mode: 'edit',
-        view_level: 'normal',
+        view_level: configViewLevel.value,
       })
     }
   } catch (e: any) {

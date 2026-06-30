@@ -51,6 +51,9 @@
             <strong>{{ selected.display_name || selected.name || selected.id }}</strong>
             <div class="action-meta">{{ selected.model_display_name || selected.model_name || selected.model_artifact_id }} / {{ selected.source_node_backend_runtime_display_name || selected.source_node_backend_runtime_id }}</div>
           </div>
+          <div class="detail-actions">
+            <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+          </div>
           <div>
             <el-button @click="editDeployment(selected)">{{ $t('common.edit') }}</el-button>
             <el-button @click="viewRunPlan(selected)">{{ $t('deployments.viewRunPlan') }}</el-button>
@@ -94,7 +97,7 @@
           <el-button type="primary" :loading="savingEdit" @click="saveDeploymentEdit">{{ $t('common.save') }}</el-button>
         </div>
         <!-- Diagnostic section (collapsed by default) -->
-        <el-collapse style="margin-top:12px">
+        <el-collapse v-if="configViewLevel === 'developer'" style="margin-top:12px">
           <el-collapse-item :title="$t('runtimes.advancedDiagnostics')">
             <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
             <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
@@ -134,6 +137,12 @@ const editing = ref(false)
 const savingEdit = ref(false)
 const deploymentEditView = ref<ConfigEditViewModel | null>(null)
 const deploymentEditPatch = ref<ConfigEditPatch | null>(null)
+const configViewLevel = ref<'normal' | 'advanced' | 'developer'>('advanced')
+const configViewOptions = [
+  { label: 'Normal', value: 'normal' },
+  { label: 'Advanced', value: 'advanced' },
+  { label: 'Developer', value: 'developer' },
+]
 
 const detailVisible = computed({
   get: () => !!selected.value,
@@ -201,7 +210,7 @@ async function editDeployment(row: any) {
     object_id: row.id,
     layer: 'deployment',
     mode: 'edit',
-    view_level: 'normal',
+    view_level: configViewLevel.value,
   })
 }
 

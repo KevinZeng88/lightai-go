@@ -39,13 +39,14 @@ export function resolveConfigFieldHelp(field: ConfigEditField, t: TranslateFn): 
 
 export function resolveConfigFieldTooltip(field: ConfigEditField, t: TranslateFn): string {
   const lines: string[] = []
+  const showTechnical = field.view === 'developer'
   const technical = field.cli_flag || field.env_key || field.technical_key || field.internal_key || field.key
-  if (technical) lines.push(technical)
+  if (showTechnical && technical) lines.push(technical)
 
   const help = resolveConfigFieldHelp(field, t)
   if (help) lines.push(help)
 
-  if (field.technical_key && field.technical_key !== technical) {
+  if (showTechnical && field.technical_key && field.technical_key !== technical) {
     lines.push(`${t('configEdit.fields.technicalKey')}: ${field.technical_key}`)
   }
   return lines.join('\n')

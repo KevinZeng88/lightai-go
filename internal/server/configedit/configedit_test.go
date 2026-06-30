@@ -63,13 +63,13 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 		}
 	}
 	requireField(t, fields, "docker.shm_size", "launcher.docker_options", []string{"shm_size"}, "container_resources")
-	requireField(t, fields, "docker.privileged", "launcher.docker_options", []string{"privileged"}, "container_resources")
+	requireField(t, fields, "docker.privileged", "launcher.docker_options", []string{"privileged"}, "security_high_risk")
 	requireField(t, fields, "docker.devices", "launcher.docker_options", []string{"devices"}, "devices_mounts")
 	requireField(t, fields, "docker.group_add", "launcher.docker_options", []string{"group_add"}, "devices_mounts")
 
-	// backend.arg.* fields are model-serving: hidden at backend_runtime layer.
-	if fieldExists(fields, "backend.arg.fake_new_param") {
-		t.Fatal("model-serving param should be hidden at backend_runtime layer")
+	backendParam := requireField(t, fields, "backend.arg.fake_new_param", "backend.arg.fake_new_param", nil, "advanced_parameters")
+	if backendParam.Widget == "raw_json" || backendParam.Label == "backend.arg.fake_new_param" {
+		t.Fatalf("backend runtime param should be structured with human label: %#v", backendParam)
 	}
 
 	requiredImage := requireField(t, fields, "runtime.image_ref", "launcher.image", nil, "basic")
@@ -111,7 +111,7 @@ func TestProjectConfigSetToEditViewHidesInternalKeysAndSplitsDockerOptions(t *te
 
 	// --- Test: optional empty field defaults disabled ---
 	// security_options is empty → should default disabled.
-	sec := requireField(t, fields, "launcher.docker_options.security_options", "launcher.docker_options", []string{"security_options"}, "container_resources")
+	sec := requireField(t, fields, "launcher.docker_options.security_options", "launcher.docker_options", []string{"security_options"}, "security_high_risk")
 	if sec.Enabled {
 		t.Fatal("empty security_options should default disabled")
 	}
@@ -629,7 +629,7 @@ func TestDockerSubfieldValueDoesNotLeakParentDefault(t *testing.T) {
 		t.Errorf("shm_size Value = %#v, want \"16gb\"", shm.Value)
 	}
 	// privileged exists: should display false (boolean, not object)
-	priv := requireField(t, fields, "docker.privileged", "launcher.docker_options", []string{"privileged"}, "container_resources")
+	priv := requireField(t, fields, "docker.privileged", "launcher.docker_options", []string{"privileged"}, "security_high_risk")
 	if priv.Value != false {
 		t.Errorf("privileged Value = %#v, want false", priv.Value)
 	}
@@ -657,7 +657,7 @@ func TestDockerSubfieldValueDoesNotLeakParentDefault(t *testing.T) {
 		t.Errorf("network_mode Value = %#v, want nil (absent sub-key must not show parent object)", net.Value)
 	}
 	// security_options does NOT exist: value must be nil.
-	sec := requireField(t, fields, "launcher.docker_options.security_options", "launcher.docker_options", []string{"security_options"}, "container_resources")
+	sec := requireField(t, fields, "launcher.docker_options.security_options", "launcher.docker_options", []string{"security_options"}, "security_high_risk")
 	if sec.Value != nil {
 		t.Errorf("security_options Value = %#v, want nil (absent sub-key must not show parent object)", sec.Value)
 	}

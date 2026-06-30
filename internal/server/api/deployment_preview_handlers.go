@@ -295,6 +295,8 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 			Privileged:      plan.Privileged,
 			IPCMode:         plan.IPCMode,
 			SecurityOptions: plan.SecurityOptions,
+			CapAdd:          plan.CapAdd,
+			CapDrop:         plan.CapDrop,
 		}
 	}
 	lintInput := runplan.LintInput{

@@ -6,7 +6,7 @@ export async function getConfigEditView(payload: {
   object_id: string
   layer: string
   mode?: string
-  view_level?: 'normal' | 'advanced' | 'developer'
+  view_level?: 'normal' | 'advanced' | 'security' | 'developer'
 }): Promise<ConfigEditView> {
   const resp = await apiClient.post('/config-edit/view', payload)
   // Backend returns envelope { config_edit_view, config_view }

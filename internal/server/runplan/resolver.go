@@ -157,6 +157,8 @@ type DockerSpecInfo struct {
 	GPUVisibleEnvKey string            `json:"gpu_visible_env_key"`
 	Ulimits          map[string]string `json:"ulimits"`
 	SecurityOptions  []string          `json:"security_options"`
+	CapAdd           []string          `json:"cap_add,omitempty"`
+	CapDrop          []string          `json:"cap_drop,omitempty"`
 	Devices          []DeviceMapping   `json:"devices"`
 	GroupAdd         []string          `json:"group_add"`
 	// GPU driver for DeviceRequest. Empty string ("") matches docker run --gpus CLI.
@@ -344,6 +346,8 @@ func Resolve(in ResolveInput) (*ResolvedRunPlan, []error, []string) {
 		NetworkMode: docker.NetworkMode,
 		ShmSize:     docker.ShmSize,
 		Ulimits:     docker.Ulimits,
+		CapAdd:      docker.CapAdd,
+		CapDrop:     docker.CapDrop,
 
 		Devices:  docker.Devices,
 		Mounts:   mounts,
@@ -969,6 +973,12 @@ func mergeDockerSpec(in ResolveInput) DockerSpecInfo {
 		}
 		if len(override.SecurityOptions) > 0 {
 			docker.SecurityOptions = override.SecurityOptions
+		}
+		if len(override.CapAdd) > 0 {
+			docker.CapAdd = override.CapAdd
+		}
+		if len(override.CapDrop) > 0 {
+			docker.CapDrop = override.CapDrop
 		}
 		for k, v := range override.Ulimits {
 			if docker.Ulimits == nil {

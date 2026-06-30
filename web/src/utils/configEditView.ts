@@ -14,7 +14,7 @@ export type ConfigEditView = {
     allowed_children?: string[]
     copy_scope?: string
   }
-  view_level?: 'normal' | 'advanced' | 'developer'
+  view_level?: 'normal' | 'advanced' | 'security' | 'developer'
   readonly?: boolean
   sections: ConfigEditSection[]
   components?: ConfigEditComponent[]
@@ -30,7 +30,7 @@ export type ConfigEditComponent = {
   renderer: string
   label: string
   section: string
-  view: 'normal' | 'advanced' | 'developer'
+  view: 'normal' | 'advanced' | 'security' | 'developer'
   order: number
   fields: string[]
   enabled: boolean
@@ -121,7 +121,7 @@ export type ConfigEditField = {
   original_value?: any
   original_enabled?: boolean
   component_key?: string
-  view?: 'normal' | 'advanced' | 'developer'
+  view?: 'normal' | 'advanced' | 'security' | 'developer'
   reset?: ConfigEditReset
   effects?: ConfigEditEffectPreview[]
 }

@@ -29,6 +29,8 @@ type fakeContainer struct {
 	NetworkMode    string
 	GroupAdd       []string
 	SecurityOpt    []string
+	CapAdd         []string
+	CapDrop        []string
 	Ulimits        map[string]string
 	RestartPolicy  string
 	DeviceRequests []DeviceRequest
@@ -87,6 +89,8 @@ func (f *FakeDockerClient) ContainerCreate(ctx context.Context, opts ContainerCr
 		NetworkMode:    opts.NetworkMode,
 		GroupAdd:       opts.GroupAdd,
 		SecurityOpt:    opts.SecurityOpt,
+		CapAdd:         opts.CapAdd,
+		CapDrop:        opts.CapDrop,
 		Ulimits:        opts.Ulimits,
 		RestartPolicy:  opts.RestartPolicy,
 		DeviceRequests: opts.DeviceRequests,

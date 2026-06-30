@@ -87,6 +87,8 @@ type DockerSpec struct {
 	ShmSize         string            `json:"shm_size,omitempty"`
 	GroupAdd        []string          `json:"group_add,omitempty"`
 	SecurityOptions []string          `json:"security_options,omitempty"`
+	CapAdd          []string          `json:"cap_add,omitempty"`
+	CapDrop         []string          `json:"cap_drop,omitempty"`
 	Ulimits         map[string]string `json:"ulimits,omitempty"`
 	RestartPolicy   string            `json:"restart_policy,omitempty"`
 	GPUDeviceIDs    []string          `json:"gpu_device_ids,omitempty"`

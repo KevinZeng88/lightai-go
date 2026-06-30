@@ -91,6 +91,8 @@ func (r *RealDockerClient) ContainerCreate(ctx context.Context, opts ContainerCr
 		NetworkMode: container.NetworkMode(opts.NetworkMode),
 		GroupAdd:    opts.GroupAdd,
 		SecurityOpt: opts.SecurityOpt,
+		CapAdd:      strslice.StrSlice(opts.CapAdd),
+		CapDrop:     strslice.StrSlice(opts.CapDrop),
 		AutoRemove:  opts.AutoRemove,
 	}
 

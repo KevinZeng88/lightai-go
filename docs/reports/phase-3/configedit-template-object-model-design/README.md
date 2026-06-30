@@ -1,42 +1,23 @@
-# LightAI Go ConfigEdit Object Model — Codex Autonomous Execution Pack
+# Unified ConfigEdit Parameter Handling Fix Pack
 
-This pack converts the architecture audit into an autonomous Codex execution plan.
+This package replaces the earlier "raw JSON-only" wording.
 
-Target repository path:
+Correct principle:
+
+All parameters must use one unified ConfigEdit Item/Component mechanism. Raw JSON is only a developer representation of the same object, never the only place where a real parameter appears.
+
+Files:
+
+- `13-unified-configedit-parameter-handling-fix.md`
+- `14-unified-configedit-parameter-handling-acceptance-checklist.md`
+
+Recommended destination:
+
+`docs/reports/phase-3/configedit-template-object-model-design/`
+
+Suggested Codex instruction:
 
 ```text
-/home/kzeng/projects/ai-platform-study/lightai-go
-```
-
-Target documentation directory inside the repository:
-
-```text
-docs/reports/phase-3/configedit-template-object-model-design/
-```
-
-Primary file to give Codex:
-
-```text
-docs/reports/phase-3/configedit-template-object-model-design/06-codex-autonomous-execution-master-prompt.md
-```
-
-Execution mode:
-
-- Codex runs autonomously.
-- Codex reads the existing design and audit documents.
-- Codex follows the work packages in order.
-- Codex self-audits each package.
-- Codex fixes discovered issues immediately when they are fixable.
-- Codex stops only for true blockers and documents them.
-- Human review happens at the final closeout.
-
-Recommended sync command if this pack is downloaded to `/tmp`:
-
-```bash
-cd /tmp
-unzip -o lightai-configedit-object-model-codex-autonomous-execution-pack.zip
-
-cd /home/kzeng/projects/ai-platform-study/lightai-go
-mkdir -p docs/reports/phase-3/configedit-template-object-model-design
-rsync -av /tmp/lightai-configedit-object-model-codex-autonomous-execution-pack/   docs/reports/phase-3/configedit-template-object-model-design/
+Please read and execute:
+docs/reports/phase-3/configedit-template-object-model-design/13-unified-configedit-parameter-handling-fix.md
 ```

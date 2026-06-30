@@ -80,11 +80,23 @@ func buildSourceMap(in ResolveInput, plan *ResolvedRunPlan) *ParameterSourceMap 
 	if plan.Privileged {
 		sm.AddDockerOption("docker.privileged", true, "node_backend_runtime", "launcher.docker_options.privileged", "NodeBackendRuntime", nil)
 	}
+	for _, s := range plan.SecurityOptions {
+		sm.AddDockerOption("docker.security_options", s, "node_backend_runtime", "launcher.docker_options.security_options", "NodeBackendRuntime", nil)
+	}
+	for k, v := range plan.Ulimits {
+		sm.AddDockerOption("docker.ulimits."+k, v, "node_backend_runtime", "launcher.docker_options.ulimits", "NodeBackendRuntime", nil)
+	}
 	for _, d := range plan.Devices {
 		sm.AddDevice(d.HostPath, d, "node_backend_runtime", "launcher.devices", "NodeBackendRuntime", nil)
 	}
 	for _, g := range plan.GroupAdd {
 		sm.AddDockerOption("docker.group_add", g, "node_backend_runtime", "launcher.docker_options.group_add", "NodeBackendRuntime", nil)
+	}
+	for _, c := range plan.CapAdd {
+		sm.AddDockerOption("docker.cap_add", c, "node_backend_runtime", "launcher.docker_options.cap_add", "NodeBackendRuntime", nil)
+	}
+	for _, c := range plan.CapDrop {
+		sm.AddDockerOption("docker.cap_drop", c, "node_backend_runtime", "launcher.docker_options.cap_drop", "NodeBackendRuntime", nil)
 	}
 
 	// Mounts

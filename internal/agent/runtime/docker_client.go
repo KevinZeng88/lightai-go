@@ -49,6 +49,8 @@ type ContainerCreateOptions struct {
 	NetworkMode    string
 	GroupAdd       []string
 	SecurityOpt    []string
+	CapAdd         []string
+	CapDrop        []string
 	Ulimits        map[string]string
 	RestartPolicy  string
 	ExtraHosts     []string

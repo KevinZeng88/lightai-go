@@ -16,8 +16,11 @@
       <template v-if="selected">
         <el-tabs>
           <el-tab-pane :label="$t('backends.title')">
-            <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
-            <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="240px" :searchable="true" />
+            <el-switch v-model="backendDeveloperDiagnostics" :active-text="$t('runtimes.developerDiagnostics')" />
+            <template v-if="backendDeveloperDiagnostics">
+              <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
+              <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="240px" :searchable="true" />
+            </template>
           </el-tab-pane>
           <el-tab-pane :label="$t('backends.versions')">
             <div class="version-toolbar">
@@ -111,6 +114,7 @@ const { t } = useI18n()
 const loading = ref(false)
 const backends = ref<any[]>([])
 const selected = ref<any | null>(null)
+const backendDeveloperDiagnostics = ref(false)
 const versions = ref<any[]>([])
 const versionsLoading = ref(false)
 const savingVersion = ref(false)
@@ -184,7 +188,7 @@ async function selectVersion(row: any) {
     object_id: row.id,
     layer: 'backend_version',
     mode: row.readonly ? 'view' : 'edit',
-    view_level: 'normal',
+    view_level: 'advanced',
   })
 }
 

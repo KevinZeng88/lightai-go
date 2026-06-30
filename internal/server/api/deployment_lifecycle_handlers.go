@@ -1062,6 +1062,8 @@ func planRunplanDockerSpec(plan *runplan.ResolvedRunPlan) runplan.DockerSpecInfo
 		IPCMode:         plan.IPCMode,
 		ShmSize:         plan.ShmSize,
 		SecurityOptions: plan.SecurityOptions,
+		CapAdd:          plan.CapAdd,
+		CapDrop:         plan.CapDrop,
 	}
 }
 
@@ -1174,6 +1176,8 @@ func (h *AgentHandler) HandleStartDeployment(w http.ResponseWriter, r *http.Requ
 		NetworkMode:      pf.plan.NetworkMode,
 		ShmSize:          pf.plan.ShmSize,
 		Ulimits:          pf.plan.Ulimits,
+		CapAdd:           pf.plan.CapAdd,
+		CapDrop:          pf.plan.CapDrop,
 		Devices:          agentPlanDevices(pf.plan.Devices),
 		Mounts:           agentPlanMounts(pf.plan.Mounts),
 		HostPort:         pf.plan.HostPort,

@@ -34,6 +34,8 @@ func ConvertRunplanToAgentSpec(plan PlanInput) AgentRunSpec {
 			NetworkMode:     plan.NetworkMode,
 			ShmSize:         plan.ShmSize,
 			SecurityOptions: plan.SecurityOptions,
+			CapAdd:          plan.CapAdd,
+			CapDrop:         plan.CapDrop,
 			Ulimits:         plan.Ulimits,
 			GroupAdd:        plan.GroupAdd,
 			GPUDeviceIDs:    plan.GPUDeviceIDs,
@@ -110,6 +112,8 @@ type PlanInput struct {
 	NetworkMode      string
 	ShmSize          string
 	Ulimits          map[string]string
+	CapAdd           []string
+	CapDrop          []string
 	Devices          []PlanDevice
 	Mounts           []PlanMount
 	HostPort         int

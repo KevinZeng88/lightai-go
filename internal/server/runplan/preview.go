@@ -35,6 +35,12 @@ func EquivalentCommandPreview(plan *ResolvedRunPlan) string {
 	for _, s := range plan.SecurityOptions {
 		parts = append(parts, "--security-opt", s)
 	}
+	for _, c := range plan.CapAdd {
+		parts = append(parts, "--cap-add", c)
+	}
+	for _, c := range plan.CapDrop {
+		parts = append(parts, "--cap-drop", c)
+	}
 	for k, v := range plan.Ulimits {
 		parts = append(parts, "--ulimit", fmt.Sprintf("%s=%s", k, v))
 	}

@@ -51,6 +51,9 @@
             <strong>{{ selectedDisplay?.displayName || selected.display_name || selected.name }}</strong>
             <div class="action-meta">{{ selectedDisplay?.backendDisplay || selected.backend_id }} / {{ selectedDisplay?.vendorDisplay || selected.vendor }} / {{ selected.runtime_type || 'docker' }}</div>
           </div>
+          <div class="detail-actions">
+            <el-segmented v-model="configViewLevel" :options="configViewOptions" size="small" />
+          </div>
           <div v-if="selected.is_editable">
             <template v-if="!editing">
               <el-button type="primary" @click="startEditing">{{ $t('common.edit') }}</el-button>
@@ -99,7 +102,7 @@
         <el-empty v-else :description="$t('common.noData')" :image-size="40" />
 
         <!-- Developer Diagnostics (collapsed by default) -->
-        <el-collapse style="margin-top:12px">
+        <el-collapse v-if="configViewLevel === 'developer'" style="margin-top:12px">
           <el-collapse-item :title="$t('runtimes.advancedDiagnostics')">
             <JsonViewer :value="selected.config_set || {}" :title="$t('runtimes.rawConfigJson')" max-height="520px" :searchable="true" />
             <JsonViewer :value="selected.source_metadata || {}" :title="$t('runtimes.rawSourceMetadataJson')" max-height="260px" :searchable="true" />
@@ -172,6 +175,12 @@ const runtimes = ref<any[]>([])
 const selected = ref<any | null>(null)
 const editView = ref<ConfigEditViewModel | null>(null)
 const editPatch = ref<ConfigEditPatch | null>(null)
+const configViewLevel = ref<'normal' | 'advanced' | 'developer'>('advanced')
+const configViewOptions = [
+  { label: 'Normal', value: 'normal' },
+  { label: 'Advanced', value: 'advanced' },
+  { label: 'Developer', value: 'developer' },
+]
 const cloneDialogVisible = ref(false)
 const editing = ref(false)
 const cloneSource = ref<any | null>(null)
@@ -228,7 +237,7 @@ function openEdit(row: any) {
   editing.value = true
 }
 
-watch(selected, async (value) => {
+watch([selected, configViewLevel], async ([value]) => {
   editView.value = null
   editPatch.value = null
   if (!value?.id) return
@@ -237,7 +246,7 @@ watch(selected, async (value) => {
     object_id: value.id,
     layer: 'backend_runtime',
     mode: value.is_editable ? 'edit' : 'view',
-    view_level: 'normal',
+    view_level: configViewLevel.value,
   })
 })
 
@@ -249,7 +258,7 @@ function cancelEditing() {
   editing.value = false
   // Reload view to discard changes
   if (selected.value?.id) {
-    getConfigEditView({ object_kind: 'backend_runtime', object_id: selected.value.id, layer: 'backend_runtime', mode: 'edit', view_level: 'normal' }).then(v => { editView.value = v; editPatch.value = null })
+    getConfigEditView({ object_kind: 'backend_runtime', object_id: selected.value.id, layer: 'backend_runtime', mode: 'edit', view_level: configViewLevel.value }).then(v => { editView.value = v; editPatch.value = null })
   }
 }
 

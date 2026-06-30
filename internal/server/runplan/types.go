@@ -15,6 +15,8 @@ type ResolvedRunPlan struct {
 	NetworkMode string            `json:"network_mode,omitempty"`
 	ShmSize     string            `json:"shm_size,omitempty"`
 	Ulimits     map[string]string `json:"ulimits,omitempty"`
+	CapAdd      []string          `json:"cap_add,omitempty"`
+	CapDrop     []string          `json:"cap_drop,omitempty"`
 
 	Devices  []DeviceMapping `json:"devices,omitempty"`
 	Mounts   []MountMapping  `json:"mounts,omitempty"`

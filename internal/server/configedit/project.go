@@ -161,7 +161,10 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 
 func normalizeViewLevel(view string) string {
 	switch strings.ToLower(strings.TrimSpace(view)) {
-	case "normal", "advanced", "developer":
+	case "normal", "advanced", "security", "high-risk", "high_risk", "developer":
+		if strings.ToLower(strings.TrimSpace(view)) == "high-risk" || strings.ToLower(strings.TrimSpace(view)) == "high_risk" {
+			return "security"
+		}
 		return strings.ToLower(strings.TrimSpace(view))
 	default:
 		return ""
@@ -174,6 +177,8 @@ func viewLevelFromMode(mode string) string {
 		return "developer"
 	case "advanced":
 		return "advanced"
+	case "security", "high-risk", "high_risk":
+		return "security"
 	case "normal":
 		return "normal"
 	case "":
@@ -187,7 +192,7 @@ func fieldVisibleAtView(field EditField, view string) bool {
 	switch view {
 	case "developer":
 		return true
-	case "advanced":
+	case "advanced", "security":
 		return field.Visibility != "internal" && field.Visibility != "hidden"
 	default:
 		return !field.Advanced && !field.Diagnostic && field.Visibility != "internal" && field.Visibility != "hidden"
@@ -371,8 +376,10 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 	value := valueMap(item)
 	enabledFields := nestedMap(item, "enabled_fields")
 	var fields []EditField
+	projected := map[string]bool{}
 	for _, spec := range dockerFieldSpecs {
 		code := "launcher.docker_options." + spec.Path
+		projected[spec.Path] = true
 		dockerItem := cloneMap(item)
 		dockerItem["type"] = spec.Type
 		subVal := value[spec.Path]
@@ -398,9 +405,137 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 		field.Widget = spec.Widget
 		field.Order = spec.Order
 		field.Label = fieldLabel(code, dockerItem)
+		applyDockerFieldPolicy(&field, spec.Path, subVal)
+		fields = append(fields, field)
+	}
+	var extraPaths []string
+	for path := range value {
+		if projected[path] || strings.TrimSpace(path) == "" {
+			continue
+		}
+		extraPaths = append(extraPaths, path)
+	}
+	sort.Strings(extraPaths)
+	for _, path := range extraPaths {
+		code := "launcher.docker_options." + path
+		subVal := value[path]
+		dockerItem := cloneMap(item)
+		dockerItem["type"] = inferredConfigType(subVal)
+		dockerItem["value"] = map[string]any{
+			"effective_value": subVal,
+			"local_value":     subVal,
+			"default_value":   subVal,
+		}
+		dockerItem["required"] = false
+		if _, ok := enabledFields[path]; ok {
+			dockerItem["enabled"] = boolValue(enabledFields[path])
+		} else {
+			dockerItem["enabled"] = !isEmptyValue(subVal)
+		}
+		if st, ok := dockerItem["state"].(map[string]any); ok {
+			st["enabled"] = boolValue(dockerItem["enabled"])
+		}
+		field := projectItem(code, "launcher.docker_options", []string{path}, dockerItem, input)
+		applyDockerFieldPolicy(&field, path, subVal)
 		fields = append(fields, field)
 	}
 	return fields
+}
+
+func applyDockerFieldPolicy(field *EditField, path string, value any) {
+	field.Section = dockerSectionFor(path)
+	field.Widget = dockerWidgetFor(path, value)
+	field.Type = inferredConfigType(value)
+	field.Label = fieldLabel("launcher.docker_options."+path, map[string]any{})
+	field.Order = dockerOrderFor(path)
+	if field.Section == "security_high_risk" {
+		field.Advanced = true
+		field.View = "security"
+		field.Diagnostic = false
+		if len(field.Warnings) == 0 {
+			field.Warnings = []any{map[string]any{
+				"level":   "warning",
+				"message": "High-risk Docker option. Review host isolation and device exposure before enabling.",
+			}}
+		}
+	}
+}
+
+func dockerSectionFor(path string) string {
+	code := "launcher.docker_options." + path
+	if isHighRiskDockerOptionCode(code) {
+		return "security_high_risk"
+	}
+	switch path {
+	case "devices", "group_add":
+		return "devices_mounts"
+	default:
+		return "container_resources"
+	}
+}
+
+func dockerWidgetFor(path string, value any) string {
+	switch path {
+	case "devices":
+		return "device_table"
+	case "ulimits":
+		return "key_value_table"
+	case "privileged":
+		return "boolean"
+	}
+	switch value.(type) {
+	case []any, []string:
+		return "string_list"
+	case map[string]any, map[string]string:
+		return "key_value_table"
+	case bool:
+		return "boolean"
+	case int, int64, float64, float32:
+		return "number"
+	default:
+		return "string"
+	}
+}
+
+func dockerOrderFor(path string) int {
+	for _, spec := range dockerFieldSpecs {
+		if spec.Path == path {
+			return spec.Order
+		}
+	}
+	switch dockerSectionFor(path) {
+	case "security_high_risk":
+		return 200 + stablePathOrder(path)
+	case "devices_mounts":
+		return 200 + stablePathOrder(path)
+	default:
+		return 200 + stablePathOrder(path)
+	}
+}
+
+func stablePathOrder(path string) int {
+	total := 0
+	for _, r := range path {
+		total += int(r)
+	}
+	return total % 100
+}
+
+func inferredConfigType(value any) string {
+	switch value.(type) {
+	case bool:
+		return "boolean"
+	case int, int64:
+		return "integer"
+	case float64, float32:
+		return "number"
+	case []any, []string:
+		return "array"
+	case map[string]any, map[string]string:
+		return "object"
+	default:
+		return "string"
+	}
 }
 
 func projectItem(key, internalKey string, path []string, item map[string]any, input ProjectInput) EditField {
@@ -449,7 +584,7 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		}
 	}
 	if advanced {
-		if section != "advanced_parameters" && section != "expert_parameters" {
+		if section != "advanced_parameters" && section != "expert_parameters" && section != "security_high_risk" {
 			section = "advanced_raw"
 		}
 	}
@@ -730,6 +865,10 @@ func sourceEffectForDockerField(key string) string {
 		return "--device"
 	case strings.Contains(key, "group_add"):
 		return "--group-add"
+	case strings.Contains(key, "cap_add"):
+		return "--cap-add"
+	case strings.Contains(key, "cap_drop"):
+		return "--cap-drop"
 	default:
 		return "docker option"
 	}

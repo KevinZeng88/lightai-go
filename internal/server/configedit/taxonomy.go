@@ -12,11 +12,12 @@ var sectionOrder = map[string]int{
 	"expert_parameters":   35,
 	"backend_runtime":     40,
 	"container_resources": 50,
+	"security_high_risk":  55,
 	"devices_mounts":      60,
 	"environment":         70,
 	"service":             80,
 	"health_check":        90,
-	"advanced_raw":        90,
+	"advanced_raw":        95,
 }
 
 var sectionLabels = map[string]string{
@@ -26,6 +27,7 @@ var sectionLabels = map[string]string{
 	"expert_parameters":   "Expert parameters",
 	"backend_runtime":     "Backend runtime",
 	"container_resources": "Container resources",
+	"security_high_risk":  "Security / High Risk",
 	"devices_mounts":      "Devices and mounts",
 	"environment":         "Environment",
 	"service":             "Service",
@@ -34,51 +36,58 @@ var sectionLabels = map[string]string{
 }
 
 var taxonomyLabels = map[string]string{
-	"launcher.image":                           "Image",
-	"launcher.command":                         "Command",
-	"launcher.entrypoint":                      "Entrypoint",
-	"launcher.docker_options.shm_size":         "Shared memory",
-	"launcher.docker_options.privileged":       "Privileged container",
-	"launcher.docker_options.ipc_mode":         "IPC mode",
-	"launcher.docker_options.uts_mode":         "UTS mode",
-	"launcher.docker_options.network_mode":     "Network mode",
-	"launcher.docker_options.security_options": "Security options",
-	"launcher.docker_options.ulimits":          "Ulimits",
-	"launcher.docker_options.devices":          "Devices",
-	"launcher.docker_options.group_add":        "Additional groups",
-	"runtime.model_mount":                      "Model mount",
-	"runtime.device_binding":                   "Device binding",
-	"runtime.env":                              "Environment variables",
-	"runtime.health":                           "Health check",
-	"service.container_port":                   "Container port",
-	"service.host_port":                        "Host port",
-	"service.listen_host":                      "Container listen host",
-	"deployment.served_model_name":             "Served model name",
-	"backend.extra_args":                       "Extra launch arguments",
-	"runtime.extra_env":                        "Extra environment variables",
-	"launcher.kind":                            "Launcher type",
-	"launcher.devices":                         "Device bindings",
-	"launcher.ports":                           "Port mappings",
-	"launcher.volumes":                         "Volume mounts",
-	"model_runtime.gpu_memory_utilization":     "GPU memory utilization",
-	"model_runtime.max_model_len":              "Max model length",
-	"model_runtime.dtype":                      "Data type",
-	"model_runtime.tensor_parallel_size":       "Tensor parallel size",
-	"model_runtime.pipeline_parallel_size":     "Pipeline parallel size",
-	"model_runtime.max_num_batched_tokens":     "Max batched tokens",
-	"model_runtime.max_num_seqs":               "Max concurrent sequences",
-	"model_runtime.kv_cache_dtype":             "KV cache data type",
-	"model_runtime.cpu_offload_gb":             "CPU offload capacity",
-	"model_runtime.swap_space":                 "Swap space",
-	"model_runtime.enforce_eager":              "Enforce eager mode",
-	"model_runtime.trust_remote_code":          "Trust remote code",
-	"model_runtime.safetensors_load_strategy":  "Safetensors load strategy",
-	"model_runtime.download_dir":               "Model download directory",
-	"model_runtime.model":                      "Model path",
-	"model_runtime.host":                       "Listen host",
-	"model_runtime.port":                       "Service port",
-	"backend.capabilities":                     "Backend capabilities",
-	"backend.supported_config_items":           "Supported config items",
+	"launcher.image":                              "Image",
+	"launcher.command":                            "Command",
+	"launcher.entrypoint":                         "Entrypoint",
+	"launcher.docker_options.shm_size":            "Shared memory",
+	"launcher.docker_options.privileged":          "Privileged container",
+	"launcher.docker_options.ipc_mode":            "IPC mode",
+	"launcher.docker_options.uts_mode":            "UTS mode",
+	"launcher.docker_options.network_mode":        "Network mode",
+	"launcher.docker_options.security_options":    "Security options",
+	"launcher.docker_options.ulimits":             "Ulimits",
+	"launcher.docker_options.devices":             "Devices",
+	"launcher.docker_options.group_add":           "Additional groups",
+	"launcher.docker_options.cap_add":             "Capabilities",
+	"launcher.docker_options.cap_drop":            "Dropped capabilities",
+	"launcher.docker_options.device_cgroup_rules": "Device cgroup rules",
+	"launcher.docker_options.extra_hosts":         "Extra hosts",
+	"launcher.docker_options.pid_mode":            "PID mode",
+	"launcher.docker_options.userns_mode":         "User namespace mode",
+	"launcher.docker_options.runtime":             "Docker runtime",
+	"runtime.model_mount":                         "Model mount",
+	"runtime.device_binding":                      "Device binding",
+	"runtime.env":                                 "Environment variables",
+	"runtime.health":                              "Health check",
+	"service.container_port":                      "Container port",
+	"service.host_port":                           "Host port",
+	"service.listen_host":                         "Container listen host",
+	"deployment.served_model_name":                "Served model name",
+	"backend.extra_args":                          "Extra launch arguments",
+	"runtime.extra_env":                           "Extra environment variables",
+	"launcher.kind":                               "Launcher type",
+	"launcher.devices":                            "Device bindings",
+	"launcher.ports":                              "Port mappings",
+	"launcher.volumes":                            "Volume mounts",
+	"model_runtime.gpu_memory_utilization":        "GPU memory utilization",
+	"model_runtime.max_model_len":                 "Max model length",
+	"model_runtime.dtype":                         "Data type",
+	"model_runtime.tensor_parallel_size":          "Tensor parallel size",
+	"model_runtime.pipeline_parallel_size":        "Pipeline parallel size",
+	"model_runtime.max_num_batched_tokens":        "Max batched tokens",
+	"model_runtime.max_num_seqs":                  "Max concurrent sequences",
+	"model_runtime.kv_cache_dtype":                "KV cache data type",
+	"model_runtime.cpu_offload_gb":                "CPU offload capacity",
+	"model_runtime.swap_space":                    "Swap space",
+	"model_runtime.enforce_eager":                 "Enforce eager mode",
+	"model_runtime.trust_remote_code":             "Trust remote code",
+	"model_runtime.safetensors_load_strategy":     "Safetensors load strategy",
+	"model_runtime.download_dir":                  "Model download directory",
+	"model_runtime.model":                         "Model path",
+	"model_runtime.host":                          "Listen host",
+	"model_runtime.port":                          "Service port",
+	"backend.capabilities":                        "Backend capabilities",
+	"backend.supported_config_items":              "Supported config items",
 }
 
 // capabilityLikeCodes are codes that contain capability/metadata information
@@ -110,11 +119,11 @@ var dockerFieldSpecs = []struct {
 	Order   int
 }{
 	{"shm_size", "container_resources", "string", "string", 10},
-	{"privileged", "container_resources", "boolean", "boolean", 20},
+	{"privileged", "security_high_risk", "boolean", "boolean", 20},
 	{"ipc_mode", "container_resources", "string", "string", 30},
 	{"uts_mode", "container_resources", "string", "string", 40},
 	{"network_mode", "container_resources", "string", "string", 50},
-	{"security_options", "container_resources", "array", "string_list", 60},
+	{"security_options", "security_high_risk", "array", "string_list", 60},
 	{"ulimits", "container_resources", "object", "key_value_table", 70},
 	{"devices", "devices_mounts", "array", "device_table", 10},
 	{"group_add", "devices_mounts", "array", "string_list", 30},
@@ -302,10 +311,6 @@ func isLayerHidden(code string, layer string) bool {
 	if hidden, ok := layerHiddenCodes[layer]; ok && hidden[code] {
 		return true
 	}
-	// Model serving codes hidden from non-deployment layers.
-	if layer != "deployment" && layer != "node_backend_runtime" && isModelServingCode(code) {
-		return true
-	}
 	// Docker sub-fields hidden from deployment (they're inherited from NBR).
 	if layer == "deployment" && strings.HasPrefix(code, "launcher.docker_options.") {
 		return true
@@ -362,9 +367,19 @@ func sectionFor(code string, item map[string]any) string {
 		return "backend_runtime"
 	case code == "launcher.docker_options":
 		return "advanced_raw"
+	case strings.HasPrefix(code, "launcher.docker_options."):
+		if isHighRiskDockerOptionCode(code) {
+			return "security_high_risk"
+		}
+		if strings.Contains(code, ".devices") || strings.Contains(code, ".group_add") {
+			return "devices_mounts"
+		}
+		return "container_resources"
 	case strings.HasPrefix(code, "backend.arg.") || strings.HasPrefix(code, "model_runtime."):
 		return "model_serving"
 	case code == "runtime.env":
+		return "environment"
+	case strings.HasPrefix(code, "runtime.env."):
 		return "environment"
 	case code == "runtime.model_mount":
 		return "devices_mounts"
@@ -388,6 +403,15 @@ func sectionFor(code string, item map[string]any) string {
 		}
 	}
 	return "advanced_raw"
+}
+
+func isHighRiskDockerOptionCode(code string) bool {
+	switch strings.TrimPrefix(code, "launcher.docker_options.") {
+	case "privileged", "security_options", "security_opt", "cap_add", "cap_drop", "device_cgroup_rules", "pid_mode", "userns_mode":
+		return true
+	default:
+		return false
+	}
 }
 
 func fieldLabel(code string, item map[string]any) string {

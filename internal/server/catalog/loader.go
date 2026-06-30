@@ -270,8 +270,10 @@ func MaterializeBackendRuntime(registry *Registry, versionSet ConfigSet, runtime
 	setItemTiered(items, "launcher.image", image, image, image != "", "BackendRuntime", runtime.ID)
 	setItemTiered(items, "launcher.entrypoint", runtime.Entrypoint, runtime.Entrypoint, len(runtime.Entrypoint) > 0, "BackendRuntime", runtime.ID)
 	setItemTiered(items, "launcher.command", runtime.Args, runtime.Args, len(runtime.Args) > 0, "BackendRuntime", runtime.ID)
-	setItemTiered(items, "launcher.docker_options", normalizeDockerOptions(runtime), normalizeDockerOptions(runtime), true, "BackendRuntime", runtime.ID)
-	setItemTiered(items, "runtime.env", runtime.Env, runtime.Env, len(runtime.Env) > 0, "BackendRuntime", runtime.ID)
+	dockerOptions := normalizeDockerOptions(runtime)
+	runtimeEnv := normalizeRuntimeEnv(runtime.Env, runtime.DockerOptions)
+	setItemTiered(items, "launcher.docker_options", dockerOptions, dockerOptions, true, "BackendRuntime", runtime.ID)
+	setItemTiered(items, "runtime.env", runtimeEnv, runtimeEnv, len(runtimeEnv) > 0, "BackendRuntime", runtime.ID)
 	setItemTiered(items, "runtime.model_mount", runtime.ModelMount, runtime.ModelMount, len(runtime.ModelMount) > 0, "BackendRuntime", runtime.ID)
 	setItemTiered(items, "runtime.health", runtime.HealthCheck, runtime.HealthCheck, len(runtime.HealthCheck) > 0, "BackendRuntime", runtime.ID)
 	if len(runtime.Ports) > 0 {
@@ -521,6 +523,9 @@ func normalizeDockerOptions(runtime RuntimeDoc) map[string]any {
 		if key == "uts" {
 			key = "uts_mode"
 		}
+		if isEnvLikeCatalogKey(key) {
+			continue
+		}
 		out[key] = normalizeDockerValue(key, v)
 	}
 	if _, ok := out["devices"]; !ok && len(runtime.Devices) > 0 {
@@ -530,6 +535,40 @@ func normalizeDockerOptions(runtime RuntimeDoc) map[string]any {
 		out["volumes"] = runtime.Volumes
 	}
 	return out
+}
+
+func normalizeRuntimeEnv(runtimeEnv map[string]string, dockerOptions map[string]any) map[string]string {
+	out := map[string]string{}
+	for k, v := range runtimeEnv {
+		if strings.TrimSpace(k) != "" {
+			out[k] = v
+		}
+	}
+	for k, v := range dockerOptions {
+		if !isEnvLikeCatalogKey(k) {
+			continue
+		}
+		out[k] = strings.TrimSpace(fmt.Sprint(v))
+	}
+	return out
+}
+
+func isEnvLikeCatalogKey(key string) bool {
+	if strings.TrimSpace(key) == "" {
+		return false
+	}
+	hasUpper := false
+	for _, r := range key {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			hasUpper = true
+		case r >= '0' && r <= '9':
+		case r == '_':
+		default:
+			return false
+		}
+	}
+	return hasUpper && strings.Contains(key, "_")
 }
 
 func normalizeDockerValue(key string, value any) any {

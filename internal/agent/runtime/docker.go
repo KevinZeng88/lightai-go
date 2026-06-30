@@ -464,6 +464,12 @@ func (d *DockerRuntimeDriver) buildCreateOptions(spec AgentRunSpec) ContainerCre
 	if len(spec.Docker.SecurityOptions) > 0 {
 		opts.SecurityOpt = spec.Docker.SecurityOptions
 	}
+	if len(spec.Docker.CapAdd) > 0 {
+		opts.CapAdd = spec.Docker.CapAdd
+	}
+	if len(spec.Docker.CapDrop) > 0 {
+		opts.CapDrop = spec.Docker.CapDrop
+	}
 	if len(spec.Docker.Ulimits) > 0 {
 		opts.Ulimits = spec.Docker.Ulimits
 	}
