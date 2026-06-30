@@ -2,7 +2,9 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createI18n } from 'vue-i18n'
 import ConfigEditView from '../ConfigEditView.vue'
+import zhCN from '@/locales/zh-CN'
 import type { ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
 
 // A realistic ConfigEditView matching backend shape, with docker options
@@ -63,6 +65,68 @@ function makeEditView(): ConfigEditViewModel {
       },
     ],
   }
+}
+
+function makeRiskMatrixView(): ConfigEditViewModel {
+  return {
+    layer: 'deployment',
+    object_id: 'dep-test',
+    object_kind: 'deployment',
+    sections: [
+      {
+        key: 'model_serving',
+        label: 'Model serving',
+        order: 10,
+        fields: [
+          { key: 'normal.enabled', internal_key: 'normal.enabled', label: 'Normal enabled', section: 'model_serving', order: 1, type: 'string', widget: 'string', value: 'on', enabled: true, original_enabled: true, has_enable: true, required: false, readonly: false, advanced: false },
+          { key: 'normal.disabled', internal_key: 'normal.disabled', label: 'Normal disabled', section: 'model_serving', order: 2, type: 'string', widget: 'string', value: 'off', enabled: false, original_enabled: false, has_enable: true, required: false, readonly: false, advanced: false },
+        ],
+      },
+      {
+        key: 'backend_runtime',
+        label: 'Runtime',
+        order: 20,
+        fields: [
+          { key: 'advanced.enabled', internal_key: 'advanced.enabled', label: 'Advanced enabled', section: 'backend_runtime', order: 1, type: 'string', widget: 'string', value: 'on', enabled: true, original_enabled: true, has_enable: true, required: false, readonly: false, advanced: true, view: 'advanced' },
+          { key: 'advanced.disabled', internal_key: 'advanced.disabled', label: 'Advanced disabled', section: 'backend_runtime', order: 2, type: 'string', widget: 'string', value: 'off', enabled: false, original_enabled: false, has_enable: true, required: false, readonly: false, advanced: true, view: 'advanced' },
+        ],
+      },
+      {
+        key: 'security_high_risk',
+        label: 'Security',
+        order: 90,
+        fields: [
+          { key: 'security.enabled', internal_key: 'security.enabled', label: 'Security enabled', section: 'security_high_risk', order: 1, type: 'boolean', widget: 'boolean', value: true, enabled: true, original_enabled: true, has_enable: true, required: false, readonly: false, advanced: true, tier: 'expert', view: 'security', risk: 'high' },
+          { key: 'security.disabled', internal_key: 'security.disabled', label: 'Security disabled', section: 'security_high_risk', order: 2, type: 'boolean', widget: 'boolean', value: false, enabled: false, original_enabled: false, has_enable: true, required: false, readonly: false, advanced: true, tier: 'expert', view: 'security', risk: 'high' },
+        ],
+      },
+      {
+        key: 'advanced_raw',
+        label: 'Raw',
+        order: 100,
+        fields: [
+          { key: 'raw.enabled', internal_key: 'raw.enabled', label: 'Raw enabled', section: 'advanced_raw', order: 1, type: 'object', widget: 'readonly_summary', value: { enabled: true }, enabled: true, original_enabled: true, has_enable: false, required: false, readonly: true, advanced: true, tier: 'expert', view: 'developer', diagnostic: true },
+          { key: 'raw.disabled', internal_key: 'raw.disabled', label: 'Raw disabled', section: 'advanced_raw', order: 2, type: 'object', widget: 'readonly_summary', value: { enabled: false }, enabled: false, original_enabled: false, has_enable: false, required: false, readonly: true, advanced: true, tier: 'expert', view: 'developer', diagnostic: true },
+        ],
+      },
+    ],
+  }
+}
+
+function mountView(modelValue: ConfigEditViewModel, locale?: 'zh-CN') {
+  const plugins: any[] = [ElementPlus]
+  if (locale === 'zh-CN') {
+    plugins.push(createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      fallbackLocale: 'zh-CN',
+      messages: { 'zh-CN': zhCN },
+    }))
+  }
+  return mount(ConfigEditView, {
+    global: { plugins },
+    props: { modelValue, readonly: true },
+  })
 }
 
 describe('ConfigEditView', () => {
@@ -170,16 +234,56 @@ describe('ConfigEditView', () => {
   })
 
   it('keeps raw config hidden by default', () => {
-    const wrapper = mount(ConfigEditView, {
-      global: { plugins: [ElementPlus] },
-      props: { modelValue: makeEditView(), readonly: true },
-    })
+    const wrapper = mountView(makeEditView())
+    const enabledSection = wrapper.find('[data-section-key="enabled_parameters"]')
+    expect(enabledSection.exists()).toBe(true)
+    expect(enabledSection.find('[data-field-key="advanced_raw_diag"]').exists()).toBe(true)
+  })
+
+  it('renders all enabled fields in enabled group including high-risk and raw diagnostics', () => {
+    const wrapper = mountView(makeRiskMatrixView())
+    const enabledSection = wrapper.find('[data-section-key="enabled_parameters"]')
+    expect(enabledSection.exists()).toBe(true)
+    for (const key of ['normal.enabled', 'advanced.enabled', 'security.enabled', 'raw.enabled']) {
+      expect(enabledSection.find(`[data-field-key="${key}"]`).exists()).toBe(true)
+    }
+    const highRisk = enabledSection.find('[data-field-key="security.enabled"]')
+    expect(highRisk.attributes('data-field-risk')).toBe('high')
+    expect(highRisk.attributes('data-field-tier')).toBe('expert')
+    expect(highRisk.attributes('data-field-view')).toBe('security')
+    const raw = enabledSection.find('[data-field-key="raw.enabled"]')
+    expect(raw.attributes('data-field-diagnostic')).toBe('true')
+  })
+
+  it('renders disabled fields in common advanced expert groups', () => {
+    const wrapper = mountView(makeRiskMatrixView())
+    expect(wrapper.find('[data-section-key="common_parameters"] [data-field-key="normal.disabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-section-key="advanced_parameters_group"] [data-field-key="advanced.disabled"]').exists()).toBe(true)
     const expertSection = wrapper.find('[data-section-key="expert_parameters_group"]')
     expect(expertSection.exists()).toBe(true)
-    expect(expertSection.find('[data-field-key="advanced_raw_diag"]').exists()).toBe(true)
+    expect(expertSection.find('[data-field-key="security.disabled"]').exists()).toBe(true)
+    expect(expertSection.find('[data-field-key="raw.disabled"]').exists()).toBe(true)
+  })
+
+  it('renders zh-CN display group labels', () => {
+    const wrapper = mountView(makeRiskMatrixView(), 'zh-CN')
+    const text = wrapper.text()
+    expect(text).toContain('已启用参数')
+    expect(text).toContain('常用参数')
+    expect(text).toContain('高级参数')
+    expect(text).toContain('专家参数')
+  })
+
+  it('keeps enabled group expanded and expert group collapsed', () => {
+    const wrapper = mountView(makeRiskMatrixView())
+    const enabledSection = wrapper.find('[data-section-key="enabled_parameters"]')
+    const enabledCollapseItem = enabledSection.find('.el-collapse-item')
+    expect(enabledCollapseItem.exists()).toBe(true)
+    expect(enabledCollapseItem.classes()).toContain('is-active')
+
+    const expertSection = wrapper.find('[data-section-key="expert_parameters_group"]')
     const collapseItem = expertSection.find('.el-collapse-item')
     expect(collapseItem.exists()).toBe(true)
-    // Should be collapsed
     expect(collapseItem.classes()).not.toContain('is-active')
   })
 

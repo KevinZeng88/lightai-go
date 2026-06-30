@@ -120,6 +120,7 @@ export type ConfigEditField = {
   dirty?: boolean
   warnings?: any[]
   diagnostic?: boolean
+  risk?: string
   original_value?: any
   original_enabled?: boolean
   component_key?: string
@@ -244,9 +245,9 @@ const SECTION_RANKS: Record<string, number> = {
 }
 
 export function displayGroupForField(field: ConfigEditField): ConfigEditDisplayGroup {
-  if (isExpertField(field)) return 'expert'
   const enabledAtLoad = field.original_enabled ?? field.enabled
   if (enabledAtLoad) return 'enabled'
+  if (isExpertField(field)) return 'expert'
   if (field.advanced || field.view === 'advanced' || field.tier === 'advanced') return 'advanced'
   return 'common'
 }

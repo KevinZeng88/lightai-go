@@ -6,6 +6,10 @@
     :data-field-key="field.key"
     :data-internal-key="field.internal_key"
     :data-section-key="field.section"
+    :data-field-tier="field.tier || ''"
+    :data-field-view="field.view || ''"
+    :data-field-risk="field.risk || ''"
+    :data-field-diagnostic="field.diagnostic ? 'true' : 'false'"
   >
     <div class="field-header">
       <el-checkbox
@@ -25,6 +29,9 @@
         <el-icon class="field-help-icon"><InfoFilled /></el-icon>
       </el-tooltip>
       <el-tag v-if="field.required" size="small" type="danger" effect="plain">{{ $t('common.required') }}</el-tag>
+      <el-tag v-if="field.risk === 'high'" size="small" type="danger" effect="plain">{{ $t('configEdit.badges.highRisk') }}</el-tag>
+      <el-tag v-if="isExpertBadgeVisible" size="small" type="warning" effect="plain">{{ $t('configEdit.badges.expert') }}</el-tag>
+      <el-tag v-if="field.diagnostic" size="small" type="info" effect="plain">{{ $t('configEdit.badges.diagnostic') }}</el-tag>
     </div>
     <div
       class="field-control"
@@ -290,6 +297,10 @@ const localizedHelp = computed(() => {
 
 const fieldTooltip = computed(() => {
   return resolveConfigFieldTooltip(props.field, t)
+})
+
+const isExpertBadgeVisible = computed(() => {
+  return props.field.tier === 'expert' || props.field.view === 'developer' || props.field.view === 'security'
 })
 
 // -- Scalar check for default widget --

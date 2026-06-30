@@ -180,6 +180,11 @@ export default {
     actions: {
       addRow: '添加行',
     },
+    badges: {
+      highRisk: '高风险',
+      expert: '专家',
+      diagnostic: '诊断',
+    },
     labels: {
       'launcher.image': '镜像',
       'launcher.kind': '启动方式',

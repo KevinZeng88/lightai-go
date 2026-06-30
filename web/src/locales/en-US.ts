@@ -180,6 +180,11 @@ export default {
     actions: {
       addRow: 'Add Row',
     },
+    badges: {
+      highRisk: 'High risk',
+      expert: 'Expert',
+      diagnostic: 'Diagnostic',
+    },
     labels: {
       'launcher.image': 'Image',
       'launcher.kind': 'Launcher Type',
