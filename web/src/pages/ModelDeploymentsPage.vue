@@ -112,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { apiClient } from '@/api/client'
@@ -147,6 +147,18 @@ const configViewLevelHelpText = computed(() => configEditViewLevelHelp(t))
 const detailVisible = computed({
   get: () => !!selected.value,
   set: (value: boolean) => { if (!value) { selected.value = null; lastDryRun.value = null; editing.value = false; deploymentEditView.value = null; deploymentEditPatch.value = null } },
+})
+
+watch(configViewLevel, async () => {
+  if (!selected.value?.id || !editing.value) return
+  deploymentEditPatch.value = null
+  deploymentEditView.value = await getConfigEditView({
+    object_kind: 'deployment',
+    object_id: selected.value.id,
+    layer: 'deployment',
+    mode: 'edit',
+    view_level: configViewLevel.value,
+  })
 })
 
 async function load() {
