@@ -443,6 +443,20 @@ func projectDockerOptions(item map[string]any, input ProjectInput) []EditField {
 }
 
 func applyDockerFieldPolicy(field *EditField, path string, value any) {
+	if strings.Contains(path, "capabilities") || strings.Contains(path, "supported_config") {
+		field.Section = "advanced_raw"
+		field.Widget = "readonly_summary"
+		field.Type = inferredConfigType(value)
+		field.Order = dockerOrderFor(path)
+		field.Readonly = true
+		field.Disabled = true
+		field.HasEnable = false
+		field.Advanced = true
+		field.Diagnostic = true
+		field.View = "developer"
+		field.Label = fieldLabel("launcher.docker_options."+path, map[string]any{})
+		return
+	}
 	field.Section = dockerSectionFor(path)
 	field.Widget = dockerWidgetFor(path, value)
 	field.Type = inferredConfigType(value)

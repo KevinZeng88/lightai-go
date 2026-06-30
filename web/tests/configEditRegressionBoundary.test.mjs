@@ -39,6 +39,11 @@ check(
     displayGroupFn.indexOf('isExpertField') >= 0 &&
     displayGroupFn.indexOf('enabledAtLoad') < displayGroupFn.indexOf('isExpertField'),
 )
+const sortedSectionsFn = sources.configEditView.match(/export function sortedSections[\s\S]*?export function sortedFields/)?.[0] || ''
+check('sortedSections preserves ConfigEditField object references',
+  !sortedSectionsFn.includes('map(field => ({ ...field') &&
+  !sortedSectionsFn.includes('map((field) => ({ ...field') &&
+  sortedSectionsFn.includes('return field'))
 
 check('ConfigEditView stable selector exists', sources.configEditViewComponent.includes('data-testid="config-edit-view"'))
 check('ConfigSection stable selector exists', sources.configSection.includes('data-testid="config-edit-section"'))

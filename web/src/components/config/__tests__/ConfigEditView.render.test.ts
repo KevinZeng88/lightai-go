@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ConfigEditView from '../ConfigEditView.vue'
 import zhCN from '@/locales/zh-CN'
 import type { ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
+import type { ConfigEditPatch } from '@/utils/configEditView'
 
 // A realistic ConfigEditView matching backend shape, with docker options
 // that have present sub-fields (shm_size, ipc_mode) and absent sub-fields
@@ -129,7 +131,127 @@ function mountView(modelValue: ConfigEditViewModel, locale?: 'zh-CN') {
   })
 }
 
+function makeMutationView(fieldOverrides: Record<string, any> = {}): ConfigEditViewModel {
+  return {
+    layer: 'backend_runtime',
+    object_id: 'rt-mutation',
+    object_kind: 'backend_runtime',
+    sections: [{
+      key: 'model_serving',
+      label: 'Model serving',
+      order: 10,
+      fields: [{
+        key: 'model_runtime.max_model_len',
+        internal_key: 'model_runtime.max_model_len',
+        label: 'Max model length',
+        section: 'model_serving',
+        order: 1,
+        type: 'integer',
+        widget: 'number',
+        value: 4096,
+        original_value: 4096,
+        enabled: false,
+        original_enabled: false,
+        has_enable: true,
+        required: false,
+        readonly: false,
+        advanced: false,
+        ...fieldOverrides,
+      }],
+    }],
+  }
+}
+
+function lastPatch(wrapper: ReturnType<typeof mount>): ConfigEditPatch {
+  const events = wrapper.emitted('update:patch') || []
+  return events[events.length - 1]?.[0] as ConfigEditPatch
+}
+
 describe('ConfigEditView', () => {
+  it('emits enabled patch when a field checkbox is toggled through ConfigEditView', async () => {
+    const wrapper = mount(ConfigEditView, {
+      global: { plugins: [ElementPlus] },
+      props: { modelValue: makeMutationView(), readonly: false },
+    })
+    const checkbox = wrapper.find('[data-field-key="model_runtime.max_model_len"] [data-testid="config-field-enabled"]')
+    expect(checkbox.exists()).toBe(true)
+    await checkbox.find('input').setValue(true)
+    await nextTick()
+    expect(lastPatch(wrapper).fields).toEqual([expect.objectContaining({
+      key: 'model_runtime.max_model_len',
+      enabled: true,
+      value: 4096,
+    })])
+  })
+
+  it('emits value patch when a number field is edited through ConfigEditView', async () => {
+    const wrapper = mount(ConfigEditView, {
+      global: { plugins: [ElementPlus] },
+      props: { modelValue: makeMutationView({ enabled: true, original_enabled: true }), readonly: false },
+    })
+    const inputNumber = wrapper.findComponent({ name: 'ElInputNumber' })
+    await inputNumber.vm.$emit('update:modelValue', 8192)
+    await inputNumber.vm.$emit('change', 8192)
+    await nextTick()
+    expect(lastPatch(wrapper).fields).toEqual([expect.objectContaining({
+      key: 'model_runtime.max_model_len',
+      enabled: true,
+      value: 8192,
+    })])
+  })
+
+  it('emits value patch for disabled-but-editable fields through ConfigEditView', async () => {
+    const wrapper = mount(ConfigEditView, {
+      global: { plugins: [ElementPlus] },
+      props: { modelValue: makeMutationView({ enabled: false, original_enabled: false }), readonly: false },
+    })
+    const inputNumber = wrapper.findComponent({ name: 'ElInputNumber' })
+    await inputNumber.vm.$emit('update:modelValue', 6144)
+    await inputNumber.vm.$emit('change', 6144)
+    await nextTick()
+    expect(lastPatch(wrapper).fields).toEqual([expect.objectContaining({
+      key: 'model_runtime.max_model_len',
+      enabled: false,
+      value: 6144,
+    })])
+  })
+
+  it('emits enabled patch for high-risk fields through ConfigEditView', async () => {
+    const wrapper = mount(ConfigEditView, {
+      global: { plugins: [ElementPlus] },
+      props: {
+        modelValue: makeMutationView({
+          key: 'docker.privileged',
+          internal_key: 'launcher.docker_options',
+          path: ['privileged'],
+          label: 'Privileged container',
+          section: 'security_high_risk',
+          type: 'boolean',
+          widget: 'boolean',
+          value: false,
+          original_value: false,
+          enabled: false,
+          original_enabled: false,
+          advanced: true,
+          tier: 'expert',
+          view: 'security',
+          risk: 'high',
+        }),
+        readonly: false,
+      },
+    })
+    const checkbox = wrapper.find('[data-field-key="docker.privileged"] [data-testid="config-field-enabled"]')
+    expect(checkbox.exists()).toBe(true)
+    await checkbox.find('input').setValue(true)
+    await nextTick()
+    expect(lastPatch(wrapper).fields).toEqual([expect.objectContaining({
+      key: 'docker.privileged',
+      internal_key: 'launcher.docker_options',
+      path: ['privileged'],
+      enabled: true,
+    })])
+  })
+
   it('renders sections and structured runtime fields', () => {
     const wrapper = mount(ConfigEditView, {
       global: { plugins: [ElementPlus] },

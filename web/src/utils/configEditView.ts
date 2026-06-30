@@ -180,7 +180,10 @@ function stableJSON(value: any): string {
 
 export function sortedSections(view: ConfigEditView): ConfigEditSection[] {
   const fields = (view.sections || []).flatMap(section =>
-    (section.fields || []).map(field => ({ ...field, section: field.section || section.key })),
+    (section.fields || []).map(field => {
+      if (!field.section) field.section = section.key
+      return field
+    }),
   )
   if (!fields.length) {
     return [...(view.sections || [])].sort((a, b) => (a.order || 0) - (b.order || 0))

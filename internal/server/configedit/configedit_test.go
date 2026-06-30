@@ -19,6 +19,9 @@ func testConfigSet() map[string]any {
 					"privileged": false,
 					"devices":    []any{"/dev/nvidia0"},
 					"group_add":  []any{"video"},
+					"gpu_capabilities": []any{
+						[]any{"gpu"},
+					},
 				}},
 			},
 			"runtime.env": map[string]any{
@@ -660,6 +663,12 @@ func TestDockerSubfieldValueDoesNotLeakParentDefault(t *testing.T) {
 	sec := requireField(t, fields, "launcher.docker_options.security_options", "launcher.docker_options", []string{"security_options"}, "security_high_risk")
 	if sec.Value != nil {
 		t.Errorf("security_options Value = %#v, want nil (absent sub-key must not show parent object)", sec.Value)
+	}
+
+	caps := requireField(t, fields, "launcher.docker_options.gpu_capabilities", "launcher.docker_options", []string{"gpu_capabilities"}, "advanced_raw")
+	if !caps.Readonly || caps.HasEnable || !caps.Diagnostic || caps.View != "developer" || caps.Widget != "readonly_summary" {
+		t.Errorf("gpu_capabilities should be readonly developer diagnostic summary, got readonly=%v has_enable=%v diagnostic=%v view=%q widget=%q section=%q",
+			caps.Readonly, caps.HasEnable, caps.Diagnostic, caps.View, caps.Widget, caps.Section)
 	}
 }
 
