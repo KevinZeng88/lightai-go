@@ -448,6 +448,7 @@ func TestResolveLauncherKindFallbackAndHostPortMaterialization(t *testing.T) {
 func TestResolveDeviceBindingVisibleInPlanAndPreview(t *testing.T) {
 	in := makeTestInput()
 	in.AssignedGPUs = []GPUInfo{{Index: 0, Vendor: "nvidia"}}
+	in.Deployment.Placement = PlacementInfo{NodeID: "node-1", AcceleratorSelectionMode: "manual", AcceleratorIds: []string{"gpu-0"}}
 
 	plan, errs, _ := Resolve(in)
 	if len(errs) > 0 {
@@ -459,12 +460,57 @@ func TestResolveDeviceBindingVisibleInPlanAndPreview(t *testing.T) {
 	if plan.DeviceBinding.DockerGPUOption != "device=0" {
 		t.Fatalf("docker gpu option=%q", plan.DeviceBinding.DockerGPUOption)
 	}
+	if plan.DeviceBinding.SelectionMode != "manual" || plan.DeviceBinding.Source != "deployment_selection" {
+		t.Fatalf("device binding contract=%#v", plan.DeviceBinding)
+	}
 	if plan.DeviceBinding.VisibleEnvKey != "CUDA_VISIBLE_DEVICES" || plan.DeviceBinding.VisibleEnvValue != "0" {
 		t.Fatalf("visible env binding=%#v", plan.DeviceBinding)
 	}
 	preview := EquivalentCommandPreview(plan)
 	if !strings.Contains(preview, `--gpus "device=0"`) || !strings.Contains(preview, "CUDA_VISIBLE_DEVICES=0") {
 		t.Fatalf("preview missing device binding: %s", preview)
+	}
+}
+
+func TestResolveDeviceBindingDisabledSkipsGPUInjection(t *testing.T) {
+	in := makeTestInput()
+	disabled := false
+	in.Deployment.Placement = PlacementInfo{NodeID: "node-1", AcceleratorSelectionMode: "disabled", DeviceBindingEnabled: &disabled}
+	in.AssignedGPUs = []GPUInfo{{Index: 0, Vendor: "nvidia"}}
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan.Env["CUDA_VISIBLE_DEVICES"] != "" {
+		t.Fatalf("CUDA_VISIBLE_DEVICES injected while disabled: %v", plan.Env)
+	}
+	if len(plan.GPUDeviceIDs) != 0 {
+		t.Fatalf("gpu ids injected while disabled: %v", plan.GPUDeviceIDs)
+	}
+	if plan.DeviceBinding == nil || plan.DeviceBinding.Enabled || plan.DeviceBinding.SelectionMode != "disabled" {
+		t.Fatalf("disabled device binding not represented: %#v", plan.DeviceBinding)
+	}
+	preview := EquivalentCommandPreview(plan)
+	if strings.Contains(preview, "--gpus") || strings.Contains(preview, "CUDA_VISIBLE_DEVICES") {
+		t.Fatalf("disabled GPU binding leaked into preview: %s", preview)
+	}
+}
+
+func TestResolveDeviceBindingManualOverridesAutoSource(t *testing.T) {
+	in := makeTestInput()
+	in.Deployment.Placement = PlacementInfo{NodeID: "node-1", AcceleratorSelectionMode: "manual", AcceleratorIds: []string{"gpu-manual"}}
+	in.AssignedGPUs = []GPUInfo{{Index: 1, Vendor: "nvidia"}}
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan.DeviceBinding.SelectionMode != "manual" || plan.DeviceBinding.DockerGPUOption != "device=1" {
+		t.Fatalf("manual binding not reflected: %#v", plan.DeviceBinding)
+	}
+	if !strings.Contains(EquivalentCommandPreview(plan), `--gpus "device=1"`) {
+		t.Fatalf("manual GPU id not in preview: %s", EquivalentCommandPreview(plan))
 	}
 }
 
@@ -514,6 +560,20 @@ func TestDefaultHealthCheck(t *testing.T) {
 	}
 	if plan.HealthCheck.ExpectedStatus != 200 {
 		t.Errorf("expected health check status 200, got %d", plan.HealthCheck.ExpectedStatus)
+	}
+}
+
+func TestHealthCheckZeroDefaultsDoNotCreateResolveError(t *testing.T) {
+	in := makeTestInput()
+	in.BackendRuntime.HealthCheckOverride = &HealthCheckInput{Path: "/v1/models"}
+	in.NBRConfigSnapshot.HealthCheckOverride = in.BackendRuntime.HealthCheckOverride
+
+	plan, errs, _ := Resolve(in)
+	if len(errs) > 0 {
+		t.Fatalf("health check zero defaults should not error: %v", errs)
+	}
+	if plan.HealthCheck.ExpectedStatus != 200 || plan.HealthCheck.IntervalSeconds == 0 || plan.HealthCheck.TimeoutSeconds == 0 {
+		t.Fatalf("health check defaults not materialized: %#v", plan.HealthCheck)
 	}
 }
 
@@ -1138,8 +1198,8 @@ func TestCollectExistingFlags(t *testing.T) {
 }
 
 func TestResolveResourceControlsNoDuplicateWithParameterDefs(t *testing.T) {
-	// max_model_len is present in the NBR snapshot schema. A later live
-	// BackendVersion resource_controls edit must not generate a second arg.
+	// max_model_len is present in the NBR snapshot schema. A live BackendVersion
+	// resource_controls edit after snapshot creation must not generate a second arg.
 	input := makeTestInput()
 	input.BackendVersion.VendorOptionsJSON = vllmVendorOptionsJSON
 	input.Deployment.Parameters = map[string]interface{}{

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // HandlePreflightDeployments computes candidate nodes for a deployment
@@ -139,5 +140,23 @@ func (h *AgentHandler) HandlePreflightDeployments(w http.ResponseWriter, r *http
 
 // errEntry creates a structured error entry for preflight responses.
 func errEntry(code, message, field, severity string) map[string]interface{} {
-	return map[string]interface{}{"code": code, "message": message, "field": field, "severity": severity}
+	blocking := severity == "error"
+	return map[string]interface{}{
+		"code":     code,
+		"message":  message,
+		"field":    field,
+		"key":      field,
+		"path":     fieldPath(field),
+		"reason":   message,
+		"source":   "preflight",
+		"severity": severity,
+		"blocking": blocking,
+	}
+}
+
+func fieldPath(field string) []string {
+	if field == "" {
+		return nil
+	}
+	return strings.Split(field, ".")
 }

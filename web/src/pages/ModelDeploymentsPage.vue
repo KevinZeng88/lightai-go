@@ -69,13 +69,21 @@
           <el-descriptions v-if="lastDryRun.resolved_image" :column="2" border size="small" style="margin-top:8px">
             <el-descriptions-item label="Resolved Image">{{ lastDryRun.resolved_image }}</el-descriptions-item>
             <el-descriptions-item v-if="lastDryRun.selected_node" label="Selected Node">{{ lastDryRun.selected_node }}</el-descriptions-item>
-          </el-descriptions>
-          <el-descriptions v-if="lastDryRun.run_plan?.device_binding" :column="2" border size="small" style="margin-top:8px">
-            <el-descriptions-item :label="$t('deployments.gpuBindingGroup')">{{ lastDryRun.run_plan.device_binding.gpu_device_ids?.join(', ') || '-' }}</el-descriptions-item>
-            <el-descriptions-item :label="$t('deployments.gpuVisibleEnv')">{{ lastDryRun.run_plan.device_binding.visible_env_key }}={{ lastDryRun.run_plan.device_binding.visible_env_value }}</el-descriptions-item>
-            <el-descriptions-item v-if="lastDryRun.run_plan.device_binding.docker_gpu_option" label="Docker GPU" :span="2">--gpus "{{ lastDryRun.run_plan.device_binding.docker_gpu_option }}"</el-descriptions-item>
-          </el-descriptions>
-        </template>
+	          </el-descriptions>
+	          <el-descriptions v-if="lastDryRun.run_plan?.device_binding" :column="2" border size="small" style="margin-top:8px">
+	            <el-descriptions-item :label="$t('deployments.gpuBindingGroup')">{{ lastDryRun.run_plan.device_binding.selection_mode || '-' }}</el-descriptions-item>
+	            <el-descriptions-item label="source">{{ lastDryRun.run_plan.device_binding.source || '-' }}</el-descriptions-item>
+	            <el-descriptions-item label="patch target" :span="2">{{ lastDryRun.run_plan.device_binding.patch_target || '-' }}</el-descriptions-item>
+	            <el-descriptions-item
+	              v-for="(item, i) in lastDryRun.run_plan.device_binding.injection_preview || []"
+	              :key="i"
+	              :label="item.key"
+	              :span="2"
+	            >
+	              {{ item.docker_effect ? item.docker_effect + ' ' : '' }}{{ item.value }} ({{ item.source }})
+	            </el-descriptions-item>
+	          </el-descriptions>
+	        </template>
         <ConfigEditView
           v-if="editing && deploymentEditView"
           :model-value="deploymentEditView"

@@ -167,6 +167,7 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 	// if the user did not explicitly pick GPUs, preview the first available GPU.
 	gpuIDs := []runplan.GPUInfo{}
 	acceleratorIDs := []string{}
+	placement := runplan.PlacementInfo{NodeID: nbrNodeID, AllowAutoSelect: true}
 	if placementRaw, ok := rawBody["placement_json"].(map[string]interface{}); ok {
 		if aids, ok := placementRaw["accelerator_ids"].([]interface{}); ok {
 			for _, a := range aids {
@@ -175,13 +176,37 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 				}
 			}
 		}
+		placement.AcceleratorSelectionMode = strings.TrimSpace(strVal(placementRaw, "accelerator_selection_mode", ""))
+		placement.AcceleratorCount = intFromAny(placementRaw["accelerator_count"], 0)
+		placement.AllowAutoSelect = boolFromAny(placementRaw["allow_auto_select"], true)
+		if _, ok := placementRaw["device_binding_enabled"]; ok {
+			enabled := boolFromAny(placementRaw["device_binding_enabled"], true)
+			placement.DeviceBindingEnabled = &enabled
+		}
 	}
-	if len(acceleratorIDs) == 0 && nbrNodeID != "" {
+	if placement.DeviceBindingEnabled != nil && !*placement.DeviceBindingEnabled {
+		placement.AcceleratorSelectionMode = "disabled"
+		acceleratorIDs = nil
+	}
+	if placement.AcceleratorSelectionMode == "disabled" {
+		acceleratorIDs = nil
+	}
+	if len(acceleratorIDs) == 0 && nbrNodeID != "" && placement.AcceleratorSelectionMode != "disabled" {
 		var autoGpuID string
 		_ = h.DB.QueryRow(`SELECT id FROM gpu_devices WHERE node_id = ? AND status = 'available' LIMIT 1`, nbrNodeID).Scan(&autoGpuID)
 		if autoGpuID != "" {
 			acceleratorIDs = append(acceleratorIDs, autoGpuID)
+			if placement.AcceleratorSelectionMode == "" {
+				placement.AcceleratorSelectionMode = "auto"
+			}
 		}
+	}
+	if len(acceleratorIDs) > 0 && placement.AcceleratorSelectionMode == "" {
+		placement.AcceleratorSelectionMode = "manual"
+	}
+	placement.AcceleratorIds = acceleratorIDs
+	if placement.AcceleratorCount == 0 {
+		placement.AcceleratorCount = len(acceleratorIDs)
 	}
 	for _, gid := range acceleratorIDs {
 		var idx int
@@ -223,7 +248,7 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 			ID:              "preview",
 			Name:            strVal(rawBody, "name", "preview"),
 			ParameterValues: paramVals,
-			Placement:       runplan.PlacementInfo{NodeID: nbrNodeID, AcceleratorIds: acceleratorIDs},
+			Placement:       placement,
 		},
 		InstanceID:        "preview",
 		Node:              &runplan.NodeInfo{ID: nbrNodeID},
@@ -235,7 +260,17 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 
 	plan, resolveErrs, resolveWarns := runplan.ResolveWithSourceMap(input)
 	for _, e := range resolveErrs {
-		errs = append(errs, errEntry("resolve_error", e.Error(), "runplan", "error"))
+		blocking := plan == nil
+		entry := errEntry("resolve_error", e.Error(), "runplan", "warning")
+		entry["source"] = "runplan_resolver"
+		entry["blocking"] = blocking
+		if blocking {
+			entry["severity"] = "error"
+			errs = append(errs, entry)
+		} else {
+			entry["severity"] = "warning"
+			warns = append(warns, entry)
+		}
 	}
 	for _, w := range resolveWarns {
 		warns = append(warns, errEntry("resolve_warning", w, "runplan", "warning"))
@@ -271,7 +306,9 @@ func (h *AgentHandler) HandleDeploymentPreview(w http.ResponseWriter, r *http.Re
 		dockerPreview = runplan.EquivalentCommandPreview(plan)
 	}
 
-	canRun := len(errs) == 0
+	errs = dedupeIssueEntries(errs)
+	warns = dedupeIssueEntries(warns)
+	canRun := plan != nil && !hasBlockingIssue(errs)
 	writeJSON(w, http.StatusOK, previewResponse(canRun, plan, dockerPreview, lintResult, errs, warns))
 }
 
@@ -304,6 +341,35 @@ func previewResponse(canRun bool, plan *runplan.ResolvedRunPlan, dockerPreview s
 		resp["run_plan"] = plan
 	}
 	return resp
+}
+
+func hasBlockingIssue(items []map[string]interface{}) bool {
+	for _, item := range items {
+		if b, ok := item["blocking"].(bool); ok {
+			if b {
+				return true
+			}
+			continue
+		}
+		if item["severity"] == "error" {
+			return true
+		}
+	}
+	return false
+}
+
+func dedupeIssueEntries(items []map[string]interface{}) []map[string]interface{} {
+	seen := map[string]bool{}
+	out := make([]map[string]interface{}, 0, len(items))
+	for _, item := range items {
+		key := fmt.Sprintf("%v|%v|%v|%v|%v", item["code"], item["key"], item["path"], item["reason"], item["source"])
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, item)
+	}
+	return out
 }
 
 // hostPortFromJSON extracts an integer from a JSON map.

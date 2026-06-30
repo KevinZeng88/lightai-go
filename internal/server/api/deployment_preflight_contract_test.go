@@ -57,6 +57,84 @@ func TestContractPreflightAcceptsReadyWithWarnings(t *testing.T) {
 	}
 }
 
+func TestDeploymentPreviewCanRunUsesResolvedPlanAndExplainsSources(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	nodeID := "node-preview-source"
+	runtimeID := "br-preview-source"
+	nbrID := nodeID + ":" + runtimeID
+	artifactID := "art-preview-source"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,status,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-preview-source',?,'nvidia',0,'RTX','available','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
+	insertRuntime(t, db, runtimeID, "Runtime Preview Source", "")
+	insertNodeBackendRuntime(t, db, nbrID, runtimeID, nodeID, "vllm/vllm-openai:latest", "ready", "ok", 1, 1, "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	insertModelLocationStatus(t, db, "ml-preview-source", artifactID, nodeID, "verified", "exact_match", "")
+
+	body := `{"name":"dep-preview-source","model_artifact_id":"` + artifactID + `","node_backend_runtime_id":"` + nbrID + `","service_json":{"host_port":8000,"container_port":8000,"app_port":8000},"placement_json":{"accelerator_selection_mode":"auto","allow_auto_select":true}}`
+	w := httptest.NewRecorder()
+	h.HandleDeploymentPreview(w, newReq("POST", "/x", body, adminSession(), nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("preview code=%d body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["can_run"] != true {
+		t.Fatalf("preview can_run false despite resolved plan: %s", w.Body.String())
+	}
+	preview, _ := resp["docker_preview"].(string)
+	for _, want := range []string{"docker run", "vllm/vllm-openai:latest", `--gpus "device=0"`, "CUDA_VISIBLE_DEVICES=0"} {
+		if !strings.Contains(preview, want) {
+			t.Fatalf("docker preview missing %q: %s", want, preview)
+		}
+	}
+	raw := w.Body.String()
+	for _, want := range []string{`"parameter_source_map"`, `"device_binding"`, `"patch_target"`, `"docker_effect"`, `"blocking"`} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("preview response missing %q: %s", want, raw)
+		}
+	}
+	if strings.Count(raw, `[resolve_error] 未知错误`) > 0 {
+		t.Fatalf("preview leaked unknown resolve error text: %s", raw)
+	}
+}
+
+func TestDeploymentPreviewDeviceBindingDisabledOmitsGPUInjection(t *testing.T) {
+	db := setupTestDB(t)
+	h := NewAgentHandler(db, nil)
+	nodeID := "node-preview-gpu-disabled"
+	runtimeID := "br-preview-gpu-disabled"
+	nbrID := nodeID + ":" + runtimeID
+	artifactID := "art-preview-gpu-disabled"
+	runtimeBoundaryInsertOnlineNode(t, db, nodeID)
+	db.Exec(`INSERT INTO gpu_devices (id,node_id,vendor,index_num,name,status,tenant_id,reported_at,created_at,updated_at)
+		VALUES ('gpu-preview-disabled',?,'nvidia',0,'RTX','available','',datetime('now'),datetime('now'),datetime('now'))`, nodeID)
+	insertRuntime(t, db, runtimeID, "Runtime Preview GPU Disabled", "")
+	insertNodeBackendRuntime(t, db, nbrID, runtimeID, nodeID, "vllm/vllm-openai:latest", "ready", "ok", 1, 1, "")
+	insertUIPersistenceArtifact(t, h, artifactID)
+	insertModelLocationStatus(t, db, "ml-preview-gpu-disabled", artifactID, nodeID, "verified", "exact_match", "")
+
+	body := `{"name":"dep-preview-gpu-disabled","model_artifact_id":"` + artifactID + `","node_backend_runtime_id":"` + nbrID + `","service_json":{"host_port":8001,"container_port":8000,"app_port":8000},"placement_json":{"device_binding_enabled":false,"accelerator_selection_mode":"disabled"}}`
+	w := httptest.NewRecorder()
+	h.HandleDeploymentPreview(w, newReq("POST", "/x", body, adminSession(), nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("preview code=%d body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["can_run"] != true {
+		t.Fatalf("disabled gpu binding should still allow CPU/no-device preview: %s", w.Body.String())
+	}
+	preview, _ := resp["docker_preview"].(string)
+	if strings.Contains(preview, "--gpus") || strings.Contains(preview, "CUDA_VISIBLE_DEVICES") {
+		t.Fatalf("disabled gpu binding leaked into preview: %s", preview)
+	}
+	if !strings.Contains(w.Body.String(), `"selection_mode":"disabled"`) {
+		t.Fatalf("disabled device binding contract missing: %s", w.Body.String())
+	}
+}
+
 // TestContractPreflightRejectsNeedsCheck verifies R-003: preflight blocks needs_check NBR.
 func TestContractPreflightRejectsNeedsCheck(t *testing.T) {
 	db := setupTestDB(t)

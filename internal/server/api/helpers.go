@@ -177,6 +177,25 @@ func boolVal(m map[string]interface{}, key string, def bool) bool {
 	return def
 }
 
+func boolFromAny(v interface{}, def bool) bool {
+	switch b := v.(type) {
+	case bool:
+		return b
+	case string:
+		switch strings.ToLower(strings.TrimSpace(b)) {
+		case "true", "1", "yes", "on":
+			return true
+		case "false", "0", "no", "off":
+			return false
+		}
+	case float64:
+		return b != 0
+	case int:
+		return b != 0
+	}
+	return def
+}
+
 func strSlice(m map[string]interface{}, key string) []string {
 	if v, ok := m[key]; ok {
 		if raw, ok := v.(json.RawMessage); ok {

@@ -276,6 +276,51 @@ func TestResolveWithSourceMapDoesNotReturnNilMap(t *testing.T) {
 	}
 }
 
+func TestResolveWithSourceMapEmitsSelfContainedSourceEntries(t *testing.T) {
+	in := makeTestInput()
+	in.Deployment.Placement = PlacementInfo{NodeID: "node-1", AcceleratorSelectionMode: "auto", AllowAutoSelect: true}
+
+	plan, errs, _ := ResolveWithSourceMap(in)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if plan.ParameterSourceMap == nil {
+		t.Fatal("parameter_source_map missing")
+	}
+	sm := plan.ParameterSourceMap
+	if len(sm.Image) == 0 || sm.Image[0].PatchTarget == "" || sm.Image[0].DockerEffect == "" {
+		t.Fatalf("image source entry not self-contained: %#v", sm.Image)
+	}
+	assertSelfContainedEntries(t, "args", sm.Args)
+	assertSelfContainedEntries(t, "env", sm.Env)
+	assertSelfContainedEntries(t, "mounts", sm.Mounts)
+	assertSelfContainedEntries(t, "ports", sm.Ports)
+	assertSelfContainedEntries(t, "docker_options", sm.DockerOptions)
+	assertSelfContainedEntries(t, "health_check", sm.HealthCheck)
+	assertSelfContainedEntries(t, "system_generated", sm.SystemGenerated)
+	foundGPU := false
+	for _, e := range sm.SystemGenerated {
+		if e.Key == "docker.gpus" {
+			foundGPU = e.PatchTarget == "deployment.placement_json" && e.DockerEffect == "--gpus" && e.Derived
+		}
+	}
+	if !foundGPU {
+		t.Fatalf("GPU docker injection source entry missing or incomplete: %#v", sm.SystemGenerated)
+	}
+}
+
+func assertSelfContainedEntries(t *testing.T, name string, entries []ParameterSourceEntry) {
+	t.Helper()
+	if len(entries) == 0 {
+		t.Fatalf("%s source entries missing", name)
+	}
+	for _, e := range entries {
+		if e.Key == "" || e.Target == "" || len(e.Path) == 0 || e.EffectiveSource == "" || e.SourceLayer == "" || e.SourceKind == "" || e.Reason == "" {
+			t.Fatalf("%s entry is not self-contained: %#v", name, e)
+		}
+	}
+}
+
 func TestSourceMapFromProvenanceTracksSourceChain(t *testing.T) {
 	sm := NewSourceMapBuilder()
 	chain := []SourceChainEntry{
