@@ -311,19 +311,24 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		ParentKey:          parentKey(internalKey, path),
 		Path:               path,
 		Label:              fieldLabel(displayKey, item),
-		LabelI18nKey:       "configEdit.labels." + displayKey,
-		DescriptionI18nKey: "configEdit.descriptions." + displayKey,
-		Help:               firstString(nestedString(item, "render", "help"), nestedString(item, "extensions", "help")),
+		LabelI18nKey:       firstString(nestedString(item, "schema", "label_i18n_key"), nestedString(item, "render", "label_i18n_key"), nestedString(item, "extensions", "label_i18n_key"), "configEdit.labels."+displayKey),
+		TitleI18nKey:       firstString(nestedString(item, "schema", "title_i18n_key"), nestedString(item, "render", "title_i18n_key"), nestedString(item, "extensions", "title_i18n_key")),
+		DescriptionI18nKey: firstString(nestedString(item, "schema", "description_i18n_key"), nestedString(item, "render", "description_i18n_key"), nestedString(item, "extensions", "description_i18n_key"), "configEdit.descriptions."+displayKey),
+		HelpI18nKey:        firstString(nestedString(item, "schema", "help_i18n_key"), nestedString(item, "render", "help_i18n_key"), nestedString(item, "extensions", "help_i18n_key"), "configEdit.descriptions."+displayKey),
+		TooltipI18nKey:     firstString(nestedString(item, "schema", "tooltip_i18n_key"), nestedString(item, "render", "tooltip_i18n_key"), nestedString(item, "extensions", "tooltip_i18n_key")),
+		Title:              firstString(nestedString(item, "schema", "title"), nestedString(item, "render", "title"), nestedString(item, "extensions", "title")),
+		Description:        firstString(nestedString(item, "schema", "description"), nestedString(item, "render", "description"), nestedString(item, "extensions", "description")),
+		Help:               firstString(nestedString(item, "schema", "help_text"), nestedString(item, "schema", "help"), nestedString(item, "render", "help"), nestedString(item, "extensions", "help")),
 		CliFlag:            configEditCliFlag(displayKey, item),
 		EnvKey:             configEditEnvKey(displayKey, item),
 		TechnicalKey:       technicalKey,
 		Section:            section,
 		Group:              firstString(nestedString(item, "render", "group"), nestedString(item, "extensions", "group")),
-		Order:              intValue(item["order"]),
-		Type:               firstString(stringValue(item["type"]), "string"),
+		Order:              firstInt(tieredAnyField(item, "schema", "display_order"), item["order"]),
+		Type:               firstString(tieredStringField(item, "schema", "type"), stringValue(item["type"]), "string"),
 		Widget:             widget,
 		Value:              value,
-		DefaultValue:       item["default_value"],
+		DefaultValue:       itemDefaultValue(item),
 		Enabled:            enabled,
 		HasEnable:          !required && !readonly,
 		Required:           required,
@@ -331,9 +336,20 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		Advanced:           advanced || section == "advanced_raw",
 		Visibility:         visibility,
 		Options:            optionsFor(item),
-		Constraints:        nestedMap(item, "constraints"),
-		Source:             nestedMap(item, "source"),
-		CopiedFrom:         firstString(stringValue(item["copied_from"]), stringValue(item["copiedFrom"])),
+		Constraints:        constraintsFor(item),
+		ValidationRules:    validationRulesFor(item),
+		Placeholder:        firstString(nestedString(item, "schema", "placeholder"), nestedString(item, "presentation", "placeholder"), nestedString(item, "render", "placeholder"), nestedString(item, "extensions", "placeholder")),
+		Sensitive:          tieredBoolField(item, "presentation", "sensitive"),
+		Disabled:           readonly,
+		Source:             sourceFor(item),
+		ValueSource:        nestedString(item, "provenance", "value_source"),
+		LastValueLayer:     nestedString(item, "provenance", "last_value_layer"),
+		InheritedValue:     itemInheritedValue(item),
+		CopyBehavior:       firstString(nestedString(item, "schema", "copy_behavior"), nestedString(item, "render", "copy_behavior"), "copy_on_create"),
+		OverrideBehavior:   firstString(nestedString(item, "schema", "override_behavior"), nestedString(item, "render", "override_behavior"), "patch_local_value"),
+		DisableBehavior:    firstString(nestedString(item, "schema", "disable_behavior"), nestedString(item, "render", "disable_behavior"), "retain_value_when_disabled"),
+		PatchTarget:        firstString(nestedString(item, "schema", "patch_target"), internalKey),
+		CopiedFrom:         firstString(nestedString(item, "snapshot", "snapshot_from_id"), stringValue(item["copied_from"]), stringValue(item["copiedFrom"])),
 		Dirty:              boolValue(item["dirty"]),
 		Warnings:           warnings,
 		Diagnostic:         advanced || visibility == "internal" || visibility == "hidden",
@@ -343,7 +359,7 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 	if hasDef {
 		field.Owner = string(def.Owner)
 		field.Tier = tier
-		field.Label = firstString(def.Label, field.Label)
+		field.Label = firstString(field.Label, def.Label)
 	} else {
 		field.Tier = tier
 	}
@@ -448,6 +464,14 @@ func optionsFor(item map[string]any) []EditOption {
 	if len(raw) == 0 {
 		raw, _ = nestedMap(item, "constraints")["options"].([]any)
 	}
+	if len(raw) == 0 {
+		if constraints, ok := nestedMap(item, "schema")["constraints"].(map[string]any); ok {
+			raw, _ = constraints["options"].([]any)
+		}
+	}
+	if len(raw) == 0 {
+		raw, _ = nestedMap(item, "schema")["choices"].([]any)
+	}
 	var out []EditOption
 	for _, v := range raw {
 		switch opt := v.(type) {
@@ -490,12 +514,46 @@ func configEditCliFlag(key string, item map[string]any) string {
 	switch key {
 	case "service.container_port":
 		return "container_port"
+	case "service.listen_host":
+		return "--host"
 	case "deployment.host_port":
 		return "host_port"
+	case "deployment.served_model_name":
+		return "--served-model-name"
 	case "model_runtime.max_model_len":
 		return "--max-model-len / --context-length / --ctx-size"
 	case "model_runtime.gpu_memory_utilization":
 		return "--gpu-memory-utilization / --mem-fraction-static"
+	case "model_runtime.dtype":
+		return "--dtype"
+	case "model_runtime.tensor_parallel_size":
+		return "--tensor-parallel-size"
+	case "model_runtime.pipeline_parallel_size":
+		return "--pipeline-parallel-size"
+	case "model_runtime.max_num_batched_tokens":
+		return "--max-num-batched-tokens"
+	case "model_runtime.max_num_seqs":
+		return "--max-num-seqs"
+	case "model_runtime.kv_cache_dtype":
+		return "--kv-cache-dtype"
+	case "model_runtime.cpu_offload_gb":
+		return "--cpu-offload-gb"
+	case "model_runtime.swap_space":
+		return "--swap-space"
+	case "model_runtime.enforce_eager":
+		return "--enforce-eager"
+	case "model_runtime.trust_remote_code":
+		return "--trust-remote-code"
+	case "model_runtime.safetensors_load_strategy":
+		return "--safetensors-load-strategy"
+	case "model_runtime.download_dir":
+		return "--download-dir"
+	case "model_runtime.model":
+		return "--model"
+	case "model_runtime.host":
+		return "--host"
+	case "model_runtime.port":
+		return "--port"
 	case "model_runtime.mem_fraction_static":
 		return "--mem-fraction-static"
 	case "model_runtime.context_length":

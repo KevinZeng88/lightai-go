@@ -4,6 +4,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import ElementPlus from 'element-plus'
+import fs from 'node:fs'
+import path from 'node:path'
 
 // Mock API modules.
 vi.mock('@/api/client', () => ({
@@ -141,5 +143,15 @@ describe('RunnerConfigsPage integration', () => {
     const portFields = allFields.filter(f => f.key.includes('port'))
     expect(portFields.some(f => f.key === 'model_runtime.port')).toBe(false)
     expect(portFields.some(f => f.key === 'service.container_port')).toBe(true)
+  })
+
+  it('node runtime wizard uses shared action bar and no duplicate dialog footer', () => {
+    const root = path.resolve(__dirname, '../..')
+    const wizardSrc = fs.readFileSync(path.join(root, 'components/deployments/NodeRuntimeConfigWizard.vue'), 'utf8')
+    const pageSrc = fs.readFileSync(path.join(root, 'pages/RunnerConfigsPage.vue'), 'utf8')
+    expect(wizardSrc).toContain('WizardActionBar')
+    expect(wizardSrc).not.toContain('class="wizard-footer"')
+    expect(pageSrc).toContain('@cancel="createVisible = false"')
+    expect(pageSrc).not.toContain('<template #footer>')
   })
 })

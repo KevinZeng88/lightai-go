@@ -32,6 +32,49 @@ func TestDefaultRegistryContainsCanonicalOwners(t *testing.T) {
 	}
 }
 
+func TestDefaultRegistryCoversRuntimeWizardKnownKeys(t *testing.T) {
+	reg := DefaultRegistry()
+	for _, key := range []string{
+		"launcher.kind",
+		"launcher.devices",
+		"launcher.ports",
+		"launcher.volumes",
+		"runtime.env",
+		"runtime.extra_env",
+		"runtime.model_mount",
+		"runtime.health",
+		"service.listen_host",
+		"service.container_port",
+		"deployment.served_model_name",
+		"backend.extra_args",
+		"model_runtime.gpu_memory_utilization",
+		"model_runtime.max_model_len",
+		"model_runtime.dtype",
+		"model_runtime.tensor_parallel_size",
+		"model_runtime.pipeline_parallel_size",
+		"model_runtime.max_num_batched_tokens",
+		"model_runtime.max_num_seqs",
+		"model_runtime.kv_cache_dtype",
+		"model_runtime.cpu_offload_gb",
+		"model_runtime.swap_space",
+		"model_runtime.enforce_eager",
+		"model_runtime.trust_remote_code",
+		"model_runtime.safetensors_load_strategy",
+		"model_runtime.download_dir",
+		"model_runtime.model",
+		"model_runtime.host",
+		"model_runtime.port",
+	} {
+		def, ok := reg.Get(key)
+		if !ok {
+			t.Fatalf("registry missing %s", key)
+		}
+		if def.Label == "" {
+			t.Fatalf("registry definition %s missing label", key)
+		}
+	}
+}
+
 func TestNormalizeConfigSetRewritesLegacyKeysAndReportsConflicts(t *testing.T) {
 	reg := DefaultRegistry()
 	set := map[string]any{
@@ -59,7 +102,7 @@ func TestNormalizeConfigSetRewritesLegacyKeysAndReportsConflicts(t *testing.T) {
 			"launcher.docker_options": map[string]any{
 				"schema": map[string]any{"key": "launcher.docker_options", "type": "object"},
 				"state":  map[string]any{"enabled": true},
-				"value":  map[string]any{"effective_value": map[string]any{
+				"value": map[string]any{"effective_value": map[string]any{
 					"shm_size":  "16g",
 					"group_add": []any{"video"},
 				}},
@@ -125,7 +168,7 @@ func TestNormalizeConfigSetDoesNotDefaultMissingEnabledToTrue(t *testing.T) {
 			"launcher.docker_options": map[string]any{
 				"schema": map[string]any{"key": "launcher.docker_options", "type": "object"},
 				"state":  map[string]any{"enabled": true},
-				"value":  map[string]any{"effective_value": map[string]any{
+				"value": map[string]any{"effective_value": map[string]any{
 					"shm_size": "16g",
 				}},
 			},

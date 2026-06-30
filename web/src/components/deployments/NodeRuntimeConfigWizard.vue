@@ -7,6 +7,22 @@
       <el-step :title="$t('runnerConfigs.wizardStepCheck')" />
     </el-steps>
 
+    <WizardActionBar
+      :active-step="activeStep"
+      :total-steps="4"
+      :can-prev="activeStep > 0"
+      :can-next="actionCanProceed"
+      :primary-label="primaryActionLabel"
+      :primary-loading="primaryActionLoading"
+      :next-disabled-reason="actionDisabledReason"
+      :secondary-actions="secondaryActions"
+      layout="sticky-top"
+      @cancel="emit('cancel')"
+      @prev="activeStep--"
+      @primary="onPrimaryAction"
+      @secondary="onSecondaryAction"
+    />
+
     <div class="wizard-content">
       <!-- Step 0: Select Node -->
       <div v-if="activeStep === 0">
@@ -120,32 +136,8 @@
           </div>
         </div>
 
-        <div style="text-align:center;display:flex;gap:8px;justify-content:center">
-          <el-button type="primary" :loading="savingState === 'saving'" @click="doSave">
-            {{ $t('runnerConfigs.saveOnly') }}
-          </el-button>
-          <el-button type="primary" :loading="savingState === 'checking'" @click="doSaveAndCheck">
-            {{ $t('runnerConfigs.saveAndCheck') }}
-          </el-button>
-          <el-button
-            v-if="checkResult?.deployable"
-            type="success"
-            @click="finish"
-          >
-            {{ $t('runnerConfigs.finish') }}
-          </el-button>
-        </div>
+        <el-alert v-if="checkResult?.deployable" type="success" :title="$t('runnerConfigs.finish')" show-icon :closable="false" />
       </div>
-    </div>
-
-    <div class="wizard-footer">
-      <el-button v-if="activeStep > 0" @click="activeStep--">{{ $t('common.prev') }}</el-button>
-      <el-button v-if="activeStep < 3" type="primary" @click="nextStep" :disabled="!canProceed">
-        {{ $t('common.next') }}
-      </el-button>
-      <span v-if="!canProceed && activeStep < 3" style="color:var(--el-color-warning);font-size:12px;margin-left:8px">
-        {{ cannotProceedReason }}
-      </span>
     </div>
   </div>
 </template>
@@ -162,6 +154,7 @@ import { toRuntimeTemplateDisplay, type RuntimeTemplateDisplay } from '@/utils/r
 import { apiErrorMessage } from '@/utils/apiErrors'
 import { translateStatus, translateStatusReason } from '@/utils/status'
 import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
+import WizardActionBar from '@/components/common/WizardActionBar.vue'
 import ConfigEditView from '@/components/config/ConfigEditView.vue'
 import DockerImagePicker from '@/components/DockerImagePicker.vue'
 import type { ConfigEditPatch, ConfigEditView as ConfigEditViewModel } from '@/utils/configEditView'
@@ -170,6 +163,7 @@ const { t } = useI18n()
 
 const emit = defineEmits<{
   completed: []
+  cancel: []
 }>()
 
 const activeStep = ref(0)
@@ -232,6 +226,34 @@ const cannotProceedReason = computed(() => {
   return ''
 })
 
+const primaryActionLabel = computed(() => {
+  if (activeStep.value < 3) return t('common.next')
+  if (checkResult.value?.deployable) return t('runnerConfigs.finish')
+  return t('runnerConfigs.saveAndCheck')
+})
+
+const primaryActionLoading = computed(() => savingState.value === 'checking')
+
+const secondaryActions = computed(() => {
+  if (activeStep.value !== 3 || checkResult.value?.deployable) return []
+  return [{
+    key: 'save-only',
+    label: t('runnerConfigs.saveOnly'),
+    type: 'default' as const,
+    loading: savingState.value === 'saving',
+  }]
+})
+
+const actionCanProceed = computed(() => {
+  if (activeStep.value < 3) return canProceed.value
+  return savingState.value !== 'saving' && savingState.value !== 'checking'
+})
+
+const actionDisabledReason = computed(() => {
+  if (activeStep.value < 3) return cannotProceedReason.value
+  return ''
+})
+
 function resetWizard() {
   activeStep.value = 0
   selectedNode.value = null
@@ -284,6 +306,22 @@ function onSchemaParamOutput(output: ConfigEditPatch) {
 
 function nextStep() {
   if (activeStep.value < 3) activeStep.value++
+}
+
+function onPrimaryAction() {
+  if (activeStep.value < 3) {
+    nextStep()
+    return
+  }
+  if (checkResult.value?.deployable) {
+    finish()
+    return
+  }
+  doSaveAndCheck()
+}
+
+function onSecondaryAction(key: string) {
+  if (key === 'save-only') doSave()
 }
 
 async function loadNodes() {
@@ -380,5 +418,4 @@ defineExpose({ resetWizard, saving: savingState })
 <style scoped>
 .nbr-wizard { max-width: 900px; margin: 0 auto; }
 .wizard-content { margin: 24px 0; min-height: 300px; }
-.wizard-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 </style>

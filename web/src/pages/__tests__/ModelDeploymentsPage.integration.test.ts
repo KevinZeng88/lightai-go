@@ -71,6 +71,23 @@ describe('detail structured display', () => {
   })
 })
 
+describe('deployment wizard shared actions', () => {
+  const pageSrc = fs.readFileSync(path.resolve(__dirname, '../ModelDeploymentsPage.vue'), 'utf8')
+  const wizardSrc = fs.readFileSync(path.resolve(__dirname, '../../components/deployments/DeploymentWizard.vue'), 'utf8')
+  const overrideSrc = fs.readFileSync(path.resolve(__dirname, '../../components/deployments/DeploymentOverrideEditor.vue'), 'utf8')
+
+  it('uses WizardActionBar and removes duplicate dialog footer actions', () => {
+    expect(wizardSrc).toContain('WizardActionBar')
+    expect(wizardSrc).not.toContain('class="wizard-footer"')
+    expect(pageSrc).toContain('@cancel="createVisible = false"')
+  })
+
+  it('deployment override editor reuses ConfigEditView contract', () => {
+    expect(overrideSrc).toContain('ConfigEditView')
+    expect(overrideSrc).toContain('getConfigEditView')
+  })
+})
+
 describe('port display', () => {
   it('service.container_port canonical', () => {
     expect('service.container_port').toBe('service.container_port')

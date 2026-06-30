@@ -227,6 +227,21 @@
         <el-step :title="$t('modelWizard.browseDir')" />
         <el-step :title="$t('modelWizard.scanModel')" />
       </el-steps>
+      <WizardActionBar
+        :active-step="wizardStep"
+        :total-steps="3"
+        :can-prev="wizardStep > 0"
+        :can-next="wizardCanProceed"
+        :primary-label="wizardPrimaryLabel"
+        :primary-loading="wizardPrimaryLoading"
+        :next-disabled-reason="wizardDisabledReason"
+        :secondary-actions="wizardSecondaryActions"
+        layout="sticky-top"
+        @cancel="wizardVisible = false"
+        @prev="wizardStep--"
+        @primary="onWizardPrimaryAction"
+        @secondary="onWizardSecondaryAction"
+      />
       <!-- Step 1: Select node -->
       <div v-if="wizardStep === 0">
         <NodeSelectorTable
@@ -238,15 +253,10 @@
           @select="onWizNodeSelect"
           @refresh="loadWizardNodes"
         />
-        <div style="margin-top:12px;text-align:right"><el-button type="primary" :disabled="!wizardNodeId" @click="wizardStep=1">{{ $t('common.next') }}</el-button></div>
       </div>
       <!-- Step 2: File browser -->
       <div v-if="wizardStep === 1">
         <RemoteFileBrowser :node-id="wizardNodeId" @select="onFileSelect" />
-        <div style="margin-top:12px;text-align:right">
-          <el-button @click="wizardStep=0">{{ $t('common.prev') }}</el-button>
-          <el-button type="primary" :disabled="!wizardSelectedEntry" @click="doScan">{{ $t('modelWizard.scanModel') }}</el-button>
-        </div>
       </div>
       <!-- Step 3: Scan results & save -->
       <div v-if="wizardStep === 2" v-loading="wizardScanning">
@@ -328,11 +338,6 @@
           <ul style="margin:0;padding-left:16px"><li v-for="w in activeCandidate.warnings" :key="w">{{ w }}</li></ul>
         </el-alert>
 
-        <div style="margin-top:12px;text-align:right">
-          <el-button @click="wizardStep=1">{{ $t('common.prev') }}</el-button>
-          <el-button @click="doScan" :loading="wizardScanning">{{ $t('modelWizard.rescan') }}</el-button>
-          <el-button type="primary" :disabled="!activeCandidate || !!scanResult?.error" @click="doWizardSave" :loading="wizardSaving">{{ $t('modelWizard.createAndSave') }}</el-button>
-        </div>
       </div>
     </el-dialog>
 
@@ -360,6 +365,7 @@ import RemoteFileBrowser from '@/components/RemoteFileBrowser.vue'
 import { useWizardAutoAdvance } from '@/composables/useWizardAutoAdvance'
 import { capabilityLabel, inferModelCapabilities, recommendedTestMode, testModeLabel } from '@/utils/modelCapabilities.js'
 import NodeSelectorTable from '@/components/common/NodeSelectorTable.vue'
+import WizardActionBar from '@/components/common/WizardActionBar.vue'
 const { loadNodes: loadNodeLabels, nodes: nodeLabelItems, nodeLabel } = useNodeLabels()
 const { t, locale } = useI18n()
 
@@ -377,6 +383,28 @@ const scanResult = ref<any>(null); const wizardModelName = ref(''); const wizard
 const selectedCandidateIdx = ref(0)
 const activeCandidate = ref<any>(null)
 
+const wizardPrimaryLabel = computed(() => {
+  if (wizardStep.value === 0) return t('common.next')
+  if (wizardStep.value === 1) return t('modelWizard.scanModel')
+  return t('modelWizard.createAndSave')
+})
+
+const wizardPrimaryLoading = computed(() => wizardScanning.value || wizardSaving.value)
+
+const wizardDisabledReason = computed(() => {
+  if (wizardStep.value === 0 && !wizardNodeId.value) return t('modelWizard.selectNode')
+  if (wizardStep.value === 1 && !wizardSelectedEntry.value) return t('modelWizard.selectCandidate')
+  if (wizardStep.value === 2 && (!activeCandidate.value || scanResult.value?.error)) return t('modelWizard.selectCandidate')
+  return ''
+})
+
+const wizardCanProceed = computed(() => !wizardPrimaryLoading.value && !wizardDisabledReason.value)
+
+const wizardSecondaryActions = computed(() => {
+  if (wizardStep.value !== 2) return []
+  return [{ key: 'rescan', label: t('modelWizard.rescan'), loading: wizardScanning.value }]
+})
+
 const { onSelectAutoNext: onWizAutoNext } = useWizardAutoAdvance(wizardStep, () => { wizardStep.value++ })
 
 async function loadWizardNodes() {
@@ -393,6 +421,22 @@ async function loadWizardNodes() {
 
 function onWizNodeSelect(node: any) {
   if (node) wizardNodeId.value = node.id
+}
+
+function onWizardPrimaryAction() {
+  if (wizardStep.value === 0) {
+    wizardStep.value = 1
+    return
+  }
+  if (wizardStep.value === 1) {
+    doScan()
+    return
+  }
+  doWizardSave()
+}
+
+function onWizardSecondaryAction(key: string) {
+  if (key === 'rescan') doScan()
 }
 
 // Add location state

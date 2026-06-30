@@ -9,28 +9,32 @@ import "encoding/json"
 // ConfigItemSchema holds immutable definition fields. After copy-on-create, inherited
 // items retain their original Schema values; the current layer must not modify them.
 type ConfigItemSchema struct {
-	Key          string         `json:"key"`
-	Owner        string         `json:"owner"`
-	OwnerLayer   string         `json:"owner_layer"`
-	ConfigSetKey string         `json:"config_set_key"`
-	Category     string         `json:"category"`
-	Label        string         `json:"label"`
-	Description  string         `json:"description,omitempty"`
-	Type         string         `json:"type"`
-	Kind         string         `json:"kind"`
-	Target       string         `json:"target,omitempty"`
-	ArgName      string         `json:"arg_name,omitempty"`
-	EnvName      string         `json:"env_name,omitempty"`
-	MountTarget  string         `json:"mount_target,omitempty"`
-	PortTarget   string         `json:"port_target,omitempty"`
-	Constraints  map[string]any `json:"constraints,omitempty"`
-	Choices      []any          `json:"choices,omitempty"`
-	Required     bool           `json:"required"`
-	Advanced     bool           `json:"advanced"`
-	DisplayOrder int            `json:"display_order"`
-	ReadOnly     bool           `json:"read_only"`
-	HelpText     string         `json:"help_text,omitempty"`
-	SupportLevel string         `json:"support_level"`
+	Key                string         `json:"key"`
+	Owner              string         `json:"owner"`
+	OwnerLayer         string         `json:"owner_layer"`
+	ConfigSetKey       string         `json:"config_set_key"`
+	Category           string         `json:"category"`
+	Label              string         `json:"label"`
+	LabelI18nKey       string         `json:"label_i18n_key,omitempty"`
+	Description        string         `json:"description,omitempty"`
+	DescriptionI18nKey string         `json:"description_i18n_key,omitempty"`
+	Type               string         `json:"type"`
+	Kind               string         `json:"kind"`
+	Target             string         `json:"target,omitempty"`
+	ArgName            string         `json:"arg_name,omitempty"`
+	EnvName            string         `json:"env_name,omitempty"`
+	MountTarget        string         `json:"mount_target,omitempty"`
+	PortTarget         string         `json:"port_target,omitempty"`
+	Constraints        map[string]any `json:"constraints,omitempty"`
+	Choices            []any          `json:"choices,omitempty"`
+	Required           bool           `json:"required"`
+	Advanced           bool           `json:"advanced"`
+	DisplayOrder       int            `json:"display_order"`
+	ReadOnly           bool           `json:"read_only"`
+	HelpText           string         `json:"help_text,omitempty"`
+	HelpI18nKey        string         `json:"help_i18n_key,omitempty"`
+	TooltipI18nKey     string         `json:"tooltip_i18n_key,omitempty"`
+	SupportLevel       string         `json:"support_level"`
 }
 
 // ConfigItemValue holds value fields that the current layer may modify.
@@ -109,43 +113,57 @@ type ConfigItem struct {
 // RegistryItem is the YAML shape from configs/config-registry/items.yaml.
 // It is converted to a ConfigItem with tiered fields during MaterializeBase.
 type RegistryItem struct {
-	Code         string                 `yaml:"code"`
-	Category     string                 `yaml:"category"`
-	Kind         string                 `yaml:"kind"`
-	Type         string                 `yaml:"type"`
-	Required     bool                   `yaml:"required"`
-	Visibility   string                 `yaml:"visibility"`
-	Readonly     bool                   `yaml:"readonly"`
-	Advanced     bool                   `yaml:"advanced"`
-	Value        any                    `yaml:"value"`
-	DefaultValue any                    `yaml:"default_value"`
-	Enabled      bool                   `yaml:"enabled"`
-	Render       map[string]any         `yaml:"render"`
-	Order        int                    `yaml:"order"`
-	Constraints  map[string]any         `yaml:"constraints"`
-	SupportLevel string                 `yaml:"support_level"`
-	Source       map[string]string      `yaml:"source"`
-	LastModified map[string]string      `yaml:"last_modified"`
-	Extensions   map[string]interface{} `yaml:"extensions"`
+	Code               string                 `yaml:"code"`
+	Category           string                 `yaml:"category"`
+	Kind               string                 `yaml:"kind"`
+	Type               string                 `yaml:"type"`
+	Label              string                 `yaml:"label"`
+	LabelI18nKey       string                 `yaml:"label_i18n_key"`
+	Description        string                 `yaml:"description"`
+	DescriptionI18nKey string                 `yaml:"description_i18n_key"`
+	Help               string                 `yaml:"help"`
+	HelpI18nKey        string                 `yaml:"help_i18n_key"`
+	TooltipI18nKey     string                 `yaml:"tooltip_i18n_key"`
+	Required           bool                   `yaml:"required"`
+	Visibility         string                 `yaml:"visibility"`
+	Readonly           bool                   `yaml:"readonly"`
+	Advanced           bool                   `yaml:"advanced"`
+	Value              any                    `yaml:"value"`
+	DefaultValue       any                    `yaml:"default_value"`
+	Enabled            bool                   `yaml:"enabled"`
+	Render             map[string]any         `yaml:"render"`
+	Order              int                    `yaml:"order"`
+	Constraints        map[string]any         `yaml:"constraints"`
+	SupportLevel       string                 `yaml:"support_level"`
+	Source             map[string]string      `yaml:"source"`
+	LastModified       map[string]string      `yaml:"last_modified"`
+	Extensions         map[string]interface{} `yaml:"extensions"`
 }
 
 // ToConfigItem converts a YAML registry item into a tiered ConfigItem.
 func (ri RegistryItem) ToConfigItem() ConfigItem {
 	ci := ConfigItem{
 		Schema: ConfigItemSchema{
-			Key:          ri.Code,
-			Category:     ri.Category,
-			Kind:         ri.Kind,
-			Type:         ri.Type,
-			Required:     ri.Required,
-			Advanced:     ri.Advanced,
-			ReadOnly:     ri.Readonly,
-			DisplayOrder: ri.Order,
-			SupportLevel: ri.SupportLevel,
-			Constraints:  ri.Constraints,
-			ConfigSetKey: "",
-			Owner:        "",
-			OwnerLayer:   "",
+			Key:                ri.Code,
+			Category:           ri.Category,
+			Kind:               ri.Kind,
+			Type:               ri.Type,
+			Label:              ri.Label,
+			LabelI18nKey:       ri.LabelI18nKey,
+			Description:        ri.Description,
+			DescriptionI18nKey: ri.DescriptionI18nKey,
+			HelpText:           ri.Help,
+			HelpI18nKey:        ri.HelpI18nKey,
+			TooltipI18nKey:     ri.TooltipI18nKey,
+			Required:           ri.Required,
+			Advanced:           ri.Advanced,
+			ReadOnly:           ri.Readonly,
+			DisplayOrder:       ri.Order,
+			SupportLevel:       ri.SupportLevel,
+			Constraints:        ri.Constraints,
+			ConfigSetKey:       "",
+			Owner:              "",
+			OwnerLayer:         "",
 		},
 		Value_: ConfigItemValue{
 			DefaultValue: ri.DefaultValue,
@@ -239,7 +257,7 @@ type ConfigChildSlot struct {
 	Slot              string `json:"slot"`
 	ChildConfigSetKey string `json:"child_config_set_key"`
 	Title             string `json:"title"`
-	View              string `json:"view"`       // summary, summary_then_edit, edit, preview
+	View              string `json:"view"`         // summary, summary_then_edit, edit, preview
 	DisplayMode       string `json:"display_mode"` // panel, card, inline
 	DefaultExpanded   bool   `json:"default_expanded"`
 	Order             int    `json:"order"`
@@ -377,8 +395,8 @@ func (r *Registry) MaterializeBase(layer, ref string) map[string]ConfigItem {
 	for _, item := range r.Items {
 		ci := item.ToConfigItem()
 		ci.Provenance_ = ConfigItemProvenance{
-			ValueSource:    layer,
-			LastValueLayer: layer,
+			ValueSource:      layer,
+			LastValueLayer:   layer,
 			LastValueOwnerID: ref,
 		}
 		items[item.Code] = ci

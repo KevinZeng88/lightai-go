@@ -28,7 +28,12 @@ export type ConfigEditField = {
   path?: string[]
   label: string
   label_i18n_key?: string
+  title_i18n_key?: string
   description_i18n_key?: string
+  help_i18n_key?: string
+  tooltip_i18n_key?: string
+  title?: string
+  description?: string
   help?: string
   cli_flag?: string
   env_key?: string
@@ -48,7 +53,18 @@ export type ConfigEditField = {
   visibility?: string
   options?: Array<{ label: string, value: any }>
   constraints?: Record<string, any>
+  validation_rules?: Record<string, any>
+  placeholder?: string
+  sensitive?: boolean
+  disabled?: boolean
   source?: Record<string, any>
+  value_source?: string
+  last_value_layer?: string
+  inherited_value?: any
+  copy_behavior?: string
+  override_behavior?: string
+  disable_behavior?: string
+  patch_target?: string
   copied_from?: string
   dirty?: boolean
   warnings?: any[]

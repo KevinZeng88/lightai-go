@@ -14,7 +14,7 @@ func testConfigSet() map[string]any {
 			"launcher.docker_options": map[string]any{
 				"schema": map[string]any{"key": "launcher.docker_options", "category": "launcher", "kind": "docker_options", "type": "object"},
 				"state":  map[string]any{"enabled": true, "checked": true, "editable": true, "visible": true},
-				"value":  map[string]any{"effective_value": map[string]any{
+				"value": map[string]any{"effective_value": map[string]any{
 					"shm_size":   "16gb",
 					"privileged": false,
 					"devices":    []any{"/dev/nvidia0"},
@@ -219,7 +219,7 @@ func TestProjectConfigSetToEditViewNodeRuntimeShowsCommonAndFoldsAdvanced(t *tes
 	if advanced.Tier != "advanced" || !advanced.Advanced {
 		t.Fatalf("scheduler should be folded into advanced section: %#v", advanced)
 	}
-	expert := requireField(t, fields, "backend.arg.trust_remote_code", "backend.arg.trust_remote_code", nil, "expert_parameters")
+	expert := requireField(t, fields, "model_runtime.trust_remote_code", "backend.arg.trust_remote_code", nil, "expert_parameters")
 	if expert.Tier != "expert" || !expert.Advanced {
 		t.Fatalf("dangerous trust_remote_code should be expert/hidden by default: %#v", expert)
 	}
@@ -248,22 +248,22 @@ func TestApplyEditPatchToConfigSetKeepsDisabledValueAndHiddenItems(t *testing.T)
 	if err != nil {
 		t.Fatalf("apply patch: %v", err)
 	}
-		outItems := out["items"].(map[string]any)
-		edited := outItems["backend.arg.fake_new_param"].(map[string]any)
-		if vt, ok := edited["value"].(map[string]any); ok && vt["effective_value"] != "edited-while-disabled" {
-			t.Fatalf("disabled effective_value not preserved: %#v", edited)
-		}
-		if st, ok := edited["state"].(map[string]any); ok && st["enabled"] != false {
-			t.Fatalf("disabled state.enabled not false: %#v", edited)
-		}
-		hidden := outItems["backend.arg.hidden_existing"].(map[string]any)
-		if vt, ok := hidden["value"].(map[string]any); ok && vt["effective_value"] != "keep-me" {
-			t.Fatalf("hidden existing item value not preserved: %#v", hidden)
-		}
-		if st, ok := hidden["state"].(map[string]any); ok && st["enabled"] != true {
-			t.Fatalf("hidden existing item state.enabled not true: %#v", hidden)
-		}
+	outItems := out["items"].(map[string]any)
+	edited := outItems["backend.arg.fake_new_param"].(map[string]any)
+	if vt, ok := edited["value"].(map[string]any); ok && vt["effective_value"] != "edited-while-disabled" {
+		t.Fatalf("disabled effective_value not preserved: %#v", edited)
 	}
+	if st, ok := edited["state"].(map[string]any); ok && st["enabled"] != false {
+		t.Fatalf("disabled state.enabled not false: %#v", edited)
+	}
+	hidden := outItems["backend.arg.hidden_existing"].(map[string]any)
+	if vt, ok := hidden["value"].(map[string]any); ok && vt["effective_value"] != "keep-me" {
+		t.Fatalf("hidden existing item value not preserved: %#v", hidden)
+	}
+	if st, ok := hidden["state"].(map[string]any); ok && st["enabled"] != true {
+		t.Fatalf("hidden existing item state.enabled not true: %#v", hidden)
+	}
+}
 
 func TestApplyEditPatchOrdinaryEnabledRoundTripsThroughProjection(t *testing.T) {
 	set := testConfigSet()
@@ -356,17 +356,17 @@ func TestApplyEditPatchToConfigSetMergesDockerOptionsAndForcesRequiredEnabled(t 
 	if err != nil {
 		t.Fatalf("apply patch: %v", err)
 	}
-		items := out["items"].(map[string]any)
-		dockerVal := items["launcher.docker_options"].(map[string]any)["value"].(map[string]any)
-		docker := dockerVal["effective_value"].(map[string]any)
-		if docker["shm_size"] != "24gb" || docker["privileged"] != true {
-			t.Fatalf("docker options not merged: %#v", docker)
-		}
-		image := items["launcher.image"].(map[string]any)
-		if st, ok := image["state"].(map[string]any); !ok || st["enabled"] != true {
-			t.Fatalf("required image enabled should be forced true: %#v", image)
-		}
+	items := out["items"].(map[string]any)
+	dockerVal := items["launcher.docker_options"].(map[string]any)["value"].(map[string]any)
+	docker := dockerVal["effective_value"].(map[string]any)
+	if docker["shm_size"] != "24gb" || docker["privileged"] != true {
+		t.Fatalf("docker options not merged: %#v", docker)
 	}
+	image := items["launcher.image"].(map[string]any)
+	if st, ok := image["state"].(map[string]any); !ok || st["enabled"] != true {
+		t.Fatalf("required image enabled should be forced true: %#v", image)
+	}
+}
 
 func TestApplyEditPatchRejectsDirectLegacyModelServingAtDeployment(t *testing.T) {
 	_, err := ApplyEditPatchToConfigSet(testConfigSet(), ConfigEditPatch{
@@ -463,6 +463,104 @@ func TestValidateEditPatchRejectsImageAtDeployment(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error: launcher.image should be rejected at deployment layer")
+	}
+}
+
+func TestProjectConfigSetToEditViewEmitsSelfContainedFieldMetadata(t *testing.T) {
+	set := testConfigSet()
+	items := set["items"].(map[string]any)
+	items["model_runtime.dtype"] = map[string]any{
+		"schema": map[string]any{
+			"key":                  "model_runtime.dtype",
+			"category":             "model_runtime",
+			"kind":                 "cli_arg",
+			"type":                 "enum",
+			"label":                "Data Type",
+			"label_i18n_key":       "runtimeFields.dtype.label",
+			"description":          "Controls runtime dtype.",
+			"description_i18n_key": "runtimeFields.dtype.help",
+			"help_i18n_key":        "runtimeFields.dtype.help",
+			"tooltip_i18n_key":     "runtimeFields.dtype.tooltip",
+			"arg_name":             "--dtype",
+			"display_order":        333,
+			"constraints": map[string]any{
+				"options": []any{"auto", "float16"},
+				"pattern": "^[a-z0-9_]+$",
+			},
+		},
+		"state": map[string]any{"enabled": false, "checked": false, "editable": true, "visible": true},
+		"value": map[string]any{
+			"default_value":   "auto",
+			"inherited_value": "auto",
+			"effective_value": "auto",
+		},
+		"provenance": map[string]any{"value_source": "backend_version", "last_value_layer": "BackendVersion"},
+		"snapshot":   map[string]any{"snapshot_from_layer": "BackendVersionConfigBundle", "snapshot_from_id": "vllm-v0.23.0"},
+		"render":     map[string]any{"widget": "select", "placeholder": "Choose dtype", "copy_behavior": "copy_on_create", "override_behavior": "patch_local_value", "disable_behavior": "retain_value_when_disabled"},
+	}
+
+	view, err := ProjectConfigSetToEditView(ProjectInput{
+		ConfigSet:   set,
+		Layer:       "node_backend_runtime",
+		ObjectKind:  "node_backend_runtime",
+		ObjectID:    "nbr-test",
+		ObjectLabel: "NBR Test",
+	})
+	if err != nil {
+		t.Fatalf("project view: %v", err)
+	}
+	field := requireField(t, flattenFields(view), "model_runtime.dtype", "model_runtime.dtype", nil, "model_serving")
+	if field.Label != "Data Type" || field.LabelI18nKey != "runtimeFields.dtype.label" || field.HelpI18nKey != "runtimeFields.dtype.help" || field.TooltipI18nKey != "runtimeFields.dtype.tooltip" {
+		t.Fatalf("label/help i18n metadata not self-contained: %#v", field)
+	}
+	if field.Type != "enum" || field.Widget != "select" || field.Placeholder != "Choose dtype" {
+		t.Fatalf("render metadata not self-contained: %#v", field)
+	}
+	if field.DefaultValue != "auto" || field.InheritedValue != "auto" || field.ValueSource != "backend_version" || field.LastValueLayer != "BackendVersion" {
+		t.Fatalf("value/source metadata not self-contained: %#v", field)
+	}
+	if len(field.Options) != 2 || field.Options[0].Value != "auto" {
+		t.Fatalf("options not projected from schema constraints: %#v", field.Options)
+	}
+	if field.Constraints["pattern"] != "^[a-z0-9_]+$" || field.ValidationRules["pattern"] != "^[a-z0-9_]+$" {
+		t.Fatalf("validation metadata missing: constraints=%#v rules=%#v", field.Constraints, field.ValidationRules)
+	}
+	if field.CopyBehavior != "copy_on_create" || field.OverrideBehavior != "patch_local_value" || field.DisableBehavior != "retain_value_when_disabled" || field.PatchTarget != "model_runtime.dtype" {
+		t.Fatalf("next-layer behavior metadata missing: %#v", field)
+	}
+}
+
+func TestProjectConfigSetToEditViewCoversRuntimeWizardKnownKeys(t *testing.T) {
+	set := testConfigSet()
+	items := set["items"].(map[string]any)
+	for _, key := range []string{
+		"model_runtime.gpu_memory_utilization",
+		"model_runtime.max_model_len",
+		"model_runtime.dtype",
+		"model_runtime.tensor_parallel_size",
+		"model_runtime.max_num_batched_tokens",
+		"deployment.served_model_name",
+	} {
+		items[key] = map[string]any{
+			"schema": map[string]any{"key": key, "category": "model_runtime", "kind": "cli_arg", "type": "string"},
+			"state":  map[string]any{"enabled": false, "editable": true, "visible": true},
+			"value":  map[string]any{"effective_value": "", "default_value": ""},
+		}
+	}
+	view, err := ProjectConfigSetToEditView(ProjectInput{ConfigSet: set, Layer: "node_backend_runtime", ObjectKind: "node_backend_runtime", ObjectID: "nbr-test"})
+	if err != nil {
+		t.Fatalf("project view: %v", err)
+	}
+	for _, field := range flattenFields(view) {
+		if field.Section != "model_serving" && field.Section != "advanced_parameters" && field.Section != "expert_parameters" {
+			continue
+		}
+		if field.Label == "" || field.Label == "Configuration" {
+			t.Fatalf("field lacks self-contained label metadata: %#v", field)
+		}
+		if field.LabelI18nKey == "" {
+			t.Fatalf("field lacks label_i18n_key metadata: %#v", field)
+		}
 	}
 }
 

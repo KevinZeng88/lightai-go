@@ -39,11 +39,9 @@
         :model-locations="modelLocations"
         :saving="saving"
         @save="createFromWizard"
+        @cancel="createVisible = false"
         @refresh-data="load"
       />
-      <template #footer>
-        <el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button>
-      </template>
     </el-dialog>
 
     <el-drawer v-model="detailVisible" :title="selected?.display_name || selected?.name || ''" size="70%">

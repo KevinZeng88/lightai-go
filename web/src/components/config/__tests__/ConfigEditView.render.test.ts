@@ -203,4 +203,70 @@ describe('ConfigEditView', () => {
     // key_value_table should have an add button
     expect(html).toContain('el-button')
   })
+
+  it('renders self-contained field metadata without backend knowledge', () => {
+    const view: ConfigEditViewModel = {
+      layer: 'node_backend_runtime',
+      object_id: 'self-contained',
+      object_kind: 'node_backend_runtime',
+      sections: [{
+        key: 'model_serving',
+        label: 'Model Serving',
+        order: 10,
+        fields: [
+          {
+            key: 'vendor.future_gpu_ratio',
+            internal_key: 'vendor.future_gpu_ratio',
+            label: 'GPU 显存利用率',
+            help: '控制单实例可使用的 GPU 显存比例。',
+            cli_flag: '--future-gpu-ratio',
+            section: 'model_serving',
+            order: 1,
+            type: 'number',
+            widget: 'number',
+            value: 0.9,
+            default_value: 0.9,
+            enabled: false,
+            has_enable: true,
+            required: false,
+            readonly: false,
+            advanced: false,
+            constraints: { min: 0, max: 1, step: 0.01 },
+            validation_rules: { min: 0, max: 1 },
+            copy_behavior: 'copy_on_create',
+            override_behavior: 'patch_local_value',
+            disable_behavior: 'retain_value_when_disabled',
+            patch_target: 'vendor.future_gpu_ratio',
+          },
+          {
+            key: 'vendor.future_dtype',
+            internal_key: 'vendor.future_dtype',
+            label: '数据类型',
+            help: '选择模型权重和计算使用的数据类型。',
+            section: 'model_serving',
+            order: 2,
+            type: 'enum',
+            widget: 'select',
+            value: 'auto',
+            enabled: true,
+            has_enable: true,
+            required: false,
+            readonly: false,
+            advanced: false,
+            options: [{ label: 'auto', value: 'auto' }, { label: 'float16', value: 'float16' }],
+          },
+        ],
+      }],
+    }
+    const wrapper = mount(ConfigEditView, {
+      global: { plugins: [ElementPlus] },
+      props: { modelValue: view, readonly: false },
+    })
+    const html = wrapper.html()
+    expect(html).toContain('GPU 显存利用率')
+    expect(html).toContain('数据类型')
+    expect(html).not.toContain('配置项')
+    expect(wrapper.find('[data-field-key="vendor.future_gpu_ratio"] [data-testid="config-field-enabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-field-key="vendor.future_gpu_ratio"] [data-testid="config-field-value"]').exists()).toBe(true)
+  })
 })

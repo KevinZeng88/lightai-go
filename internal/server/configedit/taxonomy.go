@@ -51,6 +51,31 @@ var taxonomyLabels = map[string]string{
 	"runtime.health":                           "Health check",
 	"service.container_port":                   "Container port",
 	"service.host_port":                        "Host port",
+	"service.listen_host":                      "Container listen host",
+	"deployment.served_model_name":             "Served model name",
+	"backend.extra_args":                       "Extra launch arguments",
+	"runtime.extra_env":                        "Extra environment variables",
+	"launcher.kind":                            "Launcher type",
+	"launcher.devices":                         "Device bindings",
+	"launcher.ports":                           "Port mappings",
+	"launcher.volumes":                         "Volume mounts",
+	"model_runtime.gpu_memory_utilization":     "GPU memory utilization",
+	"model_runtime.max_model_len":              "Max model length",
+	"model_runtime.dtype":                      "Data type",
+	"model_runtime.tensor_parallel_size":       "Tensor parallel size",
+	"model_runtime.pipeline_parallel_size":     "Pipeline parallel size",
+	"model_runtime.max_num_batched_tokens":     "Max batched tokens",
+	"model_runtime.max_num_seqs":               "Max concurrent sequences",
+	"model_runtime.kv_cache_dtype":             "KV cache data type",
+	"model_runtime.cpu_offload_gb":             "CPU offload capacity",
+	"model_runtime.swap_space":                 "Swap space",
+	"model_runtime.enforce_eager":              "Enforce eager mode",
+	"model_runtime.trust_remote_code":          "Trust remote code",
+	"model_runtime.safetensors_load_strategy":  "Safetensors load strategy",
+	"model_runtime.download_dir":               "Model download directory",
+	"model_runtime.model":                      "Model path",
+	"model_runtime.host":                       "Listen host",
+	"model_runtime.port":                       "Service port",
 	"backend.capabilities":                     "Backend capabilities",
 	"backend.supported_config_items":           "Supported config items",
 }
@@ -172,8 +197,8 @@ var commonRuntimeArgs = map[string]bool{
 	"model_runtime.dtype":                  true,
 	"backend.arg.tensor_parallel_size":     true,
 	"model_runtime.tensor_parallel_size":   true,
-	"backend.common.port":    true,
-	"service.container_port": true,
+	"backend.common.port":                  true,
+	"service.container_port":               true,
 	"backend.arg.served_model_name":        true,
 	"backend.common.served_model_name":     true,
 	"deployment.served_model_name":         true,
@@ -209,22 +234,22 @@ var expertRuntimeArgs = map[string]bool{
 	"model_runtime.trust_remote_code": true,
 	"model_runtime.enforce_eager":     true,
 	// Advanced/Expert parameters NOT shown as ordinary required fields:
-	"backend.arg.cpu_offload_gb":        true,
-	"model_runtime.cpu_offload_gb":      true,
-	"backend.arg.kv_cache_dtype":        true,
-	"model_runtime.kv_cache_dtype":      true,
-	"backend.arg.max_num_batched_tokens": true,
-	"backend.arg.max_num_seqs":          true,
-	"model_runtime.max_num_seqs":        true,
-	"backend.arg.swap_space":            true,
-	"model_runtime.swap_space":          true,
-	"backend.arg.safetensors_load_strategy": true,
+	"backend.arg.cpu_offload_gb":              true,
+	"model_runtime.cpu_offload_gb":            true,
+	"backend.arg.kv_cache_dtype":              true,
+	"model_runtime.kv_cache_dtype":            true,
+	"backend.arg.max_num_batched_tokens":      true,
+	"backend.arg.max_num_seqs":                true,
+	"model_runtime.max_num_seqs":              true,
+	"backend.arg.swap_space":                  true,
+	"model_runtime.swap_space":                true,
+	"backend.arg.safetensors_load_strategy":   true,
 	"model_runtime.safetensors_load_strategy": true,
 	// Internal/system parameters NOT shown in ordinary deployment form:
-	"model_runtime.model":              true,
-	"model_runtime.host":               true,
-	"model_runtime.port":               true,
-	"model_runtime.download_dir":       true,
+	"model_runtime.model":        true,
+	"model_runtime.host":         true,
+	"model_runtime.port":         true,
+	"model_runtime.download_dir": true,
 }
 
 // isModelServingCode checks if a code is a model-serving parameter (should only
@@ -364,6 +389,9 @@ func sectionFor(code string, item map[string]any) string {
 }
 
 func fieldLabel(code string, item map[string]any) string {
+	if label := nestedString(item, "schema", "label"); label != "" {
+		return label
+	}
 	if label := nestedString(item, "render", "label"); label != "" {
 		return label
 	}

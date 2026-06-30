@@ -8,6 +8,20 @@
       <el-step :title="$t('deployments.wizardStepPreview')" />
     </el-steps>
 
+    <WizardActionBar
+      :active-step="activeStep"
+      :total-steps="5"
+      :can-prev="activeStep > 0"
+      :can-next="actionCanProceed"
+      :primary-label="primaryActionLabel"
+      :primary-loading="primaryActionLoading"
+      :next-disabled-reason="actionDisabledReason"
+      layout="sticky-top"
+      @cancel="$emit('cancel')"
+      @prev="activeStep--"
+      @primary="onPrimaryAction"
+    />
+
     <div class="wizard-content">
       <!-- Step 0: Model -->
       <div v-if="activeStep === 0">
@@ -81,13 +95,6 @@
       style="margin-bottom:12px"
     />
 
-    <div class="wizard-footer">
-      <el-button v-if="activeStep > 0" @click="activeStep--">{{ $t('common.prev') }}</el-button>
-      <el-button v-if="activeStep < 4" type="primary" @click="nextStep">{{ $t('common.next') }}</el-button>
-      <el-button v-if="activeStep === 4" type="primary" :loading="saving" @click="$emit('save')">
-        {{ $t('deployments.saveConfig') }}
-      </el-button>
-    </div>
   </div>
 </template>
 
@@ -99,6 +106,7 @@ import NodeRuntimeSelector from './NodeRuntimeSelector.vue'
 import DeploymentServiceEditor from './DeploymentServiceEditor.vue'
 import DeploymentOverrideEditor from './DeploymentOverrideEditor.vue'
 import DeploymentPreviewPanel from './DeploymentPreviewPanel.vue'
+import WizardActionBar from '@/components/common/WizardActionBar.vue'
 import { previewDeployment, type PreviewResult } from '@/api/deployments'
 import type { ConfigEditPatch } from '@/utils/configEditView'
 import { apiErrorMessage } from '@/utils/apiErrors'
@@ -114,6 +122,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   save: []
+  cancel: []
   refreshData: []
 }>()
 
@@ -175,6 +184,15 @@ function onNBRSelected(nbrID: string) {
 }
 
 const compatibilityError = ref('')
+
+const primaryActionLabel = computed(() => activeStep.value < 4 ? t('common.next') : t('deployments.saveConfig'))
+const primaryActionLoading = computed(() => previewLoading.value || props.saving === true)
+const actionDisabledReason = computed(() => {
+  if (activeStep.value === 0 && !form.model_artifact_id) return t('deployments.selectedArtifact')
+  if (activeStep.value === 1 && !form.node_backend_runtime_id) return t('deployments.runtime')
+  return compatibilityError.value
+})
+const actionCanProceed = computed(() => !primaryActionLoading.value && !actionDisabledReason.value)
 
 function validateServiceConfig(): boolean {
   compatibilityError.value = ''
@@ -243,6 +261,14 @@ function nextStep() {
   if (s < 4) activeStep.value++
 }
 
+function onPrimaryAction() {
+  if (activeStep.value === 4) {
+    emit('save')
+    return
+  }
+  nextStep()
+}
+
 async function doPreview() {
   if (!checkNodeCompatibility()) return
   previewLoading.value = true
@@ -301,5 +327,4 @@ defineExpose({ buildPayload, form, resetWizard: () => { activeStep.value = 0 } }
 <style scoped>
 .deployment-wizard { max-width: 900px; margin: 0 auto; }
 .wizard-content { margin: 24px 0; min-height: 300px; }
-.wizard-footer { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

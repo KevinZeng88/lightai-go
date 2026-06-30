@@ -89,6 +89,15 @@ func intValue(v any) int {
 	}
 }
 
+func firstInt(values ...any) int {
+	for _, value := range values {
+		if n := intValue(value); n != 0 {
+			return n
+		}
+	}
+	return 0
+}
+
 func nestedString(item map[string]any, parent, key string) string {
 	m, _ := item[parent].(map[string]any)
 	if m == nil {
@@ -103,6 +112,106 @@ func nestedMap(item map[string]any, key string) map[string]any {
 		return map[string]any{}
 	}
 	return m
+}
+
+func tieredAnyField(item map[string]any, tierKey, fieldKey string) any {
+	if item == nil {
+		return nil
+	}
+	if tier, ok := item[tierKey].(map[string]any); ok {
+		return tier[fieldKey]
+	}
+	return item[fieldKey]
+}
+
+func itemDefaultValue(item map[string]any) any {
+	if item == nil {
+		return nil
+	}
+	if vt, ok := item["value"].(map[string]any); ok {
+		if dv, ok := vt["default_value"]; ok {
+			return dv
+		}
+	}
+	return item["default_value"]
+}
+
+func itemInheritedValue(item map[string]any) any {
+	if item == nil {
+		return nil
+	}
+	if vt, ok := item["value"].(map[string]any); ok {
+		return vt["inherited_value"]
+	}
+	return nil
+}
+
+func sourceFor(item map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range nestedMap(item, "source") {
+		out[k] = v
+	}
+	for k, v := range nestedMap(item, "provenance") {
+		out[k] = v
+	}
+	for k, v := range nestedMap(item, "snapshot") {
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func constraintsFor(item map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range nestedMap(item, "schema") {
+		if k == "min" || k == "max" || k == "step" || k == "pattern" {
+			out[k] = v
+		}
+	}
+	for k, v := range nestedMap(item, "constraints") {
+		out[k] = v
+	}
+	if schemaConstraints, ok := nestedMap(item, "schema")["constraints"].(map[string]any); ok {
+		for k, v := range schemaConstraints {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func validationRulesFor(item map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, key := range []string{"required", "min", "max", "step", "pattern", "choices"} {
+		if v := tieredAnyField(item, "schema", key); v != nil {
+			out[key] = v
+		}
+	}
+	if constraints, ok := nestedMap(item, "schema")["constraints"].(map[string]any); ok {
+		for _, key := range []string{"min", "max", "step", "pattern", "options"} {
+			if v := constraints[key]; v != nil {
+				out[key] = v
+			}
+		}
+	}
+	if rules, ok := nestedMap(item, "schema")["validation_rules"].(map[string]any); ok {
+		for k, v := range rules {
+			out[k] = v
+		}
+	}
+	if rules, ok := nestedMap(item, "render")["validation_rules"].(map[string]any); ok {
+		for k, v := range rules {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func hasValue(item map[string]any, key string) bool {

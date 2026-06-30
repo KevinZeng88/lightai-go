@@ -11,6 +11,7 @@ const files = [
   'src/components/config/ConfigSection.vue',
   'src/components/config/ConfigField.vue',
   'src/utils/configEditView.ts',
+  'src/utils/configEditFieldMeta.ts',
   'src/components/deployments/NodeRuntimeConfigWizard.vue',
   'src/components/deployments/NodeRuntimeSelector.vue',
   'src/components/deployments/DeploymentWizard.vue',
@@ -97,12 +98,13 @@ check('ConfigSection does not show raw section.label directly', !sectionSrc.incl
 check('ConfigSection uses sectionI18nLabel computed', sectionSrc.includes('sectionI18nLabel'))
 check('ConfigSection advanced_raw tag uses i18n', sectionSrc.includes('configEdit.sections.advancedRaw'))
 
-// b. Field label i18n: ConfigField maps field.key to configEdit.labels.
+// b. Field label/help rendering: ConfigField delegates to the self-contained metadata resolver.
 const fieldSrc = sources['src/components/config/ConfigField.vue']
-check('ConfigField has displayLabel computed with i18n mapping', fieldSrc.includes('displayLabel') && fieldSrc.includes('configEdit.labels'))
-check('ConfigField template uses displayLabel not field.label', fieldSrc.includes('{{ displayLabel }}'))
-check('ConfigField exposes technical parameter tooltip', fieldSrc.includes('fieldTooltip') && fieldSrc.includes('cli_flag') && fieldSrc.includes('technical_key'))
-check('ConfigField does not fall back to raw backend label', !fieldSrc.includes('return props.field.label'))
+const fieldMetaSrc = sources['src/utils/configEditFieldMeta.ts']
+check('ConfigField has displayLabel computed through resolver', fieldSrc.includes('displayLabel') && fieldSrc.includes('resolveConfigFieldLabel'))
+check('ConfigField template uses displayLabel not raw field.label', fieldSrc.includes('{{ displayLabel }}'))
+check('ConfigField exposes technical parameter tooltip', fieldSrc.includes('fieldTooltip') && fieldMetaSrc.includes('cli_flag') && fieldMetaSrc.includes('technical_key'))
+check('ConfigField uses shared help/tooltip resolver', fieldSrc.includes('resolveConfigFieldHelp') && fieldSrc.includes('resolveConfigFieldTooltip'))
 check('API errors render through i18n helper', sources['src/utils/apiErrors.ts'].includes('apiErrors.') && sources['src/pages/BackendRuntimesPage.vue'].includes('apiErrorMessage'))
 check('Status helper does not fall back to raw status code', !sources['src/utils/status.ts'].includes('return status'))
 check('Status reason helper does not fall back to raw backend reason', !sources['src/utils/status.ts'].includes('return reason'))
@@ -113,8 +115,8 @@ check('Runtime empty states avoid hardcoded English fallbacks',
   !sources['src/components/deployments/DeploymentOverrideEditor.vue'].includes('Select a node runtime config first'))
 check('zh-CN service port label is short', sources['src/locales/zh-CN.ts'].includes("'service.container_port': '容器端口'"))
 check('zh-CN requested runtime short labels exist',
-  sources['src/locales/zh-CN.ts'].includes("'model_runtime.gpu_memory_utilization': '显存比例'") &&
-  sources['src/locales/zh-CN.ts'].includes("'model_runtime.max_model_len': '最大上下文'") &&
+  sources['src/locales/zh-CN.ts'].includes("'model_runtime.gpu_memory_utilization': 'GPU 显存利用率'") &&
+  sources['src/locales/zh-CN.ts'].includes("'model_runtime.max_model_len': '最大上下文长度'") &&
   sources['src/locales/zh-CN.ts'].includes("'model_runtime.mem_fraction_static': '静态显存比例'") &&
   sources['src/locales/zh-CN.ts'].includes("'model_runtime.gpu_layers': 'GPU 层数'"))
 check('DeploymentWizard service next advances to overrides', sources['src/components/deployments/DeploymentWizard.vue'].includes('activeStep.value = 3'))

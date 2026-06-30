@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
-	"gopkg.in/yaml.v3"
 )
 
 func LoadRegistry(dir string) (*Registry, error) {
@@ -226,8 +226,12 @@ func addArgConfigItemsTiered(items map[string]ConfigItem, args []map[string]any,
 			Schema: ConfigItemSchema{
 				Key: code, Category: "model_runtime", Kind: "cli_arg", Type: normalizeConfigType(typ),
 				Required: required, SupportLevel: "documented", DisplayOrder: 300 + idx,
-				Target:  "cli",
-				ArgName: name,
+				Target:             "cli",
+				ArgName:            name,
+				LabelI18nKey:       stringFromMap(arg, "label_i18n_key"),
+				DescriptionI18nKey: stringFromMap(arg, "description_i18n_key"),
+				HelpI18nKey:        stringFromMap(arg, "help_i18n_key"),
+				TooltipI18nKey:     stringFromMap(arg, "tooltip_i18n_key"),
 			},
 			Value_: ConfigItemValue{
 				DefaultValue: defaultValue, EffectiveValue: defaultValue,
@@ -241,6 +245,16 @@ func addArgConfigItemsTiered(items map[string]ConfigItem, args []map[string]any,
 		if label := strings.TrimSpace(fmt.Sprint(arg["label"])); label != "" && label != "<nil>" {
 			item.Schema.Label = label
 			item.Presentation.Group = strings.TrimSpace(fmt.Sprint(arg["group"]))
+		}
+		if help := firstArgString(arg, "help", "description", "tooltip"); help != "" {
+			item.Schema.HelpText = help
+		}
+		if description := firstArgString(arg, "description", "help"); description != "" {
+			item.Schema.Description = description
+		}
+		if options := argOptions(arg); len(options) > 0 {
+			item.Schema.Choices = options
+			item.Schema.Constraints = map[string]any{"options": options}
 		}
 		items[code] = item
 	}
@@ -576,6 +590,46 @@ func configCodeFromArgName(name string) string {
 	default:
 		return "model_runtime." + normalized
 	}
+}
+
+func stringFromMap(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	s := strings.TrimSpace(fmt.Sprint(m[key]))
+	if s == "" || s == "<nil>" {
+		return ""
+	}
+	return s
+}
+
+func firstArgString(m map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if s := stringFromMap(m, key); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func argOptions(m map[string]any) []any {
+	for _, key := range []string{"options", "values", "choices"} {
+		raw, ok := m[key]
+		if !ok || raw == nil {
+			continue
+		}
+		switch v := raw.(type) {
+		case []any:
+			return v
+		case []string:
+			out := make([]any, 0, len(v))
+			for _, item := range v {
+				out = append(out, item)
+			}
+			return out
+		}
+	}
+	return nil
 }
 
 func normalizeConfigType(typ string) string {

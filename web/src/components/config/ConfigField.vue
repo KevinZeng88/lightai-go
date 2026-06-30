@@ -1,7 +1,7 @@
 <template>
   <div
     class="config-field"
-    :class="{ disabled: !field.enabled, readonly: readonly || field.readonly }"
+    :class="{ disabled: !field.enabled, readonly: isControlReadonly }"
     data-testid="config-field"
     :data-field-key="field.key"
     :data-internal-key="field.internal_key"
@@ -14,7 +14,7 @@
         data-testid="config-field-enabled"
         :data-field-key="field.key"
         :data-internal-key="field.internal_key"
-        :disabled="readonly || field.readonly"
+        :disabled="isControlReadonly"
         @change="$emit('change')"
       />
       <span class="field-label">{{ displayLabel }}</span>
@@ -36,7 +36,7 @@
       <el-switch
         v-if="field.widget === 'boolean' || field.type === 'boolean'"
         v-model="field.value"
-        :disabled="readonly || field.readonly"
+        :disabled="isControlReadonly"
         @change="$emit('change')"
       />
 
@@ -45,7 +45,7 @@
         v-else-if="field.widget === 'select' || field.widget === 'multi_select'"
         v-model="field.value"
         :multiple="field.widget === 'multi_select'"
-        :disabled="readonly || field.readonly"
+        :disabled="isControlReadonly"
         size="small"
         class="field-input"
         @change="$emit('change')"
@@ -57,7 +57,7 @@
       <el-input-number
         v-else-if="field.widget === 'number' || field.type === 'integer' || field.type === 'number'"
         v-model="field.value"
-        :disabled="readonly || field.readonly"
+        :disabled="isControlReadonly"
         size="small"
         class="field-input"
         @change="$emit('change')"
@@ -69,7 +69,7 @@
         v-model="textValue"
         type="textarea"
         :rows="6"
-        :disabled="readonly || field.readonly"
+        :disabled="isControlReadonly"
         @input="onTextInput"
       />
 
@@ -78,23 +78,23 @@
         <el-table :data="kvRows" border size="small" max-height="260px">
           <el-table-column :label="$t('configEdit.fields.key')" width="200">
             <template #default="{ row }">
-              <template v-if="readonly || field.readonly">{{ row.key }}</template>
+              <template v-if="isControlReadonly">{{ row.key }}</template>
               <el-input v-else v-model="row.key" size="small" @input="onKeyValueTableChange" />
             </template>
           </el-table-column>
           <el-table-column :label="$t('configEdit.fields.value')">
             <template #default="{ row }">
-              <template v-if="readonly || field.readonly">{{ row.value }}</template>
+              <template v-if="isControlReadonly">{{ row.value }}</template>
               <el-input v-else v-model="row.value" size="small" @input="onKeyValueTableChange" />
             </template>
           </el-table-column>
-          <el-table-column v-if="!(readonly || field.readonly)" width="60">
+          <el-table-column v-if="!(isControlReadonly)" width="60">
             <template #default="{ $index }">
               <el-button size="small" type="danger" circle @click="removeKvRow($index)" />
             </template>
           </el-table-column>
         </el-table>
-        <el-button v-if="!(readonly || field.readonly)" size="small" style="margin-top:6px" @click="addKvRow">
+        <el-button v-if="!(isControlReadonly)" size="small" style="margin-top:6px" @click="addKvRow">
           + {{ $t('configEdit.actions.addRow') }}
         </el-button>
       </div>
@@ -104,29 +104,29 @@
         <el-table :data="deviceRows" border size="small" max-height="260px">
           <el-table-column :label="$t('configEdit.fields.hostPath')">
             <template #default="{ row }">
-              <template v-if="readonly || field.readonly">{{ row.host_path }}</template>
+              <template v-if="isControlReadonly">{{ row.host_path }}</template>
               <el-input v-else v-model="row.host_path" size="small" @input="onDeviceTableChange" />
             </template>
           </el-table-column>
           <el-table-column :label="$t('configEdit.fields.containerPath')">
             <template #default="{ row }">
-              <template v-if="readonly || field.readonly">{{ row.container_path }}</template>
+              <template v-if="isControlReadonly">{{ row.container_path }}</template>
               <el-input v-else v-model="row.container_path" size="small" @input="onDeviceTableChange" />
             </template>
           </el-table-column>
           <el-table-column :label="$t('configEdit.fields.readonly')" width="80">
             <template #default="{ row }">
-              <template v-if="readonly || field.readonly">{{ row.readonly ? $t('common.yes') : $t('common.no') }}</template>
+              <template v-if="isControlReadonly">{{ row.readonly ? $t('common.yes') : $t('common.no') }}</template>
               <el-switch v-else v-model="row.readonly" size="small" @change="onDeviceTableChange" />
             </template>
           </el-table-column>
-          <el-table-column v-if="!(readonly || field.readonly)" width="60">
+          <el-table-column v-if="!(isControlReadonly)" width="60">
             <template #default="{ $index }">
               <el-button size="small" type="danger" circle @click="removeDeviceRow($index)" />
             </template>
           </el-table-column>
         </el-table>
-        <el-button v-if="!(readonly || field.readonly)" size="small" style="margin-top:6px" @click="addDeviceRow">
+        <el-button v-if="!(isControlReadonly)" size="small" style="margin-top:6px" @click="addDeviceRow">
           + {{ $t('configEdit.actions.addRow') }}
         </el-button>
       </div>
@@ -135,17 +135,17 @@
       <div v-else-if="field.widget === 'mount_form'" class="mount-form">
         <div class="mount-row">
           <span class="mount-label">{{ $t('configEdit.fields.containerPath') }}:</span>
-          <el-input v-if="!(readonly || field.readonly)" v-model="mountData.container_path" size="small" @input="onMountChange" />
+          <el-input v-if="!(isControlReadonly)" v-model="mountData.container_path" size="small" @input="onMountChange" />
           <span v-else>{{ mountData.container_path || '-' }}</span>
         </div>
         <div class="mount-row">
           <span class="mount-label">{{ $t('configEdit.fields.hostPath') }}:</span>
-          <el-input v-if="!(readonly || field.readonly)" v-model="mountData.host_path" size="small" @input="onMountChange" />
+          <el-input v-if="!(isControlReadonly)" v-model="mountData.host_path" size="small" @input="onMountChange" />
           <span v-else>{{ mountData.host_path || '-' }}</span>
         </div>
         <div class="mount-row">
           <span class="mount-label">{{ $t('configEdit.fields.readonly') }}:</span>
-          <el-switch v-if="!(readonly || field.readonly)" v-model="mountData.readonly" size="small" @change="onMountChange" />
+          <el-switch v-if="!(isControlReadonly)" v-model="mountData.readonly" size="small" @change="onMountChange" />
           <span v-else>{{ mountData.readonly ? $t('common.yes') : $t('common.no') }}</span>
         </div>
       </div>
@@ -154,23 +154,23 @@
       <div v-else-if="field.widget === 'health_check_form'" class="health-form">
         <div class="health-row">
           <span class="health-label">{{ $t('configEdit.fields.healthPath') }}:</span>
-          <el-input v-model="healthData.path" :disabled="readonly || field.readonly" size="small" @input="onHealthChange" />
+          <el-input v-model="healthData.path" :disabled="isControlReadonly" size="small" @input="onHealthChange" />
         </div>
         <div class="health-row">
           <span class="health-label">{{ $t('configEdit.fields.healthPort') }}:</span>
-          <el-input-number v-model="healthData.port" :disabled="readonly || field.readonly" size="small" @change="onHealthChange" />
+          <el-input-number v-model="healthData.port" :disabled="isControlReadonly" size="small" @change="onHealthChange" />
         </div>
         <div class="health-row">
           <span class="health-label">{{ $t('configEdit.fields.healthTimeout') }}:</span>
-          <el-input-number v-model="healthData.timeout" :disabled="readonly || field.readonly" size="small" @change="onHealthChange" />
+          <el-input-number v-model="healthData.timeout" :disabled="isControlReadonly" size="small" @change="onHealthChange" />
         </div>
         <div class="health-row">
           <span class="health-label">{{ $t('configEdit.fields.healthInterval') }}:</span>
-          <el-input-number v-model="healthData.interval" :disabled="readonly || field.readonly" size="small" @change="onHealthChange" />
+          <el-input-number v-model="healthData.interval" :disabled="isControlReadonly" size="small" @change="onHealthChange" />
         </div>
         <div class="health-row">
           <span class="health-label">{{ $t('configEdit.fields.healthRetries') }}:</span>
-          <el-input-number v-model="healthData.retries" :disabled="readonly || field.readonly" size="small" @change="onHealthChange" />
+          <el-input-number v-model="healthData.retries" :disabled="isControlReadonly" size="small" @change="onHealthChange" />
         </div>
       </div>
 
@@ -181,10 +181,10 @@
         </div>
         <div v-else class="port-row">
           <span class="port-label">{{ $t('configEdit.fields.containerPort') }}:</span>
-          <el-input-number v-if="!(readonly || field.readonly)" v-model="portData.container_port" size="small" @change="onPortChange" />
+          <el-input-number v-if="!(isControlReadonly)" v-model="portData.container_port" size="small" @change="onPortChange" />
           <span v-else>{{ portData.container_port || '-' }}</span>
           <span class="port-label">{{ $t('configEdit.fields.hostPort') }}:</span>
-          <el-input-number v-if="!(readonly || field.readonly)" v-model="portData.host_port" size="small" @change="onPortChange" />
+          <el-input-number v-if="!(isControlReadonly)" v-model="portData.host_port" size="small" @change="onPortChange" />
           <span v-else>{{ portData.host_port || '-' }}</span>
         </div>
       </div>
@@ -201,8 +201,8 @@
         v-model="textValue"
         type="textarea"
         :rows="field.widget === 'key_value_list' ? 3 : 2"
-        :disabled="readonly || field.readonly"
-        :placeholder="field.widget === 'key_value_list' ? 'KEY=value' : ''"
+        :disabled="isControlReadonly"
+        :placeholder="field.placeholder || (field.widget === 'key_value_list' ? 'KEY=value' : '')"
         @input="onLegacyListInput"
       />
 
@@ -211,7 +211,8 @@
         <el-input
           v-if="isScalarValue"
           v-model="field.value"
-          :disabled="readonly || field.readonly"
+          :disabled="isControlReadonly"
+          :placeholder="field.placeholder || ''"
           size="small"
           class="field-input"
           @input="$emit('change')"
@@ -228,6 +229,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { InfoFilled } from '@element-plus/icons-vue'
 import type { ConfigEditField } from '@/utils/configEditView'
+import { resolveConfigFieldHelp, resolveConfigFieldLabel, resolveConfigFieldTooltip } from '@/utils/configEditFieldMeta'
 
 const { t } = useI18n()
 
@@ -240,44 +242,18 @@ const props = defineProps<{
 
 const emit = defineEmits<{ change: [] }>()
 
-// Map field key to i18n label. Falls back to a localized generic label, never to
-// raw backend labels in ordinary UI.
+const isControlReadonly = computed(() => props.readonly || props.field.readonly || props.field.disabled)
+
 const displayLabel = computed(() => {
-  for (const key of [
-    props.field.label_i18n_key,
-    `configEdit.labels.${props.field.key}`,
-    props.field.semantic_key ? `configEdit.labels.${props.field.semantic_key}` : '',
-  ]) {
-    if (!key) continue
-    const translated = t(key)
-    if (translated !== key) return translated
-  }
-  // Also try internal_key if different from key
-  if (props.field.internal_key && props.field.internal_key !== props.field.key) {
-    const altKey = `configEdit.labels.${props.field.internal_key}`
-    const altTranslated = t(altKey)
-    if (altTranslated !== altKey) return altTranslated
-  }
-  return t('configEdit.labels.default')
+  return resolveConfigFieldLabel(props.field, t)
 })
 
 const localizedHelp = computed(() => {
-  const key = props.field.description_i18n_key || `configEdit.descriptions.${props.field.key}`
-  const translated = t(key)
-  if (translated !== key) return translated
-  return ''
+  return resolveConfigFieldHelp(props.field, t)
 })
 
 const fieldTooltip = computed(() => {
-  const lines: string[] = []
-  const technical = props.field.cli_flag || props.field.env_key || props.field.technical_key || props.field.internal_key || props.field.key
-  if (technical) lines.push(technical)
-  const help = localizedHelp.value
-  if (help) lines.push(help)
-  if (props.field.technical_key && props.field.technical_key !== technical) {
-    lines.push(`${t('configEdit.fields.technicalKey')}: ${props.field.technical_key}`)
-  }
-  return lines.join('\n')
+  return resolveConfigFieldTooltip(props.field, t)
 })
 
 // -- Scalar check for default widget --

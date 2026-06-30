@@ -135,6 +135,46 @@ func TestMaterializeBackendVersionDoesNotAutoEnableOptionalDefaults(t *testing.T
 	}
 }
 
+func TestMaterializeBackendVersionPreservesArgMetadataForConfigEdit(t *testing.T) {
+	registry := &Registry{}
+	backend := BackendDoc{ID: "backend.test", Slug: "test", Name: "Test"}
+	version := VersionDoc{
+		ID:        "version.test",
+		BackendID: "backend.test",
+		DefaultArgsSchema: []map[string]any{
+			{
+				"name":             "--dtype",
+				"type":             "enum",
+				"label":            "Data Type",
+				"description":      "Controls runtime dtype.",
+				"label_i18n_key":   "runtimeFields.dtype.label",
+				"help_i18n_key":    "runtimeFields.dtype.help",
+				"tooltip_i18n_key": "runtimeFields.dtype.tooltip",
+				"values":           []any{"auto", "float16"},
+				"default":          "auto",
+			},
+		},
+	}
+
+	set := MaterializeBackendVersion(registry, backend, version)
+	item := set.Items["model_runtime.dtype"]
+	if item.Schema.Key != "model_runtime.dtype" {
+		t.Fatalf("missing dtype item: %#v", set.Items)
+	}
+	if item.Schema.Label != "Data Type" || item.Schema.Description != "Controls runtime dtype." {
+		t.Fatalf("arg label/description not preserved: %#v", item.Schema)
+	}
+	if item.Schema.LabelI18nKey != "runtimeFields.dtype.label" || item.Schema.HelpI18nKey != "runtimeFields.dtype.help" || item.Schema.TooltipI18nKey != "runtimeFields.dtype.tooltip" {
+		t.Fatalf("arg i18n metadata not preserved: %#v", item.Schema)
+	}
+	if len(item.Schema.Choices) != 2 || item.Schema.Choices[0] != "auto" {
+		t.Fatalf("arg choices not preserved: %#v", item.Schema.Choices)
+	}
+	if item.Value_.DefaultValue != "auto" || item.Value_.EffectiveValue != "auto" {
+		t.Fatalf("arg default not preserved: %#v", item.Value_)
+	}
+}
+
 func containsString(haystack, needle string) bool {
 	for i := 0; i+len(needle) <= len(haystack); i++ {
 		if haystack[i:i+len(needle)] == needle {

@@ -44,7 +44,12 @@ type EditField struct {
 	Path               []string       `json:"path,omitempty"`
 	Label              string         `json:"label"`
 	LabelI18nKey       string         `json:"label_i18n_key,omitempty"`
+	TitleI18nKey       string         `json:"title_i18n_key,omitempty"`
 	DescriptionI18nKey string         `json:"description_i18n_key,omitempty"`
+	HelpI18nKey        string         `json:"help_i18n_key,omitempty"`
+	TooltipI18nKey     string         `json:"tooltip_i18n_key,omitempty"`
+	Title              string         `json:"title,omitempty"`
+	Description        string         `json:"description,omitempty"`
 	Help               string         `json:"help,omitempty"`
 	CliFlag            string         `json:"cli_flag,omitempty"`
 	EnvKey             string         `json:"env_key,omitempty"`
@@ -64,7 +69,18 @@ type EditField struct {
 	Visibility         string         `json:"visibility"`
 	Options            []EditOption   `json:"options,omitempty"`
 	Constraints        map[string]any `json:"constraints,omitempty"`
+	ValidationRules    map[string]any `json:"validation_rules,omitempty"`
+	Placeholder        string         `json:"placeholder,omitempty"`
+	Sensitive          bool           `json:"sensitive,omitempty"`
+	Disabled           bool           `json:"disabled,omitempty"`
 	Source             map[string]any `json:"source,omitempty"`
+	ValueSource        string         `json:"value_source,omitempty"`
+	LastValueLayer     string         `json:"last_value_layer,omitempty"`
+	InheritedValue     any            `json:"inherited_value,omitempty"`
+	CopyBehavior       string         `json:"copy_behavior,omitempty"`
+	OverrideBehavior   string         `json:"override_behavior,omitempty"`
+	DisableBehavior    string         `json:"disable_behavior,omitempty"`
+	PatchTarget        string         `json:"patch_target,omitempty"`
 	CopiedFrom         string         `json:"copied_from,omitempty"`
 	Dirty              bool           `json:"dirty,omitempty"`
 	Warnings           []any          `json:"warnings,omitempty"`

@@ -30,10 +30,7 @@
     </el-table>
 
     <el-dialog v-model="createVisible" :title="$t('runnerConfigs.create')" width="960px" :close-on-click-modal="false" destroy-on-close>
-      <NodeRuntimeConfigWizard ref="nbrWizardRef" @completed="onNBRCreated" />
-      <template #footer>
-        <el-button @click="createVisible = false">{{ $t('common.cancel') }}</el-button>
-      </template>
+      <NodeRuntimeConfigWizard ref="nbrWizardRef" @completed="onNBRCreated" @cancel="createVisible = false" />
     </el-dialog>
 
     <el-drawer v-model="detailVisible" :title="selected?.display_name || selected?.id || ''" size="65%">
