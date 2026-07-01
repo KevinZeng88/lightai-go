@@ -256,9 +256,10 @@ function startEditing() {
 
 function cancelEditing() {
   editing.value = false
+  detailVisible.value = false
   // Reload view to discard changes
   if (selected.value?.id) {
-    getConfigEditView({ object_kind: 'backend_runtime', object_id: selected.value.id, layer: 'backend_runtime', mode: 'edit', view_level: configViewLevel.value }).then(v => { editView.value = v; editPatch.value = null })
+    getConfigEditView({ object_kind: 'backend_runtime', object_id: selected.value.id, layer: 'backend_runtime', mode: 'view', view_level: configViewLevel.value }).then(v => { editView.value = v; editPatch.value = null })
   }
 }
 
@@ -279,6 +280,7 @@ async function saveEdit() {
     await load()
     const updated = runtimes.value.find(r => r.id === selected.value?.id)
     if (updated) selected.value = updated
+    detailVisible.value = false
   } catch (e: any) {
     ElMessage.error(apiErrorMessage(e, t, 'common.requestFailed'))
   } finally {

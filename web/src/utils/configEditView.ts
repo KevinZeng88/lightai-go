@@ -263,7 +263,7 @@ function isExpertField(field: ConfigEditField): boolean {
     field.section === 'advanced_raw' ||
     field.visibility === 'internal' ||
     field.visibility === 'hidden' ||
-    !!field.diagnostic
+    field.risk === 'high'
 }
 
 function sectionRank(section?: string): number {

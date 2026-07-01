@@ -61,6 +61,7 @@ describe('configEditView grouping and ordering', () => {
     ['enabled=true raw/diagnostic -> enabled', field({ key: 'raw.enabled', enabled: true, original_enabled: true, section: 'advanced_raw', diagnostic: true }), 'enabled'],
     ['enabled=false high-risk/security -> expert', field({ key: 'security.disabled', enabled: false, original_enabled: false, section: 'security_high_risk', view: 'security', risk: 'high' }), 'expert'],
     ['enabled=false raw/diagnostic -> expert', field({ key: 'raw.disabled', enabled: false, original_enabled: false, section: 'advanced_raw', diagnostic: true }), 'expert'],
+    ['enabled=false diagnostic only -> common', field({ key: 'normal.diagnostic_only', enabled: false, original_enabled: false, diagnostic: true }), 'common'],
     ['enabled=false advanced -> advanced', field({ key: 'advanced.disabled', enabled: false, original_enabled: false, advanced: true, view: 'advanced' }), 'advanced'],
     ['enabled=false normal -> common', field({ key: 'normal.disabled', enabled: false, original_enabled: false }), 'common'],
   ])('%s', (_name, input, expected) => {
@@ -130,6 +131,17 @@ describe('configEditView grouping and ordering', () => {
 
     expect(displayGroupForField(field({ key: 'normal.reload.enabled', enabled: true, original_enabled: true }))).toBe('enabled')
     expect(displayGroupForField(field({ key: 'normal.reload.disabled', enabled: false, original_enabled: false }))).toBe('common')
+  })
+
+  it('does not place a field in expert group only because diagnostic is true', () => {
+    expect(displayGroupForField(field({
+      key: 'model_runtime.tensor_parallel_size',
+      enabled: false,
+      original_enabled: false,
+      diagnostic: true,
+      advanced: false,
+      section: 'model_serving',
+    }))).toBe('common')
   })
 
   it('builds patches for changed value and enabled state while preserving semantic key and path', () => {

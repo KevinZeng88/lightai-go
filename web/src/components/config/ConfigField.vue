@@ -31,7 +31,6 @@
       <el-tag v-if="field.required" size="small" type="danger" effect="plain">{{ $t('common.required') }}</el-tag>
       <el-tag v-if="field.risk === 'high'" size="small" type="danger" effect="plain">{{ $t('configEdit.badges.highRisk') }}</el-tag>
       <el-tag v-if="isExpertBadgeVisible" size="small" type="warning" effect="plain">{{ $t('configEdit.badges.expert') }}</el-tag>
-      <el-tag v-if="field.diagnostic" size="small" type="info" effect="plain">{{ $t('configEdit.badges.diagnostic') }}</el-tag>
     </div>
     <div
       class="field-control"
@@ -59,6 +58,21 @@
       >
         <el-option v-for="option in field.options || []" :key="String(option.value)" :label="option.label" :value="option.value" />
       </el-select>
+
+      <!-- Port form with {{container_port}} handling -->
+      <div v-else-if="field.widget === 'port_form'" class="port-form">
+        <div v-if="isTemplatePort" class="readonly-hint">
+          {{ $t('configEdit.placeholders.deploymentContainerPort') }}
+        </div>
+        <div v-else class="port-row">
+          <span class="port-label">{{ $t('configEdit.fields.containerPort') }}:</span>
+          <el-input-number v-if="!(isControlReadonly)" v-model="portData.container_port" size="small" @change="onPortChange" />
+          <span v-else>{{ portData.container_port || '-' }}</span>
+          <span class="port-label">{{ $t('configEdit.fields.hostPort') }}:</span>
+          <el-input-number v-if="!(isControlReadonly)" v-model="portData.host_port" size="small" @change="onPortChange" />
+          <span v-else>{{ portData.host_port || '-' }}</span>
+        </div>
+      </div>
 
       <!-- Number -->
       <el-input-number
@@ -217,21 +231,6 @@
         </div>
       </div>
 
-      <!-- Port form with {{container_port}} handling -->
-      <div v-else-if="field.widget === 'port_form'" class="port-form">
-        <div v-if="isTemplatePort" class="readonly-hint">
-          {{ $t('configEdit.placeholders.deploymentContainerPort') }}
-        </div>
-        <div v-else class="port-row">
-          <span class="port-label">{{ $t('configEdit.fields.containerPort') }}:</span>
-          <el-input-number v-if="!(isControlReadonly)" v-model="portData.container_port" size="small" @change="onPortChange" />
-          <span v-else>{{ portData.container_port || '-' }}</span>
-          <span class="port-label">{{ $t('configEdit.fields.hostPort') }}:</span>
-          <el-input-number v-if="!(isControlReadonly)" v-model="portData.host_port" size="small" @change="onPortChange" />
-          <span v-else>{{ portData.host_port || '-' }}</span>
-        </div>
-      </div>
-
       <!-- Readonly summary for advanced/capabilities fields -->
       <div v-else-if="field.widget === 'readonly_summary'" class="readonly-summary">
         <span v-if="summaryText">{{ summaryText }}</span>
@@ -260,7 +259,19 @@
           class="field-input"
           @input="$emit('change')"
         />
-        <span v-else class="readonly-hint">{{ formattedDisplayValue }}</span>
+        <div v-else-if="isControlReadonly" class="readonly-summary">
+          <span v-if="readableComplexSummary">{{ readableComplexSummary }}</span>
+          <el-tag v-else size="small" type="info">{{ $t('configEdit.fields.emptyValue') }}</el-tag>
+        </div>
+        <el-input
+          v-else
+          v-model="fallbackJsonText"
+          type="textarea"
+          :rows="fallbackRows"
+          class="field-input"
+          :placeholder="fallbackPlaceholder"
+          @input="onFallbackJsonInput"
+        />
       </div>
     </div>
     <div v-if="localizedHelp" class="field-help">{{ localizedHelp }}</div>
@@ -319,6 +330,44 @@ const formattedDisplayValue = computed(() => {
   }
   return String(v)
 })
+
+const readableComplexSummary = computed(() => {
+  const v = props.field.value
+  if (Array.isArray(v)) {
+    if (v.length === 0) return ''
+    return `${v.length} ${t('configEdit.fields.items')}`
+  }
+  if (v && typeof v === 'object') {
+    const count = Object.keys(v).length
+    if (count === 0) return ''
+    return `${count} ${t('configEdit.fields.items')}`
+  }
+  return formattedDisplayValue.value
+})
+
+const fallbackRows = computed(() => Array.isArray(props.field.value) ? 4 : 6)
+
+const fallbackPlaceholder = computed(() => {
+  if (Array.isArray(props.field.value)) return t('configEdit.placeholders.arrayJson')
+  return t('configEdit.placeholders.objectJson')
+})
+
+const fallbackJsonText = ref('')
+
+watch(() => props.field.value, () => {
+  if (isScalarValue.value) return
+  fallbackJsonText.value = JSON.stringify(props.field.value ?? (Array.isArray(props.field.value) ? [] : {}), null, 2)
+}, { deep: true, immediate: true })
+
+function onFallbackJsonInput(value: string) {
+  fallbackJsonText.value = value
+  try {
+    props.field.value = JSON.parse(value || (Array.isArray(props.field.value) ? '[]' : '{}'))
+  } catch {
+    props.field.value = value
+  }
+  emit('change')
+}
 
 const bindingData = reactive<any>({
   enabled: true,

@@ -330,6 +330,26 @@ describe('ConfigEditView', () => {
     expect(wrapper.find('.kv-table-wrap').exists() || wrapper.find('[data-field-key="runtime.env"]').exists()).toBe(true)
   })
 
+  it('renders port, mount, and device fields with structured widgets when available', () => {
+    const modelValue = makeEditView()
+    modelValue.sections.push({
+      key: 'service',
+      label: 'Service',
+      order: 80,
+      fields: [
+        { key: 'service.container_port', internal_key: 'service.container_port', label: 'Container port', section: 'service', order: 1, type: 'integer', widget: 'port_form', value: 8000, enabled: true, has_enable: false, required: true, readonly: false, advanced: false },
+        { key: 'runtime.device_binding', internal_key: 'runtime.device_binding', label: 'Device binding', section: 'devices_mounts', order: 2, type: 'object', widget: 'accelerator_binding', value: { mode: 'auto', vendor: 'nvidia' }, enabled: true, has_enable: true, required: false, readonly: false, advanced: false },
+      ],
+    })
+    const wrapper = mount(ConfigEditView, {
+      global: { plugins: [ElementPlus] },
+      props: { modelValue, readonly: false },
+    })
+    expect(wrapper.find('.port-form').exists()).toBe(true)
+    expect(wrapper.find('.mount-form').exists()).toBe(true)
+    expect(wrapper.find('.binding-form').exists()).toBe(true)
+  })
+
   it('keeps environment collapsed by default', () => {
     const wrapper = mount(ConfigEditView, {
       global: { plugins: [ElementPlus] },
@@ -375,6 +395,7 @@ describe('ConfigEditView', () => {
     expect(highRisk.attributes('data-field-view')).toBe('security')
     const raw = enabledSection.find('[data-field-key="raw.enabled"]')
     expect(raw.attributes('data-field-diagnostic')).toBe('true')
+    expect(raw.text()).not.toContain('configEdit.badges.diagnostic')
   })
 
   it('renders disabled fields in common advanced expert groups', () => {

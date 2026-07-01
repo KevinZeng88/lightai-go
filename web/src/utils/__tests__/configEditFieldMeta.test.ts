@@ -6,9 +6,16 @@ const messages: Record<string, string> = {
   'runtimeFields.dtype.label': '数据类型',
   'runtimeFields.dtype.help': '模型权重和计算使用的数据类型。',
   'runtimeFields.dtype.tooltip': '选择后端 dtype。',
+  'configEdit.descriptions.fallback': '{key} configuration value. Type: {type}; section: {section}.',
 }
 
-const t = (key: string) => messages[key] || key
+const t = (key: string, vars?: Record<string, string>) => {
+  let value = messages[key] || key
+  for (const [name, replacement] of Object.entries(vars || {})) {
+    value = value.replace(`{${name}}`, replacement)
+  }
+  return value
+}
 
 function field(partial: Partial<ConfigEditField>): ConfigEditField {
   return {
@@ -54,5 +61,11 @@ describe('configEditFieldMeta', () => {
   it('humanizes unknown keys only when metadata is missing', () => {
     const f = field({ key: 'vendor.future_new_param', internal_key: 'vendor.future_new_param', label: '配置项' })
     expect(resolveConfigFieldLabel(f, t)).toContain('Vendor future new param')
+  })
+
+  it('returns fallback help for visible fields without explicit descriptions', () => {
+    const f = field({ key: 'vendor.future_new_param', internal_key: 'vendor.future_new_param', label: 'Future param' })
+    expect(resolveConfigFieldHelp(f, t)).toContain('Vendor future new param')
+    expect(resolveConfigFieldTooltip(f, t)).toContain('Vendor future new param')
   })
 })

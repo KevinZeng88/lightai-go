@@ -1,6 +1,6 @@
 import type { ConfigEditField } from './configEditView'
 
-export type TranslateFn = (key: string) => string
+export type TranslateFn = (key: string, ...args: any[]) => string
 
 export function resolveConfigFieldLabel(field: ConfigEditField, t: TranslateFn): string {
   const translated = firstTranslation(t, [
@@ -34,7 +34,7 @@ export function resolveConfigFieldHelp(field: ConfigEditField, t: TranslateFn): 
 
   const direct = firstNonEmpty(field.help, field.description)
   if (direct && !isGenericConfigLabel(direct)) return direct
-  return ''
+  return fallbackHelp(field, t)
 }
 
 export function resolveConfigFieldTooltip(field: ConfigEditField, t: TranslateFn): string {
@@ -50,6 +50,15 @@ export function resolveConfigFieldTooltip(field: ConfigEditField, t: TranslateFn
     lines.push(`${t('configEdit.fields.technicalKey')}: ${field.technical_key}`)
   }
   return lines.join('\n')
+}
+
+function fallbackHelp(field: ConfigEditField, t: TranslateFn): string {
+  const type = field.type || (Array.isArray(field.value) ? 'array' : typeof field.value)
+  const section = field.section || 'configuration'
+  const key = field.semantic_key || field.key || field.internal_key || 'configuration'
+  const translated = t('configEdit.descriptions.fallback', { key: humanizeConfigKey(key), type, section })
+  if (translated && translated !== 'configEdit.descriptions.fallback') return translated
+  return `${humanizeConfigKey(key)} (${type}, ${section})`
 }
 
 export function humanizeConfigKey(key: string): string {

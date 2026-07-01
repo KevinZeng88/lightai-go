@@ -145,6 +145,7 @@ type EditField struct {
 	Dirty              bool                `json:"dirty,omitempty"`
 	Warnings           []any               `json:"warnings,omitempty"`
 	Diagnostic         bool                `json:"diagnostic,omitempty"`
+	Risk               string              `json:"risk,omitempty"`
 	OriginalValue      any                 `json:"original_value,omitempty"`
 	OriginalEnabled    bool                `json:"original_enabled"`
 	ComponentKey       string              `json:"component_key,omitempty"`

@@ -37,6 +37,9 @@ func ProjectConfigSetToEditView(input ProjectInput) (ConfigEditView, error) {
 		if item == nil {
 			continue
 		}
+		if shouldHideLowLevelLauncherArray(code, item, items, viewLevel) {
+			continue
+		}
 		if input.Mode != "advanced" && hideFromOrdinaryFlow(code, item, input.Layer) {
 			continue
 		}
@@ -197,6 +200,31 @@ func fieldVisibleAtView(field EditField, view string) bool {
 	default:
 		return !field.Advanced && !field.Diagnostic && field.Visibility != "internal" && field.Visibility != "hidden"
 	}
+}
+
+func shouldHideLowLevelLauncherArray(code string, item map[string]any, items map[string]any, viewLevel string) bool {
+	if viewLevel == "developer" || !isLowLevelLauncherArray(code) || !isEmptyValue(itemEffectiveValue(item)) {
+		return false
+	}
+	switch code {
+	case "launcher.ports":
+		return hasConfigItem(items, "service.container_port") || hasConfigItem(items, "service.listen_host") || hasConfigItem(items, "deployment.host_port")
+	case "launcher.volumes":
+		return hasConfigItem(items, "runtime.model_mount")
+	case "launcher.devices":
+		return hasConfigItem(items, "runtime.device_binding") || hasConfigItem(items, "launcher.docker_options")
+	default:
+		return false
+	}
+}
+
+func isLowLevelLauncherArray(code string) bool {
+	return code == "launcher.ports" || code == "launcher.volumes" || code == "launcher.devices"
+}
+
+func hasConfigItem(items map[string]any, code string) bool {
+	item, _ := items[code].(map[string]any)
+	return item != nil
 }
 
 func flattenSectionFields(sections []EditSection) []EditField {
@@ -597,10 +625,15 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 			section = "advanced_parameters"
 		}
 	}
-	if advanced {
+	if isCapability || isInternalMeta || deprecated || debugLike || visibility == "internal" || visibility == "hidden" {
 		if section != "advanced_parameters" && section != "expert_parameters" && section != "security_high_risk" {
 			section = "advanced_raw"
 		}
+	}
+	if isLowLevelLauncherArray(key) && isEmptyValue(valueOrDefault(item)) {
+		section = "advanced_raw"
+		visibility = "internal"
+		advanced = true
 	}
 
 	// Readonly from input, item config, layer scope, or capability status.
@@ -675,7 +708,8 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		CopiedFrom:         firstString(nestedString(item, "snapshot", "snapshot_from_id"), stringValue(item["copied_from"]), stringValue(item["copiedFrom"])),
 		Dirty:              boolValue(item["dirty"]),
 		Warnings:           warnings,
-		Diagnostic:         advanced || visibility == "internal" || visibility == "hidden",
+		Diagnostic:         diagnosticForField(displayKey, item, visibility),
+		Risk:               riskForField(displayKey, item, section),
 		OriginalValue:      value,
 		OriginalEnabled:    enabled,
 		ComponentKey:       componentKeyForRaw(displayKey, internalKey),
@@ -694,6 +728,38 @@ func projectItem(key, internalKey string, path []string, item map[string]any, in
 		field.Tier = tier
 	}
 	return field
+}
+
+func diagnosticForField(key string, item map[string]any, visibility string) bool {
+	if visibility == "internal" || visibility == "hidden" {
+		return true
+	}
+	category := itemCategory(item)
+	if category == "internal" || category == "debug" || category == "source" || category == "resolver" {
+		return true
+	}
+	return strings.HasPrefix(key, "internal.") ||
+		strings.HasPrefix(key, "source_metadata.") ||
+		strings.HasPrefix(key, "resolver.") ||
+		strings.Contains(key, ".debug") ||
+		strings.Contains(key, "debug_") ||
+		strings.Contains(key, "_debug") ||
+		strings.Contains(key, ".profile") ||
+		strings.Contains(key, "profile_") ||
+		strings.Contains(key, "_profile")
+}
+
+func riskForField(key string, item map[string]any, section string) string {
+	if risk := nestedString(item, "schema", "risk"); risk != "" {
+		return risk
+	}
+	if risk := nestedString(item, "render", "risk"); risk != "" {
+		return risk
+	}
+	if boolValue(item["dangerous"]) || section == "security_high_risk" || isHighRiskDockerOptionCode(key) {
+		return "high"
+	}
+	return ""
 }
 
 func componentKeyForField(field EditField) string {

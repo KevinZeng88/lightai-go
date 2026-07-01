@@ -101,4 +101,37 @@ describe('ConfigField enabled/value state', () => {
     expect(config.value).toBe('{"after":')
     expect(wrapper.emitted('change')?.length).toBe(1)
   })
+
+  it('does not render a public diagnostic badge for ordinary fields', () => {
+    const config = field({ key: 'model_runtime.tensor_parallel_size', diagnostic: true })
+    const wrapper = mountField(config)
+    expect(wrapper.text()).not.toContain('configEdit.badges.diagnostic')
+    expect(wrapper.text()).not.toContain('Diagnostic')
+    expect(wrapper.text()).not.toContain('诊断')
+  })
+
+  it('edits generic array fallback as JSON instead of readonly [] text', async () => {
+    const config = field({ key: 'custom.array', type: 'array', widget: 'unknown_widget', value: [] })
+    const wrapper = mountField(config)
+    const textarea = wrapper.find('textarea')
+    expect(textarea.exists()).toBe(true)
+    await textarea.setValue('["a","b"]')
+    expect(config.value).toEqual(['a', 'b'])
+    expect(wrapper.emitted('change')?.length).toBe(1)
+  })
+
+  it('edits generic object fallback as JSON', async () => {
+    const config = field({ key: 'custom.object', type: 'object', widget: 'unknown_widget', value: {} })
+    const wrapper = mountField(config)
+    const textarea = wrapper.find('textarea')
+    expect(textarea.exists()).toBe(true)
+    await textarea.setValue('{"key":"value"}')
+    expect(config.value).toEqual({ key: 'value' })
+  })
+
+  it('shows fallback help icon for visible fields without explicit help', () => {
+    const config = field({ key: 'vendor.future_option', help: undefined })
+    const wrapper = mountField(config)
+    expect(wrapper.find('.field-help-icon').exists()).toBe(true)
+  })
 })

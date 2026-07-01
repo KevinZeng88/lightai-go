@@ -178,6 +178,115 @@ func TestProjectConfigSetToEditViewDoesNotInferEnabledFromDefaultOrVisibility(t 
 	}
 }
 
+func TestProjectConfigSetDiagnosticSemanticsAreInternalOnly(t *testing.T) {
+	set := testConfigSet()
+	items := set["items"].(map[string]any)
+	items["model_runtime.tensor_parallel_size"] = map[string]any{
+		"schema": map[string]any{"key": "model_runtime.tensor_parallel_size", "category": "model_runtime", "kind": "cli_arg", "type": "integer"},
+		"state":  map[string]any{"enabled": false, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": 1, "default_value": 1},
+	}
+	items["service.container_port"] = map[string]any{
+		"schema": map[string]any{"key": "service.container_port", "category": "model_runtime", "kind": "cli_arg", "type": "integer", "required": true},
+		"state":  map[string]any{"enabled": true, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": 8000, "default_value": 8000},
+	}
+	items["runtime.model_mount"] = map[string]any{
+		"schema": map[string]any{"key": "runtime.model_mount", "category": "runtime_env", "kind": "volume", "type": "object"},
+		"state":  map[string]any{"enabled": true, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": map[string]any{"container_path": "/models", "readonly": true}},
+	}
+	items["runtime.device_binding"] = map[string]any{
+		"schema": map[string]any{"key": "runtime.device_binding", "category": "runtime_env", "kind": "device", "type": "object"},
+		"state":  map[string]any{"enabled": true, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": map[string]any{"mode": "auto", "vendor": "nvidia"}},
+	}
+	items["launcher.ports"] = map[string]any{
+		"schema": map[string]any{"key": "launcher.ports", "category": "launcher", "kind": "port", "type": "array"},
+		"state":  map[string]any{"enabled": true, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": []any{}},
+	}
+	items["launcher.volumes"] = map[string]any{
+		"schema": map[string]any{"key": "launcher.volumes", "category": "launcher", "kind": "volume", "type": "array"},
+		"state":  map[string]any{"enabled": true, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": []any{}},
+	}
+	items["launcher.devices"] = map[string]any{
+		"schema": map[string]any{"key": "launcher.devices", "category": "launcher", "kind": "device", "type": "array"},
+		"state":  map[string]any{"enabled": true, "editable": true, "visible": true},
+		"value":  map[string]any{"effective_value": []any{}},
+	}
+	items["source_metadata.resolver_trace"] = map[string]any{
+		"schema": map[string]any{"key": "source_metadata.resolver_trace", "category": "source", "kind": "metadata", "type": "object", "visibility": "internal"},
+		"state":  map[string]any{"enabled": true, "editable": false, "visible": false},
+		"value":  map[string]any{"effective_value": map[string]any{"resolver": "test"}},
+	}
+
+	view, err := ProjectConfigSetToEditView(ProjectInput{
+		ConfigSet:  set,
+		Layer:      "backend_runtime",
+		ObjectKind: "backend_runtime",
+		ObjectID:   "rt-test",
+		Mode:       "advanced",
+		ViewLevel:  "advanced",
+	})
+	if err != nil {
+		t.Fatalf("project view: %v", err)
+	}
+	fields := flattenFields(view)
+	for _, key := range []string{
+		"model_runtime.tensor_parallel_size",
+		"runtime.command",
+		"runtime.entrypoint",
+		"runtime.model_mount",
+		"runtime.device_binding",
+		"docker.shm_size",
+		"docker.privileged",
+		"service.container_port",
+	} {
+		if fieldExists(fields, key) {
+			f := fieldsByKeyForTest(fields)[key]
+			if f.Diagnostic {
+				t.Fatalf("%s should not be diagnostic: %#v", key, f)
+			}
+		}
+	}
+	for _, key := range []string{"launcher.ports", "launcher.volumes", "launcher.devices"} {
+		if fieldExists(fields, key) {
+			t.Fatalf("%s empty low-level launcher array should not be public advanced field", key)
+		}
+	}
+	requireField(t, fields, "service.container_port", "service.container_port", nil, "service")
+	requireField(t, fields, "runtime.model_mount", "runtime.model_mount", nil, "devices_mounts")
+	requireField(t, fields, "runtime.device_binding", "runtime.device_binding", nil, "devices_mounts")
+
+	devView, err := ProjectConfigSetToEditView(ProjectInput{
+		ConfigSet:  set,
+		Layer:      "backend_runtime",
+		ObjectKind: "backend_runtime",
+		ObjectID:   "rt-test",
+		ViewLevel:  "developer",
+	})
+	if err != nil {
+		t.Fatalf("project developer view: %v", err)
+	}
+	devFields := fieldsByKeyForTest(flattenFields(devView))
+	if !devFields["source_metadata.resolver_trace"].Diagnostic {
+		t.Fatalf("internal source metadata should remain diagnostic: %#v", devFields["source_metadata.resolver_trace"])
+	}
+	if !devFields["launcher.ports"].Diagnostic || !devFields["launcher.ports"].Readonly {
+		t.Fatalf("empty low-level ports should only remain as developer diagnostic readonly field: %#v", devFields["launcher.ports"])
+	}
+}
+
+func fieldsByKeyForTest(fields []EditField) map[string]EditField {
+	out := map[string]EditField{}
+	for _, field := range fields {
+		out[field.Key] = field
+	}
+	return out
+}
+
 func TestProjectConfigSetToEditViewNodeRuntimeShowsCommonAndFoldsAdvanced(t *testing.T) {
 	set := testConfigSet()
 	items := set["items"].(map[string]any)

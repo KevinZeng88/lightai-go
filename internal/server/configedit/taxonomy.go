@@ -383,6 +383,8 @@ func sectionFor(code string, item map[string]any) string {
 		return "environment"
 	case code == "runtime.model_mount":
 		return "devices_mounts"
+	case code == "runtime.device_binding":
+		return "devices_mounts"
 	case code == "runtime.health":
 		return "health_check"
 	case strings.HasPrefix(code, "service.") || strings.HasPrefix(code, "deployment.service"):
