@@ -148,14 +148,16 @@ All known problems are FIXED. No DOCUMENTED_BLOCKER or INVALID entries were need
 
 ## Commit And Push
 
-- Fix commit id: pending.
-- Closeout metadata commit id: pending.
-- Push result: pending.
+- Fix commit id: `856d4dd`.
+- Closeout metadata commit id: recorded in final response after this document update commit.
+- Push result: pushed to `origin/main` successfully.
 
 ## Final Git Status
 
-Final status after commit and push must be checked with:
+Final status after commit and push:
 
 ```bash
 git status --short
 ```
+
+Expected result: empty.
