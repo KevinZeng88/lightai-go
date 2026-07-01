@@ -148,8 +148,7 @@ All known problems are FIXED. No DOCUMENTED_BLOCKER or INVALID entries were need
 
 ## Commit And Push
 
-- Fix commit id: `856d4dd`.
-- Closeout metadata commit id: recorded in final response after this document update commit.
+- Commit id: `856d4dd`.
 - Push result: pushed to `origin/main` successfully.
 
 ## Final Git Status
